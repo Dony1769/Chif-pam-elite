@@ -3,75 +3,128 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { UserCircle, Phone, Lock, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
-export default function RegisterPage() {
+export default function Inscription() {
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState(''); // Changé en Username
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (phone.length < 8) return alert("Numéro de téléphone trop court");
+    
     setLoading(true);
 
-    // 1. Inscription Auth
-    const { data, error } = await supabase.auth.signUp({
-      email: email, 
-      password: password,
-    });
+    try {
+      const internalEmail = `${phone}@chifpam.ht`;
 
-    if (error) {
-      if (error.message.includes("already registered")) {
-        alert("Ce compte existe déjà. Redirection vers la connexion...");
-        router.push('/connexion'); 
-      } else {
-        alert("Erreur: " + error.message);
+      // 1. Création du compte technique dans Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: internalEmail,
+        password: password,
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // 2. Insertion dans ta table profiles avec la nouvelle colonne username
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: authData.user.id,
+              phone: phone,
+              username: username, // Utilisation du Username ici
+              balance: 0,
+              email: internalEmail,
+              is_banned: false
+            }
+          ]);
+
+        if (profileError) throw profileError;
+
+        alert("Compte Elite créé ! Connectez-vous.");
+        router.push('/connexion');
       }
+    } catch (error: any) {
+      alert("Erreur : " + error.message);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // 2. Création du profil SQL
-    if (data.user) {
-      await supabase.from('profiles').insert([
-        { id: data.user.id, phone: phone, email: email, password: password, balance: 0 }
-      ]);
-      router.push('/home');
-    }
-    setLoading(false);
   };
 
   return (
-    <main className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-6 font-sans">
-      <div className="w-full max-w-100 bg-slate-900/40 p-8 rounded-[2.5rem] border border-slate-800 backdrop-blur-md">
-        <h1 className="text-2xl font-black text-center mb-6 uppercase italic text-emerald-500">Créer un compte</h1>
-        
-        <form onSubmit={handleRegister} className="space-y-4">
-          <input 
-            type="tel" placeholder="Numéro de téléphone" required
-            value={phone} onChange={(e) => setPhone(e.target.value)}
-            className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 px-6 font-bold"
-          />
-          <input 
-            type="email" placeholder="Email (Pour les messages)" required
-            value={email} onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 px-6 font-bold"
-          />
-          <input 
-            type="password" placeholder="Mot de passe" required
-            value={password} onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-4 px-6 font-bold"
-          />
-          <button type="submit" disabled={loading} className="w-full py-5 bg-emerald-500 text-slate-950 rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-transform">
-            {loading ? "Chargement..." : "S'INSCRIRE"}
-          </button>
-        </form>
+    <main className="min-h-screen bg-[#020617] text-slate-100 flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-md relative z-10">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-emerald-500 rounded-2xl rotate-3 flex items-center justify-center shadow-lg shadow-emerald-500/20 mx-auto mb-4">
+            <ShieldCheck size={32} className="text-white -rotate-3" />
+          </div>
+          <h1 className="text-3xl font-black italic uppercase tracking-tighter">Elite <span className="text-emerald-500">Pam</span></h1>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Nouveau Membre</p>
+        </div>
 
-        <p className="text-center mt-6 text-[10px] font-black uppercase text-slate-500 tracking-widest">
-          Déjà un compte ? <Link href="/connexion" className="text-emerald-500 underline underline-offset-4">Se connecter</Link>
-        </p>
+        <div className="bg-slate-900/40 border border-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl">
+          <form onSubmit={handleSignup} className="space-y-5">
+            {/* Champ USERNAME */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Username</label>
+              <div className="relative">
+                <UserCircle className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
+                <input 
+                  type="text" required
+                  value={username} onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Ton pseudo unique"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Téléphone</label>
+              <div className="relative">
+                <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
+                <input 
+                  type="tel" required
+                  value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="4000 0000"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Mot de passe</label>
+              <div className="relative">
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
+                <input 
+                  type="password" required
+                  value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit" disabled={loading}
+              className="w-full bg-emerald-500 text-slate-950 py-5 rounded-2xl font-black uppercase italic tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : "S'inscrire"}
+              {!loading && <ArrowRight size={20} />}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center pt-6 border-t border-slate-800/50">
+            <p className="text-slate-500 text-[10px] font-black uppercase">
+              Déjà inscrit ? <Link href="/connexion" className="text-emerald-500 hover:underline ml-1">Connexion</Link>
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   );

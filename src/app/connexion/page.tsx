@@ -3,143 +3,118 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Lock, Phone, ArrowRight, Loader2 } from 'lucide-react';
+import { ShieldCheck, Lock, Phone, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Connexion() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage('');
 
     try {
-      // 1. Authentification via Supabase Auth
-      // Note: On utilise l'email simulé car Supabase Auth nécessite un format email
-      const fakeEmail = `${phone}@chifpam.ht`;
+      const internalEmail = `${phone}@chifpam.ht`;
+
+      // 1. Authentification officielle
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: fakeEmail,
+        email: internalEmail,
         password: password,
       });
 
       if (authError) throw new Error("Identifiants incorrects.");
 
-      if (data.user) {
-        // 2. Vérification du rôle dans la table 'profiles'
-        const { data: profile, error: profError } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', data.user.id)
-          .single();
+      if (data?.user) {
+        const userEmail = data.user.email;
 
-        if (profError || !profile) throw new Error("Profil introuvable.");
-
-        // 3. Redirection intelligente
-        // Si c'est l'email de l'admin, direction dashboard admin
-        if (profile.email === '99999999@chifpam.ht') {
-          router.push('/admin');
+        // 2. LOGIQUE DE REDIRECTION SÉCURISÉE
+        if (userEmail === '99999999@chifpam.ht') {
+          // L'admin va vers son dashboard spécifique
+          router.push('/admin-chif-pam');
         } else {
-          // Sinon, direction espace client
-          router.push('/client');
+          // Le client est envoyé vers app/home/page.tsx
+          router.push('/home'); 
         }
       }
     } catch (err: any) {
-      alert(err.message || "Une erreur est survenue");
+      setErrorMessage(err.message || "Erreur de connexion.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-[#020617] text-slate-100 flex flex-col items-center justify-center p-6">
-      {/* Glow Effect Background */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-full opacity-20 pointer-events-none">
+    <main className="min-h-screen bg-[#020617] text-slate-100 flex flex-col items-center justify-center p-6 font-sans">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-75 h-75 bg-emerald-500 rounded-full blur-[120px]" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        {/* Logo Section */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 bg-emerald-500 rounded-2xl rotate-3 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)] mb-4">
-            <ShieldCheck size={32} className="text-white -rotate-3" />
+        <div className="text-center mb-10">
+          <div className="inline-flex p-4 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 mb-6 shadow-xl shadow-emerald-500/5">
+            <ShieldCheck size={40} className="text-emerald-500" />
           </div>
-          <h1 className="text-3xl font-black italic tracking-tighter uppercase">
+          <h1 className="text-4xl font-black italic tracking-tighter uppercase mb-2">
             CHIF-PAM <span className="text-emerald-500">ELITE</span>
           </h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] mt-2">
-            Connexion Sécurisée
-          </p>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em]">Espace Sécurisé</p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-slate-900/40 border border-slate-800 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl">
+        <div className="bg-slate-900/40 border border-white/5 backdrop-blur-2xl p-8 rounded-[2.5rem] shadow-2xl">
+          {errorMessage && (
+            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-500 text-xs font-bold animate-pulse">
+              <AlertCircle size={18} />
+              {errorMessage}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Téléphone</label>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Téléphone</label>
               <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                 <input 
-                  type="tel" 
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Ex: 40000000"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
+                  type="tel" required
+                  value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Numéro de téléphone"
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white placeholder:text-slate-700"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">Mot de passe</label>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Mot de passe</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                 <input 
-                  type="password" 
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  type="password" required
+                  value={password} onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white placeholder:text-slate-700"
                 />
               </div>
             </div>
 
             <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-4 rounded-2xl font-black uppercase italic tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
+              type="submit" disabled={loading}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-5 rounded-2xl font-black uppercase italic tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50 shadow-xl shadow-emerald-500/20"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="animate-spin" size={20} />
-                  Chargement...
-                </>
-              ) : (
-                <>
-                  Se Connecter
-                  <ArrowRight size={20} />
-                </>
-              )}
+              {loading ? <Loader2 className="animate-spin" /> : "Accéder à l'Elite"}
+              {!loading && <ArrowRight size={20} />}
             </button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-slate-800/50 text-center">
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">
-              Pas encore de compte ?{' '}
-              <Link href="/" className="text-emerald-500 hover:text-emerald-400 underline underline-offset-4">
-                S'inscrire
-              </Link>
+          <div className="mt-8 text-center">
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-wider">
+              Nouveau ici ? <Link href="/" className="text-emerald-500 hover:underline ml-1">S'inscrire</Link>
             </p>
           </div>
         </div>
-
-        {/* Support Link */}
-        <p className="text-center mt-8 text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em]">
-          Besoin d'aide ? Contactez le support
-        </p>
       </div>
     </main>
   );
