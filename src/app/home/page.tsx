@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation'; // Ajouté pour la redirection
+import { useRouter } from 'next/navigation';
 import { 
   Wallet, History, Gamepad2, User, Send, 
   ArrowDownCircle, ArrowUpCircle, MessageCircle, LogOut, 
@@ -17,7 +17,7 @@ export default function ClientHome() {
   const [pastTirages, setPastTirages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [adminUUID, setAdminUUID] = useState<string | null>(null);
-  const [isBanned, setIsBanned] = useState(false); // État de bannissement
+  const [isBanned, setIsBanned] = useState(false);
   
   const [showDepot, setShowDepot] = useState(false);
   const [showRetrait, setShowRetrait] = useState(false);
@@ -29,48 +29,77 @@ export default function ClientHome() {
   const [nextTirage, setNextTirage] = useState<any>(null);
 
   const [chatMessage, setChatMessage] = useState('');
-  const [financeAmount, setFinanceAmount] = useState('');
-  const [method, setMethod] = useState<'moncash' | 'natcash'>('moncash');
   const [chatHistory, setChatHistory] = useState<any[]>([]);
+  const [isAdminTyping, setIsAdminTyping] = useState(false);
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 1. Charger le profil et les données de base
+  useEffect(() => {
+    loadAppData();
+  }, [activeTab]);
+
+  // 2. Trouver l'ID de l'admin par son email technique
   useEffect(() => {
     const fetchAdminId = async () => {
-      const { data } = await supabase.from('profiles').select('id').eq('phone', '99999999').single();
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', '99999999@chifpam.ht')
+        .single();
       if (data) setAdminUUID(data.id);
     };
     fetchAdminId();
   }, []);
 
+  // 3. Système de Chat Temps Réel (WhatsApp Style)
   useEffect(() => {
-    loadAppData();
-  }, [activeTab]);
+    if (!user) return;
+
+    // Canal unique pour l'utilisateur
+    const channel = supabase.channel(`chat:${user.id}`, {
+      config: { broadcast: { self: true } }
+    });
+
+    channel
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `receiver_id=eq.${user.id}` 
+      }, (payload) => {
+        setChatHistory((prev) => [...prev, payload.new]);
+        if (!showChat) setUnreadCount(prev => prev + 1);
+        scrollToBottom();
+      })
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.userId === adminUUID) {
+          setIsAdminTyping(payload.isTyping);
+          // Auto-reset après 3 secondes si l'admin s'arrête brutalement
+          if (payload.isTyping) {
+            setTimeout(() => setIsAdminTyping(false), 3000);
+          }
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, adminUUID, showChat]);
 
   useEffect(() => {
     if (showChat) {
-        fetchMessages();
-        setTimeout(() => scrollToBottom(), 100);
+      fetchMessages();
+      setTimeout(() => scrollToBottom(), 100);
     }
   }, [showChat]);
 
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel('client-chat')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-          if (payload.new.receiver_id === user.id || payload.new.sender_id === user.id) {
-            setChatHistory((prev) => [...prev, payload.new]);
-            if (!showChat) setUnreadCount(prev => prev + 1);
-            scrollToBottom();
-          }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user, showChat]);
-
   const scrollToBottom = () => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   };
 
   const loadAppData = async () => {
@@ -79,50 +108,75 @@ export default function ClientHome() {
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
     
-    // --- AJUSTEMENT PROFESSIONNEL : VÉRIFICATION BANNISSEMENT ---
     if (profile?.is_banned) {
       setIsBanned(true);
-      return; // On arrête le chargement ici
+      return;
     }
 
     if (profile) setUser(profile);
     const { data: bets } = await supabase.from('bets').select('*').eq('user_id', authUser.id).order('created_at', { ascending: false });
     if (bets) setMyBets(bets);
+    
     const { data: tirage } = await supabase.from('tirages').select('*').eq('status', 'futur').order('created_at', { ascending: true }).limit(1).maybeSingle();
     setNextTirage(tirage);
+    
     const { data: results } = await supabase.from('tirages').select('*').eq('status', 'publie').order('created_at', { ascending: false }).limit(5);
     if (results) setPastTirages(results);
   };
 
   const fetchMessages = async () => {
     if (!user) return;
-    const { data } = await supabase.from('messages').select('*').or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`).order('created_at', { ascending: true });
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+      .order('created_at', { ascending: true });
     if (data) setChatHistory(data);
     setUnreadCount(0);
   };
 
   const handleSendMessage = async () => {
     if (!chatMessage.trim() || !user || !adminUUID) return;
-    const { error } = await supabase.from('messages').insert([{ sender_id: user.id, content: chatMessage.trim(), receiver_id: adminUUID }]);
-    if (!error) { setChatMessage(''); scrollToBottom(); }
+    
+    const newMessage = { 
+      sender_id: user.id, 
+      content: chatMessage.trim(), 
+      receiver_id: adminUUID 
+    };
+
+    const { data, error } = await supabase.from('messages').insert([newMessage]).select();
+    
+    if (!error && data) {
+      setChatHistory(prev => [...prev, data[0]]);
+      setChatMessage('');
+      scrollToBottom();
+    }
   };
 
   const handlePlaceBet = async () => {
     if (!nextTirage) return alert("Aucun tirage ouvert.");
     if (selectedNumber.length < 2 || !betAmount || parseFloat(betAmount) < 10) return alert("Mise invalide (min 10 HTG)");
     if (parseFloat(betAmount) > user.balance) return alert("Solde insuffisant");
+    
     setLoading(true);
     const newBalance = user.balance - parseFloat(betAmount);
     const { error: balErr } = await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
+    
     if (!balErr) {
-      await supabase.from('bets').insert([{ user_id: user.id, user_phone: user.phone, number_played: selectedNumber, stake: parseFloat(betAmount), tirage_id: nextTirage.id, status: 'en_attente' }]);
+      await supabase.from('bets').insert([{ 
+        user_id: user.id, 
+        user_phone: user.phone, 
+        number_played: selectedNumber, 
+        stake: parseFloat(betAmount), 
+        tirage_id: nextTirage.id, 
+        status: 'en_attente' 
+      }]);
       setUser({ ...user, balance: newBalance });
       setSelectedNumber(''); setBetAmount(''); setActiveTab('history');
     }
     setLoading(false);
   };
 
-  // --- INTERFACE DE BANNISSEMENT (UI PROFESSIONNELLE) ---
   if (isBanned) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-center">
@@ -147,8 +201,6 @@ export default function ClientHome() {
 
   return (
     <main className="min-h-screen bg-[#020617] text-slate-100 font-sans pb-24">
-      {/* ... Le reste de ton code original (Header, Onglets, Modals) reste exactement le même ... */}
-      
       {/* HEADER */}
       <div className="p-6 flex justify-between items-center border-b border-white/5 bg-[#020617]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="flex items-center gap-2">
@@ -161,7 +213,7 @@ export default function ClientHome() {
           <MessageCircle size={22} />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 rounded-full border-2 border-[#020617] flex items-center justify-center text-[10px] text-white font-bold animate-bounce">
-                {unreadCount}
+              {unreadCount}
             </span>
           )}
         </button>
@@ -181,7 +233,7 @@ export default function ClientHome() {
               </div>
             </div>
 
-            <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-4xl flex justify-between items-center">
+            <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-3xl flex justify-between items-center">
               <div>
                 <p className="font-black text-sm text-white uppercase italic">{nextTirage?.moment || 'Fermé'}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase italic">Cotes x80</p>
@@ -252,18 +304,31 @@ export default function ClientHome() {
         )}
       </div>
 
-      {/* MODAL CHAT */}
+      {/* MODAL CHAT - STYLE WHATSAPP ÉLITE */}
       {showChat && (
-        <div className="fixed inset-0 z-110 bg-[#020617] flex flex-col animate-in slide-in-from-right duration-300">
-          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#020617] sticky top-0">
+        <div className="fixed inset-0 z-100 bg-[#020617] flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#020617]/90 backdrop-blur-xl sticky top-0 z-10">
             <button onClick={() => setShowChat(false)} className="p-2 bg-slate-900 rounded-xl hover:bg-slate-800"><X size={20}/></button>
-            <p className="font-black text-sm uppercase italic">Support <span className="text-emerald-500">Elite</span></p>
-            <div className="w-10 h-10 bg-emerald-500/10 rounded-full animate-pulse border border-emerald-500/20" />
+            
+            <div className="flex flex-col items-center">
+              <p className="font-black text-xs uppercase italic">Support <span className="text-emerald-500">Elite</span></p>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${isAdminTyping ? 'bg-emerald-500 animate-bounce' : 'bg-emerald-500/50'}`} />
+                <p className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest">
+                  {isAdminTyping ? "En train d'écrire..." : "En ligne"}
+                </p>
+              </div>
+            </div>
+
+            <div className="w-10 h-10 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
+               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            </div>
           </div>
+
           <div ref={scrollRef} className="flex-1 p-6 overflow-y-auto space-y-4 bg-linear-to-b from-[#020617] to-slate-950">
             {chatHistory.map((msg, i) => (
               <div key={i} className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-4 rounded-2xl text-xs font-bold shadow-lg ${msg.sender_id === user?.id ? 'bg-emerald-500 text-slate-950 rounded-tr-none shadow-emerald-500/5' : 'bg-slate-900 border border-slate-800 text-white rounded-tl-none shadow-black/20'}`}>
+                <div className={`max-w-[80%] p-4 rounded-2xl text-[11px] font-bold shadow-lg ${msg.sender_id === user?.id ? 'bg-emerald-500 text-slate-950 rounded-tr-none shadow-emerald-500/5' : 'bg-slate-900 border border-slate-800 text-white rounded-tl-none shadow-black/20'}`}>
                   {msg.content}
                   <div className="flex justify-end mt-1">
                     <p className={`text-[8px] opacity-40 italic ${msg.sender_id === user?.id ? 'text-slate-950' : 'text-slate-500'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
@@ -271,11 +336,30 @@ export default function ClientHome() {
                 </div>
               </div>
             ))}
+            {isAdminTyping && (
+                <div className="flex justify-start">
+                    <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-2xl rounded-tl-none flex gap-1 items-center">
+                        <div className="w-1 h-1 bg-slate-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                        <div className="w-1 h-1 bg-slate-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                        <div className="w-1 h-1 bg-slate-500 rounded-full animate-bounce" />
+                    </div>
+                </div>
+            )}
           </div>
+
           <div className="p-6 bg-slate-900/50 border-t border-white/5 backdrop-blur-md">
             <div className="flex gap-2 max-w-xl mx-auto">
-              <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Écrivez à l'admin..." className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-xs outline-none focus:border-emerald-500 text-white" />
-              <button onClick={handleSendMessage} className="bg-emerald-500 text-slate-950 p-4 rounded-2xl active:scale-90 shadow-lg shadow-emerald-500/20"><Send size={20}/></button>
+              <input 
+                type="text" 
+                value={chatMessage} 
+                onChange={(e) => setChatMessage(e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} 
+                placeholder="Écrivez à l'admin..." 
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-xs outline-none focus:border-emerald-500 text-white" 
+              />
+              <button onClick={handleSendMessage} className="bg-emerald-500 text-slate-950 p-4 rounded-2xl active:scale-90 shadow-lg shadow-emerald-500/20">
+                <Send size={20}/>
+              </button>
             </div>
           </div>
         </div>
