@@ -15,13 +15,13 @@ export default function Inscription() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phone.length < 8) return alert("Numéro de téléphone trop court");
+    if (phone.length < 8) return alert("Numéro invalide");
     setLoading(true);
 
     try {
-      const internalEmail = `${phone.trim()}@chifpam.ht`;
+      const cleanPhone = phone.trim();
+      const internalEmail = `${cleanPhone}@chifpam.ht`;
 
-      // 1. Création Auth Supabase
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
@@ -30,20 +30,15 @@ export default function Inscription() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // 2. Insertion Profil (On s'assure que les colonnes matchent ton SQL)
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([{
-              id: authData.user.id,
-              phone: phone.trim(),
-              username: username.trim(),
-              balance: 0,
-              is_banned: false
-          }]);
+        const { error: profileError } = await supabase.from('profiles').insert([{
+          id: authData.user.id,
+          phone: cleanPhone,
+          username: username.trim(),
+          balance: 0,
+          is_banned: false
+        }]);
 
         if (profileError) throw profileError;
-
-        alert("Bienvenue dans l'Elite ! Connecte-toi maintenant.");
         router.push('/connexion');
       }
     } catch (error: any) {
@@ -61,7 +56,7 @@ export default function Inscription() {
             <ShieldCheck size={32} className="text-slate-950 -rotate-3" />
           </div>
           <h1 className="text-3xl font-black italic uppercase tracking-tighter">Elite <span className="text-emerald-500">Pam</span></h1>
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 text-center">Nouveau Membre</p>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 text-center">Rejoindre le club</p>
         </div>
 
         <div className="bg-slate-900/40 border border-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl">
@@ -72,7 +67,7 @@ export default function Inscription() {
                 <UserCircle className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                 <input 
                   type="text" required value={username} onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Ton pseudo"
+                  placeholder="Pseudo unique"
                   className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
                 />
               </div>
@@ -84,7 +79,7 @@ export default function Inscription() {
                 <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                 <input 
                   type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Numéro"
+                  placeholder="Ex: 40000000"
                   className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold"
                 />
               </div>
@@ -104,16 +99,16 @@ export default function Inscription() {
 
             <button 
               type="submit" disabled={loading}
-              className="w-full bg-emerald-500 text-slate-950 py-5 rounded-2xl font-black uppercase italic tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+              className="w-full bg-emerald-500 text-slate-950 py-5 rounded-2xl font-black uppercase italic tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50 shadow-xl shadow-emerald-500/20"
             >
-              {loading ? <Loader2 className="animate-spin" /> : "Créer mon compte"}
+              {loading ? <Loader2 className="animate-spin" /> : "Valider l'adhésion"}
               {!loading && <ArrowRight size={20} />}
             </button>
           </form>
 
-          <div className="mt-8 text-center pt-6 border-t border-slate-800/50">
+          <div className="mt-8 text-center pt-6 border-t border-white/5">
             <p className="text-slate-500 text-[10px] font-black uppercase">
-              Déjà inscrit ? <Link href="/connexion" className="text-emerald-500 hover:underline ml-1">Se connecter</Link>
+              Déjà membre ? <Link href="/connexion" className="text-emerald-500 hover:underline ml-1">Se connecter</Link>
             </p>
           </div>
         </div>
