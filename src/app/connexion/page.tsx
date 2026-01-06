@@ -27,23 +27,17 @@ export default function Connexion() {
         password: password,
       });
 
-      if (authError) throw new Error("Identifiants incorrects.");
+      // GESTION ERREUR DE CONNEXION
+      if (authError) {
+        if (authError.message.includes("Invalid login credentials")) {
+          setErrorMessage("Identifiants inconnus. Pas encore inscrit ?");
+          return;
+        }
+        throw authError;
+      }
 
       if (data?.user) {
-        // Vérification du profil
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('is_banned, phone')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile?.is_banned) {
-          await supabase.auth.signOut();
-          throw new Error("Accès refusé : Compte suspendu.");
-        }
-
-        // REDIRECTION CRUCIALE (Correction du 404)
-        // Note : On ne met pas (admin-chif-pam) dans l'URL
+        // Redirection pro vers URLs réelles
         if (cleanPhone === '99999999') {
           router.push('/dashboard'); 
         } else {
@@ -52,16 +46,13 @@ export default function Connexion() {
       }
     } catch (err: any) {
       setErrorMessage(err.message || "Erreur de connexion.");
+    } finally {
       setLoading(false);
     }
   };
 
   return (
     <main className="min-h-screen bg-[#020617] text-slate-100 flex flex-col items-center justify-center p-6 font-sans">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-80 bg-emerald-500 rounded-full blur-[120px]" />
-      </div>
-
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-10">
           <div className="inline-flex p-4 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 mb-6 shadow-xl shadow-emerald-500/5">
@@ -70,12 +61,12 @@ export default function Connexion() {
           <h1 className="text-4xl font-black italic tracking-tighter uppercase mb-2">
             CHIF-PAM <span className="text-emerald-500">ELITE</span>
           </h1>
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em]">Portail de Sécurité</p>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em]">Espace Sécurisé</p>
         </div>
 
         <div className="bg-slate-900/40 border border-white/5 backdrop-blur-2xl p-8 rounded-[2.5rem] shadow-2xl">
           {errorMessage && (
-            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-in fade-in duration-300">
+            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-500 text-xs font-bold animate-pulse">
               <AlertCircle size={18} />
               {errorMessage}
             </div>
@@ -89,7 +80,7 @@ export default function Connexion() {
                 <input 
                   type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}
                   placeholder="Numéro de téléphone"
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white"
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white placeholder:text-slate-700"
                 />
               </div>
             </div>
@@ -101,7 +92,7 @@ export default function Connexion() {
                 <input 
                   type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white"
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white placeholder:text-slate-700"
                 />
               </div>
             </div>
@@ -115,9 +106,9 @@ export default function Connexion() {
             </button>
           </form>
 
-          <div className="mt-8 text-center pt-6 border-t border-white/5">
+          <div className="mt-8 text-center pt-6 border-t border-slate-800/50">
             <p className="text-slate-500 text-[10px] font-black uppercase tracking-wider">
-              Nouveau ? <Link href="/" className="text-emerald-500 hover:underline ml-1">Créer un compte</Link>
+              Pas encore de compte ? <Link href="/" className="text-emerald-500 hover:underline ml-1">Inscrivez-vous ici</Link>
             </p>
           </div>
         </div>
