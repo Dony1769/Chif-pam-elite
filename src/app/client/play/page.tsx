@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Zap, Loader2, CheckCircle2, AlertCircle, Wallet } from 'lucide-react';
+import { Zap, Loader2, CheckCircle2, AlertCircle, Wallet, Ban } from 'lucide-react';
 
 export default function PlayZone() {
   const [session, setSession] = useState<any>(null);
@@ -17,6 +17,7 @@ export default function PlayZone() {
     init();
     const channel = supabase.channel('tirage-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => init())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => init())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -32,7 +33,11 @@ export default function PlayZone() {
     setSession(tirage);
 
     if (tirage) {
-      const { data: pastMises } = await supabase.from('mises').select('chiffre_choisi').eq('tirage_id', tirage.id).eq('user_id', authUser.id);
+      const { data: pastMises } = await supabase
+        .from('mises')
+        .select('chiffre_choisi')
+        .eq('tirage_id', tirage.id)
+        .eq('user_id', authUser.id);
       setUserMises(pastMises?.map(m => m.chiffre_choisi) || []);
     }
   };
@@ -40,8 +45,16 @@ export default function PlayZone() {
   const handleBet = async () => {
     const betAmount = Number(amount);
     if (!selected || !amount || betAmount <= 0) return;
+    
+    // Sécurité 1: Vérifier si le chiffre est déjà joué (doublon)
+    if (userMises.includes(selected)) {
+      setError("Vous avez déjà un billet sur ce chiffre !");
+      return;
+    }
+
+    // Sécurité 2: Solde
     if (betAmount > (user?.balance || 0)) {
-      setError("Solde insuffisant");
+      setError("Solde insuffisant.");
       return;
     }
 
@@ -49,14 +62,14 @@ export default function PlayZone() {
     setError(null);
 
     try {
-      // ÉTAPE 1 : DÉBIT DU COMPTE
+      // 1. Débit
       const { error: rpcError } = await supabase.rpc('increment_balance', {
         user_id: user.id,
         amount: -betAmount
       });
-      if (rpcError) throw new Error("Transaction refusée.");
+      if (rpcError) throw new Error("Erreur de transaction.");
 
-      // ÉTAPE 2 : ENREGISTREMENT DU BILLET
+      // 2. Insertion
       const { error: miseError } = await supabase.from('mises').insert([{
         user_id: user.id,
         tirage_id: session.id,
@@ -67,12 +80,13 @@ export default function PlayZone() {
       }]);
 
       if (miseError) {
-        // REMBOURSEMENT SI ÉCHEC
+        // Remboursement si erreur technique (ex: doublon détecté par la DB)
         await supabase.rpc('increment_balance', { user_id: user.id, amount: betAmount });
-        throw new Error("Sécurité : Mise annulée et remboursée.");
+        console.error("Erreur technique:", miseError);
+        throw new Error("Validation échouée : Mise remboursée.");
       }
 
-      // ÉTAPE 3 : TRANSACTION LOG
+      // 3. Log
       await supabase.from('transactions').insert([{
         user_id: user.id,
         amount: betAmount,
@@ -83,7 +97,7 @@ export default function PlayZone() {
       setSelected(null);
       setAmount('');
       init();
-      alert("✅ Billet validé ! Bonne chance.");
+      alert("🎯 Billet enregistré ! Bonne chance.");
 
     } catch (err: any) {
       setError(err.message);
@@ -94,7 +108,7 @@ export default function PlayZone() {
 
   if (!session) return (
     <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-10 text-center">
-      <Zap size={40} className="text-slate-800 mb-4" />
+      <Zap size={40} className="text-slate-800 mb-4 animate-pulse" />
       <p className="text-slate-500 font-black uppercase text-[10px] tracking-widest">Aucun tirage en cours</p>
     </div>
   );
@@ -103,39 +117,44 @@ export default function PlayZone() {
     <main className="min-h-screen bg-[#020617] p-4 pb-32 text-white">
       <div className="max-w-md mx-auto space-y-6">
         
-        {/* EN-TÊTE */}
+        {/* HEADER */}
         <div className="bg-slate-900 border border-white/5 p-6 rounded-[2rem] flex justify-between items-center shadow-xl">
            <div>
-              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Rideau de Fumée</p>
-              <h1 className="text-lg font-black uppercase italic">{session.moment}</h1>
+              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest italic">Session {session.moment}</p>
+              <h1 className="text-lg font-black uppercase italic">ChifPam Live</h1>
            </div>
-           <div className="bg-emerald-500 text-slate-950 px-4 py-1 rounded-full text-[10px] font-black italic">
+           <div className="bg-emerald-500 text-slate-950 px-3 py-1 rounded-lg text-[10px] font-black">
               x{session.multiplicateur}
            </div>
         </div>
 
         {/* GRILLE */}
         <div className="grid grid-cols-5 gap-2">
-          {session.chiffres_visibles.map((num: string) => (
-            <button
-              key={num}
-              disabled={userMises.includes(num) || isBetting}
-              onClick={() => setSelected(num)}
-              className={`h-14 rounded-2xl font-black text-sm transition-all border ${
-                userMises.includes(num) ? 'bg-slate-950 border-white/5 text-slate-800' :
-                selected === num ? 'bg-emerald-500 border-emerald-400 text-slate-950 scale-105' : 'bg-slate-900 border-white/5 text-slate-400'
-              }`}
-            >
-              {num}
-            </button>
-          ))}
+          {session.chiffres_visibles.map((num: string) => {
+            const isPlayed = userMises.includes(num);
+            const isSelected = selected === num;
+            return (
+              <button
+                key={num}
+                disabled={isPlayed || isBetting}
+                onClick={() => setSelected(num)}
+                className={`h-14 rounded-xl font-black text-sm transition-all border relative flex items-center justify-center ${
+                  isPlayed ? 'bg-slate-950 border-white/5 text-slate-800' :
+                  isSelected ? 'bg-emerald-500 border-emerald-400 text-slate-950 scale-105' : 'bg-slate-900 border-white/5 text-slate-400'
+                }`}
+              >
+                {num}
+                {isPlayed && <Ban size={12} className="absolute top-1 right-1 opacity-20" />}
+              </button>
+            );
+          })}
         </div>
 
         {/* CLAVIER */}
-        <div className="bg-slate-900/50 border border-white/5 p-8 rounded-[2.5rem] space-y-6 backdrop-blur-md">
-           <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
-              <span className="text-[10px] font-black text-slate-500 uppercase">Mise</span>
-              <span className="text-3xl font-black italic text-white">{amount || '0'} <span className="text-xs">HTG</span></span>
+        <div className="bg-slate-900/50 border border-white/5 p-8 rounded-[2.5rem] space-y-6 backdrop-blur-md shadow-2xl">
+           <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center shadow-inner">
+              <span className="text-[9px] font-black text-slate-500 uppercase">Mise HTG</span>
+              <span className="text-3xl font-black italic text-white">{amount || '0'}</span>
            </div>
 
            <div className="grid grid-cols-3 gap-2">
@@ -157,17 +176,18 @@ export default function PlayZone() {
            )}
 
            <button
-             disabled={!selected || !amount || isBetting}
+             disabled={!selected || !amount || isBetting || userMises.includes(selected!)}
              onClick={handleBet}
              className="w-full py-6 bg-emerald-500 text-slate-950 rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-20 transition-all flex items-center justify-center gap-2"
            >
-             {isBetting ? <Loader2 className="animate-spin" /> : 'Confirmer le Billet'}
+             {isBetting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
+             VALIDER MON BILLET
            </button>
         </div>
 
         <div className="flex items-center justify-center gap-4 py-4 bg-slate-900/20 rounded-2xl border border-white/5">
             <Wallet size={16} className="text-slate-600" />
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Solde: <span className="text-white">{user?.balance?.toLocaleString()} HTG</span></p>
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Solde actuel: <span className="text-white">{user?.balance?.toLocaleString()} HTG</span></p>
         </div>
       </div>
     </main>
