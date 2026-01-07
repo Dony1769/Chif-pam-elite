@@ -24,21 +24,15 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Utilisation de getUser() qui est la méthode la plus fiable pour vérifier l'auth
   const { data: { user } } = await supabase.auth.getUser();
 
-  const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
-  const isLoginPage = request.nextUrl.pathname === '/connexion';
+  const ADMIN_EMAIL = "99999999@chifpam.ht"; // On utilise l'email pour plus de sûreté
   const isAdminPath = request.nextUrl.pathname.startsWith('/admin-chif-pam');
 
-  // Si l'admin est déjà connecté et va sur /connexion, on l'envoie sur son dashboard
-  if (isLoginPage && user?.id === ADMIN_ID) {
-    return NextResponse.redirect(new URL('/admin-chif-pam/dashboard', request.url));
-  }
-
-  // PROTECTION : Si on tente d'entrer dans l'admin sans être l'ADMIN_ID
   if (isAdminPath) {
-    if (!user || user.id !== ADMIN_ID) {
+    // Si l'utilisateur n'est pas connecté OU si son email n'est pas celui de l'admin
+    if (!user || user.email !== ADMIN_EMAIL) {
+      console.log("Accès refusé pour :", user?.email);
       return NextResponse.redirect(new URL('/connexion', request.url));
     }
   }
