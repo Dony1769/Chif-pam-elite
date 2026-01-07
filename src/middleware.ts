@@ -38,20 +38,18 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Utiliser getUser() est plus sûr car cela vérifie la validité du token auprès de Supabase Auth
+  // IMPORTANT: On utilise getUser() pour forcer la vérification du jeton
   const { data: { user } } = await supabase.auth.getUser();
 
   const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
-  const path = request.nextUrl.pathname;
+  const isAdminPage = request.nextUrl.pathname.startsWith('/admin-chif-pam');
 
-  // 1. SI l'utilisateur tente d'accéder à l'admin
-  if (path.startsWith('/admin-chif-pam')) {
-    
-    // Exception : On laisse passer si c'est la page de login admin spécifique (si tu en as une)
-    // Sinon, on vérifie si l'utilisateur est connecté ET s'il est l'admin
+  if (isAdminPage) {
+    // Si l'utilisateur n'est pas connecté ou n'est pas l'admin
     if (!user || user.id !== ADMIN_ID) {
-      // Si ce n'est pas le bon admin, redirection vers la page de login principale
-      return NextResponse.redirect(new URL('/login', request.url)); 
+      console.log("Accès refusé. User:", user?.id); // Pour debug en local
+      // Redirige vers la racine si l'accès est interdit
+      return NextResponse.redirect(new URL('/', request.url));
     }
   }
 
@@ -59,13 +57,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };
