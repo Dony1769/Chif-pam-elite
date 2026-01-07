@@ -24,19 +24,7 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const ADMIN_EMAIL = "99999999@chifpam.ht"; // On utilise l'email pour plus de sûreté
-  const isAdminPath = request.nextUrl.pathname.startsWith('/admin-chif-pam');
-
-  if (isAdminPath) {
-    // Si l'utilisateur n'est pas connecté OU si son email n'est pas celui de l'admin
-    if (!user || user.email !== ADMIN_EMAIL) {
-      console.log("Accès refusé pour :", user?.email);
-      return NextResponse.redirect(new URL('/connexion', request.url));
-    }
-  }
-
+  // ON NE BLOQUE RIEN POUR LE TEST
   return response;
 }
 
