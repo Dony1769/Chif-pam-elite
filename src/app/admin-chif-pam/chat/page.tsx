@@ -4,119 +4,69 @@ import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Send, User as UserIcon, Loader2 } from "lucide-react";
 
-const ADMIN_ID = process.env.NEXT_PUBLIC_ADMIN_ID || "9e141172-93db-4df4-a72b-47b89211b46e";
-
-type Profile = {
-  id: string;
-  phone?: string;
-  last_active?: string;
-  [key: string]: any;
-};
-
-type Message = {
-  id?: string;
-  content: string;
-  sender_id: string;
-  receiver_id: string;
-  is_admin?: boolean;
-  created_at?: string;
-  [key: string]: any;
-};
+const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
 
 export default function AdminChat() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const selectedUserRef = useRef<string | null>(null);
-
-  // Synchronisation du ref pour le Realtime
-  useEffect(() => {
-    selectedUserRef.current = selectedUser;
-    if (selectedUser) fetchMessages(selectedUser);
-  }, [selectedUser]);
 
   useEffect(() => {
-    initAdmin();
+    fetchConversations();
 
+    // Écoute globale des nouveaux messages pour mettre à jour la liste des profils ou le chat actif
     const channel = supabase
-      .channel('admin-global-chat')
+      .channel('admin-chat-global')
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages' }, 
         (payload) => {
-          const msg = payload.new as Message;
-          fetchConversations();
-
-          const isRelevant = 
-            (msg.sender_id === selectedUserRef.current && msg.receiver_id === ADMIN_ID) ||
-            (msg.sender_id === ADMIN_ID && msg.receiver_id === selectedUserRef.current);
-
-          if (isRelevant) {
-            setMessages((prev) => {
-                if (prev.find(m => m.id === msg.id)) return prev;
-                return [...prev, msg];
-            });
+          const newMsg = payload.new;
+          
+          // Si le message concerne l'utilisateur actuellement sélectionné, on l'ajoute
+          if (selectedUser === newMsg.sender_id || selectedUser === newMsg.receiver_id) {
+            setMessages((prev) => [...prev, newMsg]);
           }
+          // On rafraîchit la liste des conversations pour remonter le dernier client actif
+          fetchConversations();
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [selectedUser]); // On réabonne si l'utilisateur sélectionné change pour plus de sécurité
+
+  useEffect(() => {
+    if (selectedUser) fetchMessages(selectedUser);
+  }, [selectedUser]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const initAdmin = async () => {
-    setLoading(true);
-    await fetchConversations();
+  const fetchConversations = async () => {
+    // On récupère les profils
+    const { data: profilesData, error } = await supabase
+      .from("profiles")
+      .select("id, phone, username, created_at")
+      .neq("id", ADMIN_ID);
+
+    if (error) return console.error(error);
+    setProfiles(profilesData || []);
     setLoading(false);
   };
 
-  /**
-   * RÉCUPÉRATION DES CONVERSATIONS (MISE À JOUR)
-   * Cette fonction récupère tous les profils sauf l'admin
-   * et les trie par activité récente.
-   */
-  const fetchConversations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, phone, last_active, username")
-        .neq("id", ADMIN_ID);
-
-      if (error) throw error;
-
-      // Tri manuel pour placer les clients les plus actifs en haut
-      const sortedData = (data || []).sort((a, b) => {
-        const dateA = a.last_active || '';
-        const dateB = b.last_active || '';
-        return dateB.localeCompare(dateA);
-      });
-
-      setProfiles(sortedData);
-    } catch (err) {
-      console.error("Erreur de chargement des profils:", err);
-    }
-  };
-
   const fetchMessages = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-        .order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`and(sender_id.eq.${userId},receiver_id.eq.${ADMIN_ID}),and(sender_id.eq.${ADMIN_ID},receiver_id.eq.${userId})`)
+      .order("created_at", { ascending: true });
 
-      if (error) throw error;
-      setMessages(data || []);
-    } catch (err) {
-      console.error("Erreur chargement messages:", err);
-    }
+    if (!error) setMessages(data || []);
   };
 
   const sendResponse = async () => {
@@ -130,99 +80,47 @@ export default function AdminChat() {
     };
 
     const { error } = await supabase.from("messages").insert([msg]);
-    if (error) console.error("Erreur envoi:", error);
-    else setNewMessage("");
+    if (!error) setNewMessage("");
   };
 
-  if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-[#020617]">
-      <Loader2 className="animate-spin text-emerald-500" />
-    </div>
-  );
+  if (loading) return <div className="h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
     <div className="flex h-[85vh] gap-6 p-6 text-white font-sans">
-      {/* SIDEBAR : LISTE DES CLIENTS */}
+      {/* SIDEBAR */}
       <div className="w-80 bg-slate-900/40 rounded-[2.5rem] border border-white/10 flex flex-col overflow-hidden backdrop-blur-md">
-        <div className="p-6 border-b border-white/10">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Conversations</h3>
-        </div>
+        <div className="p-6 border-b border-white/10"><h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Clients</h3></div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {profiles.length > 0 ? (
-            profiles.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setSelectedUser(p.id)}
-                className={`w-full p-4 rounded-3xl flex items-center gap-4 transition-all border ${
-                  selectedUser === p.id 
-                  ? "bg-emerald-600 border-emerald-400 shadow-lg shadow-emerald-900/20" 
-                  : "bg-slate-950/50 border-white/5 hover:border-white/20"
-                }`}
-              >
-                <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-[10px] font-black border border-white/10">
-                  {p.phone?.slice(-2) || "??"}
-                </div>
-                <div className="text-left">
-                  <p className="text-xs font-black truncate w-32">{p.phone ? `+${p.phone}` : "Client Anonyme"}</p>
-                  <span className={`text-[8px] font-bold uppercase tracking-widest ${selectedUser === p.id ? 'text-emerald-100' : 'text-emerald-500'}`}>
-                     • En ligne
-                  </span>
-                </div>
-              </button>
-            ))
-          ) : (
-            <div className="p-4 text-center text-[10px] text-slate-500 font-bold uppercase tracking-widest opacity-50">
-              Aucun client trouvé
-            </div>
-          )}
+          {profiles.map((p) => (
+            <button key={p.id} onClick={() => setSelectedUser(p.id)} className={`w-full p-4 rounded-3xl flex items-center gap-4 transition-all border ${selectedUser === p.id ? "bg-emerald-600 border-emerald-400" : "bg-slate-950/50 border-white/5"}`}>
+              <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-[10px] font-black">{p.phone?.slice(-2) || "??"}</div>
+              <div className="text-left">
+                <p className="text-xs font-black truncate w-32">{p.phone || "Client"}</p>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ZONE DE CHAT PRINCIPALE */}
+      {/* CHAT ZONE */}
       <div className="flex-1 bg-slate-900/20 rounded-[3rem] border border-white/10 flex flex-col overflow-hidden backdrop-blur-sm relative">
         {selectedUser ? (
           <>
-            <div className="p-6 bg-slate-950/40 border-b border-white/10 flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
-                <p className="text-[10px] font-black uppercase tracking-widest">Discussion sécurisée</p>
-            </div>
-
             <div className="flex-1 overflow-y-auto p-8 space-y-6">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.is_admin ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[75%] p-5 rounded-[2rem] text-sm leading-relaxed shadow-2xl ${
-                    m.is_admin 
-                    ? "bg-emerald-600 text-white rounded-tr-none border border-emerald-400/30" 
-                    : "bg-slate-800 text-white rounded-tl-none border border-white/10"
-                  }`}>
-                    {m.content}
-                  </div>
+                  <div className={`max-w-[75%] p-5 rounded-[2rem] text-sm ${m.is_admin ? "bg-emerald-600 rounded-tr-none" : "bg-slate-800 rounded-tl-none"}`}>{m.content}</div>
                 </div>
               ))}
               <div ref={scrollRef} />
             </div>
-
-            <div className="p-6 bg-slate-950/80 border-t border-white/10 flex gap-4">
-              <input
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendResponse()}
-                placeholder="Écrire votre réponse..."
-                className="flex-1 bg-slate-900 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white outline-none focus:border-emerald-500/50 transition-all placeholder:text-slate-600"
-              />
-              <button 
-                onClick={sendResponse} 
-                className="p-4 bg-emerald-500 text-slate-950 rounded-2xl hover:bg-emerald-400 active:scale-90 transition-all shadow-lg shadow-emerald-500/20"
-              >
-                <Send size={22} />
-              </button>
+            <div className="p-6 bg-slate-950/80 flex gap-4">
+              <input value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendResponse()} placeholder="Répondre..." className="flex-1 bg-slate-900 border border-white/10 rounded-2xl px-6 py-4 text-white outline-none focus:border-emerald-500" />
+              <button onClick={sendResponse} className="p-4 bg-emerald-500 text-slate-950 rounded-2xl"><Send size={22} /></button>
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center gap-6 opacity-20">
-            <UserIcon size={80} className="text-slate-500" />
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">En attente de sélection</p>
-          </div>
+          <div className="h-full flex flex-col items-center justify-center opacity-20"><UserIcon size={80} /><p className="text-[10px] font-black uppercase">Sélectionnez un client</p></div>
         )}
       </div>
     </div>
