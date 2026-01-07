@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Zap, Loader2, CheckCircle2, AlertCircle, Wallet, Ban } from 'lucide-react';
+import { Zap, Loader2, CheckCircle2, AlertCircle, Wallet, Lock } from 'lucide-react';
 
 export default function PlayZone() {
   const [session, setSession] = useState<any>(null);
@@ -33,27 +33,23 @@ export default function PlayZone() {
     setSession(tirage);
 
     if (tirage) {
-      const { data: pastMises } = await supabase
-        .from('mises')
+      const { data: past } = await supabase.from('mises')
         .select('chiffre_choisi')
         .eq('tirage_id', tirage.id)
         .eq('user_id', authUser.id);
-      setUserMises(pastMises?.map(m => m.chiffre_choisi) || []);
+      setUserMises(past?.map(m => m.chiffre_choisi) || []);
     }
   };
 
   const handleBet = async () => {
-    const betAmount = Number(amount);
-    if (!selected || !amount || betAmount <= 0) return;
+    const betAmt = Number(amount);
+    if (!selected || betAmt <= 0 || !session) return;
     
-    // Sécurité 1: Vérifier si le chiffre est déjà joué (doublon)
     if (userMises.includes(selected)) {
-      setError("Vous avez déjà un billet sur ce chiffre !");
+      setError("Chiffre déjà joué pour cette session.");
       return;
     }
-
-    // Sécurité 2: Solde
-    if (betAmount > (user?.balance || 0)) {
+    if (betAmt > (user?.balance || 0)) {
       setError("Solde insuffisant.");
       return;
     }
@@ -62,99 +58,105 @@ export default function PlayZone() {
     setError(null);
 
     try {
-      // 1. Débit
-      const { error: rpcError } = await supabase.rpc('increment_balance', {
-        user_id: user.id,
-        amount: -betAmount
+      // 1. DÉBIT
+      const { error: dError } = await supabase.rpc('increment_balance', { 
+        user_id: user.id, 
+        amount: -betAmt 
       });
-      if (rpcError) throw new Error("Erreur de transaction.");
+      if (dError) throw new Error("Échec du débit.");
 
-      // 2. Insertion
-      const { error: miseError } = await supabase.from('mises').insert([{
+      // 2. INSERTION
+      const { error: mError } = await supabase.from('mises').insert({
         user_id: user.id,
         tirage_id: session.id,
         chiffre_choisi: selected,
-        montant: betAmount,
+        montant: betAmt,
         status: 'en_attente',
         multiplicateur_moment: session.multiplicateur || 10
-      }]);
+      });
 
-      if (miseError) {
-        // Remboursement si erreur technique (ex: doublon détecté par la DB)
-        await supabase.rpc('increment_balance', { user_id: user.id, amount: betAmount });
-        console.error("Erreur technique:", miseError);
-        throw new Error("Validation échouée : Mise remboursée.");
+      if (mError) {
+        // REMBOURSEMENT AUTOMATIQUE SI LA DB REJETTE
+        await supabase.rpc('increment_balance', { user_id: user.id, amount: betAmt });
+        console.error("Erreur DB détaillée:", mError);
+        throw new Error("Erreur technique (Base de données). Mise remboursée.");
       }
 
-      // 3. Log
-      await supabase.from('transactions').insert([{
+      // 3. LOG TRANSACTION
+      await supabase.from('transactions').insert({
         user_id: user.id,
-        amount: betAmount,
+        amount: betAmt,
         type: 'mise',
         status: 'valide'
-      }]);
+      });
 
+      alert("🎉 Billet validé ! Bonne chance.");
       setSelected(null);
       setAmount('');
       init();
-      alert("🎯 Billet enregistré ! Bonne chance.");
 
-    } catch (err: any) {
-      setError(err.message);
+    } catch (e: any) {
+      setError(e.message);
     } finally {
       setIsBetting(false);
     }
   };
 
   if (!session) return (
-    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-10 text-center">
-      <Zap size={40} className="text-slate-800 mb-4 animate-pulse" />
-      <p className="text-slate-500 font-black uppercase text-[10px] tracking-widest">Aucun tirage en cours</p>
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
+      <Lock size={40} className="text-slate-800 mb-4" />
+      <h2 className="text-white font-black uppercase italic tracking-tighter">Aucune session ouverte</h2>
+      <p className="text-slate-500 text-[10px] mt-2 uppercase tracking-widest">Revenez au prochain tirage</p>
     </div>
   );
 
   return (
-    <main className="min-h-screen bg-[#020617] p-4 pb-32 text-white">
+    <main className="min-h-screen bg-[#020617] p-4 pb-32 text-white font-sans">
       <div className="max-w-md mx-auto space-y-6">
         
-        {/* HEADER */}
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-[2rem] flex justify-between items-center shadow-xl">
-           <div>
-              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest italic">Session {session.moment}</p>
-              <h1 className="text-lg font-black uppercase italic">ChifPam Live</h1>
-           </div>
-           <div className="bg-emerald-500 text-slate-950 px-3 py-1 rounded-lg text-[10px] font-black">
-              x{session.multiplicateur}
-           </div>
+        {/* HEADER PRO */}
+        <div className="bg-slate-900 border border-white/5 p-6 rounded-[2.5rem] flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-black shadow-lg shadow-emerald-500/20">
+              <Zap size={20} fill="currentColor" />
+            </div>
+            <div>
+              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">{session.moment}</p>
+              <h1 className="text-lg font-black uppercase italic">Live Zone</h1>
+            </div>
+          </div>
+          <div className="bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+            <p className="text-emerald-500 font-black text-xs">x{session.multiplicateur}</p>
+          </div>
         </div>
 
-        {/* GRILLE */}
+        {/* GRILLE DE CHIFFRES */}
         <div className="grid grid-cols-5 gap-2">
-          {session.chiffres_visibles.map((num: string) => {
-            const isPlayed = userMises.includes(num);
-            const isSelected = selected === num;
+          {session.chiffres_visibles.map((n: string) => {
+            const played = userMises.includes(n);
+            const active = selected === n;
             return (
               <button
-                key={num}
-                disabled={isPlayed || isBetting}
-                onClick={() => setSelected(num)}
-                className={`h-14 rounded-xl font-black text-sm transition-all border relative flex items-center justify-center ${
-                  isPlayed ? 'bg-slate-950 border-white/5 text-slate-800' :
-                  isSelected ? 'bg-emerald-500 border-emerald-400 text-slate-950 scale-105' : 'bg-slate-900 border-white/5 text-slate-400'
+                key={n}
+                disabled={played || isBetting}
+                onClick={() => setSelected(n)}
+                className={`h-14 rounded-2xl font-black text-sm border transition-all ${
+                  played ? 'bg-slate-950 border-white/5 text-slate-800' :
+                  active ? 'bg-emerald-500 border-emerald-400 text-slate-950 scale-105 shadow-xl' :
+                  'bg-slate-900 border-white/5 text-slate-400 active:scale-95'
                 }`}
               >
-                {num}
-                {isPlayed && <Ban size={12} className="absolute top-1 right-1 opacity-20" />}
+                {n}
               </button>
             );
           })}
         </div>
 
-        {/* CLAVIER */}
-        <div className="bg-slate-900/50 border border-white/5 p-8 rounded-[2.5rem] space-y-6 backdrop-blur-md shadow-2xl">
-           <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center shadow-inner">
-              <span className="text-[9px] font-black text-slate-500 uppercase">Mise HTG</span>
-              <span className="text-3xl font-black italic text-white">{amount || '0'}</span>
+        {/* CLAVIER & ACTION */}
+        <div className="bg-slate-900/50 border border-white/5 p-8 rounded-[2.5rem] space-y-6 backdrop-blur-xl">
+           <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Votre Mise</span>
+              <span className="text-3xl font-black italic text-white">{amount || '0'} <span className="text-xs">HTG</span></span>
            </div>
 
            <div className="grid grid-cols-3 gap-2">
@@ -162,7 +164,7 @@ export default function PlayZone() {
                 <button
                   key={btn}
                   onClick={() => btn === 'C' ? setAmount('') : setAmount(prev => prev.length < 6 ? prev + btn : prev)}
-                  className="h-14 rounded-2xl bg-slate-950 text-white font-black border border-white/5 active:bg-emerald-500 active:text-black transition-all"
+                  className="h-12 rounded-xl bg-slate-950 text-white font-black border border-white/5 active:bg-emerald-500 active:text-black transition-colors"
                 >
                   {btn}
                 </button>
@@ -170,24 +172,25 @@ export default function PlayZone() {
            </div>
 
            {error && (
-             <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-500 text-[9px] font-black uppercase italic">
+             <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-500 text-[10px] font-black uppercase italic">
                <AlertCircle size={16} /> {error}
              </div>
            )}
 
            <button
-             disabled={!selected || !amount || isBetting || userMises.includes(selected!)}
+             disabled={!selected || !amount || isBetting}
              onClick={handleBet}
              className="w-full py-6 bg-emerald-500 text-slate-950 rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-20 transition-all flex items-center justify-center gap-2"
            >
              {isBetting ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
-             VALIDER MON BILLET
+             VALIDER LE BILLET
            </button>
         </div>
 
+        {/* FOOTER SOLDE */}
         <div className="flex items-center justify-center gap-4 py-4 bg-slate-900/20 rounded-2xl border border-white/5">
             <Wallet size={16} className="text-slate-600" />
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Solde actuel: <span className="text-white">{user?.balance?.toLocaleString()} HTG</span></p>
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Mon Solde: <span className="text-white">{user?.balance?.toLocaleString()} HTG</span></p>
         </div>
       </div>
     </main>
