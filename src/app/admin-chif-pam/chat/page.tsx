@@ -64,8 +64,8 @@ export default function AdminChat() {
           );
 
         // subscribe (await if subscribe returns a promise)
-        const sub = channel.subscribe();
-        if (sub && typeof (sub as Promise<any>).then === 'function') {
+        const sub: any = channel.subscribe();
+        if (sub && typeof sub.then === 'function') {
           await sub;
         }
 
@@ -147,8 +147,8 @@ export default function AdminChat() {
             }
           );
 
-        const sub = convoChannel.subscribe();
-        if (sub && typeof (sub as Promise<any>).then === 'function') {
+        const sub: any = convoChannel.subscribe();
+        if (sub && typeof sub.then === 'function') {
           await sub;
         }
 
@@ -315,4 +315,4 @@ export default function AdminChat() {
       </div>
     </div>
   );
-                }
+        }
