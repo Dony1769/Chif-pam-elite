@@ -34,6 +34,12 @@ export default function AdminChat() {
   const globalChannelRef = useRef<any>(null);
   const convoChannelRef = useRef<any>(null);
 
+  // Keep selectedUser in a ref so realtime handlers always see latest value
+  const selectedUserRef = useRef<string | null>(selectedUser);
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
   // Fetch conversations & create a global channel for new messages to admin (updates conversation list)
   useEffect(() => {
     let mounted = true;
@@ -53,17 +59,21 @@ export default function AdminChat() {
             (payload: any) => {
               const newMsg = payload?.new;
               if (!newMsg) return;
-              // Refresh conversation list so last_active/order reflects new activity
+              // Debug log
+              console.debug('[admin global channel] new message', newMsg);
+
+              // Refresh conversation list
               fetchConversations();
 
               // If this incoming message belongs to the currently opened conversation, append it
-              if (mounted && selectedUser && (newMsg.sender_id === selectedUser || newMsg.receiver_id === selectedUser)) {
+              const sel = selectedUserRef.current;
+              if (mounted && sel && (newMsg.sender_id === sel || newMsg.receiver_id === sel)) {
                 setMessages((prev) => [...prev, newMsg]);
               }
             }
           );
 
-        // subscribe (await if subscribe returns a promise)
+        // subscribe (subscribe may return a promise or the channel directly)
         const sub: any = channel.subscribe();
         if (sub && typeof sub.then === 'function') {
           await sub;
@@ -123,7 +133,7 @@ export default function AdminChat() {
       await fetchMessages(selectedUser);
 
       try {
-        // Create a conversation-specific channel. We don't rely on a single filter because we want to catch both sides.
+        // Create a conversation-specific channel (listen to all inserts then filter)
         const convoChannel = supabase.channel(`convo-${selectedUser}-${ADMIN_ID}`)
           .on(
             'postgres_changes',
@@ -136,10 +146,17 @@ export default function AdminChat() {
               const newMsg = payload?.new;
               if (!newMsg) return;
 
+              // Debug log
+              console.debug('[convo channel] payload', newMsg);
+
               // Only append messages that belong to this conversation (sender/receiver matches pair)
+              const sel = selectedUserRef.current;
               const belongsToConvo =
-                (newMsg.sender_id === selectedUser && newMsg.receiver_id === ADMIN_ID) ||
-                (newMsg.sender_id === ADMIN_ID && newMsg.receiver_id === selectedUser);
+                sel &&
+                (
+                  (newMsg.sender_id === sel && newMsg.receiver_id === ADMIN_ID) ||
+                  (newMsg.sender_id === ADMIN_ID && newMsg.receiver_id === sel)
+                );
 
               if (mounted && belongsToConvo) {
                 setMessages((prev) => [...prev, newMsg]);
@@ -315,4 +332,4 @@ export default function AdminChat() {
       </div>
     </div>
   );
-              }
+                                                                                            }
