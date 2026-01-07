@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Dices, Timer, Loader2, ShieldCheck, Zap } from 'lucide-react';
+import { Dices, Timer, Loader2, ShieldCheck, Zap, BarChart3 } from 'lucide-react';
 
 export default function AdminLoterie() {
   const [currentTirage, setCurrentTirage] = useState<any>(null);
@@ -11,209 +11,142 @@ export default function AdminLoterie() {
   const [isClosing, setIsClosing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Utilisation de useCallback pour stabiliser la fonction de récupération
-  const fetchActiveSession = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tirages')
-        .select('*, mises(count)')
-        .eq('status', 'ouvert')
-        .maybeSingle();
-      
-      if (error) throw error;
-
-      // Si une session est trouvée, on la fixe dans l'état
-      if (data) {
-        setCurrentTirage(data);
-        setMultiplicateur(data.multiplicateur);
-      } else {
-        setCurrentTirage(null);
-      }
-    } catch (err) {
-      console.error("Erreur lors de la récupération de la session:", err);
-    } finally {
-      setLoading(false);
-    }
+  // Récupération stable de la session ouverte
+  const refreshStatus = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('tirages')
+      .select('*, mises(count)')
+      .eq('status', 'ouvert')
+      .maybeSingle();
+    
+    if (error) console.error("Erreur fetch:", error);
+    setCurrentTirage(data);
+    if (data) setMultiplicateur(data.multiplicateur);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchActiveSession();
+    refreshStatus();
 
-    // Abonnement Realtime pour rester synchronisé avec la DB
-    const channel = supabase.channel('admin-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, (payload) => {
-        console.log("Changement tirage détecté:", payload);
-        fetchActiveSession();
-      })
+    // Canal Realtime unique et robuste
+    const channel = supabase.channel('admin_main_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => refreshStatus())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mises' }, () => refreshStatus())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchActiveSession]);
+  }, [refreshStatus]);
 
   const ouvrirSession = async (moment: string) => {
-    // SÉCURITÉ : Vérifier encore une fois avant de créer
-    const { data: active } = await supabase.from('tirages').select('id').eq('status', 'ouvert').maybeSingle();
-    if (active || currentTirage) return alert("Une session est déjà en cours !");
-    
+    if (currentTirage) return alert("Une session est déjà ouverte.");
     setIsCreating(true);
+
     try {
       const numGagnant = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+      // Génération de 10 chiffres (9 faux + 1 gagnant)
       const pool = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'))
         .filter(n => n !== numGagnant)
         .sort(() => Math.random() - 0.5)
         .slice(0, 9);
       
-      const grilleFinale = [...pool, numGagnant].sort(() => Math.random() - 0.5);
+      const grille = [...pool, numGagnant].sort(() => Math.random() - 0.5);
 
-      const { data, error } = await supabase.from('tirages').insert({
+      const { error } = await supabase.from('tirages').insert({
         moment,
         chiffre_gagnant: numGagnant,
-        chiffres_visibles: grilleFinale,
-        multiplicateur: multiplicateur,
+        chiffres_visibles: grille,
+        multiplicateur,
         status: 'ouvert'
-      }).select().single();
+      });
 
       if (error) throw error;
-      setCurrentTirage(data);
     } catch (err: any) {
-      alert("Erreur création : " + err.message);
+      alert("Erreur: " + err.message);
     } finally {
       setIsCreating(false);
     }
   };
 
-  const validerEtPayerGagnants = async () => {
+  const executerCloture = async () => {
     if (!currentTirage || isClosing) return;
-    if (!confirm(`Confirmer la clôture du chiffre ${currentTirage.chiffre_gagnant} ?`)) return;
-    
+    if (!confirm(`Clôturer la session sur le chiffre ${currentTirage.chiffre_gagnant} ?`)) return;
+
     setIsClosing(true);
     try {
-      // 1. Marquer la session comme 'en_cloture' pour éviter les doubles clics
-      await supabase.from('tirages').update({ status: 'termine' }).eq('id', currentTirage.id);
-      
-      // 2. Récupérer les mises
-      const { data: mises } = await supabase.from('mises').select('*').eq('tirage_id', currentTirage.id).eq('status', 'en_attente');
+      // 1. Récupérer les mises gagnantes
+      const { data: gagnants } = await supabase.from('mises')
+        .select('*')
+        .eq('tirage_id', currentTirage.id)
+        .eq('chiffre_choisi', currentTirage.chiffre_gagnant)
+        .eq('status', 'en_attente');
 
-      if (mises && mises.length > 0) {
-        for (const mise of mises) {
-          const gagne = mise.chiffre_choisi === currentTirage.chiffre_gagnant;
-          const gainFin = gagne ? (mise.montant * (mise.multiplicateur_moment || currentTirage.multiplicateur)) : 0;
-          
-          await supabase.from('mises').update({ 
-            status: gagne ? 'gagné' : 'perdu', 
-            gain_reel: gainFin 
-          }).eq('id', mise.id);
-
-          if (gagne) {
-            await supabase.rpc('increment_balance', { user_id: mise.user_id, amount: gainFin });
-            await supabase.from('transactions').insert({
-              user_id: mise.user_id,
-              amount: gainFin,
-              type: 'gain',
-              status: 'valide',
-              admin_note: `Gain Tirage ${currentTirage.moment}`
-            });
-          }
+      // 2. Créditer les comptes via RPC
+      if (gagnants && gagnants.length > 0) {
+        for (const m of gagnants) {
+          const gain = m.montant * (m.multiplicateur_moment || currentTirage.multiplicateur);
+          await supabase.rpc('increment_balance', { user_id: m.user_id, amount: gain });
+          await supabase.from('mises').update({ status: 'gagné', gain_reel: gain }).eq('id', m.id);
+          await supabase.from('transactions').insert({
+            user_id: m.user_id, amount: gain, type: 'gain', status: 'valide', admin_note: `Tirage ${currentTirage.moment}`
+          });
         }
       }
+
+      // 3. Clôturer le reste
+      await supabase.from('mises').update({ status: 'perdu' }).eq('tirage_id', currentTirage.id).eq('status', 'en_attente');
+      await supabase.from('tirages').update({ status: 'termine' }).eq('id', currentTirage.id);
       
-      alert("Session terminée et gagnants payés !");
       setCurrentTirage(null);
     } catch (err: any) {
-      alert("Erreur système : " + err.message);
+      alert("Erreur: " + err.message);
     } finally {
       setIsClosing(false);
-      fetchActiveSession();
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
-      <p className="text-slate-500 font-black text-[10px] uppercase tracking-widest">Vérification de la session en cours...</p>
-    </div>
-  );
+  if (loading) return <div className="h-screen bg-black flex items-center justify-center text-emerald-500"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#020617] p-6 text-white">
-      <div className="max-w-5xl mx-auto space-y-8">
-        
-        {/* DASHBOARD HEADER */}
-        <div className="bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+    <div className="min-h-screen bg-[#020617] p-4 text-white font-sans">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* HEADER */}
+        <div className="flex justify-between items-center bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 shadow-xl">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center">
-              <Zap className="text-slate-950" fill="currentColor" />
-            </div>
-            <h1 className="text-2xl font-black uppercase italic italic">LOTERIE<span className="text-emerald-500">.</span>ADMIN</h1>
+            <div className="p-3 bg-emerald-500 rounded-2xl"><Zap className="text-black" /></div>
+            <h1 className="text-xl font-black italic">LOTTO ADMIN</h1>
           </div>
-
-          <div className="flex items-center gap-4 bg-black/40 p-2 rounded-2xl border border-white/5">
-            <div className="px-4 text-center border-r border-white/10">
-              <p className="text-[8px] text-slate-500 font-black uppercase">Multiplicateur</p>
-              <input 
-                type="number" 
-                disabled={!!currentTirage}
-                value={multiplicateur} 
-                onChange={(e) => setMultiplicateur(Number(e.target.value))}
-                className="bg-transparent text-emerald-500 font-black text-xl outline-none w-16 text-center disabled:opacity-30"
-              />
-            </div>
-            <div className="px-4 text-center">
-              <p className="text-[8px] text-slate-500 font-black uppercase">Mises</p>
-              <p className="text-xl font-black">{currentTirage?.mises?.[0]?.count || 0}</p>
-            </div>
+          <div className="bg-black/50 px-4 py-2 rounded-xl border border-white/10 text-center">
+            <p className="text-[8px] uppercase text-slate-500 font-bold">Ratio</p>
+            <input type="number" value={multiplicateur} onChange={(e) => setMultiplicateur(Number(e.target.value))} className="bg-transparent text-emerald-500 font-black w-12 outline-none text-center" />
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* SELECTION SESSIONS */}
-          <div className="bg-slate-900/40 p-6 rounded-[2.5rem] border border-white/5 space-y-3">
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-4">Ouvrir une session</p>
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* SESSIONS */}
+          <div className="space-y-3 bg-slate-900/40 p-4 rounded-[2rem] border border-white/5">
             {['Matin', 'Midi', 'Après-Midi', 'Soir'].map((m) => (
-              <button
-                key={m}
-                disabled={isCreating || !!currentTirage}
-                onClick={() => ouvrirSession(m)}
-                className={`w-full py-4 rounded-xl font-black uppercase text-[10px] tracking-widest border transition-all ${
-                  currentTirage?.moment === m 
-                  ? 'bg-emerald-500 border-emerald-500 text-slate-950' 
-                  : 'bg-slate-950 border-white/5 text-white hover:bg-emerald-500/10 disabled:opacity-10'
-                }`}
-              >
+              <button key={m} onClick={() => ouvrirSession(m)} disabled={!!currentTirage} className="w-full py-4 bg-slate-950 rounded-xl font-black text-[10px] uppercase tracking-widest border border-white/5 hover:bg-emerald-500 hover:text-black transition-all disabled:opacity-20">
                 {m}
               </button>
             ))}
           </div>
 
-          {/* MONITORING CENTRAL */}
-          <div className="lg:col-span-2">
-            <div className="bg-slate-900 p-8 rounded-[3rem] border border-emerald-500/10 h-full flex flex-col items-center justify-center min-h-[400px]">
-              {currentTirage ? (
-                <div className="w-full text-center space-y-8">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
-                    Session {currentTirage.moment} Active
-                  </div>
-                  <h2 className="text-[10rem] font-black italic leading-none">{currentTirage.chiffre_gagnant}</h2>
-                  <button
-                    disabled={isClosing}
-                    onClick={validerEtPayerGagnants}
-                    className="w-full py-6 bg-white text-slate-950 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-500 transition-all flex items-center justify-center gap-3"
-                  >
-                    {isClosing ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                    CLÔTURER ET PAYER
-                  </button>
-                </div>
-              ) : (
-                <div className="opacity-20 text-center">
-                  <Dices size={64} className="mx-auto mb-4" />
-                  <p className="font-black uppercase text-xs tracking-widest">Aucune session active</p>
-                </div>
-              )}
-            </div>
+          {/* MONITORING */}
+          <div className="md:col-span-2 bg-slate-900 p-8 rounded-[2.5rem] border border-emerald-500/10 flex flex-col items-center justify-center min-h-[350px]">
+            {currentTirage ? (
+              <div className="w-full text-center space-y-6">
+                <span className="bg-emerald-500/10 text-emerald-500 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter animate-pulse">Session {currentTirage.moment} Active</span>
+                <h2 className="text-9xl font-black italic text-white">{currentTirage.chiffre_gagnant}</h2>
+                <button onClick={executerCloture} disabled={isClosing} className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3">
+                  {isClosing ? <Loader2 className="animate-spin" /> : <ShieldCheck />} CLÔTURER & PAYER
+                </button>
+              </div>
+            ) : (
+              <div className="opacity-20 flex flex-col items-center"><Dices size={64} /><p className="font-black text-[10px] uppercase mt-4">Aucun tirage</p></div>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
-
