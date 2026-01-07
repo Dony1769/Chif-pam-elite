@@ -42,18 +42,14 @@ export default function AdminChat() {
   useEffect(() => {
     initAdmin();
 
-    // CANAL UNIQUE : Ecoute globale des nouveaux messages
     const channel = supabase
       .channel('admin-global-chat')
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages' }, 
         (payload) => {
           const msg = payload.new as Message;
-          
-          // 1. Refresh la liste des profils pour l'ordre d'activité
           fetchConversations();
 
-          // 2. Si le message concerne la conversation ouverte, on l'ajoute
           const isRelevant = 
             (msg.sender_id === selectedUserRef.current && msg.receiver_id === ADMIN_ID) ||
             (msg.sender_id === ADMIN_ID && msg.receiver_id === selectedUserRef.current);
@@ -81,22 +77,46 @@ export default function AdminChat() {
     setLoading(false);
   };
 
+  /**
+   * RÉCUPÉRATION DES CONVERSATIONS (MISE À JOUR)
+   * Cette fonction récupère tous les profils sauf l'admin
+   * et les trie par activité récente.
+   */
   const fetchConversations = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .neq("id", ADMIN_ID)
-      .order("last_active", { ascending: false });
-    setProfiles(data || []);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, phone, last_active, username")
+        .neq("id", ADMIN_ID);
+
+      if (error) throw error;
+
+      // Tri manuel pour placer les clients les plus actifs en haut
+      const sortedData = (data || []).sort((a, b) => {
+        const dateA = a.last_active || '';
+        const dateB = b.last_active || '';
+        return dateB.localeCompare(dateA);
+      });
+
+      setProfiles(sortedData);
+    } catch (err) {
+      console.error("Erreur de chargement des profils:", err);
+    }
   };
 
   const fetchMessages = async (userId: string) => {
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-      .order("created_at", { ascending: true });
-    setMessages(data || []);
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      setMessages(data || []);
+    } catch (err) {
+      console.error("Erreur chargement messages:", err);
+    }
   };
 
   const sendResponse = async () => {
@@ -128,27 +148,33 @@ export default function AdminChat() {
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Conversations</h3>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {profiles.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setSelectedUser(p.id)}
-              className={`w-full p-4 rounded-3xl flex items-center gap-4 transition-all border ${
-                selectedUser === p.id 
-                ? "bg-emerald-600 border-emerald-400 shadow-lg shadow-emerald-900/20" 
-                : "bg-slate-950/50 border-white/5 hover:border-white/20"
-              }`}
-            >
-              <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-[10px] font-black border border-white/10">
-                {p.phone?.slice(-2) || "??"}
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-black truncate w-32">{p.phone ? `+${p.phone}` : "Client Anonyme"}</p>
-                <span className={`text-[8px] font-bold uppercase tracking-widest ${selectedUser === p.id ? 'text-emerald-100' : 'text-emerald-500'}`}>
-                   • Actif
-                </span>
-              </div>
-            </button>
-          ))}
+          {profiles.length > 0 ? (
+            profiles.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSelectedUser(p.id)}
+                className={`w-full p-4 rounded-3xl flex items-center gap-4 transition-all border ${
+                  selectedUser === p.id 
+                  ? "bg-emerald-600 border-emerald-400 shadow-lg shadow-emerald-900/20" 
+                  : "bg-slate-950/50 border-white/5 hover:border-white/20"
+                }`}
+              >
+                <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-[10px] font-black border border-white/10">
+                  {p.phone?.slice(-2) || "??"}
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-black truncate w-32">{p.phone ? `+${p.phone}` : "Client Anonyme"}</p>
+                  <span className={`text-[8px] font-bold uppercase tracking-widest ${selectedUser === p.id ? 'text-emerald-100' : 'text-emerald-500'}`}>
+                     • En ligne
+                  </span>
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="p-4 text-center text-[10px] text-slate-500 font-bold uppercase tracking-widest opacity-50">
+              Aucun client trouvé
+            </div>
+          )}
         </div>
       </div>
 
@@ -156,13 +182,11 @@ export default function AdminChat() {
       <div className="flex-1 bg-slate-900/20 rounded-[3rem] border border-white/10 flex flex-col overflow-hidden backdrop-blur-sm relative">
         {selectedUser ? (
           <>
-            {/* Header Chat */}
             <div className="p-6 bg-slate-950/40 border-b border-white/10 flex items-center gap-4">
                 <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
                 <p className="text-[10px] font-black uppercase tracking-widest">Discussion sécurisée</p>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-8 space-y-6">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.is_admin ? "justify-end" : "justify-start"}`}>
@@ -178,7 +202,6 @@ export default function AdminChat() {
               <div ref={scrollRef} />
             </div>
 
-            {/* Input Bar */}
             <div className="p-6 bg-slate-950/80 border-t border-white/10 flex gap-4">
               <input
                 value={newMessage}
