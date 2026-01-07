@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Send, User as UserIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import { supabase } from "@/lib/supabase";
+import { Send, User as UserIcon } from "lucide-react";
 
-const ADMIN_ID = process.env.NEXT_PUBLIC_ADMIN_ID || '9e141172-93db-4df4-a72b-47b89211b46e';
+const ADMIN_ID =
+  process.env.NEXT_PUBLIC_ADMIN_ID ||
+  "9e141172-93db-4df4-a72b-47b89211b46e";
 
 type Profile = {
   id: string;
@@ -27,61 +29,80 @@ export default function AdminChat() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Realtime refs so we can clean up channels
   const globalChannelRef = useRef<any>(null);
   const convoChannelRef = useRef<any>(null);
 
-  // Keep selectedUser in a ref so realtime handlers always see latest value
+  // keep latest selected user in a ref so realtime handlers always see it
   const selectedUserRef = useRef<string | null>(selectedUser);
   useEffect(() => {
     selectedUserRef.current = selectedUser;
   }, [selectedUser]);
 
-  // Fetch conversations & create a global channel for new messages to admin (updates conversation list)
   useEffect(() => {
     let mounted = true;
     const init = async () => {
+      console.debug("[admin] init realtime");
       await fetchConversations();
 
       try {
-        const channel = supabase.channel(`admin-inbox-${ADMIN_ID}`)
+        // Subscribe to all INSERTs on messages, then filter locally.
+        const channel = supabase
+          .channel(`admin-inbox-${ADMIN_ID}`)
           .on(
-            'postgres_changes',
+            "postgres_changes",
             {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'messages',
-              filter: `receiver_id=eq.${ADMIN_ID}`,
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
             },
             (payload: any) => {
-              const newMsg = payload?.new;
-              if (!newMsg) return;
-              // Debug log
-              console.debug('[admin global channel] new message', newMsg);
+              try {
+                const newMsg = payload?.new;
+                if (!newMsg) return;
+                console.debug("[admin global channel] received insert:", newMsg);
 
-              // Refresh conversation list
-              fetchConversations();
+                // ignore messages not involving admin
+                if (newMsg.receiver_id !== ADMIN_ID && newMsg.sender_id !== ADMIN_ID) {
+                  console.debug("[admin global channel] ignoring message not involving admin");
+                  return;
+                }
 
-              // If this incoming message belongs to the currently opened conversation, append it
-              const sel = selectedUserRef.current;
-              if (mounted && sel && (newMsg.sender_id === sel || newMsg.receiver_id === sel)) {
-                setMessages((prev) => [...prev, newMsg]);
+                // refresh conversation list (so last_active ordering is accurate)
+                fetchConversations();
+
+                // append to conversation if currently selected matches the other party
+                const sel = selectedUserRef.current;
+                if (mounted && sel) {
+                  const otherId =
+                    newMsg.sender_id === ADMIN_ID ? newMsg.receiver_id : newMsg.sender_id;
+                  console.debug("[admin global channel] selectedUserRef:", sel, "otherId:", otherId);
+                  if (otherId === sel || newMsg.sender_id === sel || newMsg.receiver_id === sel) {
+                    setMessages((prev) => [...prev, newMsg]);
+                    console.debug("[admin global channel] appended message to UI");
+                  } else {
+                    console.debug("[admin global channel] message for different conversation");
+                  }
+                } else {
+                  console.debug("[admin global channel] no selectedUser to append to");
+                }
+              } catch (e) {
+                console.error("[admin global channel] handler error:", e);
               }
             }
           );
 
-        // subscribe (subscribe may return a promise or the channel directly)
+        // subscribe (subscribe can return promise or channel; be tolerant)
         const sub: any = channel.subscribe();
-        if (sub && typeof sub.then === 'function') {
+        if (sub && typeof sub.then === "function") {
           await sub;
         }
-
+        console.debug("[admin] subscribed to global channel", channel);
         globalChannelRef.current = channel;
       } catch (err) {
-        console.error('Error creating admin global realtime channel:', err);
+        console.error("[admin] error creating global realtime channel:", err);
       }
     };
 
@@ -92,35 +113,39 @@ export default function AdminChat() {
       const ch = globalChannelRef.current;
       if (ch) {
         try {
-          if (typeof ch.unsubscribe === 'function') {
+          if (typeof ch.unsubscribe === "function") {
             ch.unsubscribe();
-          } else if (typeof supabase.removeChannel === 'function') {
+            console.debug("[admin] unsubscribed global channel via unsubscribe()");
+          } else if (typeof supabase.removeChannel === "function") {
             supabase.removeChannel(ch);
+            console.debug("[admin] removed global channel via supabase.removeChannel()");
           }
         } catch (err) {
-          console.warn('Error cleaning up global admin channel:', err);
+          console.warn("[admin] error cleaning up global channel:", err);
         }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once
+  }, []);
 
-  // When selectedUser changes: fetch messages for that user and open a per-conversation channel
+  // conversation-specific channel: listen to all inserts and filter to the conversation
   useEffect(() => {
     let mounted = true;
 
     const setupConversationChannel = async () => {
-      // Cleanup previous convo channel
+      // cleanup previous conversation channel
       const prev = convoChannelRef.current;
       if (prev) {
         try {
-          if (typeof prev.unsubscribe === 'function') {
+          if (typeof prev.unsubscribe === "function") {
             prev.unsubscribe();
-          } else if (typeof supabase.removeChannel === 'function') {
+            console.debug("[admin] unsubscribed previous convo channel via unsubscribe()");
+          } else if (typeof supabase.removeChannel === "function") {
             supabase.removeChannel(prev);
+            console.debug("[admin] removed previous convo channel via supabase.removeChannel()");
           }
         } catch (err) {
-          console.warn('Error removing previous convo channel:', err);
+          console.warn("[admin] error removing previous convo channel:", err);
         }
         convoChannelRef.current = null;
       }
@@ -133,45 +158,46 @@ export default function AdminChat() {
       await fetchMessages(selectedUser);
 
       try {
-        // Create a conversation-specific channel (listen to all inserts then filter)
-        const convoChannel = supabase.channel(`convo-${selectedUser}-${ADMIN_ID}`)
+        const convoChannel = supabase
+          .channel(`convo-${selectedUser}-${ADMIN_ID}`)
           .on(
-            'postgres_changes',
+            "postgres_changes",
             {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'messages',
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
             },
             (payload: any) => {
-              const newMsg = payload?.new;
-              if (!newMsg) return;
+              try {
+                const newMsg = payload?.new;
+                if (!newMsg) return;
+                console.debug("[admin convo channel] payload:", newMsg);
 
-              // Debug log
-              console.debug('[convo channel] payload', newMsg);
-
-              // Only append messages that belong to this conversation (sender/receiver matches pair)
-              const sel = selectedUserRef.current;
-              const belongsToConvo =
-                sel &&
-                (
-                  (newMsg.sender_id === sel && newMsg.receiver_id === ADMIN_ID) ||
-                  (newMsg.sender_id === ADMIN_ID && newMsg.receiver_id === sel)
-                );
-
-              if (mounted && belongsToConvo) {
-                setMessages((prev) => [...prev, newMsg]);
+                const sel = selectedUserRef.current;
+                const belongs =
+                  sel &&
+                  ((newMsg.sender_id === sel && newMsg.receiver_id === ADMIN_ID) ||
+                    (newMsg.sender_id === ADMIN_ID && newMsg.receiver_id === sel));
+                if (mounted && belongs) {
+                  setMessages((prev) => [...prev, newMsg]);
+                  console.debug("[admin convo channel] appended message");
+                } else {
+                  console.debug("[admin convo channel] message not for this convo");
+                }
+              } catch (e) {
+                console.error("[admin convo channel] handler error:", e);
               }
             }
           );
 
         const sub: any = convoChannel.subscribe();
-        if (sub && typeof sub.then === 'function') {
+        if (sub && typeof sub.then === "function") {
           await sub;
         }
-
+        console.debug("[admin] subscribed convo channel", convoChannel);
         convoChannelRef.current = convoChannel;
       } catch (err) {
-        console.error('Error creating conversation channel:', err);
+        console.error("[admin] error creating convo channel:", err);
       }
     };
 
@@ -182,13 +208,13 @@ export default function AdminChat() {
       const ch = convoChannelRef.current;
       if (ch) {
         try {
-          if (typeof ch.unsubscribe === 'function') {
+          if (typeof ch.unsubscribe === "function") {
             ch.unsubscribe();
-          } else if (typeof supabase.removeChannel === 'function') {
+          } else if (typeof supabase.removeChannel === "function") {
             supabase.removeChannel(ch);
           }
         } catch (err) {
-          console.warn('Error cleaning up convo channel on unmount/selection change:', err);
+          console.warn("[admin] error cleaning up convo channel on unmount:", err);
         }
       }
     };
@@ -202,36 +228,37 @@ export default function AdminChat() {
   const fetchConversations = async () => {
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('id', ADMIN_ID)
-        .order('last_active', { ascending: false });
+        .from("profiles")
+        .select("*")
+        .neq("id", ADMIN_ID)
+        .order("last_active", { ascending: false });
 
       if (error) {
-        console.error('Error fetching profiles:', error);
+        console.error("[admin] Error fetching profiles:", error);
         return;
       }
       setProfiles(data || []);
     } catch (err) {
-      console.error('fetchConversations error:', err);
+      console.error("[admin] fetchConversations error:", err);
     }
   };
 
   const fetchMessages = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('messages')
-        .select('*')
+        .from("messages")
+        .select("*")
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-        .order('created_at', { ascending: true });
+        .order("created_at", { ascending: true });
 
       if (error) {
-        console.error('Error fetching messages:', error);
+        console.error("[admin] Error fetching messages:", error);
         return;
       }
       setMessages(data || []);
+      console.debug("[admin] fetched messages", data?.length ?? 0);
     } catch (err) {
-      console.error('fetchMessages error:', err);
+      console.error("[admin] fetchMessages error:", err);
     }
   };
 
@@ -246,19 +273,22 @@ export default function AdminChat() {
     };
 
     try {
-      const { data, error } = await supabase.from('messages').insert([msg]).select().single();
+      const { data, error } = await supabase
+        .from("messages")
+        .insert([msg])
+        .select()
+        .single();
       if (error) {
-        console.error('Error sending admin message:', error);
+        console.error("[admin] Error sending admin message:", error);
         return;
       }
-
       const sent = (data as Message) || { ...msg, created_at: new Date().toISOString() };
       setMessages((prev) => [...prev, sent]);
-      setNewMessage('');
-      // Update conversation list ordering / last_active
+      setNewMessage("");
       fetchConversations();
+      console.debug("[admin] sent message", sent);
     } catch (err) {
-      console.error('sendResponse error:', err);
+      console.error("[admin] sendResponse error:", err);
     }
   };
 
@@ -270,20 +300,20 @@ export default function AdminChat() {
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {profiles.map((p) => {
             const isSelected = selectedUser === p.id;
-            const phone = p.phone ?? '';
+            const phone = p.phone ?? "";
             return (
               <button
                 key={p.id}
                 onClick={() => setSelectedUser(p.id)}
-                className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-all ${isSelected ? 'bg-emerald-500 text-slate-950' : 'hover:bg-slate-800/50'}`}
+                className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-all ${isSelected ? "bg-emerald-500 text-slate-950" : "hover:bg-slate-800/50"}`}
                 aria-pressed={isSelected}
               >
                 <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-black text-[10px]">
-                  {phone ? phone.slice(-2) : '??'}
+                  {phone ? phone.slice(-2) : "??"}
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-bold">{phone ? `+${phone}` : 'Utilisateur'}</p>
-                  <p className={`text-[8px] uppercase font-black ${isSelected ? 'text-slate-900' : 'text-emerald-500'}`}>Actif</p>
+                  <p className="text-xs font-bold">{phone ? `+${phone}` : "Utilisateur"}</p>
+                  <p className={`text-[8px] uppercase font-black ${isSelected ? "text-slate-900" : "text-emerald-500"}`}>Actif</p>
                 </div>
               </button>
             );
@@ -297,12 +327,8 @@ export default function AdminChat() {
           <>
             <div className="flex-1 overflow-y-auto p-8 space-y-4">
               {messages.map((m, i) => (
-                <div key={m.id ?? m.created_at ?? i} className={`flex ${m.is_admin ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] p-4 rounded-3xl text-xs ${
-                    m.is_admin 
-                    ? 'bg-emerald-500 text-slate-950 font-bold rounded-tr-none' 
-                    : 'bg-slate-800 text-white rounded-tl-none border border-white/5'
-                  }`}>
+                <div key={m.id ?? m.created_at ?? i} className={`flex ${m.is_admin ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[70%] p-4 rounded-3xl text-xs ${m.is_admin ? "bg-emerald-500 text-slate-950 font-bold rounded-tr-none" : "bg-slate-800 text-white rounded-tl-none border border-white/5"}`}>
                     {m.content}
                   </div>
                 </div>
@@ -310,10 +336,10 @@ export default function AdminChat() {
               <div ref={scrollRef} />
             </div>
             <div className="p-6 bg-slate-950 flex gap-3">
-              <input 
-                value={newMessage} 
+              <input
+                value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendResponse()}
+                onKeyDown={(e) => e.key === "Enter" && sendResponse()}
                 placeholder="Répondre au client..."
                 className="flex-1 bg-slate-900 border border-white/10 rounded-2xl px-6 py-4 text-xs outline-none focus:border-emerald-500 transition-all"
                 aria-label="Répondre au client"
@@ -332,4 +358,4 @@ export default function AdminChat() {
       </div>
     </div>
   );
-                                                                                            }
+                        }
