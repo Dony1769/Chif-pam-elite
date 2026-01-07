@@ -2,16 +2,18 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 import { ShieldCheck, Lock, Phone, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+
+// Constantes de sécurité basées sur tes données Supabase
+const ADMIN_PHONE = '99999999';
+const ADMIN_ID = '9e141172-93db-4df4-a72b-47b89211b46e';
 
 export default function Connexion() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +22,7 @@ export default function Connexion() {
 
     try {
       const cleanPhone = phone.trim();
-      // On utilise l'email interne pour Supabase Auth
+      // Utilisation de l'email interne pour correspondre à ton Auth Supabase
       const internalEmail = `${cleanPhone}@chifpam.ht`;
 
       const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -33,27 +35,25 @@ export default function Connexion() {
       }
 
       if (data?.user) {
-        // Redirection forcée vers les dossiers MAÎTRES
-        if (cleanPhone === '99999999') {
-          // Redirige vers /admin-chif-pam/dashboard
-          router.push('/admin-chif-pam/dashboard'); 
+        // Verification de l'ID Admin pour la redirection
+        if (cleanPhone === ADMIN_PHONE && data.user.id === ADMIN_ID) {
+          // IMPORTANT: window.location.href force la mise à jour des cookies pour le middleware
+          window.location.href = '/admin-chif-pam/dashboard';
         } else {
-          // Redirige vers /client/home
-          router.push('/client/home'); 
+          window.location.href = '/client/home';
         }
       }
     } catch (err: any) {
       setErrorMessage(err.message);
-    } finally {
       setLoading(false);
     }
   };
 
   return (
     <main className="min-h-screen bg-[#020617] text-slate-100 flex items-center justify-center p-6">
-      {/* Fond décoratif minimaliste */}
+      {/* Fond décoratif */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-10">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-125 h-125 bg-emerald-500 rounded-full blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500 rounded-full blur-[120px]" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
@@ -82,7 +82,7 @@ export default function Connexion() {
                 <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
                 <input 
                   type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Numéro de téléphone"
+                  placeholder="Ex: 99999999"
                   className="w-full bg-slate-950/50 border border-slate-800 rounded-2xl py-5 pl-14 pr-6 text-sm outline-none focus:border-emerald-500 transition-all font-bold text-white placeholder:text-slate-700"
                 />
               </div>
