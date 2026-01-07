@@ -4,13 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, AreaChart, Area 
 } from 'recharts';
 import { 
   TrendingUp, Users, Wallet, ArrowUpCircle, 
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
-  Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList
+  Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
+  ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -23,7 +24,7 @@ export default function AdminDashboard() {
     totalBalance: 0, 
     pendingDepots: 0, 
     pendingRetraits: 0,
-    totalRevenue: 0
+    unreadMessages: 0
   });
   const [chartData, setChartData] = useState<any[]>([]);
 
@@ -34,12 +35,12 @@ export default function AdminDashboard() {
   const fetchGlobalStats = async () => {
     setLoading(true);
     try {
-      // 1. Récupération des profils pour le solde total
+      // 1. Profils & Solde
       const { data: profiles } = await supabase.from('profiles').select('balance');
       const totalUsers = profiles?.length || 0;
       const totalBalance = profiles?.reduce((acc, curr) => acc + (curr.balance || 0), 0) || 0;
 
-      // 2. Récupération des transactions pour les stats et le graphique
+      // 2. Transactions (Stats & Graphique)
       const { data: trans } = await supabase
         .from('transactions')
         .select('type, status, amount, created_at')
@@ -48,13 +49,15 @@ export default function AdminDashboard() {
       const pendingDepots = trans?.filter(t => t.type === 'depot' && t.status === 'en_attente').length || 0;
       const pendingRetraits = trans?.filter(t => t.type === 'retrait' && t.status === 'en_attente').length || 0;
       
-      // Calcul du revenu (ex: total des mises - total des gains)
-      const totalRevenue = trans?.filter(t => t.status === 'valide' || t.status === 'approuve')
-        .reduce((acc, t) => t.type === 'mise' ? acc + t.amount : t.type === 'gain' ? acc - t.amount : acc, 0) || 0;
+      // 3. Messages (Support)
+      const { count: unread } = await supabase
+        .from('messages') // Assure-toi que le nom de la table est correct
+        .select('*', { count: 'exact', head: true })
+        .eq('is_read', false);
 
-      setStats({ totalUsers, totalBalance, pendingDepots, pendingRetraits, totalRevenue });
+      setStats({ totalUsers, totalBalance, pendingDepots, pendingRetraits, unreadMessages: unread || 0 });
 
-      // 3. Préparation des données du graphique (7 derniers jours)
+      // 4. Données du graphique
       const last7Days = [...Array(7)].map((_, i) => {
         const d = new Date();
         d.setDate(d.getDate() - i);
@@ -86,7 +89,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans flex">
-      {/* SIDEBAR GAUCHE */}
+      {/* SIDEBAR (Navigation fixe) */}
       <aside className="w-72 border-r border-white/5 bg-slate-950/50 backdrop-blur-xl p-8 flex flex-col hidden lg:flex">
         <div className="flex items-center gap-3 mb-12 px-2">
           <ShieldCheck className="text-emerald-500" size={28} />
@@ -110,35 +113,28 @@ export default function AdminDashboard() {
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-12">
           
-          {/* HEADER AVEC BOUTON RAFRAICHIR */}
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-3xl font-black italic uppercase tracking-tighter">Vue d'ensemble</h2>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Statistiques financières en temps réel</p>
+              <h2 className="text-3xl font-black italic uppercase tracking-tighter">Administration</h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Contrôle total du système</p>
             </div>
             <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl border border-white/5 hover:bg-emerald-500 hover:text-black transition-all">
               <RefreshCw size={20} />
             </button>
           </div>
 
-          {/* GRILLE DE STATS */}
+          {/* STATS RAPIDES */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard title="Utilisateurs" value={stats.totalUsers} icon={<Users />} color="blue" />
-            <StatCard title="Trésorerie Clients" value={`${stats.totalBalance.toLocaleString()} HTG`} icon={<Wallet />} color="emerald" />
-            <StatCard title="Dépôts en attente" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
-            <StatCard title="Retraits en attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
+            <StatCard title="Total Membres" value={stats.totalUsers} icon={<Users />} color="blue" />
+            <StatCard title="Solde Global" value={`${stats.totalBalance.toLocaleString()} HTG`} icon={<Wallet />} color="emerald" />
+            <StatCard title="En attente Dépôt" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
+            <StatCard title="En attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* GRAPHIQUE ET ACTIONS */}
           <div className="grid lg:grid-cols-3 gap-8">
+            {/* GRAPHIQUE */}
             <div className="lg:col-span-2 bg-slate-900/50 border border-white/5 p-8 rounded-[2.5rem]">
-               <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Flux des 7 derniers jours</h3>
-                  <div className="flex gap-4 text-[9px] font-black uppercase">
-                    <span className="flex items-center gap-2 text-emerald-500"><div className="w-2 h-2 bg-emerald-500 rounded-full"/> Mises</span>
-                    <span className="flex items-center gap-2 text-rose-500"><div className="w-2 h-2 bg-rose-500 rounded-full"/> Gains</span>
-                  </div>
-               </div>
+               <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-8">Flux de revenus</h3>
                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData}>
@@ -151,7 +147,7 @@ export default function AdminDashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} />
                       <YAxis hide />
-                      <Tooltip contentStyle={{backgroundColor: '#0f172a', border: 'none', borderRadius: '16px', fontSize: '12px', fontWeight: 'bold'}} />
+                      <Tooltip contentStyle={{backgroundColor: '#0f172a', border: 'none', borderRadius: '16px'}} />
                       <Area type="monotone" dataKey="mises" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorMises)" />
                       <Area type="monotone" dataKey="gains" stroke="#f43f5e" strokeWidth={3} fill="transparent" />
                     </AreaChart>
@@ -159,25 +155,45 @@ export default function AdminDashboard() {
                </div>
             </div>
 
-            {/* ACCÈS RAPIDES (INCLUANT LES DEMANDES) */}
+            {/* CASES D'ACTIONS (UTILISATEURS, MESSAGES, ETC) */}
             <div className="space-y-4">
-               <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4">Actions Prioritaires</h3>
+               <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-600 px-4">Gestion & Support</h3>
                
-               <Link href="/admin-chif-pam/demandes" className="flex items-center justify-between p-6 bg-emerald-500 rounded-[2rem] text-slate-950 hover:scale-[1.02] transition-all group">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-black/10 rounded-xl"><ClipboardList size={24}/></div>
-                    <span className="font-black uppercase text-[11px] tracking-widest">Valider Demandes</span>
-                  </div>
-                  <div className="bg-black/10 px-3 py-1 rounded-full text-[10px] font-black">{stats.pendingDepots + stats.pendingRetraits}</div>
-               </Link>
+               {/* CASE DEMANDES */}
+               <ActionCard 
+                href="/admin-chif-pam/demandes" 
+                label="Demandes Financières" 
+                count={stats.pendingDepots + stats.pendingRetraits} 
+                icon={<ClipboardList size={22}/>} 
+                color="bg-emerald-500" 
+               />
 
-               <Link href="/admin-chif-pam/loterie" className="flex items-center justify-between p-6 bg-slate-900 border border-white/5 rounded-[2rem] hover:border-emerald-500/30 transition-all group">
-                  <div className="flex items-center gap-4 text-slate-300">
-                    <div className="p-3 bg-slate-950 rounded-xl text-emerald-500"><Dices size={24}/></div>
-                    <span className="font-black uppercase text-[11px] tracking-widest text-white">Gérer Tirages</span>
-                  </div>
-                  <TrendingUp size={20} className="text-slate-700 group-hover:text-emerald-500 transition-colors" />
-               </Link>
+               {/* CASE UTILISATEURS */}
+               <ActionCard 
+                href="/admin-chif-pam/users" 
+                label="Gestion Utilisateurs" 
+                icon={<Users size={22}/>} 
+                color="bg-blue-500" 
+               />
+
+               {/* CASE MESSAGES */}
+               <ActionCard 
+                href="/admin-chif-pam/chat" 
+                label="Support Client" 
+                count={stats.unreadMessages} 
+                icon={<MessageSquare size={22}/>} 
+                color="bg-slate-800" 
+                textColor="text-white"
+               />
+
+               {/* CASE LOTERIE */}
+               <ActionCard 
+                href="/admin-chif-pam/loterie" 
+                label="Contrôle Loterie" 
+                icon={<Dices size={22}/>} 
+                color="bg-slate-900 border border-white/5" 
+                textColor="text-emerald-500"
+               />
             </div>
           </div>
         </div>
@@ -186,11 +202,11 @@ export default function AdminDashboard() {
   );
 }
 
+// COMPOSANTS POUR UN CODE PROPRE
 function NavLink({ href, icon, label, active }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all font-black uppercase text-[10px] tracking-widest ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}>
-      {icon}
-      {label}
+      {icon} {label}
     </Link>
   );
 }
@@ -202,7 +218,6 @@ function StatCard({ title, value, icon, color }: any) {
     amber: "text-amber-500 bg-amber-500/10 border-amber-500/20",
     rose: "text-rose-500 bg-rose-500/10 border-rose-500/20",
   };
-
   return (
     <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden group`}>
       <div className="relative z-10">
@@ -213,5 +228,21 @@ function StatCard({ title, value, icon, color }: any) {
         {React.cloneElement(icon, { size: 80 })}
       </div>
     </div>
+  );
+}
+
+function ActionCard({ href, label, count, icon, color, textColor = "text-slate-950" }: any) {
+  return (
+    <Link href={href} className={`flex items-center justify-between p-6 ${color} rounded-[2rem] hover:scale-[1.02] transition-all group`}>
+      <div className="flex items-center gap-4">
+        <div className="p-3 bg-black/10 rounded-xl text-current">{icon}</div>
+        <span className={`font-black uppercase text-[10px] tracking-widest ${textColor}`}>{label}</span>
+      </div>
+      {count !== undefined && count > 0 ? (
+        <div className="bg-black/20 px-3 py-1 rounded-full text-[10px] font-black">{count}</div>
+      ) : (
+        <ChevronRight size={18} className="opacity-30" />
+      )}
+    </Link>
   );
 }
