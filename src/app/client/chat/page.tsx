@@ -98,7 +98,7 @@ export default function ClientChat() {
   const fetchMessages = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from<Message>('messages')
+        .from('messages')
         .select('*')
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: true });
@@ -188,4 +188,4 @@ export default function ClientChat() {
       </div>
     </div>
   );
-}
+                }
