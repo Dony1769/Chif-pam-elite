@@ -26,16 +26,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Utilisation de getUser() pour forcer la vérification de la session
-  const { data: { user } } = await supabase.auth.getUser();
+  // On récupère la session. 
+  // IMPORTANT: On utilise getSession() ici car c'est plus rapide pour le middleware
+  const { data: { session } } = await supabase.auth.getSession();
 
   const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
-  const isTargetingAdmin = request.nextUrl.pathname.startsWith('/admin-chif-pam');
+  const path = request.nextUrl.pathname;
 
-  if (isTargetingAdmin) {
-    // Si l'utilisateur n'est pas l'admin, on le renvoie à la page d'accueil (ton /)
-    if (!user || user.id !== ADMIN_ID) {
-      return NextResponse.redirect(new URL('/', request.url));
+  // Si on essaie d'aller sur une page admin
+  if (path.startsWith('/admin-chif-pam')) {
+    // Si pas de session OU si l'ID ne correspond pas à l'admin
+    if (!session || session.user.id !== ADMIN_ID) {
+      console.log("Accès refusé - Redirection vers accueil");
+      return NextResponse.redirect(new URL('/connexion', request.url));
     }
   }
 
