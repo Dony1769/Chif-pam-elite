@@ -30,6 +30,8 @@ export async function middleware(request: NextRequest) {
   const ADMIN_ID = process.env.NEXT_PUBLIC_ADMIN_ID;
   const isAdminPath = request.nextUrl.pathname.startsWith('/admin-chif-pam');
 
+console.log("ID Utilisateur Connecté:", user?.id);
+console.log("ID Admin Attendu:", process.env.NEXT_PUBLIC_ADMIN_ID);
   if (isAdminPath) {
     // Si l'ID ne correspond pas à celui de ton .env
     if (!user || user.id !== ADMIN_ID) {
@@ -43,3 +45,4 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };
+
