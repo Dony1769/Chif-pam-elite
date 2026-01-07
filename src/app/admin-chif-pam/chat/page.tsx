@@ -185,7 +185,7 @@ export default function AdminChat() {
   const fetchConversations = async () => {
     try {
       const { data, error } = await supabase
-        .from<Profile>('profiles')
+        .from('profiles')
         .select('*')
         .neq('id', ADMIN_ID)
         .order('last_active', { ascending: false });
@@ -203,7 +203,7 @@ export default function AdminChat() {
   const fetchMessages = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from<Message>('messages')
+        .from('messages')
         .select('*')
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: true });
@@ -315,4 +315,4 @@ export default function AdminChat() {
       </div>
     </div>
   );
-        }
+              }
