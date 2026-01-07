@@ -21,17 +21,41 @@ export default function ClientHome() {
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => { fetchUser(); }, []);
+  useEffect(() => { 
+    fetchUser(); 
 
+    // SYSTEME REALTIME : Met à jour le solde si la table profile change (gains, dépôts valides)
+    const channel = supabase.channel('profile-changes')
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'profiles' 
+      }, (payload) => {
+        if (user && payload.new.id === user.id) {
+          setUser(payload.new);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
+  // Fonction fetchUser Robuste
   const fetchUser = async () => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) return router.push('/connexion');
       
-      const { data } = await supabase.from('profiles').select('*').eq('id', authUser?.id).single();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+      
+      if (error) throw error;
       setUser(data);
     } catch (e) {
-      console.error(e);
+      console.error("Erreur de chargement profil:", e);
     } finally {
       setFetching(false);
     }
@@ -44,11 +68,23 @@ export default function ClientHome() {
     try {
       if (method === 'retrait') {
         if (Number(amount) > user.balance) throw new Error("Solde insuffisant");
-        await supabase.rpc('increment_balance', { user_id: user.id, amount: -Number(amount) });
+        
+        // Déduction immédiate via RPC pour sécurité
+        const { error: rpcError } = await supabase.rpc('increment_balance', { 
+          user_id: user.id, 
+          amount: -Number(amount) 
+        });
+        
+        if (rpcError) throw rpcError;
+
         await supabase.from('transactions').insert([{
-          user_id: user.id, amount: Number(amount), type: 'retrait', status: 'en_attente'
+          user_id: user.id, 
+          amount: Number(amount), 
+          type: 'retrait', 
+          status: 'en_attente'
         }]);
       } else {
+        // Logique de Dépôt
         let publicUrl = "";
         if (file) {
           const fileName = `${user.id}/${Date.now()}.jpg`;
@@ -57,13 +93,19 @@ export default function ClientHome() {
           publicUrl = data.publicUrl;
         }
         await supabase.from('transactions').insert([{
-          user_id: user.id, amount: Number(amount), type: 'depot', proof_url: publicUrl, status: 'en_attente'
+          user_id: user.id, 
+          amount: Number(amount), 
+          type: 'depot', 
+          proof_url: publicUrl, 
+          status: 'en_attente'
         }]);
       }
-      alert("Demande envoyée avec succès !");
+      
+      alert("Demande transmise avec succès !");
       setMethod(null);
       setAmount('');
-      fetchUser();
+      setFile(null);
+      fetchUser(); // Rafraîchissement manuel par sécurité
     } catch (error: any) {
       alert(error.message);
     } finally {
@@ -94,8 +136,8 @@ export default function ClientHome() {
       </header>
 
       <div className="p-4 space-y-6 animate-in fade-in duration-700">
-        {/* CARTE DE SOLDE PREMIUM */}
-        <div className="bg-linear-to-br from-emerald-600 to-emerald-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+        {/* CARTE DE SOLDE */}
+        <div className="bg-gradient-to-br from-emerald-600 to-emerald-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
           <div className="relative z-10">
             <p className="text-[10px] font-black uppercase text-emerald-200 tracking-[0.2em] mb-1">Solde de Jeu</p>
             <h2 className="text-4xl font-black italic text-white tracking-tighter">
@@ -111,11 +153,11 @@ export default function ClientHome() {
 
         {/* ACTIONS RAPIDES */}
         <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setMethod('depot')} className="bg-slate-900/50 border border-white/5 p-6 rounded-4xl flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-slate-900">
+          <button onClick={() => setMethod('depot')} className="bg-slate-900/50 border border-white/5 p-6 rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all">
             <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500"><Plus size={24} /></div>
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dépôt</span>
           </button>
-          <button onClick={() => setMethod('retrait')} className="bg-slate-900/50 border border-white/5 p-6 rounded-4xl flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-slate-900">
+          <button onClick={() => setMethod('retrait')} className="bg-slate-900/50 border border-white/5 p-6 rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all">
             <div className="p-3 bg-rose-500/10 rounded-2xl text-rose-500"><ArrowDownCircle size={24} /></div>
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Retrait</span>
           </button>
@@ -128,19 +170,17 @@ export default function ClientHome() {
                 <h3 className="font-black uppercase text-[10px] tracking-[0.2em] text-emerald-500">
                     {method === 'depot' ? 'Recharger le compte' : 'Retirer les gains'}
                 </h3>
-                <button onClick={() => setMethod(null)} className="text-slate-500 text-[10px] font-black uppercase hover:text-white transition-colors">Annuler</button>
+                <button onClick={() => {setMethod(null); setFile(null);}} className="text-slate-500 text-[10px] font-black uppercase hover:text-white transition-colors">Annuler</button>
             </div>
             
             <div className="space-y-4">
-              <div className="relative">
-                <input 
-                  type="number" 
-                  placeholder="Montant HTG" 
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/5 p-6 rounded-3xl text-center font-black text-2xl text-emerald-500 outline-none focus:border-emerald-500/30 transition-all"
-                />
-              </div>
+              <input 
+                type="number" 
+                placeholder="Montant HTG" 
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full bg-slate-950 border border-white/5 p-6 rounded-3xl text-center font-black text-2xl text-emerald-500 outline-none focus:border-emerald-500/30 transition-all"
+              />
 
               {method === 'depot' && (
                 <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/5 p-8 rounded-3xl cursor-pointer hover:bg-white/5 transition-colors">
@@ -163,15 +203,15 @@ export default function ClientHome() {
           </div>
         )}
 
-        {/* JEUX EN VEDETTE */}
+        {/* ESPACE DE JEU */}
         <div className="space-y-4">
             <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-2">Espace de jeu</h4>
-            <Link href="/client/play" className="block bg-slate-900 border border-white/5 p-4 rounded-4xl items-center gap-4 hover:border-emerald-500/30 transition-all group">
-                <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-slate-950">
-                    <PlayCircle size={32} />
+            <Link href="/client/play" className="flex bg-slate-900 border border-white/5 p-4 rounded-[2rem] items-center gap-4 hover:border-emerald-500/30 transition-all group">
+                <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center text-slate-950">
+                    <PlayCircle size={28} />
                 </div>
                 <div>
-                    <p className="font-black uppercase italic tracking-tighter">Jouer aux 10 chiffres</p>
+                    <p className="font-black uppercase italic tracking-tighter text-sm">Jouer aux 10 chiffres</p>
                     <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Multipliez votre mise par 10</p>
                 </div>
                 <div className="ml-auto p-2 text-slate-700 group-hover:text-emerald-500 transition-colors">
@@ -181,7 +221,7 @@ export default function ClientHome() {
         </div>
       </div>
 
-      {/* NAVIGATION BARRE BASSE (BOTTOM NAV) */}
+      {/* BOTTOM NAV */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Home" active={pathname === '/client/home'} />
         <NavLink href="/client/play" icon={<PlayCircle size={22}/>} label="Jouer" active={pathname === '/client/play'} />
@@ -193,7 +233,6 @@ export default function ClientHome() {
   );
 }
 
-// Composant NavLink pour la barre basse
 function NavLink({ href, icon, label, active }: any) {
   return (
     <Link href={href} className="flex flex-col items-center gap-1 transition-all">
