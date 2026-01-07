@@ -59,8 +59,8 @@ export default function ClientChat() {
           // subscribe (await if subscribe returns a promise)
           try {
             // subscribe may return a promise or the channel itself depending on version
-            const sub = channel.subscribe();
-            if (sub && typeof (sub as Promise<any>).then === 'function') {
+            const sub: any = channel.subscribe();
+            if (sub && typeof sub.then === 'function') {
               await sub;
             }
           } catch (subErr) {
