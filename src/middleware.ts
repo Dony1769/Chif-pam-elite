@@ -24,16 +24,17 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
-  const isPathAdmin = request.nextUrl.pathname.startsWith('/admin-chif-pam');
+  // Utiliser getSession() pour la rapidité dans le middleware
+  const { data: { session } } = await supabase.auth.getSession();
 
-  // Si quelqu'un tente d'entrer dans l'admin
-  if (isPathAdmin) {
-    // S'il n'est pas connecté OU s'il n'est pas l'ADMIN_ID
-    if (!user || user.id !== ADMIN_ID) {
-      // On le renvoie à la racine (inscription/connexion) sans lui dire pourquoi
-      return NextResponse.redirect(new URL('/', request.url));
+  const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
+  const url = request.nextUrl.clone();
+
+  // Si on cible l'admin
+  if (url.pathname.startsWith('/admin-chif-pam')) {
+    // Si pas de session ou pas l'ID admin, retour à la connexion
+    if (!session || session.user.id !== ADMIN_ID) {
+      return NextResponse.redirect(new URL('/connexion', request.url));
     }
   }
 
