@@ -24,7 +24,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // ON NE BLOQUE RIEN POUR LE TEST
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // UTILISATION DE TA VARIABLE ENV
+  const ADMIN_ID = process.env.NEXT_PUBLIC_ADMIN_ID;
+  const isAdminPath = request.nextUrl.pathname.startsWith('/admin-chif-pam');
+
+  if (isAdminPath) {
+    // Si l'ID ne correspond pas à celui de ton .env
+    if (!user || user.id !== ADMIN_ID) {
+      return NextResponse.redirect(new URL('/connexion', request.url));
+    }
+  }
+
   return response;
 }
 
