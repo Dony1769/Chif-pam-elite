@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { Send, User as UserIcon } from "lucide-react";
+import { Send, User as UserIcon, Loader2 } from "lucide-react";
 
-const ADMIN_ID =
-  process.env.NEXT_PUBLIC_ADMIN_ID ||
-  "9e141172-93db-4df4-a72b-47b89211b46e";
+const ADMIN_ID = process.env.NEXT_PUBLIC_ADMIN_ID || "9e141172-93db-4df4-a72b-47b89211b46e";
 
 type Profile = {
   id: string;
@@ -30,332 +28,180 @@ export default function AdminChat() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selectedUserRef = useRef<string | null>(null);
 
-  const globalChannelRef = useRef<any>(null);
-  const convoChannelRef = useRef<any>(null);
-
-  // keep latest selected user in a ref so realtime handlers always see it
-  const selectedUserRef = useRef<string | null>(selectedUser);
+  // Synchronisation du ref pour le Realtime
   useEffect(() => {
     selectedUserRef.current = selectedUser;
+    if (selectedUser) fetchMessages(selectedUser);
   }, [selectedUser]);
 
   useEffect(() => {
-    let mounted = true;
-    const init = async () => {
-      console.debug("[admin] init realtime");
-      await fetchConversations();
+    initAdmin();
 
-      try {
-        // Subscribe to all INSERTs on messages, then filter locally.
-        const channel = supabase
-          .channel(`admin-inbox-${ADMIN_ID}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "messages",
-            },
-            (payload: any) => {
-              try {
-                const newMsg = payload?.new;
-                if (!newMsg) return;
-                console.debug("[admin global channel] received insert:", newMsg);
+    // CANAL UNIQUE : Ecoute globale des nouveaux messages
+    const channel = supabase
+      .channel('admin-global-chat')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'messages' }, 
+        (payload) => {
+          const msg = payload.new as Message;
+          
+          // 1. Refresh la liste des profils pour l'ordre d'activité
+          fetchConversations();
 
-                // ignore messages not involving admin
-                if (newMsg.receiver_id !== ADMIN_ID && newMsg.sender_id !== ADMIN_ID) {
-                  console.debug("[admin global channel] ignoring message not involving admin");
-                  return;
-                }
+          // 2. Si le message concerne la conversation ouverte, on l'ajoute
+          const isRelevant = 
+            (msg.sender_id === selectedUserRef.current && msg.receiver_id === ADMIN_ID) ||
+            (msg.sender_id === ADMIN_ID && msg.receiver_id === selectedUserRef.current);
 
-                // refresh conversation list (so last_active ordering is accurate)
-                fetchConversations();
-
-                // append to conversation if currently selected matches the other party
-                const sel = selectedUserRef.current;
-                if (mounted && sel) {
-                  const otherId =
-                    newMsg.sender_id === ADMIN_ID ? newMsg.receiver_id : newMsg.sender_id;
-                  console.debug("[admin global channel] selectedUserRef:", sel, "otherId:", otherId);
-                  if (otherId === sel || newMsg.sender_id === sel || newMsg.receiver_id === sel) {
-                    setMessages((prev) => [...prev, newMsg]);
-                    console.debug("[admin global channel] appended message to UI");
-                  } else {
-                    console.debug("[admin global channel] message for different conversation");
-                  }
-                } else {
-                  console.debug("[admin global channel] no selectedUser to append to");
-                }
-              } catch (e) {
-                console.error("[admin global channel] handler error:", e);
-              }
-            }
-          );
-
-        // subscribe (subscribe can return promise or channel; be tolerant)
-        const sub: any = channel.subscribe();
-        if (sub && typeof sub.then === "function") {
-          await sub;
-        }
-        console.debug("[admin] subscribed to global channel", channel);
-        globalChannelRef.current = channel;
-      } catch (err) {
-        console.error("[admin] error creating global realtime channel:", err);
-      }
-    };
-
-    init();
-
-    return () => {
-      mounted = false;
-      const ch = globalChannelRef.current;
-      if (ch) {
-        try {
-          if (typeof ch.unsubscribe === "function") {
-            ch.unsubscribe();
-            console.debug("[admin] unsubscribed global channel via unsubscribe()");
-          } else if (typeof supabase.removeChannel === "function") {
-            supabase.removeChannel(ch);
-            console.debug("[admin] removed global channel via supabase.removeChannel()");
+          if (isRelevant) {
+            setMessages((prev) => {
+                if (prev.find(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+            });
           }
-        } catch (err) {
-          console.warn("[admin] error cleaning up global channel:", err);
         }
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
-
-  // conversation-specific channel: listen to all inserts and filter to the conversation
-  useEffect(() => {
-    let mounted = true;
-
-    const setupConversationChannel = async () => {
-      // cleanup previous conversation channel
-      const prev = convoChannelRef.current;
-      if (prev) {
-        try {
-          if (typeof prev.unsubscribe === "function") {
-            prev.unsubscribe();
-            console.debug("[admin] unsubscribed previous convo channel via unsubscribe()");
-          } else if (typeof supabase.removeChannel === "function") {
-            supabase.removeChannel(prev);
-            console.debug("[admin] removed previous convo channel via supabase.removeChannel()");
-          }
-        } catch (err) {
-          console.warn("[admin] error removing previous convo channel:", err);
-        }
-        convoChannelRef.current = null;
-      }
-
-      if (!selectedUser) {
-        setMessages([]);
-        return;
-      }
-
-      await fetchMessages(selectedUser);
-
-      try {
-        const convoChannel = supabase
-          .channel(`convo-${selectedUser}-${ADMIN_ID}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "messages",
-            },
-            (payload: any) => {
-              try {
-                const newMsg = payload?.new;
-                if (!newMsg) return;
-                console.debug("[admin convo channel] payload:", newMsg);
-
-                const sel = selectedUserRef.current;
-                const belongs =
-                  sel &&
-                  ((newMsg.sender_id === sel && newMsg.receiver_id === ADMIN_ID) ||
-                    (newMsg.sender_id === ADMIN_ID && newMsg.receiver_id === sel));
-                if (mounted && belongs) {
-                  setMessages((prev) => [...prev, newMsg]);
-                  console.debug("[admin convo channel] appended message");
-                } else {
-                  console.debug("[admin convo channel] message not for this convo");
-                }
-              } catch (e) {
-                console.error("[admin convo channel] handler error:", e);
-              }
-            }
-          );
-
-        const sub: any = convoChannel.subscribe();
-        if (sub && typeof sub.then === "function") {
-          await sub;
-        }
-        console.debug("[admin] subscribed convo channel", convoChannel);
-        convoChannelRef.current = convoChannel;
-      } catch (err) {
-        console.error("[admin] error creating convo channel:", err);
-      }
-    };
-
-    setupConversationChannel();
-
-    return () => {
-      mounted = false;
-      const ch = convoChannelRef.current;
-      if (ch) {
-        try {
-          if (typeof ch.unsubscribe === "function") {
-            ch.unsubscribe();
-          } else if (typeof supabase.removeChannel === "function") {
-            supabase.removeChannel(ch);
-          }
-        } catch (err) {
-          console.warn("[admin] error cleaning up convo channel on unmount:", err);
-        }
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUser]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const fetchConversations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .neq("id", ADMIN_ID)
-        .order("last_active", { ascending: false });
+  const initAdmin = async () => {
+    setLoading(true);
+    await fetchConversations();
+    setLoading(false);
+  };
 
-      if (error) {
-        console.error("[admin] Error fetching profiles:", error);
-        return;
-      }
-      setProfiles(data || []);
-    } catch (err) {
-      console.error("[admin] fetchConversations error:", err);
-    }
+  const fetchConversations = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .neq("id", ADMIN_ID)
+      .order("last_active", { ascending: false });
+    setProfiles(data || []);
   };
 
   const fetchMessages = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        console.error("[admin] Error fetching messages:", error);
-        return;
-      }
-      setMessages(data || []);
-      console.debug("[admin] fetched messages", data?.length ?? 0);
-    } catch (err) {
-      console.error("[admin] fetchMessages error:", err);
-    }
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+      .order("created_at", { ascending: true });
+    setMessages(data || []);
   };
 
   const sendResponse = async () => {
     if (!newMessage.trim() || !selectedUser) return;
 
-    const msg: Message = {
+    const msg = {
       content: newMessage.trim(),
       sender_id: ADMIN_ID,
       receiver_id: selectedUser,
       is_admin: true,
     };
 
-    try {
-      const { data, error } = await supabase
-        .from("messages")
-        .insert([msg])
-        .select()
-        .single();
-      if (error) {
-        console.error("[admin] Error sending admin message:", error);
-        return;
-      }
-      const sent = (data as Message) || { ...msg, created_at: new Date().toISOString() };
-      setMessages((prev) => [...prev, sent]);
-      setNewMessage("");
-      fetchConversations();
-      console.debug("[admin] sent message", sent);
-    } catch (err) {
-      console.error("[admin] sendResponse error:", err);
-    }
+    const { error } = await supabase.from("messages").insert([msg]);
+    if (error) console.error("Erreur envoi:", error);
+    else setNewMessage("");
   };
 
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center bg-[#020617]">
+      <Loader2 className="animate-spin text-emerald-500" />
+    </div>
+  );
+
   return (
-    <div className="flex h-[80vh] gap-4 p-4">
-      {/* Liste des conversations */}
-      <div className="w-1/3 bg-slate-900/50 rounded-[2.5rem] border border-white/5 overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-white/5 font-black uppercase text-[10px] tracking-widest text-slate-500">Messages Clients</div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {profiles.map((p) => {
-            const isSelected = selectedUser === p.id;
-            const phone = p.phone ?? "";
-            return (
-              <button
-                key={p.id}
-                onClick={() => setSelectedUser(p.id)}
-                className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-all ${isSelected ? "bg-emerald-500 text-slate-950" : "hover:bg-slate-800/50"}`}
-                aria-pressed={isSelected}
-              >
-                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-black text-[10px]">
-                  {phone ? phone.slice(-2) : "??"}
-                </div>
-                <div className="text-left">
-                  <p className="text-xs font-bold">{phone ? `+${phone}` : "Utilisateur"}</p>
-                  <p className={`text-[8px] uppercase font-black ${isSelected ? "text-slate-900" : "text-emerald-500"}`}>Actif</p>
-                </div>
-              </button>
-            );
-          })}
+    <div className="flex h-[85vh] gap-6 p-6 text-white font-sans">
+      {/* SIDEBAR : LISTE DES CLIENTS */}
+      <div className="w-80 bg-slate-900/40 rounded-[2.5rem] border border-white/10 flex flex-col overflow-hidden backdrop-blur-md">
+        <div className="p-6 border-b border-white/10">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Conversations</h3>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setSelectedUser(p.id)}
+              className={`w-full p-4 rounded-3xl flex items-center gap-4 transition-all border ${
+                selectedUser === p.id 
+                ? "bg-emerald-600 border-emerald-400 shadow-lg shadow-emerald-900/20" 
+                : "bg-slate-950/50 border-white/5 hover:border-white/20"
+              }`}
+            >
+              <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-[10px] font-black border border-white/10">
+                {p.phone?.slice(-2) || "??"}
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-black truncate w-32">{p.phone ? `+${p.phone}` : "Client Anonyme"}</p>
+                <span className={`text-[8px] font-bold uppercase tracking-widest ${selectedUser === p.id ? 'text-emerald-100' : 'text-emerald-500'}`}>
+                   • Actif
+                </span>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Zone de Chat */}
-      <div className="flex-1 bg-slate-900/30 rounded-[3.5rem] border border-white/5 flex flex-col overflow-hidden relative">
+      {/* ZONE DE CHAT PRINCIPALE */}
+      <div className="flex-1 bg-slate-900/20 rounded-[3rem] border border-white/10 flex flex-col overflow-hidden backdrop-blur-sm relative">
         {selectedUser ? (
           <>
-            <div className="flex-1 overflow-y-auto p-8 space-y-4">
+            {/* Header Chat */}
+            <div className="p-6 bg-slate-950/40 border-b border-white/10 flex items-center gap-4">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+                <p className="text-[10px] font-black uppercase tracking-widest">Discussion sécurisée</p>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-6">
               {messages.map((m, i) => (
-                <div key={m.id ?? m.created_at ?? i} className={`flex ${m.is_admin ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[70%] p-4 rounded-3xl text-xs ${m.is_admin ? "bg-emerald-500 text-slate-950 font-bold rounded-tr-none" : "bg-slate-800 text-white rounded-tl-none border border-white/5"}`}>
+                <div key={i} className={`flex ${m.is_admin ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[75%] p-5 rounded-[2rem] text-sm leading-relaxed shadow-2xl ${
+                    m.is_admin 
+                    ? "bg-emerald-600 text-white rounded-tr-none border border-emerald-400/30" 
+                    : "bg-slate-800 text-white rounded-tl-none border border-white/10"
+                  }`}>
                     {m.content}
                   </div>
                 </div>
               ))}
               <div ref={scrollRef} />
             </div>
-            <div className="p-6 bg-slate-950 flex gap-3">
+
+            {/* Input Bar */}
+            <div className="p-6 bg-slate-950/80 border-t border-white/10 flex gap-4">
               <input
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendResponse()}
-                placeholder="Répondre au client..."
-                className="flex-1 bg-slate-900 border border-white/10 rounded-2xl px-6 py-4 text-xs outline-none focus:border-emerald-500 transition-all"
-                aria-label="Répondre au client"
+                placeholder="Écrire votre réponse..."
+                className="flex-1 bg-slate-900 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white outline-none focus:border-emerald-500/50 transition-all placeholder:text-slate-600"
               />
-              <button onClick={sendResponse} className="p-4 bg-emerald-500 text-slate-950 rounded-2xl active:scale-95 transition-all" aria-label="Envoyer réponse">
-                <Send size={20} />
+              <button 
+                onClick={sendResponse} 
+                className="p-4 bg-emerald-500 text-slate-950 rounded-2xl hover:bg-emerald-400 active:scale-90 transition-all shadow-lg shadow-emerald-500/20"
+              >
+                <Send size={22} />
               </button>
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-600 italic">
-            <UserIcon size={48} className="opacity-10 mb-4" />
-            <p className="text-[10px] font-black uppercase tracking-widest">Sélectionnez une conversation pour répondre</p>
+          <div className="h-full flex flex-col items-center justify-center gap-6 opacity-20">
+            <UserIcon size={80} className="text-slate-500" />
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">En attente de sélection</p>
           </div>
         )}
       </div>
     </div>
   );
-                        }
+}
