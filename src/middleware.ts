@@ -25,16 +25,21 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  
-  // UTILISATION DE TA VARIABLE ENV
+
   const ADMIN_ID = process.env.NEXT_PUBLIC_ADMIN_ID;
+  const ADMIN_EMAIL = "99999999@chifpam.ht";
   const isAdminPath = request.nextUrl.pathname.startsWith('/admin-chif-pam');
 
-console.log("ID Utilisateur Connecté:", user?.id);
-console.log("ID Admin Attendu:", process.env.NEXT_PUBLIC_ADMIN_ID);
   if (isAdminPath) {
-    // Si l'ID ne correspond pas à celui de ton .env
-    if (!user || user.id !== ADMIN_ID) {
+    // Si l'utilisateur n'est pas connecté
+    if (!user) {
+      return NextResponse.redirect(new URL('/connexion', request.url));
+    }
+
+    // Double vérification : par ID ou par Email
+    const isMaster = user.id === ADMIN_ID || user.email === ADMIN_EMAIL;
+
+    if (!isMaster) {
       return NextResponse.redirect(new URL('/connexion', request.url));
     }
   }
@@ -45,4 +50,3 @@ console.log("ID Admin Attendu:", process.env.NEXT_PUBLIC_ADMIN_ID);
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };
-
