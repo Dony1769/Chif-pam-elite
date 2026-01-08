@@ -1,120 +1,238 @@
-// /app/client/play/page.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Wallet, Zap, Loader2, Ticket } from 'lucide-react';
+import { 
+  Loader2, 
+  Ticket, 
+  Zap, 
+  Wallet, 
+  Delete, 
+  CheckCircle2,
+  AlertCircle 
+} from 'lucide-react';
 
 export default function PlayZone() {
   const [session, setSession] = useState<any>(null);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [montant, setMontant] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [montant, setMontant] = useState(""); 
+  const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastTicket, setLastTicket] = useState<any>(null);
 
-  const fetchData = async () => {
-    // 1. Charger la session ouverte
-    const { data: tirage } = await supabase.from('tirages').select('*').eq('status', 'ouvert').maybeSingle();
-    setSession(tirage);
-    // 2. Charger le solde (balance)
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: prof } = await supabase.from('profiles').select('balance').eq('id', user.id).single();
-      if (prof) setBalance(prof.balance);
+  // 1. SYNC DONNÉES UTILISATEUR ET SESSION
+  const syncData = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Récupérer Solde
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', user.id)
+        .single();
+      if (profile) setBalance(profile.balance);
+
+      // Récupérer Session Active
+      const { data: tirage } = await supabase
+        .from('tirages')
+        .select('*')
+        .eq('status', 'ouvert')
+        .maybeSingle();
+      
+      setSession(tirage);
+    } catch (err) {
+      console.error("Erreur de synchronisation client:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchData();
-    const channel = supabase.channel('sync-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const validerMise = async () => {
-    const m = parseInt(montant);
-    if (!selected || !m || m > balance) return alert("Vérifiez votre chiffre, montant ou solde !");
+  useEffect(() => {
+    syncData();
+
+    // ECOUTE REALTIME (Solde et Sessions)
+    const channel = supabase.channel('client-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => syncData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => syncData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [syncData]);
+
+  // 2. LOGIQUE DU CLAVIER NUMÉRIQUE
+  const addDigit = (d: string) => {
+    if (montant.length < 6) setMontant(prev => prev + d);
+  };
+  const clearMontant = () => setMontant("");
+  const deleteLast = () => setMontant(prev => prev.slice(0, -1));
+
+  // 3. ENREGISTREMENT DE LA MISE
+  const placerMise = async () => {
+    const montantNum = parseInt(montant);
     
+    // Validations critiques
+    if (!selectedNumber || isNaN(montantNum) || montantNum <= 0) {
+      return alert("Veuillez choisir un chiffre et un montant valide.");
+    }
+    if (montantNum > balance) {
+      return alert("Solde insuffisant pour cette mise.");
+    }
+
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      // Insérer la mise
-      await supabase.from('mises').insert({
-        user_id: user?.id, tirage_id: session.id, chiffre_choisi: selected,
-        montant: m, multiplicateur_moment: session.multiplicateur
+      if (!user) throw new Error("Session utilisateur expirée");
+
+      // A. Insérer la mise
+      const { data: mise, error: miseError } = await supabase
+        .from('mises')
+        .insert({
+          user_id: user.id,
+          tirage_id: session.id,
+          chiffre_choisi: selectedNumber,
+          montant: montantNum,
+          multiplicateur_moment: session.multiplicateur,
+          status: 'en_attente'
+        })
+        .select()
+        .single();
+
+      if (miseError) throw miseError;
+
+      // B. Débiter le solde via RPC
+      const { error: rpcError } = await supabase.rpc('increment_balance', {
+        user_id: user.id,
+        amount: -montantNum
       });
-      // Débiter le solde (balance)
-      await supabase.rpc('increment_balance', { user_id: user?.id, amount: -m });
+
+      if (rpcError) throw rpcError;
+
+      // Succès
+      setLastTicket(mise);
+      setMontant("");
+      setSelectedNumber(null);
+      syncData(); // Re-sync immédiat du solde
       
-      alert("Ticket validé avec succès !");
-      setMontant(""); setSelected(null);
-    } catch (e) {
-      alert("Erreur de connexion");
+      setTimeout(() => setLastTicket(null), 5000); // Effacer le message de succès après 5s
+    } catch (err: any) {
+      alert("Erreur lors de la mise : " + err.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center text-emerald-500 font-black italic tracking-widest">CHIF PAM...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <Loader2 className="animate-spin text-emerald-500" size={32} />
+    </div>
+  );
 
   return (
-    <main className="min-h-screen bg-[#020617] p-6 text-white font-black italic uppercase">
+    <main className="min-h-screen bg-[#020617] text-white p-4 pb-32 font-black italic uppercase tracking-tighter">
       <div className="max-w-md mx-auto space-y-6">
         
-        {/* HEADER BALANCE */}
-        <div className="flex justify-between items-center bg-slate-900/50 p-6 rounded-[2rem] border border-white/5">
+        {/* HEADER SOLDE */}
+        <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-white/5 flex justify-between items-center shadow-xl">
           <div className="flex items-center gap-3">
-            <Wallet className="text-emerald-500" />
-            <span className="text-xl tracking-tighter">{balance.toLocaleString()} <span className="text-[10px] opacity-50">HTG</span></span>
+            <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
+              <Wallet className="text-emerald-500" size={20} />
+            </div>
+            <div>
+              <p className="text-[8px] text-slate-500 not-italic font-bold tracking-widest">Mon Portefeuille</p>
+              <p className="text-lg leading-none">{balance.toLocaleString()} <span className="text-[10px] text-emerald-500">HTG</span></p>
+            </div>
           </div>
-          {session && <div className="text-emerald-500 text-[8px] animate-pulse">Session {session.moment}</div>}
+          {session && (
+            <div className="bg-emerald-500 text-slate-950 px-4 py-1.5 rounded-full text-[9px] shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse">
+              LIVE: {session.moment}
+            </div>
+          )}
         </div>
 
         {session ? (
           <>
-            {/* GRILLE RIDEAU DE FUMÉE */}
-            <div className="grid grid-cols-5 gap-3">
-              {session.chiffres_visibles?.map((n: string) => (
-                <button key={n} onClick={() => setSelected(n)} className={`h-14 rounded-2xl border transition-all text-xl ${selected === n ? 'bg-emerald-500 text-black border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-900 border-white/5'}`}>
-                  {n}
-                </button>
-              ))}
-            </div>
-
-            {/* CALCULETTE */}
-            <div className="bg-slate-900 p-6 rounded-[2.5rem] border border-white/5 space-y-4">
-              <div className="bg-black/50 p-4 rounded-xl text-center text-3xl text-emerald-500 border border-white/5">
-                {montant || "0"}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {["1","2","3","4","5","6","7","8","9","C","0","X"].map(k => (
-                  <button key={k} onClick={() => {
-                    if(k === "C") setMontant("");
-                    else if(k === "X") setMontant(p => p.slice(0, -1));
-                    else if(montant.length < 6) setMontant(p => p + k);
-                  }} className="h-12 bg-slate-950 rounded-xl border border-white/5 hover:bg-slate-800 transition-colors">
-                    {k}
+            {/* GRILLE DE CHOIX (Rideau de fumée admin) */}
+            <div className="space-y-4">
+              <p className="text-[10px] text-slate-500 text-center tracking-[0.3em]">Sélectionnez votre chiffre</p>
+              <div className="grid grid-cols-5 gap-3">
+                {session.chiffres_visibles?.map((num: string) => (
+                  <button
+                    key={num}
+                    onClick={() => setSelectedNumber(num)}
+                    className={`h-14 rounded-2xl border-2 transition-all flex items-center justify-center text-xl ${
+                      selectedNumber === num 
+                      ? 'bg-emerald-500 border-emerald-400 text-slate-950 scale-110 shadow-lg shadow-emerald-500/20' 
+                      : 'bg-slate-900 border-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    {num}
                   </button>
                 ))}
               </div>
             </div>
 
-            <button disabled={!selected || !montant || isSubmitting} onClick={validerMise} className="w-full py-6 bg-emerald-500 text-black rounded-3xl shadow-2xl disabled:opacity-20 active:scale-95 transition-all flex items-center justify-center gap-3">
-              {isSubmitting ? <Loader2 className="animate-spin" /> : <Ticket size={20} />}
-              VALIDER LE BILLET
-            </button>
+            {/* CALCULETTE DE MISE */}
+            <div className="bg-slate-900 p-6 rounded-[2.5rem] border border-white/5 space-y-6">
+              <div className="bg-black/40 py-6 rounded-2xl text-center border border-white/5 relative overflow-hidden">
+                <p className="text-[8px] text-slate-500 absolute top-2 left-1/2 -translate-x-1/2 tracking-widest">Montant de la mise</p>
+                <span className="text-4xl">{montant || "0"}</span>
+                <span className="text-emerald-500 ml-2 text-xs">HTG</span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                  <button key={d} onClick={() => addDigit(d)} className="h-14 bg-slate-950 rounded-2xl border border-white/5 text-xl active:bg-emerald-500 active:text-black transition-colors">{d}</button>
+                ))}
+                <button onClick={clearMontant} className="h-14 bg-rose-500/10 text-rose-500 rounded-2xl border border-rose-500/10 text-sm">C</button>
+                <button onClick={() => addDigit("0")} className="h-14 bg-slate-950 rounded-2xl border border-white/5 text-xl">0</button>
+                <button onClick={deleteLast} className="h-14 bg-slate-950 rounded-2xl border border-white/5 flex items-center justify-center text-slate-500"><Delete size={20}/></button>
+              </div>
+            </div>
+
+            {/* MESSAGE DE SUCCÈS TEMPORAIRE */}
+            {lastTicket && (
+              <div className="bg-emerald-500 text-slate-950 p-4 rounded-2xl flex items-center gap-3 animate-bounce">
+                <CheckCircle2 size={20} />
+                <p className="text-[10px]">Billet enregistré : {lastTicket.chiffre_choisi} pour {lastTicket.montant} HTG !</p>
+              </div>
+            )}
           </>
         ) : (
-          <div className="py-40 text-center opacity-20 space-y-4">
-            <Zap size={64} className="mx-auto" />
-            <p className="text-xs tracking-[0.5em]">Aucune session en cours...</p>
+          /* ÉTAT : PAS DE SESSION */
+          <div className="flex flex-col items-center justify-center py-32 space-y-6 opacity-30">
+            <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center">
+              <Zap size={40} className="text-slate-500" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-xs tracking-[0.4em]">En attente</p>
+              <p className="text-[10px] not-italic font-bold text-slate-500">L'admin n'a pas encore ouvert de session.</p>
+            </div>
           </div>
         )}
       </div>
+
+      {/* BOUTON DE VALIDATION FIXE */}
+      {session && (
+        <div className="fixed bottom-6 left-6 right-6 max-w-md mx-auto">
+          <button
+            disabled={!selectedNumber || !montant || isSubmitting}
+            onClick={placerMise}
+            className="w-full py-6 bg-white text-slate-950 rounded-[2rem] flex items-center justify-center gap-3 shadow-2xl active:scale-95 transition-all disabled:opacity-10"
+          >
+            {isSubmitting ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <>
+                <Ticket size={22} />
+                <span className="tracking-[0.2em] text-xs">Confirmer mon billet</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </main>
   );
 }
