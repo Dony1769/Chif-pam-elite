@@ -3,7 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Dices, Loader2, ShieldCheck, Zap, Users, AlertCircle
+  Dices, 
+  Loader2, 
+  ShieldCheck, 
+  Zap, 
+  Users, 
+  AlertCircle
 } from 'lucide-react';
 
 export default function AdminLoterie() {
@@ -13,6 +18,7 @@ export default function AdminLoterie() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [stats, setStats] = useState({ totalMises: 0, totalMontant: 0 });
 
+  // 1. CHARGEMENT ET SYNC DE LA SESSION
   const fetchAdminData = useCallback(async () => {
     try {
       const { data: tirage, error } = await supabase
@@ -47,7 +53,8 @@ export default function AdminLoterie() {
 
   useEffect(() => {
     fetchAdminData();
-    const channel = supabase.channel('admin-loterie-sync')
+
+    const channel = supabase.channel('admin-loterie-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => fetchAdminData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mises' }, () => fetchAdminData())
       .subscribe();
@@ -55,7 +62,7 @@ export default function AdminLoterie() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchAdminData]);
 
-  // OUVERTURE DE SESSION CORRIGÉE
+  // 2. OUVERTURE DE SESSION
   const ouvrirSession = async (moment: string) => {
     if (currentTirage || isProcessing) return;
     setIsProcessing(true);
@@ -69,31 +76,31 @@ export default function AdminLoterie() {
       
       const grilleVisible = [...pool, numGagnant].sort(() => Math.random() - 0.5);
 
-      // CORRECTION : Utilisation de 'chiffres_visible' (sans S) comme sur ta capture d'écran
       const { error } = await supabase.from('tirages').insert([{
-        moment: moment,
+        moment,
         chiffre_gagnant: numGagnant,
-        chiffres_visible: grilleVisible, // Synchronisé avec ta DB
+        chiffres_visibles: grilleVisible,
         multiplicateur: multiplicateur,
         status: 'ouvert'
       }]);
 
       if (error) throw error;
       
-      // Forcer le rafraîchissement local
       await fetchAdminData();
-
     } catch (err: any) {
-      console.error("Erreur insertion:", err);
-      alert("Erreur d'ouverture : " + (err.message || "Vérifiez la console"));
+      console.error("Détails erreur ouverture:", err);
+      alert("Erreur d'ouverture : " + err.message);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // 3. CLÔTURE ET PAIEMENT AUTOMATIQUE
   const cloturerEtPayer = async () => {
     if (!currentTirage || isProcessing) return;
-    if (!confirm(`Voulez-vous clôturer la session ${currentTirage.moment} ?`)) return;
+    const confirmMsg = `Voulez-vous clôturer la session ${currentTirage.moment} ?\nChiffre gagnant : ${currentTirage.chiffre_gagnant}\nLes gagnants seront payés immédiatement.`;
+    
+    if (!confirm(confirmMsg)) return;
 
     setIsProcessing(true);
     try {
@@ -108,7 +115,9 @@ export default function AdminLoterie() {
       if (mises && mises.length > 0) {
         for (const mise of mises) {
           const estGagnant = mise.chiffre_choisi === currentTirage.chiffre_gagnant;
-          const gainCalculé = estGagnant ? (Number(mise.montant) * Number(currentTirage.multiplicateur)) : 0;
+          // Sécurité : on utilise le multiplicateur du tirage si celui de la mise est absent
+          const mult = mise.multiplicateur_moment || currentTirage.multiplicateur;
+          const gainCalculé = estGagnant ? (Number(mise.montant) * Number(mult)) : 0;
 
           await supabase.from('mises')
             .update({ 
@@ -126,14 +135,18 @@ export default function AdminLoterie() {
         }
       }
 
-      await supabase.from('tirages')
+      const { error: closeError } = await supabase
+        .from('tirages')
         .update({ status: 'termine' })
         .eq('id', currentTirage.id);
+
+      if (closeError) throw closeError;
 
       alert("Session clôturée avec succès !");
       setCurrentTirage(null);
       fetchAdminData();
     } catch (err: any) {
+      console.error("Erreur clôture:", err);
       alert("Erreur lors de la clôture : " + err.message);
     } finally {
       setIsProcessing(false);
@@ -148,11 +161,12 @@ export default function AdminLoterie() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-6 font-sans uppercase italic font-black">
-      {/* Ton UI reste la même, elle est superbe ! */}
       <div className="max-w-6xl mx-auto space-y-8">
+        
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center">
+            <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.2)]">
               <ShieldCheck className="text-slate-950" size={32} />
             </div>
             <div>
@@ -160,6 +174,7 @@ export default function AdminLoterie() {
               <p className="text-[9px] text-slate-500 not-italic font-bold tracking-[0.3em]">Loterie Professionnelle</p>
             </div>
           </div>
+
           <div className="flex gap-4 w-full md:w-auto">
             <div className="flex-1 md:w-32 bg-black/40 p-4 rounded-2xl border border-white/5 text-center">
               <p className="text-[8px] text-slate-500 mb-1">Ratio Gain</p>
@@ -178,11 +193,13 @@ export default function AdminLoterie() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
+          
           <div className="space-y-6">
             <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5">
               <h3 className="text-xs text-slate-500 mb-6 tracking-widest flex items-center gap-2">
                 <Zap size={14} /> Gestion Sessions
               </h3>
+              
               <div className="grid grid-cols-1 gap-3">
                 {['Matin', 'Midi', 'Après-Midi', 'Soir'].map((m) => {
                   const isActive = currentTirage?.moment === m;
@@ -204,6 +221,19 @@ export default function AdminLoterie() {
                 })}
               </div>
             </div>
+
+            {currentTirage && (
+              <div className="bg-emerald-500/5 border border-emerald-500/10 p-6 rounded-[2rem] space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-emerald-500">Mises en cours</span>
+                  <Users size={16} className="text-emerald-500" />
+                </div>
+                <div className="flex justify-between items-end">
+                  <p className="text-4xl">{stats.totalMises}</p>
+                  <p className="text-emerald-500 text-xs">{stats.totalMontant} HTG</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-2">
@@ -212,18 +242,28 @@ export default function AdminLoterie() {
                 <div className="flex-1 flex flex-col items-center justify-center text-center space-y-10">
                   <div className="space-y-2">
                     <p className="text-emerald-500 text-[10px] tracking-[0.5em]">Résultat Programmé</p>
-                    <h2 className="text-[12rem] leading-none tracking-tighter">
+                    <h2 className="text-[12rem] leading-none tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
                       {currentTirage.chiffre_gagnant}
                     </h2>
                   </div>
-                  <button
-                    disabled={isProcessing}
-                    onClick={cloturerEtPayer}
-                    className="w-full max-w-sm py-6 bg-white text-slate-950 rounded-2xl text-xs tracking-[0.2em] hover:bg-emerald-500 transition-all flex items-center justify-center gap-3"
-                  >
-                    {isProcessing ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                    Clôturer et Payer
-                  </button>
+
+                  <div className="w-full max-w-sm space-y-4">
+                    <div className="flex items-center gap-3 p-4 bg-black/40 rounded-2xl border border-white/5 text-left">
+                      <AlertCircle className="text-amber-500" size={20} />
+                      <p className="text-[8px] text-slate-400 uppercase leading-relaxed font-bold">
+                        Paiement automatique : Mise x {currentTirage.multiplicateur}
+                      </p>
+                    </div>
+                    
+                    <button
+                      disabled={isProcessing}
+                      onClick={cloturerEtPayer}
+                      className="w-full py-6 bg-white text-slate-950 rounded-2xl text-xs tracking-[0.2em] hover:bg-emerald-500 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
+                    >
+                      {isProcessing ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
+                      Clôturer et Payer
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-slate-800 space-y-6">
@@ -233,6 +273,7 @@ export default function AdminLoterie() {
               )}
             </div>
           </div>
+
         </div>
       </div>
     </div>
