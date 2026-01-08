@@ -3,183 +3,128 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Check, X, Clock, ExternalLink, 
-  Search, Filter, Loader2, AlertCircle,
-  ArrowUpRight, ArrowDownLeft, User as UserIcon
+  CheckCircle2, XCircle, Clock, Search, 
+  ArrowUpCircle, ArrowDownCircle, Eye, Loader2, MessageSquare
 } from 'lucide-react';
 
 export default function AdminDemandes() {
-  const [demandes, setDemandes] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDemandes();
-    
-    // Realtime : Si un client envoie une nouvelle demande, elle apparaît sans rafraîchir
-    const channel = supabase.channel('admin-flux-financier')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => fetchDemandes())
+    fetchTransactions();
+    const sub = supabase.channel('admin-finance')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchTransactions())
       .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(sub); };
   }, []);
 
-  const fetchDemandes = async () => {
-    const { data, error } = await supabase
+  const fetchTransactions = async () => {
+    const { data } = await supabase
       .from('transactions')
-      .select('*, profiles(username, phone, balance)')
-      .eq('status', 'en_attente')
+      .select('*, profiles(id, balance, locked_balance)')
       .order('created_at', { ascending: false });
-
-    if (!error) setDemandes(data || []);
+    
+    if (data) setTransactions(data);
     setLoading(false);
   };
 
-  const validerTransaction = async (trx: any, decision: 'approuve' | 'refuse') => {
-    const confirmation = confirm(`Voulez-vous vraiment ${decision === 'approuve' ? 'APPROUVER' : 'REFUSER'} cette transaction de ${trx.amount} HTG ?`);
-    if (!confirmation) return;
-
-    setProcessingId(trx.id);
-
+  const traiterTransaction = async (trans: any, action: 'approved' | 'rejected') => {
+    setProcessingId(trans.id);
+    const note = action === 'rejected' ? prompt("Raison du refus :") : null;
+    
     try {
-      if (decision === 'approuve') {
-        if (trx.type === 'depot') {
-          // Pour un dépôt, on ajoute l'argent sur le compte du client
-          const { error: rpcError } = await supabase.rpc('increment_balance', { 
-            user_id: trx.user_id, 
-            amount: trx.amount 
+      if (trans.type === 'deposit' && action === 'approved') {
+        // Créditer le compte
+        await supabase.rpc('increment_balance', { 
+          user_id: trans.user_id, 
+          amount: trans.amount 
+        });
+      } 
+
+      else if (trans.type === 'withdrawal') {
+        if (action === 'rejected') {
+          // Rembourser le montant bloqué
+          await supabase.rpc('refund_withdrawal', { 
+            user_id_param: trans.user_id, 
+            amount_param: trans.amount 
           });
-          if (rpcError) throw rpcError;
-        }
-        // Pour un retrait, l'argent a déjà été déduit lors de la demande (sécurité client)
-        // Donc on ne fait que valider le statut.
-      } else {
-        // En cas de REFUS d'un retrait, il faut RENDRE l'argent au client
-        if (trx.type === 'retrait') {
-          const { error: rpcError } = await supabase.rpc('increment_balance', { 
-            user_id: trx.user_id, 
-            amount: trx.amount 
-          });
-          if (rpcError) throw rpcError;
+        } else {
+          // Approuvé : On diminue juste le locked_balance (l'argent quitte définitivement le système)
+          await supabase.from('profiles')
+            .update({ locked_balance: trans.profiles.locked_balance - trans.amount })
+            .eq('id', trans.user_id);
         }
       }
 
-      // Mise à jour du statut final
-      const { error: updateError } = await supabase
-        .from('transactions')
-        .update({ status: decision === 'approuve' ? 'valide' : 'refuse' })
-        .eq('id', trx.id);
-
-      if (updateError) throw updateError;
+      // Mettre à jour le statut de la transaction
+      await supabase.from('transactions')
+        .update({ 
+          status: action, 
+          admin_note: note,
+          processed_at: new Date().toISOString() 
+        })
+        .eq('id', trans.id);
 
       alert("Transaction traitée avec succès !");
-      fetchDemandes();
     } catch (err: any) {
-      alert("Erreur critique : " + err.message);
+      alert("Erreur : " + err.message);
     } finally {
       setProcessingId(null);
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <main className="min-h-screen bg-[#020617] p-4 md:p-10 text-white font-sans">
-      <div className="max-w-6xl mx-auto space-y-10">
-        
-        {/* HEADER SECTION */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div>
-            <h1 className="text-3xl font-black italic uppercase tracking-tighter">
-              Flux <span className="text-emerald-500">Financiers</span>
-            </h1>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em]">
-              Validation des demandes en attente ({demandes.length})
-            </p>
-          </div>
-          <div className="flex gap-2 bg-slate-900/50 p-2 rounded-2xl border border-white/5">
-             <div className="px-4 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-widest">
-                Sécurité Activée
-             </div>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <h1 className="text-3xl text-emerald-500 tracking-tighter">Gestion Financière</h1>
 
-        {/* LISTE DES DEMANDES */}
-        <div className="grid gap-6">
-          {demandes.length === 0 ? (
-            <div className="bg-slate-900/30 border border-white/5 p-20 rounded-[3rem] text-center">
-               <Clock className="mx-auto text-slate-800 mb-4" size={48} />
-               <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">Aucune demande en attente</p>
-            </div>
-          ) : demandes.map((d) => (
-            <div key={d.id} className="bg-slate-900 border border-white/5 p-8 rounded-[2.5rem] flex flex-col lg:flex-row gap-8 items-center group hover:border-emerald-500/20 transition-all">
+        <div className="grid grid-cols-1 gap-4">
+          {transactions.map((t) => (
+            <div key={t.id} className={`bg-slate-900/50 p-6 rounded-[2rem] border ${t.status === 'pending' ? 'border-amber-500/20' : 'border-white/5'} flex flex-col md:flex-row justify-between items-center gap-6`}>
               
-              {/* INFO CLIENT */}
-              <div className="flex items-center gap-4 min-w-[250px]">
-                <div className="p-4 bg-slate-950 rounded-2xl border border-white/5 text-slate-500">
-                  <UserIcon size={24} />
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                  {t.type === 'deposit' ? <ArrowUpCircle /> : <ArrowDownCircle />}
                 </div>
                 <div>
-                  <h3 className="font-black uppercase text-sm">{d.profiles?.username}</h3>
-                  <p className="text-[10px] text-slate-500 font-bold">{d.profiles?.phone}</p>
-                  <p className="text-[9px] text-emerald-500/60 font-black uppercase mt-1">Solde: {d.profiles?.balance} HTG</p>
+                  <p className="text-xs">{t.type === 'deposit' ? 'Dépôt' : 'Retrait'} - {t.amount} HTG</p>
+                  <p className="text-[8px] text-slate-500 not-italic tracking-widest">{new Date(t.created_at).toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* TYPE & MONTANT */}
-              <div className="flex-1 flex items-center justify-center gap-8">
-                <div className="text-center">
-                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Type</p>
-                  <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 ${
-                    d.type === 'depot' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'
-                  }`}>
-                    {d.type === 'depot' ? <ArrowUpRight size={12}/> : <ArrowDownLeft size={12}/>}
-                    {d.type}
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Montant</p>
-                  <p className="text-2xl font-black italic">{d.amount} <span className="text-[10px] not-italic text-slate-600">HTG</span></p>
-                </div>
-
-                {d.proof_url && (
-                  <div className="text-center">
-                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Preuve</p>
-                    <a href={d.proof_url} target="_blank" className="p-3 bg-slate-950 rounded-xl border border-white/5 text-emerald-500 hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center">
-                      <ExternalLink size={18} />
-                    </a>
+              {/* DETAILS SPECIFIQUES */}
+              <div className="flex gap-4">
+                {t.proof_url && (
+                  <a href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/payment-proofs/${t.proof_url}`} target="_blank" className="flex items-center gap-2 text-[10px] bg-white/5 px-4 py-2 rounded-xl">
+                    <Eye size={14}/> Voir Preuve
+                  </a>
+                )}
+                {t.phone_number && (
+                  <div className="flex items-center gap-2 text-[10px] bg-white/5 px-4 py-2 rounded-xl">
+                    <MessageSquare size={14}/> {t.phone_number}
                   </div>
                 )}
               </div>
 
               {/* ACTIONS */}
-              <div className="flex gap-3">
-                <button
-                  disabled={!!processingId}
-                  onClick={() => validerTransaction(d, 'approuve')}
-                  className="h-14 px-8 bg-emerald-500 text-slate-950 rounded-2xl font-black text-[10px] tracking-widest hover:scale-105 transition-all shadow-lg shadow-emerald-500/10 flex items-center gap-2"
-                >
-                  {processingId === d.id ? <Loader2 className="animate-spin" size={16}/> : <Check size={18}/>}
-                  APPROUVER
-                </button>
-                <button
-                  disabled={!!processingId}
-                  onClick={() => validerTransaction(d, 'refuse')}
-                  className="h-14 px-6 bg-slate-950 border border-white/5 text-rose-500 rounded-2xl font-black text-[10px] tracking-widest hover:bg-rose-500 hover:text-white transition-all"
-                >
-                  {processingId === d.id ? <Loader2 className="animate-spin" size={16}/> : <X size={18}/>}
-                </button>
-              </div>
+              {t.status === 'pending' ? (
+                <div className="flex gap-2">
+                  <button onClick={() => traiterTransaction(t, 'rejected')} disabled={!!processingId} className="px-6 py-3 bg-rose-500/10 text-rose-500 rounded-xl text-[10px]">Refuser</button>
+                  <button onClick={() => traiterTransaction(t, 'approved')} disabled={!!processingId} className="px-6 py-3 bg-emerald-500 text-slate-950 rounded-xl text-[10px]">Approuver</button>
+                </div>
+              ) : (
+                <div className={`px-6 py-3 rounded-xl text-[10px] ${t.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                  {t.status === 'approved' ? 'Validé' : 'Refusé'}
+                </div>
+              )}
             </div>
           ))}
         </div>
-
       </div>
-    </main>
+    </div>
   );
 }
