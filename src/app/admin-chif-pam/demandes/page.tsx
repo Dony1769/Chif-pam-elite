@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  CheckCircle2, XCircle, Clock, Search, 
-  ArrowUpCircle, ArrowDownCircle, Eye, Loader2, MessageSquare
+  CheckCircle2, XCircle, Clock, 
+  ArrowUpCircle, ArrowDownCircle, 
+  Eye, Loader2, Smartphone, AlertCircle 
 } from 'lucide-react';
 
 export default function AdminDemandes() {
@@ -14,14 +15,15 @@ export default function AdminDemandes() {
 
   useEffect(() => {
     fetchTransactions();
-    const sub = supabase.channel('admin-finance')
+    // Realtime pour voir les nouvelles demandes arriver sans rafraîchir
+    const channel = supabase.channel('admin-finance-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchTransactions())
       .subscribe();
-    return () => { supabase.removeChannel(sub); };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const fetchTransactions = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('transactions')
       .select('*, profiles(id, balance, locked_balance)')
       .order('created_at', { ascending: false });
@@ -30,46 +32,50 @@ export default function AdminDemandes() {
     setLoading(false);
   };
 
-  const traiterTransaction = async (trans: any, action: 'approved' | 'rejected') => {
-    setProcessingId(trans.id);
-    const note = action === 'rejected' ? prompt("Raison du refus :") : null;
-    
-    try {
-      if (trans.type === 'deposit' && action === 'approved') {
-        // Créditer le compte
-        await supabase.rpc('increment_balance', { 
-          user_id: trans.user_id, 
-          amount: trans.amount 
-        });
-      } 
+  const handleAction = async (trans: any, status: 'approved' | 'rejected') => {
+    const confirmAction = confirm(`Voulez-vous vraiment ${status === 'approved' ? 'APPROUVER' : 'REFUSER'} cette transaction de ${trans.amount} HTG ?`);
+    if (!confirmAction) return;
 
+    setProcessingId(trans.id);
+    let note = "";
+    if (status === 'rejected') {
+      note = prompt("Raison du refus (sera visible par le client) :") || "Refusé par l'administrateur";
+    }
+
+    try {
+      // 1. LOGIQUE FINANCIÈRE (Impact sur la table PROFILES)
+      if (trans.type === 'deposit' && status === 'approved') {
+        // Approuver Dépôt : On ajoute à la balance
+        await supabase.rpc('increment_balance', { user_id: trans.user_id, amount: trans.amount });
+      } 
+      
       else if (trans.type === 'withdrawal') {
-        if (action === 'rejected') {
-          // Rembourser le montant bloqué
-          await supabase.rpc('refund_withdrawal', { 
-            user_id_param: trans.user_id, 
-            amount_param: trans.amount 
-          });
+        if (status === 'rejected') {
+          // Refuser Retrait : On rembourse (Locked -> Balance)
+          await supabase.rpc('refund_withdrawal', { user_id_param: trans.user_id, amount_param: trans.amount });
         } else {
-          // Approuvé : On diminue juste le locked_balance (l'argent quitte définitivement le système)
-          await supabase.from('profiles')
-            .update({ locked_balance: trans.profiles.locked_balance - trans.amount })
-            .eq('id', trans.user_id);
+          // Approuver Retrait : L'argent est déjà déduit de balance, on vide juste le locked_balance
+          const newLocked = Math.max(0, (trans.profiles.locked_balance || 0) - trans.amount);
+          await supabase.from('profiles').update({ locked_balance: newLocked }).eq('id', trans.user_id);
         }
       }
 
-      // Mettre à jour le statut de la transaction
-      await supabase.from('transactions')
+      // 2. MISE À JOUR DE LA TRANSACTION
+      const { error: updateError } = await supabase
+        .from('transactions')
         .update({ 
-          status: action, 
+          status: status, 
           admin_note: note,
           processed_at: new Date().toISOString() 
         })
         .eq('id', trans.id);
 
-      alert("Transaction traitée avec succès !");
+      if (updateError) throw updateError;
+      
+      alert("Transaction traitée !");
+      fetchTransactions();
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      alert("Erreur critique : " + err.message);
     } finally {
       setProcessingId(null);
     }
@@ -78,49 +84,86 @@ export default function AdminDemandes() {
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <h1 className="text-3xl text-emerald-500 tracking-tighter">Gestion Financière</h1>
+    <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase tracking-tighter">
+      <div className="max-w-5xl mx-auto space-y-8">
+        
+        <div className="flex justify-between items-center bg-slate-900/40 p-8 rounded-[2rem] border border-white/5">
+          <div>
+            <h1 className="text-3xl">Flux Financiers</h1>
+            <p className="text-[9px] text-slate-500 not-italic tracking-[0.3em]">Validation des Dépôts & Retraits</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-emerald-500">{transactions.filter(t => t.status === 'pending').length} En attente</p>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid gap-4">
+          {transactions.length === 0 && <p className="text-center py-20 opacity-20">Aucune transaction enregistrée</p>}
+          
           {transactions.map((t) => (
-            <div key={t.id} className={`bg-slate-900/50 p-6 rounded-[2rem] border ${t.status === 'pending' ? 'border-amber-500/20' : 'border-white/5'} flex flex-col md:flex-row justify-between items-center gap-6`}>
+            <div key={t.id} className="bg-slate-900/60 border border-white/5 p-6 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-6">
               
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                  {t.type === 'deposit' ? <ArrowUpCircle /> : <ArrowDownCircle />}
+              {/* INFOS CLIENT ET TYPE */}
+              <div className="flex items-center gap-4 flex-1">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${t.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                  {t.type === 'deposit' ? <ArrowUpCircle size={28} /> : <ArrowDownCircle size={28} />}
                 </div>
                 <div>
-                  <p className="text-xs">{t.type === 'deposit' ? 'Dépôt' : 'Retrait'} - {t.amount} HTG</p>
-                  <p className="text-[8px] text-slate-500 not-italic tracking-widest">{new Date(t.created_at).toLocaleString()}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{t.amount} HTG</span>
+                    <span className={`text-[8px] px-2 py-0.5 rounded-full ${t.status === 'pending' ? 'bg-amber-500 text-black' : t.status === 'approved' ? 'bg-emerald-500 text-black' : 'bg-rose-500 text-white'}`}>
+                      {t.status}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 not-italic lowercase">ID Client: {t.user_id.slice(0,8)}...</p>
                 </div>
               </div>
 
-              {/* DETAILS SPECIFIQUES */}
-              <div className="flex gap-4">
-                {t.proof_url && (
-                  <a href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/payment-proofs/${t.proof_url}`} target="_blank" className="flex items-center gap-2 text-[10px] bg-white/5 px-4 py-2 rounded-xl">
-                    <Eye size={14}/> Voir Preuve
+              {/* PREUVES / CONTACT */}
+              <div className="flex-1 flex gap-3">
+                {t.type === 'deposit' && t.proof_url && (
+                  <a 
+                    href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/payment-proofs/${t.proof_url}`} 
+                    target="_blank" 
+                    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-3 rounded-xl transition-all border border-white/5"
+                  >
+                    <Eye size={16} className="text-emerald-500" />
+                    <span className="text-[9px]">Voir Reçu</span>
                   </a>
                 )}
-                {t.phone_number && (
-                  <div className="flex items-center gap-2 text-[10px] bg-white/5 px-4 py-2 rounded-xl">
-                    <MessageSquare size={14}/> {t.phone_number}
+                {t.type === 'withdrawal' && (
+                  <div className="flex items-center gap-2 bg-black/40 px-4 py-3 rounded-xl border border-white/5">
+                    <Smartphone size={16} className="text-blue-500" />
+                    <span className="text-[9px]">{t.phone_number}</span>
                   </div>
                 )}
               </div>
 
               {/* ACTIONS */}
-              {t.status === 'pending' ? (
-                <div className="flex gap-2">
-                  <button onClick={() => traiterTransaction(t, 'rejected')} disabled={!!processingId} className="px-6 py-3 bg-rose-500/10 text-rose-500 rounded-xl text-[10px]">Refuser</button>
-                  <button onClick={() => traiterTransaction(t, 'approved')} disabled={!!processingId} className="px-6 py-3 bg-emerald-500 text-slate-950 rounded-xl text-[10px]">Approuver</button>
-                </div>
-              ) : (
-                <div className={`px-6 py-3 rounded-xl text-[10px] ${t.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                  {t.status === 'approved' ? 'Validé' : 'Refusé'}
-                </div>
-              )}
+              <div className="flex gap-2 w-full md:w-auto">
+                {t.status === 'pending' ? (
+                  <>
+                    <button 
+                      onClick={() => handleAction(t, 'rejected')}
+                      disabled={processingId === t.id}
+                      className="flex-1 md:flex-none px-6 py-4 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] hover:bg-rose-500 hover:text-white transition-all"
+                    >
+                      {processingId === t.id ? <Loader2 className="animate-spin" /> : "REFUSER"}
+                    </button>
+                    <button 
+                      onClick={() => handleAction(t, 'approved')}
+                      disabled={processingId === t.id}
+                      className="flex-1 md:flex-none px-6 py-4 bg-emerald-500 text-slate-950 rounded-xl text-[10px] hover:scale-105 transition-all shadow-lg"
+                    >
+                      {processingId === t.id ? <Loader2 className="animate-spin" /> : "APPROUVER"}
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-[9px] text-slate-600 not-italic">
+                    Traité le {new Date(t.processed_at).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
