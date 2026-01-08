@@ -7,12 +7,13 @@ import Link from 'next/link';
 import { 
   Plus, ArrowDownCircle, Wallet, Loader2, 
   Home, PlayCircle, History, MessageSquare, 
-  User, Bell, ArrowRightCircle
+  User, Bell, ArrowRightCircle, CheckCircle2, XCircle
 } from 'lucide-react';
 
 export default function ClientHome() {
   const [profile, setProfile] = useState<any>(null);
   const [fetching, setFetching] = useState(true);
+  const [notification, setNotification] = useState<{type: 'success' | 'error', msg: string} | null>(null);
   
   const router = useRouter();
   const pathname = usePathname();
@@ -20,7 +21,7 @@ export default function ClientHome() {
   useEffect(() => { 
     fetchUser(); 
 
-    // Sync Realtime pour le solde (balance et locked_balance)
+    // Sync Realtime pour le solde et les notifications financières
     const channel = supabase.channel('profile-update')
       .on('postgres_changes', { 
         event: 'UPDATE', 
@@ -28,13 +29,29 @@ export default function ClientHome() {
         table: 'profiles' 
       }, (payload) => {
         if (profile && payload.new.id === profile.id) {
+          // Détection de changement de solde pour notification
+          if (payload.new.balance > profile.balance) {
+            setNotification({type: 'success', msg: 'Dépôt approuvé !'});
+          }
           setProfile(payload.new);
         }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'transactions',
+        filter: `user_id=eq.${profile?.id}`
+      }, (payload) => {
+        if (payload.new.status === 'rejected') {
+          setNotification({type: 'error', msg: 'Transaction refusée.'});
+        }
+        // Auto-hide notification après 5 secondes
+        setTimeout(() => setNotification(null), 5000);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [profile?.id]);
+  }, [profile?.id, profile?.balance]);
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -56,7 +73,6 @@ export default function ClientHome() {
     </div>
   );
 
-  // Calcul du solde disponible selon ton rapport
   const availableBalance = (profile?.balance || 0) - (profile?.locked_balance || 0);
 
   return (
@@ -69,8 +85,19 @@ export default function ClientHome() {
             <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 font-black italic">CP</div>
             <h1 className="text-xl tracking-tighter">CHIF PAM</h1>
           </div>
-          <Bell className="text-slate-500" />
+          <div className="relative">
+            <Bell className={notification ? "text-emerald-500 animate-pulse" : "text-slate-500"} />
+            {notification && <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full"></span>}
+          </div>
         </div>
+
+        {/* ALERTE DE NOTIFICATION DYNAMIQUE */}
+        {notification && (
+          <div className={`flex items-center gap-3 p-4 rounded-2xl border ${notification.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-rose-500/10 border-rose-500/20 text-rose-500'} animate-in fade-in slide-in-from-top-4`}>
+            {notification.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+            <span className="text-[10px] tracking-widest">{notification.msg}</span>
+          </div>
+        )}
 
         <div className="bg-slate-900/50 p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -133,4 +160,3 @@ function NavLink({ href, icon, label, active }: any) {
     </Link>
   );
 }
-
