@@ -111,7 +111,7 @@ export default function AdminDashboard() {
           <nav className="space-y-2">
             <SidebarLink href="/admin-chif-pam" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname === '/admin-chif-pam'} />
             <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
-            <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('transactions')} />
+            <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
             <SidebarLink href="/admin-chif-pam/chat" icon={<MessageSquare size={20}/>} label="Support Client" active={pathname.includes('chat')} />
           </nav>
@@ -203,7 +203,7 @@ export default function AdminDashboard() {
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Finances & Assistance</h3>
                <ActionCard 
-                href="/admin-chif-pam/transactions" 
+                href="/admin-chif-pam/demandes" 
                 label="Valider les Demandes" 
                 count={stats.pendingDepots + stats.pendingRetraits} 
                 icon={<ClipboardList size={24}/>} 
