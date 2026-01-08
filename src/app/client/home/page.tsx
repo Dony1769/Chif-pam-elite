@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Plus, ArrowDownCircle, Wallet, Loader2, 
-  Home, PlayCircle, History, MessageSquare, 
+  Home, PlayCircle, History, MessagesSquare, 
   User, Bell, ArrowRightCircle, CheckCircle2, XCircle
 } from 'lucide-react';
 
@@ -97,14 +97,14 @@ export default function ClientHome() {
         )}
 
         {/* SOLDE CARD - VERSION PREMIUM DÉGRADÉ VERT */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-900/30 p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden shadow-2xl">
+        <div className="bg-linear-to-br from-slate-900 via-slate-900 to-emerald-900/30 p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <Wallet size={80} />
           </div>
           <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2">Solde Disponible</p>
           <div className="flex items-baseline gap-2">
             {/* Dégradé de texte premium sur le montant */}
-            <h2 className="text-5xl tracking-tighter bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
+            <h2 className="text-5xl tracking-tighter bg-linear-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
               {availableBalance.toLocaleString()}
             </h2>
             <span className="text-xs text-emerald-500/50">HTG</span>
@@ -119,19 +119,19 @@ export default function ClientHome() {
 
         {/* ACTIONS PRINCIPALES */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-3 shadow-[0_10px_30px_rgba(16,185,129,0.2)] active:scale-95 transition-all">
+          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-3 shadow-[0_10px_30px_rgba(16,185,129,0.2)] active:scale-95 transition-all">
             <Plus size={28} />
             <span className="text-xs tracking-widest font-black">Dépôt</span>
           </Link>
           {/* VERSION ROSE/ROUGE POUR LE RETRAIT */}
-          <Link href="/client/finance" className="bg-rose-500/10 p-6 rounded-[2rem] border border-rose-500/20 flex flex-col items-center gap-3 active:scale-95 transition-all group">
+          <Link href="/client/finance" className="bg-rose-500/10 p-6 rounded-4xl border border-rose-500/20 flex flex-col items-center gap-3 active:scale-95 transition-all group">
             <ArrowDownCircle size={28} className="text-rose-500 transition-transform group-hover:scale-110" />
             <span className="text-xs tracking-widest font-black text-rose-500">Retrait</span>
           </Link>
         </div>
 
         {/* ACCÈS JEU RAPIDE */}
-        <Link href="/client/play" className="block bg-slate-900/50 p-6 rounded-[2rem] border border-white/5 relative overflow-hidden group">
+        <Link href="/client/play" className="block bg-slate-900/50 p-6 rounded-4xl border border-white/5 relative overflow-hidden group">
           <div className="flex justify-between items-center relative z-10">
             <div>
               <h3 className="text-lg">Jouer une mise</h3>
@@ -143,7 +143,7 @@ export default function ClientHome() {
       </div>
 
       {/* NAV BAS DE PAGE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-[2rem]">
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-4xl">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/play" icon={<PlayCircle size={22}/>} label="Jouer" active={pathname === '/client/play'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />

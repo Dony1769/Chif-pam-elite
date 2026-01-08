@@ -1,14 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Dices, 
-  Loader2, 
-  ShieldCheck, 
-  Zap, 
-  Users, 
-  AlertCircle
+  Dices, Loader2, ShieldCheck, Zap, Users, Lock, AlertTriangle
 } from 'lucide-react';
 
 export default function AdminLoterie() {
@@ -18,16 +13,24 @@ export default function AdminLoterie() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [stats, setStats] = useState({ totalMises: 0, totalMontant: 0 });
 
-  // 1. CHARGEMENT ET SYNC DE LA SESSION
+  // Sécurité pour éviter les boucles de mise à jour
+  const isActionInProgress = useRef(false);
+
+  // RÉCUPÉRATION : On cherche s'il y a DEJA une session ouverte par erreur
   const fetchAdminData = useCallback(async () => {
+    if (isActionInProgress.current) return;
+
     try {
       const { data: tirage, error } = await supabase
         .from('tirages')
         .select('*')
         .eq('status', 'ouvert')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error) throw error;
+      
       setCurrentTirage(tirage);
 
       if (tirage) {
@@ -41,11 +44,9 @@ export default function AdminLoterie() {
           const total = mises.reduce((sum, m) => sum + Number(m.montant), 0);
           setStats({ totalMises: mises.length, totalMontant: total });
         }
-      } else {
-        setStats({ totalMises: 0, totalMontant: 0 });
       }
     } catch (err) {
-      console.error("Erreur de synchronisation admin:", err);
+      console.error("Erreur sync:", err);
     } finally {
       setLoading(false);
     }
@@ -53,19 +54,23 @@ export default function AdminLoterie() {
 
   useEffect(() => {
     fetchAdminData();
-
-    const channel = supabase.channel('admin-dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => fetchAdminData())
+    // On écoute les changements mais on ne déclenche RIEN automatiquement
+    const channel = supabase.channel('admin-control')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mises' }, () => fetchAdminData())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [fetchAdminData]);
 
-  // 2. OUVERTURE DE SESSION (CORRIGÉE POUR SUPABASE)
+  // ACTION 1 : OUVRIR (Seulement sur clic)
   const ouvrirSession = async (moment: string) => {
-    if (currentTirage || isProcessing) return;
+    // Si currentTirage existe, c'est qu'une session est déjà ouverte dans la DB
+    if (currentTirage) {
+      alert("Une session est déjà ouverte dans la base de données. Fermez-la d'abord.");
+      return;
+    }
+
     setIsProcessing(true);
+    isActionInProgress.current = true;
 
     try {
       const numGagnant = Math.floor(Math.random() * 100).toString().padStart(2, '0');
@@ -73,208 +78,156 @@ export default function AdminLoterie() {
         .filter(n => n !== numGagnant)
         .sort(() => Math.random() - 0.5)
         .slice(0, 9);
-      
       const grilleVisible = [...pool, numGagnant].sort(() => Math.random() - 0.5);
 
-      // Correction : Utilisation d'un tableau [] pour l'insert et noms exacts
-      const { error } = await supabase.from('tirages').insert([{
+      const { data, error } = await supabase.from('tirages').insert([{
         moment: moment,
         chiffre_gagnant: numGagnant,
-        chiffres_visibles: grilleVisible, // Avec le "s" comme confirmé
+        chiffres_visibles: grilleVisible,
         multiplicateur: Number(multiplicateur),
         status: 'ouvert'
-      }]);
+      }]).select().single();
 
       if (error) throw error;
       
-      // On force le rafraîchissement
-      await fetchAdminData();
-
+      // Mise à jour immédiate de l'interface après le clic réussi
+      setCurrentTirage(data);
+      alert(`Session ${moment} ouverte avec succès !`);
     } catch (err: any) {
-      alert("Erreur d'ouverture : " + err.message);
+      alert("Erreur lors de l'ouverture : " + err.message);
     } finally {
       setIsProcessing(false);
+      isActionInProgress.current = false;
     }
   };
 
-  // 3. CLÔTURE ET PAIEMENT (CORRIGÉ POUR TYPESCRIPT)
+  // ACTION 2 : CLÔTURER (Seulement sur clic)
   const cloturerEtPayer = async () => {
     if (!currentTirage || isProcessing) return;
-    const confirmMsg = `Voulez-vous clôturer la session ${currentTirage.moment} ?\nChiffre gagnant : ${currentTirage.chiffre_gagnant}`;
-    
-    if (!window.confirm(confirmMsg)) return;
+    if (!window.confirm(`Voulez-vous fermer la session et valider le ${currentTirage.chiffre_gagnant} ?`)) return;
 
     setIsProcessing(true);
-    try {
-      const { data: mises, error: fetchError } = await supabase
-        .from('mises')
-        .select('*')
-        .eq('tirage_id', currentTirage.id)
-        .eq('status', 'en_attente');
+    isActionInProgress.current = true;
+    const tid = currentTirage.id;
 
-      if (fetchError) throw fetchError;
+    try {
+      // 1. Fermer le tirage
+      await supabase.from('tirages').update({ status: 'termine' }).eq('id', tid);
+
+      // 2. Traiter les mises
+      const { data: mises } = await supabase.from('mises').select('*').eq('tirage_id', tid).eq('status', 'en_attente');
 
       if (mises && mises.length > 0) {
         for (const mise of mises) {
-          const estGagnant = mise.chiffre_choisi === currentTirage.chiffre_gagnant;
-          // Utilise le multiplicateur du tirage si celui de la mise est absent
-          const mult = mise.multiplicateur_moment || currentTirage.multiplicateur;
-          const gainCalculé = estGagnant ? (Number(mise.montant) * Number(mult)) : 0;
-
-          await supabase.from('mises')
-            .update({ 
-              status: estGagnant ? 'gagné' : 'perdu', 
-              gain_reel: gainCalculé 
-            })
-            .eq('id', mise.id);
-
-          if (estGagnant && gainCalculé > 0) {
-            await supabase.rpc('increment_balance', { 
-              user_id: mise.user_id, 
-              amount: gainCalculé 
-            });
+          const gagne = mise.chiffre_choisi === currentTirage.chiffre_gagnant;
+          const gain = gagne ? (Number(mise.montant) * Number(mise.multiplicateur_moment)) : 0;
+          await supabase.from('mises').update({ status: gagne ? 'gagné' : 'perdu', gain_reel: gain }).eq('id', mise.id);
+          if (gagne && gain > 0) {
+            await supabase.rpc('increment_balance', { user_id: mise.user_id, amount: gain });
           }
         }
       }
 
-      const { error: closeError } = await supabase
-        .from('tirages')
-        .update({ status: 'termine' })
-        .eq('id', currentTirage.id);
-
-      if (closeError) throw closeError;
-
-      alert("Session clôturée !");
+      // 3. Reset TOTAL
       setCurrentTirage(null);
-      await fetchAdminData();
+      setStats({ totalMises: 0, totalMontant: 0 });
+      alert("Session fermée manuellement. Tout est en ordre.");
+      
     } catch (err: any) {
       alert("Erreur lors de la clôture : " + err.message);
     } finally {
       setIsProcessing(false);
+      isActionInProgress.current = false;
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-6 font-sans uppercase italic font-black">
+    <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* HEADER DASHBOARD */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/5">
+        {/* HEADER */}
+        <div className="flex justify-between items-center bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.2)]">
-              <ShieldCheck className="text-slate-950" size={32} />
-            </div>
-            <div>
-              <h1 className="text-2xl tracking-tighter">Control Center</h1>
-              <p className="text-[9px] text-slate-500 not-italic font-bold tracking-[0.3em]">Loterie Professionnelle</p>
-            </div>
+            <ShieldCheck className="text-emerald-500" size={40} />
+            <h1 className="text-2xl tracking-tighter">Panel de Contrôle</h1>
           </div>
-
-          <div className="flex gap-4 w-full md:w-auto">
-            <div className="flex-1 md:w-32 bg-black/40 p-4 rounded-2xl border border-white/5 text-center">
-              <p className="text-[8px] text-slate-500 mb-1">Ratio Gain</p>
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-emerald-500 text-xs">x</span>
-                <input 
-                  type="number" 
-                  value={multiplicateur} 
-                  disabled={!!currentTirage}
-                  onChange={(e) => setMultiplicateur(Number(e.target.value))}
-                  className="bg-transparent text-xl w-12 text-center outline-none disabled:opacity-30"
-                />
-              </div>
-            </div>
+          
+          <div className="flex items-center gap-4 bg-black/40 p-3 rounded-2xl border border-white/10">
+            <span className="text-[10px] text-slate-500">Multiplicateur :</span>
+            <input 
+              type="number" 
+              value={multiplicateur} 
+              disabled={!!currentTirage}
+              onChange={(e) => setMultiplicateur(Number(e.target.value))}
+              className="bg-transparent text-emerald-500 text-xl w-12 outline-none font-bold"
+            />
           </div>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          
-          <div className="space-y-6">
-            <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5">
-              <h3 className="text-xs text-slate-500 mb-6 tracking-widest flex items-center gap-2">
-                <Zap size={14} /> Gestion Sessions
-              </h3>
-              
-              <div className="grid grid-cols-1 gap-3">
-                {['Matin', 'Midi', 'Après-Midi', 'Soir'].map((m) => {
-                  const isActive = currentTirage?.moment === m;
-                  return (
-                    <button
-                      key={m}
-                      disabled={(!!currentTirage && !isActive) || isProcessing}
-                      onClick={() => ouvrirSession(m)}
-                      className={`py-5 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${
-                        isActive 
-                        ? 'bg-emerald-500 border-emerald-400 text-slate-950 scale-[1.02]' 
-                        : 'bg-slate-950 border-white/5 hover:border-emerald-500/50 disabled:opacity-10'
-                      }`}
-                    >
-                      <span className="text-xs tracking-widest">{m}</span>
-                      {isActive && <span className="text-[8px] animate-pulse">Session Active</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {currentTirage && (
-              <div className="bg-emerald-500/5 border border-emerald-500/10 p-6 rounded-[2rem] space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-emerald-500">Mises en cours</span>
-                  <Users size={16} className="text-emerald-500" />
-                </div>
-                <div className="flex justify-between items-end">
-                  <p className="text-4xl">{stats.totalMises}</p>
-                  <p className="text-emerald-500 text-xs">{stats.totalMontant} HTG</p>
-                </div>
-              </div>
-            )}
+          {/* GAUCHE : SESSIONS */}
+          <div className="bg-slate-900/40 p-6 rounded-4xl border border-white/5 space-y-4">
+            <h3 className="text-xs text-slate-500 flex items-center gap-2"><Zap size={14}/> Actions Manuelles</h3>
+            {['Matin', 'Midi', 'Après-Midi', 'Soir'].map((m) => (
+              <button
+                key={m}
+                disabled={!!currentTirage || isProcessing}
+                onClick={() => ouvrirSession(m)}
+                className={`w-full py-5 rounded-2xl border transition-all ${
+                  currentTirage?.moment === m 
+                  ? 'bg-emerald-500 text-black border-emerald-400' 
+                  : 'bg-slate-950 border-white/5 hover:border-emerald-500/50 disabled:opacity-20'
+                }`}
+              >
+                Ouvrir {m}
+              </button>
+            ))}
           </div>
 
+          {/* DROITE : AFFICHAGE & CLÔTURE */}
           <div className="lg:col-span-2">
-            <div className="bg-slate-900 p-8 rounded-[3rem] border border-white/5 h-full min-h-[500px] flex flex-col">
+            <div className="bg-slate-900 p-10 rounded-[3rem] border border-white/5 min-h-100 flex flex-col items-center justify-center relative">
               {currentTirage ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-10">
-                  <div className="space-y-2">
-                    <p className="text-emerald-500 text-[10px] tracking-[0.5em]">Résultat Programmé</p>
-                    <h2 className="text-[12rem] leading-none tracking-tighter drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-                      {currentTirage.chiffre_gagnant}
-                    </h2>
+                <div className="text-center space-y-8 w-full">
+                  <div className="bg-amber-500/10 text-amber-500 px-6 py-2 rounded-full border border-amber-500/20 inline-flex items-center gap-2">
+                    <Lock size={16} /> <span>Session {currentTirage.moment} Active</span>
+                  </div>
+                  
+                  <div>
+                    <p className="text-emerald-500 text-xs tracking-widest mb-2">Chiffre Gagnant pour ce tirage</p>
+                    <h2 className="text-[12rem] leading-none">{currentTirage.chiffre_gagnant}</h2>
                   </div>
 
-                  <div className="w-full max-w-sm space-y-4">
-                    <div className="flex items-center gap-3 p-4 bg-black/40 rounded-2xl border border-white/5 text-left">
-                      <AlertCircle className="text-amber-500" size={20} />
-                      <p className="text-[8px] text-slate-400 uppercase leading-relaxed font-bold font-sans italic-none">
-                        Paiement automatique : Chiffre {currentTirage.chiffre_gagnant} (x{currentTirage.multiplicateur})
-                      </p>
+                  <div className="grid grid-cols-2 gap-4 w-full max-w-md mx-auto mb-8">
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-slate-500">Mises</p>
+                      <p className="text-2xl">{stats.totalMises}</p>
                     </div>
-                    
-                    <button
-                      disabled={isProcessing}
-                      onClick={cloturerEtPayer}
-                      className="w-full py-6 bg-white text-slate-950 rounded-2xl text-xs tracking-[0.2em] hover:bg-emerald-500 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
-                    >
-                      {isProcessing ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                      Clôturer et Payer
-                    </button>
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-slate-500">Total</p>
+                      <p className="text-2xl">{stats.totalMontant} HTG</p>
+                    </div>
                   </div>
+
+                  <button
+                    onClick={cloturerEtPayer}
+                    disabled={isProcessing}
+                    className="w-full max-w-sm py-6 bg-emerald-500 text-black rounded-2xl font-black hover:bg-white transition-colors flex items-center justify-center gap-3"
+                  >
+                    {isProcessing ? <Loader2 className="animate-spin" /> : <ShieldCheck />}
+                    VALIDER ET FERMER LA SESSION
+                  </button>
                 </div>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-800 space-y-6">
-                  <Dices size={80} strokeWidth={1} />
-                  <p className="tracking-[0.5em] text-xs">Système en veille</p>
+                <div className="text-center opacity-30">
+                  <Dices size={80} className="mx-auto mb-4" />
+                  <p className="text-sm">Système en attente d'une commande admin.</p>
                 </div>
               )}
             </div>
           </div>
-
         </div>
       </div>
     </div>
