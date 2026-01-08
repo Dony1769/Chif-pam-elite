@@ -39,7 +39,7 @@ export default function AdminDashboard() {
       const totalUsers = profiles?.length || 0;
       const totalBalance = profiles?.reduce((acc, curr) => acc + (curr.balance || 0), 0) || 0;
 
-      // 2. Transactions en attente (Supporte les deux formats de nommage)
+      // 2. Transactions en attente (Filtrage précis pour éviter les erreurs)
       const { data: pendingT } = await supabase
         .from('transactions')
         .select('type')
@@ -54,17 +54,15 @@ export default function AdminDashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false);
 
-      // 4. LOGIQUE DE FLUX DE REVENUS (Mises Perdues = Gains Admin)
+      // 4. LOGIQUE DE FLUX (Harmonisée avec la table 'mises')
+      // Utilisation de 'montant' car c'est ce que ta page Loterie utilise
       const { data: flux, error: fluxError } = await supabase
         .from('mises')
-        .select('amount, status, created_at');
+        .select('montant, status, created_at')
+        .limit(1000); // On limite pour ne pas saturer le système
 
-      if (fluxError) throw fluxError;
-
-      if (flux) {
+      if (!fluxError && flux) {
         const dailyStats: { [key: string]: number } = {};
-
-        // Initialisation des 7 derniers jours à 0 pour un graphique propre
         const last7Days = [...Array(7)].map((_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - i);
@@ -75,13 +73,13 @@ export default function AdminDashboard() {
 
         flux.forEach(item => {
           const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-          
           let impactAdmin = 0;
-          // Logique demandée : Perte client est ton gain, Gain client est ta perte
+          
+          // Logique: Perte client = Gain admin | Gain client = Perte admin
           if (item.status === 'perdu') {
-            impactAdmin = item.amount; 
+            impactAdmin = item.montant; 
           } else if (item.status === 'gagne' || item.status === 'gagné') {
-            impactAdmin = -item.amount; 
+            impactAdmin = -item.montant; 
           }
           
           if (dailyStats[day] !== undefined) {
@@ -93,7 +91,6 @@ export default function AdminDashboard() {
           name: day,
           revenue: dailyStats[day]
         }));
-        
         setChartData(formattedChart);
       }
 
@@ -106,7 +103,7 @@ export default function AdminDashboard() {
       });
 
     } catch (error) {
-      console.error("Erreur de calcul du flux:", error);
+      console.error("Dashboard Sync Error:", error);
     } finally {
       setLoading(false);
     }
@@ -122,7 +119,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR (Respect des redirections établies) */}
+        {/* SIDEBAR */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
@@ -139,7 +136,7 @@ export default function AdminDashboard() {
           </nav>
 
           <button onClick={() => supabase.auth.signOut()} className="mt-12 flex items-center gap-4 text-slate-600 hover:text-rose-500 transition-colors px-4">
-            <LogOut size={20} /> <span className="text-[10px] tracking-widest">Déconnexion</span>
+            <LogOut size={20} /> <span className="text-[10px] tracking-widest lowercase not-italic">Déconnexion</span>
           </button>
         </aside>
 
@@ -155,7 +152,7 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* GRAPHIQUE DE FLUX (LOGIQUE MISE À JOUR) */}
+          {/* CHART */}
           <div className="bg-slate-900/50 rounded-[3rem] border border-white/5 p-8 shadow-2xl backdrop-blur-sm">
             <div className="flex justify-between items-center mb-10">
               <div className="flex items-center gap-4">
@@ -164,14 +161,14 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <h2 className="text-xl">Flux de Revenus Nets</h2>
-                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Différentiel Mises Perdues / Gains Clients</p>
+                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Basé sur les résultats des mises</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className={`text-3xl ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                   {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} HTG
                 </p>
-                <p className="text-[10px] text-slate-500 uppercase">Profit Net Calculé</p>
+                <p className="text-[10px] text-slate-500 uppercase">Profit Net</p>
               </div>
             </div>
 
@@ -202,7 +199,7 @@ export default function AdminDashboard() {
             <StatCard title="En attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* ACTIONS RAPIDES & SUPPORT */}
+          {/* ACTIONS & SUPPORT (Liens préservés) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Opérations de Jeu</h3>
@@ -247,7 +244,7 @@ export default function AdminDashboard() {
   );
 }
 
-// COMPOSANTS UI RÉUTILISABLES (PRÉSERVÉS)
+// COMPOSANTS UI (Inchangés pour préserver le design)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
