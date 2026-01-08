@@ -10,7 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, 
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
-  ChevronRight, Activity
+  Activity
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -39,20 +39,63 @@ export default function AdminDashboard() {
       const totalUsers = profiles?.length || 0;
       const totalBalance = profiles?.reduce((acc, curr) => acc + (curr.balance || 0), 0) || 0;
 
-      // 2. Transactions en attente (Correction des filtres type/status)
+      // 2. Transactions en attente (Supporte les deux formats de nommage)
       const { data: pendingT } = await supabase
         .from('transactions')
         .select('type')
         .eq('status', 'pending');
       
-      const pendingDepots = pendingT?.filter(t => t.type === 'deposit').length || 0;
-      const pendingRetraits = pendingT?.filter(t => t.type === 'withdrawal').length || 0;
+      const pendingDepots = pendingT?.filter(t => t.type === 'deposit' || t.type === 'depot').length || 0;
+      const pendingRetraits = pendingT?.filter(t => t.type === 'withdrawal' || t.type === 'retrait').length || 0;
 
-      // 3. Support (Messages non lus) - RÉINTÉGRÉ
+      // 3. Support (Messages non lus)
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false);
+
+      // 4. LOGIQUE DE FLUX DE REVENUS (Mises Perdues = Gains Admin)
+      const { data: flux, error: fluxError } = await supabase
+        .from('mises')
+        .select('amount, status, created_at');
+
+      if (fluxError) throw fluxError;
+
+      if (flux) {
+        const dailyStats: { [key: string]: number } = {};
+
+        // Initialisation des 7 derniers jours à 0 pour un graphique propre
+        const last7Days = [...Array(7)].map((_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          return d.toLocaleDateString('fr-FR', { weekday: 'short' });
+        }).reverse();
+        
+        last7Days.forEach(day => dailyStats[day] = 0);
+
+        flux.forEach(item => {
+          const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
+          
+          let impactAdmin = 0;
+          // Logique demandée : Perte client est ton gain, Gain client est ta perte
+          if (item.status === 'perdu') {
+            impactAdmin = item.amount; 
+          } else if (item.status === 'gagne' || item.status === 'gagné') {
+            impactAdmin = -item.amount; 
+          }
+          
+          if (dailyStats[day] !== undefined) {
+            dailyStats[day] += impactAdmin;
+          }
+        });
+
+        const formattedChart = Object.keys(dailyStats).map(day => ({
+          name: day,
+          revenue: dailyStats[day]
+        }));
+        
+        setChartData(formattedChart);
+      }
 
       setStats({
         totalUsers,
@@ -62,29 +105,8 @@ export default function AdminDashboard() {
         unreadMessages: unread || 0
       });
 
-      // 4. LOGIQUE RECHARTS : FLUX DE REVENU ADMIN (Mises Perdues vs Gagnées)
-      const { data: flux } = await supabase
-        .from('mises')
-        .select('amount, status, created_at')
-        .order('created_at', { ascending: true });
-
-      if (flux) {
-        const dailyStats: { [key: string]: number } = {};
-        flux.forEach(item => {
-          const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-          const profitAdmin = item.status === 'perdu' ? item.amount : -item.amount;
-          dailyStats[day] = (dailyStats[day] || 0) + profitAdmin;
-        });
-
-        const formattedChart = Object.keys(dailyStats).map(day => ({
-          name: day,
-          revenue: dailyStats[day]
-        }));
-        setChartData(formattedChart);
-      }
-
     } catch (error) {
-      console.error("Erreur stats:", error);
+      console.error("Erreur de calcul du flux:", error);
     } finally {
       setLoading(false);
     }
@@ -100,7 +122,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR COMPLÈTE (RÉPARÉE) */}
+        {/* SIDEBAR (Respect des redirections établies) */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
@@ -126,14 +148,14 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-4xl">Administration</h1>
-              <p className="text-emerald-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Contrôle de rentabilité & Support</p>
+              <p className="text-emerald-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Analyse de rentabilité réelle</p>
             </div>
             <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all border border-white/5">
               <RefreshCw size={20} />
             </button>
           </div>
 
-          {/* GRAPHIQUE PREMIUM */}
+          {/* GRAPHIQUE DE FLUX (LOGIQUE MISE À JOUR) */}
           <div className="bg-slate-900/50 rounded-[3rem] border border-white/5 p-8 shadow-2xl backdrop-blur-sm">
             <div className="flex justify-between items-center mb-10">
               <div className="flex items-center gap-4">
@@ -142,14 +164,14 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <h2 className="text-xl">Flux de Revenus Nets</h2>
-                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Mises Perdues vs Gains Clients</p>
+                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Différentiel Mises Perdues / Gains Clients</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className={`text-3xl ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                   {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} HTG
                 </p>
-                <p className="text-[10px] text-slate-500">Bénéfice Période</p>
+                <p className="text-[10px] text-slate-500 uppercase">Profit Net Calculé</p>
               </div>
             </div>
 
@@ -172,7 +194,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* STAT CARDS (AVEC COULEURS ORIGINALES) */}
+          {/* STAT CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard title="Membres" value={stats.totalUsers} icon={<Users />} color="blue" />
             <StatCard title="Volume Global" value={`${stats.totalBalance.toLocaleString()} HTG`} icon={<Wallet />} color="emerald" />
@@ -180,7 +202,7 @@ export default function AdminDashboard() {
             <StatCard title="En attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* ACTIONS & SUPPORT (RÉINTÉGRÉ TOUT LE SYSTÈME MANQUANT) */}
+          {/* ACTIONS RAPIDES & SUPPORT */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Opérations de Jeu</h3>
@@ -225,7 +247,7 @@ export default function AdminDashboard() {
   );
 }
 
-// COMPOSANTS RÉPARÉS
+// COMPOSANTS UI RÉUTILISABLES (PRÉSERVÉS)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
@@ -271,3 +293,4 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
     </Link>
   );
 }
+
