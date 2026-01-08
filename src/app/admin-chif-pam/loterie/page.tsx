@@ -8,8 +8,6 @@ import {
   ShieldCheck, 
   Zap, 
   Users, 
-  Coins, 
-  TrendingUp,
   AlertCircle
 } from 'lucide-react';
 
@@ -23,7 +21,6 @@ export default function AdminLoterie() {
   // 1. CHARGEMENT ET SYNC DE LA SESSION
   const fetchAdminData = useCallback(async () => {
     try {
-      // Récupérer la session ouverte
       const { data: tirage, error } = await supabase
         .from('tirages')
         .select('*')
@@ -35,7 +32,6 @@ export default function AdminLoterie() {
 
       if (tirage) {
         setMultiplicateur(tirage.multiplicateur);
-        // Récupérer les stats des mises pour ce tirage
         const { data: mises } = await supabase
           .from('mises')
           .select('montant')
@@ -45,6 +41,8 @@ export default function AdminLoterie() {
           const total = mises.reduce((sum, m) => sum + Number(m.montant), 0);
           setStats({ totalMises: mises.length, totalMontant: total });
         }
+      } else {
+        setStats({ totalMises: 0, totalMontant: 0 });
       }
     } catch (err) {
       console.error("Erreur de synchronisation admin:", err);
@@ -56,7 +54,6 @@ export default function AdminLoterie() {
   useEffect(() => {
     fetchAdminData();
 
-    // ECOUTE REALTIME : Tirages et Mises
     const channel = supabase.channel('admin-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tirages' }, () => fetchAdminData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mises' }, () => fetchAdminData())
@@ -65,16 +62,13 @@ export default function AdminLoterie() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchAdminData]);
 
-  // 2. OUVERTURE DE SESSION
+  // 2. OUVERTURE DE SESSION (CORRIGÉE POUR SUPABASE)
   const ouvrirSession = async (moment: string) => {
-    if (currentTirage) return;
+    if (currentTirage || isProcessing) return;
     setIsProcessing(true);
 
     try {
-      // Génération Chiffre Gagnant (00-99)
       const numGagnant = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-      
-      // Génération du "Rideau de fumée" (9 chiffres faux + 1 gagnant)
       const pool = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'))
         .filter(n => n !== numGagnant)
         .sort(() => Math.random() - 0.5)
@@ -82,15 +76,20 @@ export default function AdminLoterie() {
       
       const grilleVisible = [...pool, numGagnant].sort(() => Math.random() - 0.5);
 
-      const { error } = await supabase.from('tirages').insert({
-        moment,
+      // Correction : Utilisation d'un tableau [] pour l'insert et noms exacts
+      const { error } = await supabase.from('tirages').insert([{
+        moment: moment,
         chiffre_gagnant: numGagnant,
-        chiffres_visibles: grilleVisible,
-        multiplicateur: multiplicateur,
+        chiffres_visibles: grilleVisible, // Avec le "s" comme confirmé
+        multiplicateur: Number(multiplicateur),
         status: 'ouvert'
-      });
+      }]);
 
       if (error) throw error;
+      
+      // On force le rafraîchissement
+      await fetchAdminData();
+
     } catch (err: any) {
       alert("Erreur d'ouverture : " + err.message);
     } finally {
@@ -98,16 +97,15 @@ export default function AdminLoterie() {
     }
   };
 
-  // 3. CLÔTURE ET PAIEMENT AUTOMATIQUE
+  // 3. CLÔTURE ET PAIEMENT (CORRIGÉ POUR TYPESCRIPT)
   const cloturerEtPayer = async () => {
     if (!currentTirage || isProcessing) return;
-    const confirmMsg = `Voulez-vous clôturer la session ${currentTirage.moment} ?\nChiffre gagnant : ${currentTirage.chiffre_gagnant}\nLes gagnants seront payés immédiatement.`;
+    const confirmMsg = `Voulez-vous clôturer la session ${currentTirage.moment} ?\nChiffre gagnant : ${currentTirage.chiffre_gagnant}`;
     
-    if (!confirm(confirmMsg)) return;
+    if (!window.confirm(confirmMsg)) return;
 
     setIsProcessing(true);
     try {
-      // A. Récupérer toutes les mises en attente pour ce tirage
       const { data: mises, error: fetchError } = await supabase
         .from('mises')
         .select('*')
@@ -116,13 +114,13 @@ export default function AdminLoterie() {
 
       if (fetchError) throw fetchError;
 
-      // B. Traiter chaque mise
       if (mises && mises.length > 0) {
         for (const mise of mises) {
           const estGagnant = mise.chiffre_choisi === currentTirage.chiffre_gagnant;
-          const gainCalculé = estGagnant ? (Number(mise.montant) * Number(mise.multiplicateur_moment)) : 0;
+          // Utilise le multiplicateur du tirage si celui de la mise est absent
+          const mult = mise.multiplicateur_moment || currentTirage.multiplicateur;
+          const gainCalculé = estGagnant ? (Number(mise.montant) * Number(mult)) : 0;
 
-          // Mettre à jour le statut de la mise
           await supabase.from('mises')
             .update({ 
               status: estGagnant ? 'gagné' : 'perdu', 
@@ -130,7 +128,6 @@ export default function AdminLoterie() {
             })
             .eq('id', mise.id);
 
-          // Payer si gagné
           if (estGagnant && gainCalculé > 0) {
             await supabase.rpc('increment_balance', { 
               user_id: mise.user_id, 
@@ -140,7 +137,6 @@ export default function AdminLoterie() {
         }
       }
 
-      // C. Fermer la session
       const { error: closeError } = await supabase
         .from('tirages')
         .update({ status: 'termine' })
@@ -148,8 +144,9 @@ export default function AdminLoterie() {
 
       if (closeError) throw closeError;
 
-      alert("Session clôturée avec succès ! Tous les gagnants ont été crédités.");
+      alert("Session clôturée !");
       setCurrentTirage(null);
+      await fetchAdminData();
     } catch (err: any) {
       alert("Erreur lors de la clôture : " + err.message);
     } finally {
@@ -198,7 +195,6 @@ export default function AdminLoterie() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           
-          {/* COLONNE GAUCHE : ACTIONS / SESSIONS */}
           <div className="space-y-6">
             <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5">
               <h3 className="text-xs text-slate-500 mb-6 tracking-widest flex items-center gap-2">
@@ -211,7 +207,7 @@ export default function AdminLoterie() {
                   return (
                     <button
                       key={m}
-                      disabled={!!currentTirage || isProcessing}
+                      disabled={(!!currentTirage && !isActive) || isProcessing}
                       onClick={() => ouvrirSession(m)}
                       className={`py-5 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${
                         isActive 
@@ -241,7 +237,6 @@ export default function AdminLoterie() {
             )}
           </div>
 
-          {/* COLONNE DROITE : MONITORING LIVE */}
           <div className="lg:col-span-2">
             <div className="bg-slate-900 p-8 rounded-[3rem] border border-white/5 h-full min-h-[500px] flex flex-col">
               {currentTirage ? (
@@ -256,8 +251,8 @@ export default function AdminLoterie() {
                   <div className="w-full max-w-sm space-y-4">
                     <div className="flex items-center gap-3 p-4 bg-black/40 rounded-2xl border border-white/5 text-left">
                       <AlertCircle className="text-amber-500" size={20} />
-                      <p className="text-[8px] text-slate-400 uppercase leading-relaxed font-bold">
-                        En clôturant, le système calculera automatiquement les gains (Mise x {currentTirage.multiplicateur}) et mettra à jour le solde des clients.
+                      <p className="text-[8px] text-slate-400 uppercase leading-relaxed font-bold font-sans italic-none">
+                        Paiement automatique : Chiffre {currentTirage.chiffre_gagnant} (x{currentTirage.multiplicateur})
                       </p>
                     </div>
                     
@@ -285,3 +280,4 @@ export default function AdminLoterie() {
     </div>
   );
 }
+
