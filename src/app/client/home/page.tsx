@@ -1,3 +1,5 @@
+[skip vercel] chore: secure logout + profile improvements
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -147,7 +149,7 @@ export default function ClientHome() {
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/play" icon={<PlayCircle size={22}/>} label="Jouer" active={pathname === '/client/play'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
-        <NavLink href="/client/finance" icon={<Wallet size={22}/>} label="Finance" active={pathname === '/client/finance'} />
+        <NavLink href="/client/chat" icon={<MessagesSquare size={22}/>} label="Support" active={pathname === '/client/chat'} />
         <NavLink href="/client/profile" icon={<User size={22}/>} label="Compte" active={pathname === '/client/profile'} />
       </nav>
     </div>
