@@ -1,5 +1,3 @@
-[skip vercel] chore: secure logout + profile improvements
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
