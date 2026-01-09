@@ -37,13 +37,29 @@ export default function Connexion() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // FONCTION DE SUPPORT WHATSAPP
+  const contactSupport = (reason: 'banni' | 'password', userPhone: string) => {
+    const baseUrl = "https://wa.me/message/IN7LA3KWGTZ7B1";
+    let message = "";
+    
+    if (reason === 'banni') {
+      message = `Bonjour Support Chif-Pam, je veux du support pour mon compte banni. Mon numéro est : ${userPhone}`;
+    } else {
+      message = `Bonjour Support Chif-Pam, je veux du support parce que j'ai oublié mon mot de passe. Mon numéro est : ${userPhone}`;
+    }
+    
+    const finalUrl = `${baseUrl}?text=${encodeURIComponent(message)}`;
+    window.open(finalUrl, '_blank');
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
     
     try {
-      const email = `${phone.trim()}@chifpam.ht`;
+      const cleanPhone = phone.trim();
+      const email = `${cleanPhone}@chifpam.ht`;
       
       // 1. Authentification Supabase
       const { data, error } = await supabase.auth.signInWithPassword({ 
@@ -54,7 +70,7 @@ export default function Connexion() {
       if (error) throw error;
 
       if (data?.user) {
-        // 2. VÉRIFICATION DU BLOCAGE (SÉCURITÉ ÉTABLIE)
+        // 2. VÉRIFICATION DU BANNISSEMENT
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_banned, ban_reason')
@@ -62,27 +78,39 @@ export default function Connexion() {
           .single();
 
         if (profile?.is_banned) {
-          await supabase.auth.signOut(); // Déconnexion forcée immédiate
-          alert(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des conditions d'utilisation."}`);
+          await supabase.auth.signOut(); // Déconnexion forcée
+          
+          const confirmBan = window.confirm(
+            `🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des conditions."}\n\nVoulez-vous contacter le support maintenant ?`
+          );
+          
+          if (confirmBan) {
+            contactSupport('banni', cleanPhone);
+          }
+          
           setLoading(false);
           return;
         }
 
         // 3. Redirection si non banni
-        if (phone.trim() === '99999999') {
+        if (cleanPhone === '99999999') {
           window.location.href = '/admin-chif-pam/dashboard';
         } else {
           window.location.href = '/client/home';
         }
       }
     } catch (error: any) {
-      alert("Erreur d'accès: " + error.message);
+      alert("Erreur d'accès: Identifiants incorrects.");
       setLoading(false);
     }
   };
 
   const handleForgotPassword = () => {
-    alert("Pour réinitialiser votre mot de passe, veuillez contacter le support Chif-Pam muni de votre numéro de téléphone pour vérification d'identité.");
+    if (!phone.trim()) {
+      alert("Veuillez d'abord saisir votre numéro de téléphone dans le champ Identifiant.");
+      return;
+    }
+    contactSupport('password', phone.trim());
   };
 
   return (
