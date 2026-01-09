@@ -124,7 +124,6 @@ export default function AdminDashboard() {
             <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
-            {/* NOUVEAU LIEN NOTIFICATION */}
             <SidebarLink href="/admin-chif-pam/notifications" icon={<Bell size={20}/>} label="Notifications" active={pathname.includes('notifications')} />
             <SidebarLink href="/admin-chif-pam/chat" icon={<MessageSquare size={20}/>} label="Support Client" active={pathname.includes('chat')} />
           </nav>
@@ -216,6 +215,13 @@ export default function AdminDashboard() {
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Communication & Finances</h3>
                <ActionCard 
+                href="/admin-chif-pam/demandes" 
+                label="Valider les Demandes" 
+                count={stats.pendingDepots + stats.pendingRetraits} 
+                icon={<ClipboardList size={24}/>} 
+                color="bg-white" 
+               />
+               <ActionCard 
                 href="/admin-chif-pam/notifications" 
                 label="Envoyer une Alerte" 
                 icon={<Bell size={24}/>} 
@@ -284,3 +290,4 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
     </Link>
   );
 }
+
