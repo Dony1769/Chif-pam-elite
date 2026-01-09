@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert } from 'lucide-react';
+import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare } from 'lucide-react';
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
@@ -19,7 +19,20 @@ export default function AdminUsers() {
   };
 
   const toggleBan = async (id: string, currentStatus: boolean) => {
-    const { error } = await supabase.from('profiles').update({ is_banned: !currentStatus }).eq('id', id);
+    let banReason = null;
+    if (!currentStatus) {
+      banReason = prompt("Motif du blocage (affiché au client) :");
+      if (banReason === null) return; // Annule si on ferme le prompt
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        is_banned: !currentStatus,
+        ban_reason: banReason 
+      })
+      .eq('id', id);
+
     if (!error) fetchUsers();
   };
 
@@ -31,57 +44,80 @@ export default function AdminUsers() {
     }
   };
 
-  const filteredUsers = users.filter(u => u.phone.includes(searchTerm));
+  // Recherche étendue : Numéro OU Nom (username)
+  const filteredUsers = users.filter(u => 
+    u.phone.includes(searchTerm) || 
+    (u.username && u.username.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl mx-auto">
+    <div className="p-8 space-y-8 max-w-6xl mx-auto text-white italic uppercase font-black">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h1 className="text-2xl font-black italic uppercase">Gestion <span className="text-emerald-500">Elite</span></h1>
+        <h1 className="text-2xl tracking-tighter">Gestion <span className="text-emerald-500">Elite</span></h1>
         <div className="relative w-full md:w-96">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
           <input 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Chercher un numéro..." 
-            className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-xs outline-none focus:border-emerald-500 transition-all"
+            placeholder="Nom ou Numéro..." 
+            className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[10px] outline-none focus:border-emerald-500 transition-all font-bold"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredUsers.map(user => (
-          <div key={user.id} className={`p-6 rounded-[2.5rem] border transition-all ${user.is_banned ? 'bg-rose-500/5 border-rose-500/20' : 'bg-slate-900/50 border-white/5'}`}>
+          <div key={user.id} className={`p-6 rounded-[2.5rem] border transition-all duration-500 ${user.is_banned ? 'bg-rose-500/5 border-rose-500/20' : 'bg-slate-900/50 border-white/5 shadow-xl'}`}>
+            
+            {/* Header Profil */}
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${user.is_banned ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
-                  {user.phone.slice(-2)}
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg ${user.is_banned ? 'bg-rose-500' : 'bg-emerald-500 text-slate-950'}`}>
+                  <User size={24} />
                 </div>
                 <div>
-                  <p className="font-black text-sm">+{user.phone}</p>
-                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Client</p>
+                  <p className="text-sm tracking-tighter">@{user.username || 'Inconnu'}</p>
+                  <p className="text-[10px] text-emerald-500 font-bold">+{user.phone}</p>
                 </div>
               </div>
-              <button onClick={() => toggleBan(user.id, user.is_banned)} className={`p-2 rounded-xl transition-colors ${user.is_banned ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-rose-500 hover:bg-rose-500/10'}`}>
+              <button onClick={() => toggleBan(user.id, user.is_banned)} className={`p-3 rounded-2xl transition-all active:scale-90 ${user.is_banned ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                 {user.is_banned ? <UserCheck size={20} /> : <Ban size={20} />}
               </button>
             </div>
 
-            <div className="bg-slate-950/50 p-4 rounded-2xl border border-white/5 flex justify-between items-center mb-4">
-              <div>
-                <p className="text-[8px] font-black uppercase text-slate-500">Solde Actuel</p>
-                <p className="font-black italic text-emerald-500">{user.balance.toLocaleString()} HTG</p>
+            {/* Infos Détails */}
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center gap-2 text-[9px] text-slate-500">
+                <Calendar size={12} />
+                <span>Inscrit le : {new Date(user.created_at).toLocaleDateString()}</span>
               </div>
-              <button onClick={() => adjustBalance(user.id)} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white">
-                <Wallet size={16} />
-              </button>
+              
+              <div className="bg-slate-950/50 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                <div>
+                  <p className="text-[8px] text-slate-500 mb-1">Portefeuille</p>
+                  <p className="text-lg text-emerald-500">{user.balance.toLocaleString()} HTG</p>
+                </div>
+                <button onClick={() => adjustBalance(user.id)} className="p-3 bg-slate-800 rounded-xl text-emerald-500 hover:bg-emerald-500 hover:text-slate-950 transition-all">
+                  <Wallet size={18} />
+                </button>
+              </div>
             </div>
 
+            {/* Zone Blocage */}
             {user.is_banned && (
-              <div className="flex items-center gap-2 text-rose-500">
-                <ShieldAlert size={12} />
-                <span className="text-[8px] font-black uppercase tracking-tighter">Compte Suspendu</span>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-rose-500">
+                  <ShieldAlert size={14} />
+                  <span className="text-[9px] tracking-widest font-black">COMPTE SUSPENDU</span>
+                </div>
+                {user.ban_reason && (
+                  <div className="bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 flex gap-2 items-start">
+                    <MessageSquare size={12} className="text-rose-500 shrink-0 mt-0.5" />
+                    <p className="text-[8px] italic lowercase font-bold text-rose-200">"{user.ban_reason}"</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
