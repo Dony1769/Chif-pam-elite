@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell, Wallet, Gamepad2, History, User as UserIcon,
   TrendingUp, Loader2, Plus, ArrowDownCircle, Sparkles, 
-  ArrowRightCircle, CheckCircle2, XCircle, MessagesSquare, Home
+  ArrowRightCircle, CheckCircle2, MessagesSquare, Home
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -28,21 +28,34 @@ export default function ClientHome() {
 
   useEffect(() => {
     fetchData();
-    const cleanup = setupSubscriptions();
-    return () => { cleanup && cleanup(); };
   }, []);
+
+  // On lance les abonnements seulement quand le profil est chargé pour avoir l'ID
+  useEffect(() => {
+    if (profile?.id) {
+      const cleanup = setupSubscriptions(profile.id);
+      return () => { cleanup && cleanup(); };
+    }
+  }, [profile?.id]);
 
   const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      
-      // Sécurité immédiate au chargement
-      if (prof?.is_banned) {
+      const { data: prof, error: profError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profError || !prof) throw new Error("Profil introuvable");
+
+      // Sécurité : Si banni au chargement
+      if (prof.is_banned) {
         await supabase.auth.signOut();
-        return router.push('/connexion');
+        window.location.replace('/connexion');
+        return;
       }
 
       setProfile(prof);
@@ -55,42 +68,43 @@ export default function ClientHome() {
         setNotifications(notifs);
         setUnreadCount(notifs.filter(n => !n.is_read).length);
       }
-    } catch (error) { console.error(error); } finally { setLoading(false); }
+    } catch (error) { 
+      console.error(error);
+      router.push('/connexion');
+    } finally { 
+      setLoading(false); 
+    }
   };
 
-  const setupSubscriptions = () => {
-    const { data: { user } } =  supabase.auth.getUser() as any; // On garde le user ID pour l'écouteur de bannissement
-
+  const setupSubscriptions = (userId: string) => {
     // 1. Écoute des NOTIFICATIONS
-    const channelNotif = supabase.channel('notifs-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, 
+    const channelNotif = supabase.channel(`notifs-${userId}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'notifications',
+        filter: `user_id=eq.${userId}` 
+      }, 
       (payload) => {
         setNotifications(prev => [payload.new, ...prev]);
         setUnreadCount(prev => prev + 1);
         if (window.navigator.vibrate) window.navigator.vibrate(100);
       }).subscribe();
 
-    // 2. Écoute du SOLDE & BANNISSEMENT EN TEMPS RÉEL
-    const channelProfile = supabase.channel('profile-security')
+    // 2. Écoute du PROFIL (Solde + Bannissement)
+    const channelProfile = supabase.channel(`profile-${userId}`)
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'profiles' 
+        table: 'profiles',
+        filter: `id=eq.${userId}`
       }, 
       async (payload) => {
-        // On vérifie si c'est bien le profil du client connecté qui est mis à jour
-        const session = await supabase.auth.getSession();
-        const currentId = session.data.session?.user.id;
-
-        if (payload.new.id === currentId) {
-          // Si le profil devient banni, on l'expulse immédiatement
-          if (payload.new.is_banned === true) {
-            await supabase.auth.signOut();
-            window.location.replace('/connexion');
-          } else {
-            // Sinon on met juste à jour le solde normalement
-            setProfile(payload.new);
-          }
+        if (payload.new.is_banned === true) {
+          await supabase.auth.signOut();
+          window.location.replace('/connexion');
+        } else {
+          setProfile(payload.new);
         }
       }).subscribe();
 
@@ -100,7 +114,6 @@ export default function ClientHome() {
     };
   };
 
-  // --- SKELETON LOADER PRÉSERVÉ ---
   if (loading) return (
     <div className="min-h-screen bg-[#020617] p-6 space-y-8 animate-pulse">
       <div className="flex justify-between items-center"><div className="w-10 h-10 bg-slate-800 rounded-full"></div><div className="h-10 w-10 bg-slate-800 rounded-full"></div></div>
@@ -111,8 +124,6 @@ export default function ClientHome() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32">
-      
-      {/* HEADER AVEC LOGO ET CLOCHE SMART */}
       <div className="p-6 space-y-6">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -125,7 +136,6 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* SOLDE CARD "ALIVE" PRÉSERVÉ */}
         <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl">
           <div className="relative z-10">
             <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 uppercase">Solde Disponible</p>
@@ -136,13 +146,11 @@ export default function ClientHome() {
           <TrendingUp size={80} className="absolute -right-4 -bottom-4 opacity-10 text-emerald-500" />
         </div>
 
-        {/* ACTIONS & JEUX PRÉSERVÉS */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-2 shadow-lg"><Plus size={24} /><span>Dépôt</span></Link>
           <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-2"><ArrowDownCircle size={24} className="text-rose-500" /><span>Retrait</span></Link>
         </div>
 
-        {/* APERÇU DES NOTIFICATIONS */}
         {notifications.length > 0 && unreadCount > 0 && (
           <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
             <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Alertes Récentes</h3>
@@ -166,7 +174,6 @@ export default function ClientHome() {
         </Link>
       </div>
 
-      {/* NAV BASSE PRÉSERVÉE */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-[2.5rem]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/play" icon={<Gamepad2 size={22}/>} label="Jouer" active={pathname === '/client/play'} />
