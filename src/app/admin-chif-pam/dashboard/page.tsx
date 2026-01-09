@@ -7,7 +7,7 @@ import {
   XAxis, Tooltip, ResponsiveContainer, AreaChart, Area 
 } from 'recharts';
 import { 
-  Users, Wallet, ArrowUpCircle, 
+  Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
   Activity
@@ -34,12 +34,10 @@ export default function AdminDashboard() {
   const fetchGlobalStats = async () => {
     setLoading(true);
     try {
-      // 1. Profils & Solde global
       const { data: profiles } = await supabase.from('profiles').select('balance');
       const totalUsers = profiles?.length || 0;
       const totalBalance = profiles?.reduce((acc, curr) => acc + (curr.balance || 0), 0) || 0;
 
-      // 2. Transactions en attente (Filtrage précis pour éviter les erreurs)
       const { data: pendingT } = await supabase
         .from('transactions')
         .select('type')
@@ -48,18 +46,15 @@ export default function AdminDashboard() {
       const pendingDepots = pendingT?.filter(t => t.type === 'deposit' || t.type === 'depot').length || 0;
       const pendingRetraits = pendingT?.filter(t => t.type === 'withdrawal' || t.type === 'retrait').length || 0;
 
-      // 3. Support (Messages non lus)
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false);
 
-      // 4. LOGIQUE DE FLUX (Harmonisée avec la table 'mises')
-      // Utilisation de 'montant' car c'est ce que ta page Loterie utilise
       const { data: flux, error: fluxError } = await supabase
         .from('mises')
         .select('montant, status, created_at')
-        .limit(1000); // On limite pour ne pas saturer le système
+        .limit(1000);
 
       if (!fluxError && flux) {
         const dailyStats: { [key: string]: number } = {};
@@ -74,14 +69,11 @@ export default function AdminDashboard() {
         flux.forEach(item => {
           const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
           let impactAdmin = 0;
-          
-          // Logique: Perte client = Gain admin | Gain client = Perte admin
           if (item.status === 'perdu') {
             impactAdmin = item.montant; 
           } else if (item.status === 'gagne' || item.status === 'gagné') {
             impactAdmin = -item.montant; 
           }
-          
           if (dailyStats[day] !== undefined) {
             dailyStats[day] += impactAdmin;
           }
@@ -119,19 +111,21 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR */}
+        {/* SIDEBAR MIS À JOUR */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
               <ShieldCheck size={24} />
             </div>
-            <span className="text-xl tracking-widest">ADMIN CP</span>
+            <span className="text-xl tracking-widest uppercase">ADMIN CP</span>
           </div>
           <nav className="space-y-2">
             <SidebarLink href="/admin-chif-pam" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname === '/admin-chif-pam'} />
             <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
+            {/* NOUVEAU LIEN NOTIFICATION */}
+            <SidebarLink href="/admin-chif-pam/notifications" icon={<Bell size={20}/>} label="Notifications" active={pathname.includes('notifications')} />
             <SidebarLink href="/admin-chif-pam/chat" icon={<MessageSquare size={20}/>} label="Support Client" active={pathname.includes('chat')} />
           </nav>
 
@@ -199,7 +193,7 @@ export default function AdminDashboard() {
             <StatCard title="En attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* ACTIONS & SUPPORT (Liens préservés) */}
+          {/* ACTIONS & SUPPORT MIS À JOUR */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Opérations de Jeu</h3>
@@ -220,13 +214,13 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Finances & Assistance</h3>
+               <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Communication & Finances</h3>
                <ActionCard 
-                href="/admin-chif-pam/demandes" 
-                label="Valider les Demandes" 
-                count={stats.pendingDepots + stats.pendingRetraits} 
-                icon={<ClipboardList size={24}/>} 
-                color="bg-white" 
+                href="/admin-chif-pam/notifications" 
+                label="Envoyer une Alerte" 
+                icon={<Bell size={24}/>} 
+                color="bg-amber-500" 
+                textColor="text-slate-950"
                />
                <ActionCard 
                 href="/admin-chif-pam/chat" 
@@ -244,7 +238,7 @@ export default function AdminDashboard() {
   );
 }
 
-// COMPOSANTS UI (Inchangés pour préserver le design)
+// COMPOSANTS UI
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
@@ -290,4 +284,3 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
     </Link>
   );
 }
-
