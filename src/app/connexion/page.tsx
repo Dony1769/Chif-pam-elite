@@ -26,7 +26,7 @@ const LogoChifPam = ({ className }: { className?: string }) => (
         strokeLinejoin="round" 
       />
     </svg>
-    <h1 className="mt-2 text-3xl font-black tracking-tighter uppercase italic">
+    <h1 className="mt-2 text-3xl font-black tracking-tighter uppercase italic text-white">
       CHIF-<span className="text-emerald-500">PAM</span>
     </h1>
   </div>
@@ -44,6 +44,8 @@ export default function Connexion() {
     
     try {
       const email = `${phone.trim()}@chifpam.ht`;
+      
+      // 1. Authentification Supabase
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email, 
         password 
@@ -52,6 +54,21 @@ export default function Connexion() {
       if (error) throw error;
 
       if (data?.user) {
+        // 2. VÉRIFICATION DU BLOCAGE (SÉCURITÉ ÉTABLIE)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_banned, ban_reason')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profile?.is_banned) {
+          await supabase.auth.signOut(); // Déconnexion forcée immédiate
+          alert(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des conditions d'utilisation."}`);
+          setLoading(false);
+          return;
+        }
+
+        // 3. Redirection si non banni
         if (phone.trim() === '99999999') {
           window.location.href = '/admin-chif-pam/dashboard';
         } else {
@@ -64,10 +81,8 @@ export default function Connexion() {
     }
   };
 
-  // Fonction pour gérer l'oubli de mot de passe
   const handleForgotPassword = () => {
     alert("Pour réinitialiser votre mot de passe, veuillez contacter le support Chif-Pam muni de votre numéro de téléphone pour vérification d'identité.");
-    // Optionnel: window.location.href = "https://wa.me/VOTRE_NUMERO_WHATSAPP"; 
   };
 
   return (
@@ -90,7 +105,7 @@ export default function Connexion() {
               value={phone} 
               onChange={(e) => setPhone(e.target.value)}
               required
-              className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-white placeholder:text-slate-700"
+              className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-white placeholder:text-slate-700 font-bold"
             />
           </div>
 
@@ -102,7 +117,7 @@ export default function Connexion() {
               value={password} 
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-white placeholder:text-slate-700"
+              className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-white placeholder:text-slate-700 font-bold"
             />
           </div>
 
@@ -113,14 +128,13 @@ export default function Connexion() {
           >
             {loading ? <Loader2 className="animate-spin" /> : (
               <>
-                <span>SE CONNECTER</span>
+                <span className="tracking-tighter italic">SE CONNECTER</span>
                 <ArrowRight size={18} />
               </>
             )}
           </button>
         </form>
 
-        {/* LIEN MOT DE PASSE OUBLIÉ (SÉCURITÉ & UX) */}
         <button 
           onClick={handleForgotPassword}
           className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 transition-colors uppercase tracking-widest font-bold group"
