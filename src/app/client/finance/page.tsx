@@ -11,10 +11,12 @@ import {
   Smartphone,
   ChevronLeft,
   TrendingUp,
-  Wallet
+  Wallet,
+  CheckCircle2,
+  Copy
 } from 'lucide-react';
 
-// --- COMPOSANT LOGO CHIF-PAM (SVG INTÉGRÉ) ---
+// --- COMPOSANT LOGO CHIF-PAM ---
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
     <svg viewBox="0 0 100 100" className="w-12 h-12 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -27,14 +29,20 @@ const LogoChifPam = ({ className }: { className?: string }) => (
 
 export default function FinancePage() {
   const [view, setView] = useState<'menu' | 'deposit' | 'withdrawal'>('menu');
+  const [method, setMethod] = useState<'MonCash' | 'NatCash' | null>(null);
   const [profile, setProfile] = useState<{balance: number, locked_balance: number} | null>(null);
   const [loading, setLoading] = useState(true);
   const [issubmitting, setIsSubmitting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // Form states
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [file, setFile] = useState<File | null>(null);
+
+  const adminNumbers = {
+    NatCash: "+509 4045 1937",
+    MonCash: "+509 4719 3408"
+  };
 
   const fetchProfile = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -53,27 +61,38 @@ export default function FinancePage() {
     return () => { supabase.removeChannel(sub); };
   }, [fetchProfile]);
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !amount) return alert("Remplissez tous les champs");
+    if (!file || !amount || !method) return alert("Remplissez tous les champs et choisissez une méthode");
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}-${Math.random()}.${fileExt}`;
       const filePath = `proofs/${fileName}`;
+      
       const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(filePath, file);
       if (uploadError) throw uploadError;
+
       const { error: transError } = await supabase.from('transactions').insert({
         user_id: user?.id,
         type: 'deposit',
         amount: parseFloat(amount),
         proof_url: filePath,
+        method: method, // NOUVEAU CHAMP
         status: 'pending'
       });
       if (transError) throw transError;
-      alert("Demande de dépôt envoyée ! En attente de validation admin.");
+
+      alert("Dépôt envoyé ! Validation en cours.");
       setView('menu');
+      setMethod(null);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -84,8 +103,9 @@ export default function FinancePage() {
   const handleWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
-    if (!amt || !phone) return alert("Remplissez tous les champs");
+    if (!amt || !phone || !method) return alert("Remplissez tous les champs");
     if (amt > (profile?.balance || 0) - (profile?.locked_balance || 0)) return alert("Solde disponible insuffisant");
+    
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -94,16 +114,20 @@ export default function FinancePage() {
         amount_param: amt
       });
       if (rpcError) throw rpcError;
+
       const { error: transError } = await supabase.from('transactions').insert({
         user_id: user?.id,
         type: 'withdrawal',
         amount: amt,
         phone_number: phone,
+        method: method, // NOUVEAU CHAMP
         status: 'pending'
       });
       if (transError) throw transError;
-      alert("Demande de retrait enregistrée. Le montant est bloqué jusqu'à validation.");
+
+      alert("Demande de retrait enregistrée.");
       setView('menu');
+      setMethod(null);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -124,31 +148,24 @@ export default function FinancePage() {
     <main className="min-h-screen bg-[#020617] text-white p-6 uppercase italic font-black">
       <div className="max-w-md mx-auto space-y-8 animate-in fade-in duration-500">
         
-        {/* HEADER AVEC LOGO ET BOUTON RETOUR */}
         <div className="flex items-center justify-between">
           <button 
-            onClick={() => view === 'menu' ? window.history.back() : setView('menu')}
+            onClick={() => {
+              if (method) setMethod(null);
+              else view === 'menu' ? window.history.back() : setView('menu');
+            }}
             className="p-3 bg-slate-900 rounded-2xl border border-white/5 hover:bg-slate-800 transition-all active:scale-90"
           >
             <ChevronLeft size={24} className="text-emerald-500" />
           </button>
           <LogoChifPam />
-          <div className="w-12" /> {/* Spacer pour centrer le logo */}
+          <div className="w-12" />
         </div>
 
-        {/* SOLDE CARD - EFFET VIVANT */}
         <div className="relative group overflow-hidden bg-slate-900 p-8 rounded-[2.5rem] border border-white/5 shadow-2xl transition-all hover:border-emerald-500/30">
-          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
-            <Wallet size={80} />
-          </div>
-          
-          <p className="text-[10px] text-slate-500 tracking-widest mb-2 flex items-center gap-2">
-            <TrendingUp size={12} className="text-emerald-500" /> Solde Disponible
-          </p>
-          <h2 className="text-4xl text-emerald-500 mb-4 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
-            {availableBalance.toLocaleString()} <span className="text-sm text-white/50">HTG</span>
-          </h2>
-          
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform"><Wallet size={80} /></div>
+          <p className="text-[10px] text-slate-500 tracking-widest mb-2 flex items-center gap-2"><TrendingUp size={12} className="text-emerald-500" /> Solde Disponible</p>
+          <h2 className="text-4xl text-emerald-500 mb-4">{availableBalance.toLocaleString()} <span className="text-sm text-white/50">HTG</span></h2>
           {profile?.locked_balance! > 0 && (
             <div className="flex items-center gap-2 text-[10px] text-amber-500 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 animate-pulse">
               <Clock size={14} /> {profile?.locked_balance} HTG bloqués (Retrait en cours)
@@ -158,72 +175,105 @@ export default function FinancePage() {
 
         {view === 'menu' && (
           <div className="grid grid-cols-1 gap-4">
-            <button 
-              onClick={() => setView('deposit')} 
-              className="group p-8 bg-emerald-500 text-slate-950 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20"
-            >
+            <button onClick={() => setView('deposit')} className="group p-8 bg-emerald-500 text-slate-950 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
               <ArrowUpCircle size={36} className="group-hover:translate-y-[-4px] transition-transform" /> 
               <span className="text-lg">Dépôt</span>
             </button>
-            <button 
-              onClick={() => setView('withdrawal')} 
-              className="group p-8 bg-slate-900 border border-white/5 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95"
-            >
+            <button onClick={() => setView('withdrawal')} className="group p-8 bg-slate-900 border border-white/5 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95">
               <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-[4px] transition-transform" /> 
               <span className="text-lg">Retrait</span>
             </button>
           </div>
         )}
 
-        {/* FORMULAIRES AVEC EFFETS DE TRANSITION */}
-        {view === 'deposit' && (
-          <form onSubmit={handleDeposit} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-emerald-500/20 animate-in slide-in-from-bottom-4 duration-300">
-            <h3 className="text-center text-emerald-500 text-xl">Effectuer un Dépôt</h3>
-            <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2 uppercase">Montant HTG</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500 transition-all text-emerald-500 text-lg" placeholder="Ex: 1000" />
+        {/* --- SECTION DÉPÔT --- */}
+        {view === 'deposit' && !method && (
+          <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+            <h3 className="text-center text-emerald-500 text-sm tracking-widest">Choisir le service de dépôt</h3>
+            <button onClick={() => setMethod('MonCash')} className="w-full p-6 bg-[#CC1011]/10 border border-[#CC1011]/20 rounded-2xl flex items-center justify-between hover:bg-[#CC1011]/20 transition-all group">
+              <span className="text-[#CC1011]">MONCASH</span>
+              <Smartphone className="group-hover:scale-110 transition-transform" />
+            </button>
+            <button onClick={() => setMethod('NatCash')} className="w-full p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between hover:bg-emerald-500/20 transition-all group">
+              <span className="text-emerald-500">NATCASH</span>
+              <Smartphone className="group-hover:scale-110 transition-transform" />
+            </button>
+          </div>
+        )}
+
+        {view === 'deposit' && method && (
+          <form onSubmit={handleDeposit} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-emerald-500/20 animate-in zoom-in-95 duration-300">
+            <div className="text-center space-y-2">
+              <h3 className="text-emerald-500 text-lg">Dépôt via {method}</h3>
+              <div onClick={() => copyToClipboard(adminNumbers[method])} className="p-4 bg-black/40 rounded-2xl border border-white/5 flex items-center justify-between cursor-pointer active:scale-95 transition-all">
+                <span className="text-sm font-sans tracking-normal italic-none">{adminNumbers[method]}</span>
+                {copied ? <CheckCircle2 size={16} className="text-emerald-500" /> : <Copy size={16} className="text-slate-500" />}
+              </div>
+              <p className="text-[8px] text-slate-500">Transférez le montant sur ce numéro puis uploadez la preuve ci-dessous.</p>
             </div>
+
             <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2 uppercase">Preuve de paiement (Image)</label>
-              <label className="w-full flex flex-col items-center p-8 bg-black/40 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-all hover:bg-emerald-500/5 group">
-                <Upload size={32} className="text-slate-500 mb-2 group-hover:text-emerald-500 transition-colors" />
-                <span className="text-[10px] text-slate-400">{file ? file.name : "Cliquez pour uploader"}</span>
+              <label className="text-[10px] text-slate-500 ml-2">Montant HTG</label>
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500 transition-all text-emerald-500" placeholder="Ex: 1000" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] text-slate-500 ml-2 uppercase">Preuve de paiement</label>
+              <label className="w-full flex flex-col items-center p-8 bg-black/40 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-all">
+                <Upload size={32} className="text-slate-500 mb-2" />
+                <span className="text-[10px] text-slate-400">{file ? file.name : "Capture d'écran"}</span>
                 <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
               </label>
             </div>
+
             <div className="flex gap-3 pt-4">
-              <button type="button" onClick={() => setView('menu')} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5 hover:bg-red-500/10 hover:text-red-500 transition-all">Annuler</button>
-              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-emerald-500 text-slate-950 rounded-2xl flex justify-center items-center shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 active:scale-95 transition-all">
-                {issubmitting ? <Loader2 className="animate-spin" /> : "Soumettre"}
+              <button type="button" onClick={() => setMethod(null)} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5">Retour</button>
+              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-emerald-500 text-slate-950 rounded-2xl flex justify-center items-center shadow-lg">
+                {issubmitting ? <Loader2 className="animate-spin" /> : "Envoyer"}
               </button>
             </div>
           </form>
         )}
 
-        {view === 'withdrawal' && (
-          <form onSubmit={handleWithdrawal} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-amber-500/20 animate-in slide-in-from-bottom-4 duration-300">
-            <h3 className="text-center text-amber-500 text-xl">Demander un Retrait</h3>
+        {/* --- SECTION RETRAIT --- */}
+        {view === 'withdrawal' && !method && (
+          <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+            <h3 className="text-center text-amber-500 text-sm tracking-widest">Recevoir via quel service ?</h3>
+            <button onClick={() => setMethod('MonCash')} className="w-full p-6 bg-[#CC1011]/10 border border-[#CC1011]/20 rounded-2xl flex items-center justify-between hover:bg-[#CC1011]/20 transition-all">
+              <span className="text-[#CC1011]">MONCASH</span>
+              <ArrowDownCircle className="text-[#CC1011]" />
+            </button>
+            <button onClick={() => setMethod('NatCash')} className="w-full p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between hover:bg-emerald-500/20 transition-all">
+              <span className="text-emerald-500">NATCASH</span>
+              <ArrowDownCircle className="text-emerald-500" />
+            </button>
+          </div>
+        )}
+
+        {view === 'withdrawal' && method && (
+          <form onSubmit={handleWithdrawal} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-amber-500/20 animate-in zoom-in-95 duration-300">
+            <h3 className="text-center text-amber-500 text-xl">Retrait {method}</h3>
             <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2 uppercase">Montant à retirer</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-amber-500 transition-all text-amber-500 text-lg" placeholder="Ex: 500" />
+              <label className="text-[10px] text-slate-500 ml-2">Montant à retirer</label>
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-amber-500 transition-all text-amber-500" placeholder="Ex: 500" />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] text-slate-500 ml-2 uppercase">Numéro de réception</label>
               <div className="relative">
                 <Smartphone className="absolute left-5 top-5 text-slate-500" size={20} />
-                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 pl-14 rounded-2xl outline-none focus:border-amber-500 transition-all" placeholder="Ex: 4848..." />
+                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 pl-14 rounded-2xl outline-none focus:border-amber-500 transition-all font-sans" placeholder="4848..." />
               </div>
             </div>
             <div className="flex gap-3 pt-4">
-              <button type="button" onClick={() => setView('menu')} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5">Annuler</button>
-              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-white text-slate-950 rounded-2xl flex justify-center items-center hover:bg-slate-200 active:scale-95 transition-all">
+              <button type="button" onClick={() => setMethod(null)} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5">Retour</button>
+              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-white text-slate-950 rounded-2xl flex justify-center items-center">
                 {issubmitting ? <Loader2 className="animate-spin" /> : "Confirmer"}
               </button>
             </div>
           </form>
         )}
+
       </div>
     </main>
   );
 }
-
