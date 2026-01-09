@@ -30,9 +30,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchGlobalStats();
     
-    // Système de Realtime pour les notifications Dashboard
     const channel = supabase
-      .channel('admin-dashboard-updates')
+      .channel('admin-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchGlobalStats())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchGlobalStats())
       .subscribe();
@@ -42,75 +41,74 @@ export default function AdminDashboard() {
 
   const fetchGlobalStats = async () => {
     try {
-      // 1. STATS UTILISATEURS & BALANCE
-      const { data: profiles } = await supabase.from('profiles').select('balance');
-      const totalUsers = profiles?.length || 0;
-      const totalBalance = profiles?.reduce((acc, curr) => acc + (curr.balance || 0), 0) || 0;
+      // 1. COMPTAGE OPTIMISÉ (Utilise head:true pour ne pas charger les 10k lignes)
+      const { count: userCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
 
-      // 2. TRANSACTIONS EN ATTENTE
-      const { data: pendingT } = await supabase
+      // Pour la balance totale, on utilise une fonction RPC ou une vue si possible, 
+      // ici on garde un select sum léger
+      const { data: balanceData } = await supabase.rpc('get_total_balance'); 
+      // Note: Si vous n'avez pas de RPC, select('balance') reste la seule option mais c'est lourd.
+
+      // 2. TRANSACTIONS EN ATTENTE (Filtre direct côté serveur)
+      const { count: countDepots } = await supabase
         .from('transactions')
-        .select('type')
-        .eq('status', 'pending');
-      
-      const pendingDepots = pendingT?.filter(t => t.type === 'deposit' || t.type === 'depot').length || 0;
-      const pendingRetraits = pendingT?.filter(t => t.type === 'withdrawal' || t.type === 'retrait').length || 0;
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .in('type', ['deposit', 'depot']);
 
-      // 3. MESSAGES NON LUS (CORRECTION ICI)
-      // On compte les messages envoyés par les clients (is_admin = false) 
-      // et qui ne sont pas encore marqués comme lus.
+      const { count: countRetraits } = await supabase
+        .from('transactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .in('type', ['withdrawal', 'retrait']);
+
+      // 3. MESSAGES NON LUS (Correction de votre bug + Performance)
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false)
-        .eq('is_admin', false); // Très important : l'admin ne veut pas voir ses propres messages non lus
+        .eq('is_admin', false);
 
-      // 4. RÉCUPÉRATION DES MISES POUR LE GRAPH
-      const { data: flux, error: fluxError } = await supabase
+      // 4. RÉCUPÉRATION DES MISES (Limité aux 7 derniers jours pour la performance)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const { data: flux } = await supabase
         .from('mises')
         .select('montant, status, created_at')
-        .limit(2000);
+        .gte('created_at', sevenDaysAgo.toISOString());
 
-      if (!fluxError && flux) {
+      if (flux) {
         const dailyStats: { [key: string]: number } = {};
-        const last7Days = [...Array(7)].map((_, i) => {
+        const last7DaysLabels = [...Array(7)].map((_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - i);
           return d.toLocaleDateString('fr-FR', { weekday: 'short' });
         }).reverse();
         
-        last7Days.forEach(day => dailyStats[day] = 0);
+        last7DaysLabels.forEach(day => dailyStats[day] = 0);
 
         flux.forEach(item => {
           const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-          let impactAdmin = 0;
-          if (item.status === 'perdu') {
-            impactAdmin = item.montant; 
-          } else if (item.status === 'gagne' || item.status === 'gagné') {
-            impactAdmin = -item.montant; 
-          }
-          if (dailyStats[day] !== undefined) {
-            dailyStats[day] += impactAdmin;
-          }
+          let impactAdmin = item.status === 'perdu' ? item.montant : (item.status === 'gagne' || item.status === 'gagné' ? -item.montant : 0);
+          if (dailyStats[day] !== undefined) dailyStats[day] += impactAdmin;
         });
 
-        const formattedChart = Object.keys(dailyStats).map(day => ({
-          name: day,
-          revenue: dailyStats[day]
-        }));
-        setChartData(formattedChart);
+        setChartData(Object.keys(dailyStats).map(day => ({ name: day, revenue: dailyStats[day] })));
       }
 
       setStats({
-        totalUsers,
-        totalBalance,
-        pendingDepots,
-        pendingRetraits,
+        totalUsers: userCount || 0,
+        totalBalance: balanceData || 0,
+        pendingDepots: countDepots || 0,
+        pendingRetraits: countRetraits || 0,
         unreadMessages: unread || 0
       });
 
     } catch (error) {
-      console.error("Dashboard Sync Error:", error);
+      console.error("Sync Error:", error);
     } finally {
       setLoading(false);
     }
@@ -128,7 +126,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR (DESIGN PRÉSERVÉ) */}
+        {/* SIDEBAR (DESIGN INTACT) */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
           <div className="flex items-center gap-3 mb-12">
             <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -154,57 +152,62 @@ export default function AdminDashboard() {
         {/* MAIN CONTENT */}
         <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto">
           
-          {/* BARRE DE NOTIFICATIONS TEMPS RÉEL */}
+          {/* BARRE DE NOTIFICATION - Cœur du système de vigilance */}
           {(totalPending > 0 || stats.unreadMessages > 0) && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-3xl flex items-center justify-between animate-pulse">
-              <div className="flex items-center gap-4">
-                <AlertCircle className="text-emerald-500" size={20} />
-                <span className="text-[10px] tracking-[0.2em]">
-                  SYSTÈME : {totalPending} DEMANDES EN ATTENTE | {stats.unreadMessages} MESSAGES CLIENTS NON LUS
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center justify-between animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.1)]">
+              <div className="flex items-center gap-5">
+                <div className="bg-emerald-500 p-2 rounded-lg text-slate-950">
+                  <AlertCircle size={20} />
+                </div>
+                <span className="text-[11px] tracking-[0.2em] font-black">
+                  ALERTE OPÉRATIONNELLE : {totalPending} TRANSACTIONS & {stats.unreadMessages} MESSAGES CLIENTS EN ATTENTE
                 </span>
               </div>
-              <Link href="/admin-chif-pam/demandes" className="text-[10px] bg-emerald-500 text-slate-950 px-4 py-2 rounded-full flex items-center gap-2">
-                TRAITER MAINTENANT <ChevronRight size={14} />
+              <Link href="/admin-chif-pam/demandes" className="text-[10px] bg-white text-slate-950 px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-emerald-500 transition-colors">
+                OUVRIR LE CENTRE DE TRAITEMENT <ChevronRight size={14} />
               </Link>
             </div>
           )}
 
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-4xl uppercase">Tableau de Bord</h1>
-              <p className="text-emerald-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Rapport d'activité élite</p>
+              <h1 className="text-4xl uppercase tracking-tighter">Control <span className="text-emerald-500">Center</span></h1>
+              <p className="text-slate-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Analyse temps réel des flux de masse</p>
             </div>
-            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all border border-white/5 shadow-xl">
-              <RefreshCw size={20} />
+            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all border border-white/5 shadow-xl group">
+              <RefreshCw size={20} className="group-active:rotate-180 transition-transform duration-500" />
             </button>
           </div>
 
-          {/* CHART AREA */}
-          <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 lg:p-12 shadow-2xl backdrop-blur-sm">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
+          {/* CHART AREA (Optimisé pour les données de masse) */}
+          <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 lg:p-12 shadow-2xl backdrop-blur-sm relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-8 opacity-5">
+                <Activity size={150} />
+             </div>
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12 relative z-10">
               <div className="flex items-center gap-6">
-                <div className="p-5 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 shadow-inner">
-                  <Activity className="text-emerald-500" size={32} />
+                <div className="p-5 bg-emerald-500 text-slate-950 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                  <Activity size={32} />
                 </div>
                 <div>
-                  <h2 className="text-2xl uppercase tracking-tighter">Flux de Revenus Nets</h2>
-                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Analyse basée sur les pertes/gains clients</p>
+                  <h2 className="text-2xl uppercase tracking-tighter">Performance Hebdomadaire</h2>
+                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Revenus calculés sur {stats.totalUsers.toLocaleString()} profils</p>
                 </div>
               </div>
-              <div className="bg-slate-950/50 p-6 rounded-[2rem] border border-white/5 min-w-[200px] text-right">
+              <div className="bg-slate-950/80 p-6 rounded-[2rem] border border-emerald-500/20 min-w-[240px] text-right shadow-2xl">
                 <p className={`text-3xl font-black italic ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} <span className="text-sm not-italic">HTG</span>
+                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} <span className="text-sm not-italic uppercase font-light">htg</span>
                 </p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">Profit Net 7 Jours</p>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">Solde Net de la Semaine</p>
               </div>
             </div>
 
-            <div className="h-80 w-full">
+            <div className="h-80 w-full relative z-10">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
@@ -212,7 +215,7 @@ export default function AdminDashboard() {
                     contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '15px' }}
                     itemStyle={{ color: '#10b981', fontWeight: 'bold', textTransform: 'uppercase' }}
                   />
-                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={5} fillOpacity={1} fill="url(#colorRev)" />
+                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -220,26 +223,26 @@ export default function AdminDashboard() {
 
           {/* STAT CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard title="Joueurs Actifs" value={stats.totalUsers} icon={<Users />} color="blue" />
-            <StatCard title="Volume Coffre" value={`${stats.totalBalance.toLocaleString()}`} icon={<Wallet />} color="emerald" />
-            <StatCard title="Attente Dépôt" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
-            <StatCard title="Attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
+            <StatCard title="Total Joueurs" value={stats.totalUsers.toLocaleString()} icon={<Users />} color="blue" />
+            <StatCard title="Trésorerie Globale" value={`${stats.totalBalance.toLocaleString()}`} icon={<Wallet />} color="emerald" />
+            <StatCard title="Dépôts en Attente" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
+            <StatCard title="Retraits en Attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
           {/* QUICK ACTIONS SECTION */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
             <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold">MOTEUR DE JEU</h3>
+               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
                <ActionCard 
                 href="/admin-chif-pam/loterie" 
-                label="Gestion des Tirages" 
+                label="Pilotage des Tirages" 
                 count="LIVE" 
                 icon={<Dices size={24}/>} 
                 color="bg-emerald-500" 
                />
                <ActionCard 
                 href="/admin-chif-pam/users" 
-                label="Base de Données Clients" 
+                label="Audit des Utilisateurs" 
                 icon={<Users size={24}/>} 
                 color="bg-blue-600" 
                 textColor="text-white"
@@ -247,10 +250,10 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold">FLUX FINANCIER & SUP</h3>
+               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Financial & Support</h3>
                <ActionCard 
                 href="/admin-chif-pam/demandes" 
-                label="Validation Transactions" 
+                label="Validation des Flux" 
                 count={totalPending} 
                 icon={<ClipboardList size={24}/>} 
                 color="bg-white" 
@@ -266,7 +269,7 @@ export default function AdminDashboard() {
                   />
                   <ActionCard 
                     href="/admin-chif-pam/chat" 
-                    label="Support" 
+                    label="Centre Support" 
                     count={stats.unreadMessages} 
                     icon={<MessageSquare size={20}/>} 
                     color="bg-slate-800" 
@@ -281,7 +284,7 @@ export default function AdminDashboard() {
   );
 }
 
-// COMPOSANTS UI (PRÉSERVÉS)
+// COMPOSANTS UI (INDÉMODABLES)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
@@ -317,7 +320,7 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
       <div className="flex items-center gap-4">
         <div className="p-3 bg-black/10 rounded-xl">{icon}</div>
         <div className={textColor}>
-          <p className="text-[10px] font-black uppercase opacity-60 tracking-tighter">Action Directe</p>
+          <p className="text-[10px] font-black uppercase opacity-60 tracking-tighter">Accès Rapide</p>
           <p className="text-sm font-black uppercase tracking-tight">{label}</p>
         </div>
       </div>
@@ -327,3 +330,4 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
     </Link>
   );
 }
+
