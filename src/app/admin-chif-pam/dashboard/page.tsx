@@ -10,7 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
-  Activity
+  Activity, AlertCircle, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -29,10 +29,18 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchGlobalStats();
+    
+    // Système de Realtime pour les notifications Dashboard
+    const channel = supabase
+      .channel('admin-dashboard-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchGlobalStats())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchGlobalStats())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const fetchGlobalStats = async () => {
-    setLoading(true);
     try {
       const { data: profiles } = await supabase.from('profiles').select('balance');
       const totalUsers = profiles?.length || 0;
@@ -107,20 +115,23 @@ export default function AdminDashboard() {
     </div>
   );
 
+  const totalPending = stats.pendingDepots + stats.pendingRetraits;
+
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR MIS À JOUR */}
-        <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block">
+        {/* SIDEBAR */}
+        <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
-              <ShieldCheck size={24} />
-            </div>
-            <span className="text-xl tracking-widest uppercase">ADMIN CP</span>
+            <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
+              <path d="M55 45L76 24M76 24H58M76 24V42" stroke="#10B981" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-xl tracking-widest uppercase font-black">CHIF-PAM</span>
           </div>
           <nav className="space-y-2">
-            <SidebarLink href="/admin-chif-pam" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname === '/admin-chif-pam'} />
+            <SidebarLink href="/admin-chif-pam/dashboard" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname.includes('dashboard')} />
             <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
@@ -134,38 +145,54 @@ export default function AdminDashboard() {
         </aside>
 
         {/* MAIN CONTENT */}
-        <main className="flex-1 p-6 lg:p-12 space-y-10 overflow-y-auto">
+        <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto">
+          
+          {/* BARRE DE NOTIFICATIONS TEMPS RÉEL */}
+          {(totalPending > 0 || stats.unreadMessages > 0) && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-3xl flex items-center justify-between animate-pulse">
+              <div className="flex items-center gap-4">
+                <AlertCircle className="text-emerald-500" size={20} />
+                <span className="text-[10px] tracking-[0.2em]">
+                  SYSTÈME : {totalPending} DEMANDES EN ATTENTE | {stats.unreadMessages} MESSAGES NON LUS
+                </span>
+              </div>
+              <Link href="/admin-chif-pam/demandes" className="text-[10px] bg-emerald-500 text-slate-950 px-4 py-2 rounded-full flex items-center gap-2">
+                TRAITER MAINTENANT <ChevronRight size={14} />
+              </Link>
+            </div>
+          )}
+
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-4xl">Administration</h1>
-              <p className="text-emerald-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Analyse de rentabilité réelle</p>
+              <h1 className="text-4xl uppercase">Tableau de Bord</h1>
+              <p className="text-emerald-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Rapport d'activité élite</p>
             </div>
-            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all border border-white/5">
+            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all border border-white/5 shadow-xl">
               <RefreshCw size={20} />
             </button>
           </div>
 
-          {/* CHART */}
-          <div className="bg-slate-900/50 rounded-[3rem] border border-white/5 p-8 shadow-2xl backdrop-blur-sm">
-            <div className="flex justify-between items-center mb-10">
-              <div className="flex items-center gap-4">
-                <div className="p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
-                  <Activity className="text-emerald-500" size={24} />
+          {/* CHART AREA */}
+          <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 lg:p-12 shadow-2xl backdrop-blur-sm">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
+              <div className="flex items-center gap-6">
+                <div className="p-5 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 shadow-inner">
+                  <Activity className="text-emerald-500" size={32} />
                 </div>
                 <div>
-                  <h2 className="text-xl">Flux de Revenus Nets</h2>
-                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Basé sur les résultats des mises</p>
+                  <h2 className="text-2xl uppercase tracking-tighter">Flux de Revenus Nets</h2>
+                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Analyse basée sur les pertes/gains clients</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className={`text-3xl ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} HTG
+              <div className="bg-slate-950/50 p-6 rounded-[2rem] border border-white/5 min-w-[200px] text-right">
+                <p className={`text-3xl font-black italic ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} <span className="text-sm not-italic">HTG</span>
                 </p>
-                <p className="text-[10px] text-slate-500 uppercase">Profit Net</p>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">Profit Net 7 Jours</p>
               </div>
             </div>
 
-            <div className="h-72 w-full">
+            <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -175,10 +202,10 @@ export default function AdminDashboard() {
                     </linearGradient>
                   </defs>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '15px' }}
-                    itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
+                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '15px' }}
+                    itemStyle={{ color: '#10b981', fontWeight: 'bold', textTransform: 'uppercase' }}
                   />
-                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
+                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={5} fillOpacity={1} fill="url(#colorRev)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -186,26 +213,26 @@ export default function AdminDashboard() {
 
           {/* STAT CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard title="Membres" value={stats.totalUsers} icon={<Users />} color="blue" />
-            <StatCard title="Volume Global" value={`${stats.totalBalance.toLocaleString()} HTG`} icon={<Wallet />} color="emerald" />
-            <StatCard title="En attente Dépôt" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
-            <StatCard title="En attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
+            <StatCard title="Joueurs Actifs" value={stats.totalUsers} icon={<Users />} color="blue" />
+            <StatCard title="Volume Coffre" value={`${stats.totalBalance.toLocaleString()}`} icon={<Wallet />} color="emerald" />
+            <StatCard title="Attente Dépôt" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
+            <StatCard title="Attente Retrait" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* ACTIONS & SUPPORT MIS À JOUR */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
+          {/* QUICK ACTIONS SECTION */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
             <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Opérations de Jeu</h3>
+               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold">MOTEUR DE JEU</h3>
                <ActionCard 
                 href="/admin-chif-pam/loterie" 
-                label="Contrôle de la Loterie" 
+                label="Gestion des Tirages" 
                 count="LIVE" 
                 icon={<Dices size={24}/>} 
                 color="bg-emerald-500" 
                />
                <ActionCard 
                 href="/admin-chif-pam/users" 
-                label="Gestion des Joueurs" 
+                label="Base de Données Clients" 
                 icon={<Users size={24}/>} 
                 color="bg-blue-600" 
                 textColor="text-white"
@@ -213,29 +240,32 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.3em] px-4">Communication & Finances</h3>
+               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold">FLUX FINANCIER & SUP</h3>
                <ActionCard 
                 href="/admin-chif-pam/demandes" 
-                label="Valider les Demandes" 
-                count={stats.pendingDepots + stats.pendingRetraits} 
+                label="Validation Transactions" 
+                count={totalPending} 
                 icon={<ClipboardList size={24}/>} 
                 color="bg-white" 
                />
-               <ActionCard 
-                href="/admin-chif-pam/notifications" 
-                label="Envoyer une Alerte" 
-                icon={<Bell size={24}/>} 
-                color="bg-amber-500" 
-                textColor="text-slate-950"
-               />
-               <ActionCard 
-                href="/admin-chif-pam/chat" 
-                label="Support (Messages)" 
-                count={stats.unreadMessages} 
-                icon={<MessageSquare size={24}/>} 
-                color="bg-slate-800" 
-                textColor="text-white"
-               />
+               <div className="grid grid-cols-2 gap-4">
+                  <ActionCard 
+                    href="/admin-chif-pam/notifications" 
+                    label="Alertes" 
+                    icon={<Bell size={20}/>} 
+                    color="bg-amber-500/10" 
+                    textColor="text-amber-500"
+                    border="border-amber-500/20"
+                  />
+                  <ActionCard 
+                    href="/admin-chif-pam/chat" 
+                    label="Support" 
+                    count={stats.unreadMessages} 
+                    icon={<MessageSquare size={20}/>} 
+                    color="bg-slate-800" 
+                    textColor="text-white"
+                  />
+               </div>
             </div>
           </div>
         </main>
@@ -262,21 +292,21 @@ function StatCard({ title, value, icon, color }: any) {
     rose: "text-rose-500 bg-rose-500/10 border-rose-500/20",
   };
   return (
-    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden group transition-all`}>
+    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden group transition-all shadow-xl`}>
       <div className="relative z-10">
         <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">{title}</p>
-        <p className="text-2xl font-black italic">{value}</p>
+        <p className="text-3xl font-black italic">{value}</p>
       </div>
       <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-700">
-        {React.cloneElement(icon, { size: 80 })}
+        {React.cloneElement(icon, { size: 90 })}
       </div>
     </div>
   );
 }
 
-function ActionCard({ href, label, count, icon, color, textColor = "text-slate-950" }: any) {
+function ActionCard({ href, label, count, icon, color, textColor = "text-slate-950", border="border-transparent" }: any) {
   return (
-    <Link href={href} className={`flex items-center justify-between p-6 ${color} rounded-[2rem] hover:scale-[1.02] transition-all group shadow-xl`}>
+    <Link href={href} className={`flex items-center justify-between p-6 ${color} ${border} border rounded-[2rem] hover:scale-[1.02] transition-all group shadow-xl`}>
       <div className="flex items-center gap-4">
         <div className="p-3 bg-black/10 rounded-xl">{icon}</div>
         <div className={textColor}>
@@ -285,9 +315,8 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
         </div>
       </div>
       {count !== undefined && count !== 0 && (
-        <div className={`px-4 py-2 bg-black/10 rounded-full text-xs ${textColor} font-black`}>{count}</div>
+        <div className={`px-4 py-2 bg-black/20 rounded-full text-[10px] ${textColor} font-black border border-black/5`}>{count}</div>
       )}
     </Link>
   );
 }
-
