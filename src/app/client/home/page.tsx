@@ -6,7 +6,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell, Wallet, Gamepad2, History, User as UserIcon,
   TrendingUp, Loader2, Plus, ArrowDownCircle, Sparkles, 
-  ArrowRightCircle, CheckCircle2, MessagesSquare, Home
+  ArrowRightCircle, CheckCircle2, MessagesSquare, Home,
+  Zap, Trophy, Target, BarChart3
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -30,7 +31,6 @@ export default function ClientHome() {
     fetchData();
   }, []);
 
-  // On lance les abonnements seulement quand le profil est chargé pour avoir l'ID
   useEffect(() => {
     if (profile?.id) {
       const cleanup = setupSubscriptions(profile.id);
@@ -44,14 +44,9 @@ export default function ClientHome() {
       if (!user) return router.push('/connexion');
 
       const { data: prof, error: profError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+        .from('profiles').select('*').eq('id', user.id).single();
 
       if (profError || !prof) throw new Error("Profil introuvable");
-
-      // Sécurité : Si banni au chargement
       if (prof.is_banned) {
         await supabase.auth.signOut();
         window.location.replace('/connexion');
@@ -71,34 +66,22 @@ export default function ClientHome() {
     } catch (error) { 
       console.error(error);
       router.push('/connexion');
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   };
 
   const setupSubscriptions = (userId: string) => {
-    // 1. Écoute des NOTIFICATIONS
+    // 1. Écoute des NOTIFICATIONS (Cloche opérationnelle)
     const channelNotif = supabase.channel(`notifs-${userId}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'notifications',
-        filter: `user_id=eq.${userId}` 
-      }, 
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, 
       (payload) => {
         setNotifications(prev => [payload.new, ...prev]);
         setUnreadCount(prev => prev + 1);
         if (window.navigator.vibrate) window.navigator.vibrate(100);
       }).subscribe();
 
-    // 2. Écoute du PROFIL (Solde + Bannissement)
+    // 2. Écoute du PROFIL (Sécurité Realtime)
     const channelProfile = supabase.channel(`profile-${userId}`)
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'profiles',
-        filter: `id=eq.${userId}`
-      }, 
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, 
       async (payload) => {
         if (payload.new.is_banned === true) {
           await supabase.auth.signOut();
@@ -125,17 +108,20 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32">
       <div className="p-6 space-y-6">
+        
+        {/* HEADER - CLOCHE OPÉRATIONNELLE */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <LogoSmall />
             <h1 className="text-lg tracking-tighter">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
-          <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5">
+          <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 transition-all active:scale-90">
             <Bell size={20} className={unreadCount > 0 ? "text-emerald-500 animate-bounce" : "text-slate-500"} />
             {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full shadow-[0_0_10px_#f43f5e]"></span>}
           </Link>
         </div>
 
+        {/* SOLDE CARD */}
         <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl">
           <div className="relative z-10">
             <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 uppercase">Solde Disponible</p>
@@ -146,34 +132,62 @@ export default function ClientHome() {
           <TrendingUp size={80} className="absolute -right-4 -bottom-4 opacity-10 text-emerald-500" />
         </div>
 
+        {/* ACTIONS */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-2 shadow-lg"><Plus size={24} /><span>Dépôt</span></Link>
-          <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-2"><ArrowDownCircle size={24} className="text-rose-500" /><span>Retrait</span></Link>
+          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-2 shadow-lg active:scale-95 transition-transform"><Plus size={24} /><span>Dépôt</span></Link>
+          <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-2 active:scale-95 transition-transform"><ArrowDownCircle size={24} className="text-rose-500" /><span>Retrait</span></Link>
         </div>
 
-        {notifications.length > 0 && unreadCount > 0 && (
-          <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
-            <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Alertes Récentes</h3>
-            {notifications.slice(0, 1).map(n => (
-              <div key={n.id} className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span className="text-[10px] tracking-widest lowercase not-italic">{n.title}</span>
+        {/* RAPPORTS CLIENTS (Nouvelle Section) */}
+        <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
+           <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-500/10 rounded-2xl"><BarChart3 size={20} className="text-blue-500"/></div>
+              <div>
+                <p className="text-[10px] text-slate-400">Rapports d'activité</p>
+                <p className="text-xs">Statistiques de jeu</p>
               </div>
-            ))}
-          </div>
-        )}
+           </div>
+           <Link href="/client/reports" className="text-blue-500 text-[10px] border-b border-blue-500/30">Détails</Link>
+        </div>
 
-        <Link href="/client/play" className="block bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-[2.5rem] border border-white/5 relative group">
-          <div className="flex justify-between items-center">
-            <div className="space-y-1">
-              <h3 className="text-xl font-black flex items-center gap-2">Loterie Live <Sparkles size={16} className="text-amber-500" /></h3>
-              <p className="text-[9px] text-slate-500 tracking-widest">Mises rapides & Gains instantanés</p>
+        {/* JEU PRINCIPAL */}
+        <div className="space-y-3">
+          <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Jeux Disponibles</h3>
+          <Link href="/client/play" className="block bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-[2.5rem] border border-white/5 relative group overflow-hidden">
+            <div className="flex justify-between items-center relative z-10">
+              <div className="space-y-1">
+                <h3 className="text-xl font-black flex items-center gap-2">Loterie Live <Sparkles size={16} className="text-amber-500" /></h3>
+                <p className="text-[9px] text-slate-500 tracking-widest">Mises rapides & Gains instantanés</p>
+              </div>
+              <ArrowRightCircle className="text-emerald-500 group-hover:translate-x-1 transition-transform" size={28} />
             </div>
-            <ArrowRightCircle className="text-emerald-500" size={28} />
+            <div className="absolute top-0 right-0 p-2 bg-emerald-500/20 rounded-bl-2xl">
+                <span className="text-[8px] text-emerald-500">Ouvert</span>
+            </div>
+          </Link>
+        </div>
+
+        {/* MINI JEUX À VENIR (Nouvelles Cases) */}
+        <div className="space-y-3">
+          <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Bientôt Disponible</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 flex flex-col items-center gap-3 opacity-60 grayscale group">
+               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500"><Zap size={24}/></div>
+               <span className="text-[10px] text-center">Crash Game</span>
+               <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-800 rounded-full text-[6px]">Coming</div>
+            </div>
+            
+            <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 flex flex-col items-center gap-3 opacity-60 grayscale">
+               <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500"><Target size={24}/></div>
+               <span className="text-[10px] text-center">Mines</span>
+               <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-800 rounded-full text-[6px]">Coming</div>
+            </div>
           </div>
-        </Link>
+        </div>
+
       </div>
 
+      {/* NAV BASSE */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-[2.5rem]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/play" icon={<Gamepad2 size={22}/>} label="Jouer" active={pathname === '/client/play'} />
