@@ -38,6 +38,13 @@ export default function ClientHome() {
       if (!user) return router.push('/connexion');
 
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      
+      // Sécurité immédiate au chargement
+      if (prof?.is_banned) {
+        await supabase.auth.signOut();
+        return router.push('/connexion');
+      }
+
       setProfile(prof);
 
       const { data: notifs } = await supabase.from('notifications')
@@ -52,7 +59,9 @@ export default function ClientHome() {
   };
 
   const setupSubscriptions = () => {
-    // Écoute des NOTIFICATIONS (Nouveau système)
+    const { data: { user } } =  supabase.auth.getUser() as any; // On garde le user ID pour l'écouteur de bannissement
+
+    // 1. Écoute des NOTIFICATIONS
     const channelNotif = supabase.channel('notifs-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, 
       (payload) => {
@@ -61,11 +70,28 @@ export default function ClientHome() {
         if (window.navigator.vibrate) window.navigator.vibrate(100);
       }).subscribe();
 
-    // Écoute du SOLDE (Ancien système préservé)
-    const channelProfile = supabase.channel('profile-realtime')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, 
-      (payload) => {
-        if (payload.new.id === profile?.id) setProfile(payload.new);
+    // 2. Écoute du SOLDE & BANNISSEMENT EN TEMPS RÉEL
+    const channelProfile = supabase.channel('profile-security')
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'profiles' 
+      }, 
+      async (payload) => {
+        // On vérifie si c'est bien le profil du client connecté qui est mis à jour
+        const session = await supabase.auth.getSession();
+        const currentId = session.data.session?.user.id;
+
+        if (payload.new.id === currentId) {
+          // Si le profil devient banni, on l'expulse immédiatement
+          if (payload.new.is_banned === true) {
+            await supabase.auth.signOut();
+            window.location.replace('/connexion');
+          } else {
+            // Sinon on met juste à jour le solde normalement
+            setProfile(payload.new);
+          }
+        }
       }).subscribe();
 
     return () => {
@@ -116,7 +142,7 @@ export default function ClientHome() {
           <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-2"><ArrowDownCircle size={24} className="text-rose-500" /><span>Retrait</span></Link>
         </div>
 
-        {/* APERÇU DES NOTIFICATIONS (Nouveau & Pratique) */}
+        {/* APERÇU DES NOTIFICATIONS */}
         {notifications.length > 0 && unreadCount > 0 && (
           <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
             <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Alertes Récentes</h3>
@@ -160,4 +186,3 @@ function NavLink({ href, icon, label, active }: any) {
     </Link>
   );
 }
-
