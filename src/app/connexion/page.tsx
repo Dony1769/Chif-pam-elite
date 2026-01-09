@@ -1,12 +1,11 @@
 "use client";
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, HelpCircle } from 'lucide-react';
 
 // --- COMPOSANT LOGO CHIF-PAM (SVG PROFESSIONNEL) ---
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`relative flex flex-col items-center ${className}`}>
-    {/* Icône du Logo */}
     <svg 
       viewBox="0 0 100 100" 
       className="w-20 h-20 drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]"
@@ -27,8 +26,6 @@ const LogoChifPam = ({ className }: { className?: string }) => (
         strokeLinejoin="round" 
       />
     </svg>
-    
-    {/* Texte du Logo */}
     <h1 className="mt-2 text-3xl font-black tracking-tighter uppercase italic">
       CHIF-<span className="text-emerald-500">PAM</span>
     </h1>
@@ -47,7 +44,6 @@ export default function Connexion() {
     
     try {
       const email = `${phone.trim()}@chifpam.ht`;
-      
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email, 
         password 
@@ -56,7 +52,6 @@ export default function Connexion() {
       if (error) throw error;
 
       if (data?.user) {
-        // Redirection radicale pour éviter les problèmes de cache
         if (phone.trim() === '99999999') {
           window.location.href = '/admin-chif-pam/dashboard';
         } else {
@@ -69,11 +64,16 @@ export default function Connexion() {
     }
   };
 
+  // Fonction pour gérer l'oubli de mot de passe
+  const handleForgotPassword = () => {
+    alert("Pour réinitialiser votre mot de passe, veuillez contacter le support Chif-Pam muni de votre numéro de téléphone pour vérification d'identité.");
+    // Optionnel: window.location.href = "https://wa.me/VOTRE_NUMERO_WHATSAPP"; 
+  };
+
   return (
     <main className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-white font-sans">
       <div className="w-full max-w-md bg-slate-900 border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl relative overflow-hidden">
         
-        {/* Intégration du Logo */}
         <div className="mb-10">
           <LogoChifPam />
           <p className="text-slate-500 text-[10px] uppercase tracking-[0.3em] mt-2 font-bold">
@@ -120,7 +120,15 @@ export default function Connexion() {
           </button>
         </form>
 
-        {/* Effet de lumière en arrière-plan pour le "look" premium */}
+        {/* LIEN MOT DE PASSE OUBLIÉ (SÉCURITÉ & UX) */}
+        <button 
+          onClick={handleForgotPassword}
+          className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 transition-colors uppercase tracking-widest font-bold group"
+        >
+          <HelpCircle size={14} className="group-hover:animate-pulse" />
+          <span>Mot de passe oublié ?</span>
+        </button>
+
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/5 rounded-full blur-[80px]" />
       </div>
     </main>
