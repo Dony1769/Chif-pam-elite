@@ -42,10 +42,12 @@ export default function AdminDashboard() {
 
   const fetchGlobalStats = async () => {
     try {
+      // 1. STATS UTILISATEURS & BALANCE
       const { data: profiles } = await supabase.from('profiles').select('balance');
       const totalUsers = profiles?.length || 0;
       const totalBalance = profiles?.reduce((acc, curr) => acc + (curr.balance || 0), 0) || 0;
 
+      // 2. TRANSACTIONS EN ATTENTE
       const { data: pendingT } = await supabase
         .from('transactions')
         .select('type')
@@ -54,15 +56,20 @@ export default function AdminDashboard() {
       const pendingDepots = pendingT?.filter(t => t.type === 'deposit' || t.type === 'depot').length || 0;
       const pendingRetraits = pendingT?.filter(t => t.type === 'withdrawal' || t.type === 'retrait').length || 0;
 
+      // 3. MESSAGES NON LUS (CORRECTION ICI)
+      // On compte les messages envoyés par les clients (is_admin = false) 
+      // et qui ne sont pas encore marqués comme lus.
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
-        .eq('is_read', false);
+        .eq('is_read', false)
+        .eq('is_admin', false); // Très important : l'admin ne veut pas voir ses propres messages non lus
 
+      // 4. RÉCUPÉRATION DES MISES POUR LE GRAPH
       const { data: flux, error: fluxError } = await supabase
         .from('mises')
         .select('montant, status, created_at')
-        .limit(1000);
+        .limit(2000);
 
       if (!fluxError && flux) {
         const dailyStats: { [key: string]: number } = {};
@@ -121,7 +128,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR */}
+        {/* SIDEBAR (DESIGN PRÉSERVÉ) */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
           <div className="flex items-center gap-3 mb-12">
             <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -153,7 +160,7 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-4">
                 <AlertCircle className="text-emerald-500" size={20} />
                 <span className="text-[10px] tracking-[0.2em]">
-                  SYSTÈME : {totalPending} DEMANDES EN ATTENTE | {stats.unreadMessages} MESSAGES NON LUS
+                  SYSTÈME : {totalPending} DEMANDES EN ATTENTE | {stats.unreadMessages} MESSAGES CLIENTS NON LUS
                 </span>
               </div>
               <Link href="/admin-chif-pam/demandes" className="text-[10px] bg-emerald-500 text-slate-950 px-4 py-2 rounded-full flex items-center gap-2">
@@ -274,7 +281,7 @@ export default function AdminDashboard() {
   );
 }
 
-// COMPOSANTS UI
+// COMPOSANTS UI (PRÉSERVÉS)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
