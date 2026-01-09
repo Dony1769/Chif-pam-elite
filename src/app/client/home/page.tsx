@@ -7,8 +7,16 @@ import Link from 'next/link';
 import { 
   Plus, ArrowDownCircle, Wallet, Loader2, 
   Home, PlayCircle, History, MessagesSquare, 
-  User, Bell, ArrowRightCircle, CheckCircle2, XCircle
+  User, Bell, ArrowRightCircle, CheckCircle2, XCircle, TrendingUp
 } from 'lucide-react';
+
+// --- COMPOSANT LOGO CHIF-PAM ---
+const LogoSmall = () => (
+  <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
+    <path d="M55 45L76 24M76 24H58M76 24V42" stroke="#10B981" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 export default function ClientHome() {
   const [profile, setProfile] = useState<any>(null);
@@ -51,7 +59,7 @@ export default function ClientHome() {
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return router.push('/login');
+    if (!user) return router.push('/connexion');
 
     const { data } = await supabase
       .from('profiles')
@@ -63,9 +71,21 @@ export default function ClientHome() {
     setFetching(false);
   };
 
+  // --- SKELETON LOADER (POINT 1 DU RAPPORT) ---
   if (fetching) return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
+    <div className="min-h-screen bg-[#020617] p-6 space-y-8 animate-pulse">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-slate-800 rounded-full"></div>
+          <div className="h-4 w-32 bg-slate-800 rounded"></div>
+        </div>
+        <div className="w-10 h-10 bg-slate-800 rounded-full"></div>
+      </div>
+      <div className="h-48 w-full bg-slate-900 rounded-[2.5rem] border border-white/5"></div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="h-32 bg-slate-900 rounded-4xl"></div>
+        <div className="h-32 bg-slate-900 rounded-4xl"></div>
+      </div>
     </div>
   );
 
@@ -78,72 +98,81 @@ export default function ClientHome() {
       <div className="p-6 space-y-6">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 font-black italic shadow-[0_0_20px_rgba(16,185,129,0.3)]">CP</div>
-            {/* REMPLACEMENT : Accueil personnalisé avec Username */}
-            <h1 className="text-lg tracking-tighter">Bon retour <span className="text-emerald-500">@{profile?.username || 'Joueur'}</span></h1>
+            <LogoSmall />
+            <h1 className="text-lg tracking-tighter">
+              Salut, <span className="text-emerald-500">@{profile?.username || 'Joueur'}</span>
+            </h1>
           </div>
-          <div className="relative p-2 bg-white/5 rounded-full">
-            <Bell size={20} className={notification ? "text-emerald-500 animate-pulse" : "text-slate-500"} />
-            {notification && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full"></span>}
+          <div className="relative p-2 bg-white/5 rounded-full border border-white/5">
+            <Bell size={20} className={notification ? "text-emerald-500 animate-bounce" : "text-slate-500"} />
+            {notification && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full shadow-[0_0_10px_#f43f5e]"></span>}
           </div>
         </div>
 
         {/* NOTIFICATION DYNAMIQUE */}
         {notification && (
-          <div className={`flex items-center gap-3 p-4 rounded-2xl border ${notification.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-rose-500/10 border-rose-500/20 text-rose-500'} animate-in fade-in slide-in-from-top-4`}>
+          <div className={`flex items-center gap-3 p-4 rounded-2xl border ${notification.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-rose-500/10 border-rose-500/20 text-rose-500'} animate-in fade-in slide-in-from-top-4 duration-500`}>
             {notification.type === 'success' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
-            <span className="text-[10px] tracking-widest">{notification.msg}</span>
+            <span className="text-[10px] tracking-widest font-bold">{notification.msg}</span>
           </div>
         )}
 
-        {/* SOLDE CARD - VERSION PREMIUM DÉGRADÉ VERT */}
-        <div className="bg-linear-to-br from-slate-900 via-slate-900 to-emerald-900/30 p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden shadow-2xl">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Wallet size={80} />
-          </div>
-          <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2">Solde Disponible</p>
-          <div className="flex items-baseline gap-2">
-            {/* Dégradé de texte premium sur le montant */}
-            <h2 className="text-5xl tracking-tighter bg-linear-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
-              {availableBalance.toLocaleString()}
-            </h2>
-            <span className="text-xs text-emerald-500/50">HTG</span>
+        {/* SOLDE CARD - VERSION "ALIVE" (POINT 3 DU RAPPORT) */}
+        <div className="group bg-linear-to-br from-slate-900 via-slate-900 to-emerald-950/40 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl transition-all duration-500 hover:border-emerald-500/30 hover:shadow-emerald-500/10">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:rotate-12 transition-transform duration-700">
+            <TrendingUp size={80} className="text-emerald-500" />
           </div>
           
-          {profile?.locked_balance > 0 && (
-            <p className="mt-4 text-[9px] text-amber-500 bg-amber-500/10 py-2 px-3 rounded-xl inline-block not-italic border border-amber-500/10">
-              ⚠️ {profile.locked_balance} HTG en attente de traitement
-            </p>
-          )}
+          <div className="relative z-10">
+            <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 font-bold">Solde Disponible</p>
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-5xl tracking-tighter bg-linear-to-r from-white via-emerald-400 to-emerald-600 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                {availableBalance.toLocaleString()}
+              </h2>
+              <span className="text-xs text-emerald-500/70 font-black">HTG</span>
+            </div>
+            
+            {profile?.locked_balance > 0 && (
+              <div className="mt-4 flex items-center gap-2 text-[9px] text-amber-500 bg-amber-500/10 py-2 px-3 rounded-xl border border-amber-500/20 w-fit animate-pulse">
+                <span>⚠️ {profile.locked_balance} HTG bloqués</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Effet visuel de fond */}
+          <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors" />
         </div>
 
         {/* ACTIONS PRINCIPALES */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-3 shadow-[0_10px_30px_rgba(16,185,129,0.2)] active:scale-95 transition-all">
-            <Plus size={28} />
-            <span className="text-xs tracking-widest font-black">Dépôt</span>
+          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-3 shadow-[0_10px_30px_rgba(16,185,129,0.3)] active:scale-90 transition-all active:brightness-110">
+            <Plus size={28} strokeWidth={3} />
+            <span className="text-[10px] tracking-[0.2em] font-black uppercase">Dépôt</span>
           </Link>
-          {/* VERSION ROSE/ROUGE POUR LE RETRAIT */}
-          <Link href="/client/finance" className="bg-rose-500/10 p-6 rounded-4xl border border-rose-500/20 flex flex-col items-center gap-3 active:scale-95 transition-all group">
-            <ArrowDownCircle size={28} className="text-rose-500 transition-transform group-hover:scale-110" />
-            <span className="text-xs tracking-widest font-black text-rose-500">Retrait</span>
+          <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-3 active:scale-90 transition-all hover:bg-rose-500/10 hover:border-rose-500/20 group">
+            <ArrowDownCircle size={28} className="text-rose-500 transition-transform group-active:translate-y-1" />
+            <span className="text-[10px] tracking-[0.2em] font-black text-slate-400 group-hover:text-rose-500 uppercase">Retrait</span>
           </Link>
         </div>
 
         {/* ACCÈS JEU RAPIDE */}
-        <Link href="/client/play" className="block bg-slate-900/50 p-6 rounded-4xl border border-white/5 relative overflow-hidden group">
+        <Link href="/client/play" className="block bg-slate-900/50 p-6 rounded-4xl border border-white/5 relative overflow-hidden group active:scale-[0.98] transition-all">
           <div className="flex justify-between items-center relative z-10">
             <div>
-              <h3 className="text-lg">Jouer une mise</h3>
-              <p className="text-[9px] text-slate-500 tracking-widest">Sessions live en cours</p>
+              <h3 className="text-lg font-black tracking-tight">Jouer une mise</h3>
+              <p className="text-[9px] text-slate-500 tracking-[0.2em] font-bold">Sessions live actives</p>
             </div>
-            <ArrowRightCircle className="text-emerald-500 group-hover:translate-x-2 transition-transform" size={32} />
+            <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center group-hover:bg-emerald-500 transition-colors">
+              <ArrowRightCircle className="text-emerald-500 group-hover:text-slate-950 transition-all" size={24} />
+            </div>
           </div>
+          {/* Lueur d'accentuation */}
+          <div className="absolute top-0 right-0 w-full h-full bg-linear-to-r from-transparent to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
         </Link>
       </div>
 
       {/* NAV BAS DE PAGE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-4xl">
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/play" icon={<PlayCircle size={22}/>} label="Jouer" active={pathname === '/client/play'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
@@ -156,11 +185,15 @@ export default function ClientHome() {
 
 function NavLink({ href, icon, label, active }: any) {
   return (
-    <Link href={href} className={`flex flex-col items-center gap-1.5 ${active ? 'text-emerald-500' : 'text-slate-500'}`}>
-      <div className={active ? 'scale-110 transition-transform' : ''}>
+    <Link 
+      href={href} 
+      className={`flex flex-col items-center gap-1.5 transition-all duration-300 ${active ? 'text-emerald-400' : 'text-slate-600 hover:text-slate-400'}`}
+    >
+      <div className={`${active ? 'scale-110 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]' : ''} transition-transform`}>
         {icon}
       </div>
-      <span className="text-[8px] font-bold tracking-tighter">{label}</span>
+      <span className={`text-[8px] font-black tracking-tighter ${active ? 'opacity-100' : 'opacity-60'}`}>{label}</span>
+      {active && <div className="w-1 h-1 bg-emerald-500 rounded-full mt-0.5 animate-pulse" />}
     </Link>
   );
 }
