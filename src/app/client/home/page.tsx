@@ -5,12 +5,13 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  Plus, ArrowDownCircle, Wallet, Loader2, 
+  Plus, ArrowDownCircle, Loader2, 
   Home, PlayCircle, History, MessagesSquare, 
-  User, Bell, ArrowRightCircle, CheckCircle2, XCircle, TrendingUp
+  User, Bell, ArrowRightCircle, CheckCircle2, XCircle, TrendingUp,
+  Gamepad2, Sparkles
 } from 'lucide-react';
 
-// --- COMPOSANT LOGO CHIF-PAM ---
+// --- COMPOSANT LOGO CHIF-PAM (IDENTITÉ VISUELLE POINT 4) ---
 const LogoSmall = () => (
   <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
@@ -103,7 +104,7 @@ export default function ClientHome() {
               Salut, <span className="text-emerald-500">@{profile?.username || 'Joueur'}</span>
             </h1>
           </div>
-          <div className="relative p-2 bg-white/5 rounded-full border border-white/5">
+          <div className="relative p-2 bg-white/5 rounded-full border border-white/5 transition-transform active:scale-90">
             <Bell size={20} className={notification ? "text-emerald-500 animate-bounce" : "text-slate-500"} />
             {notification && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full shadow-[0_0_10px_#f43f5e]"></span>}
           </div>
@@ -118,13 +119,13 @@ export default function ClientHome() {
         )}
 
         {/* SOLDE CARD - VERSION "ALIVE" (POINT 3 DU RAPPORT) */}
-        <div className="group bg-linear-to-br from-slate-900 via-slate-900 to-emerald-950/40 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl transition-all duration-500 hover:border-emerald-500/30 hover:shadow-emerald-500/10">
+        <div className="group bg-linear-to-br from-slate-900 via-slate-900 to-emerald-950/40 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl transition-all duration-500 hover:border-emerald-500/30 hover:shadow-emerald-500/10 active:scale-[0.98]">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:rotate-12 transition-transform duration-700">
             <TrendingUp size={80} className="text-emerald-500" />
           </div>
           
           <div className="relative z-10">
-            <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 font-bold">Solde Disponible</p>
+            <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 font-bold uppercase">Solde Disponible</p>
             <div className="flex items-baseline gap-2">
               <h2 className="text-5xl tracking-tighter bg-linear-to-r from-white via-emerald-400 to-emerald-600 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                 {availableBalance.toLocaleString()}
@@ -139,7 +140,6 @@ export default function ClientHome() {
             )}
           </div>
           
-          {/* Effet visuel de fond */}
           <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors" />
         </div>
 
@@ -155,20 +155,51 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* ACCÈS JEU RAPIDE */}
-        <Link href="/client/play" className="block bg-slate-900/50 p-6 rounded-4xl border border-white/5 relative overflow-hidden group active:scale-[0.98] transition-all">
-          <div className="flex justify-between items-center relative z-10">
-            <div>
-              <h3 className="text-lg font-black tracking-tight">Jouer une mise</h3>
-              <p className="text-[9px] text-slate-500 tracking-[0.2em] font-bold">Sessions live actives</p>
+        {/* --- NOUVELLE SECTION : MINI-JEUX (STRATÉGIQUE POINT 7) --- */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2">
+              <Gamepad2 size={18} className="text-emerald-500" />
+              <h3 className="text-[12px] tracking-[0.2em] text-slate-400">Divertissement</h3>
             </div>
-            <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center group-hover:bg-emerald-500 transition-colors">
-              <ArrowRightCircle className="text-emerald-500 group-hover:text-slate-950 transition-all" size={24} />
+            <span className="text-[8px] bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded-full animate-pulse border border-emerald-500/20">Nouveau</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {/* Loterie Live (Case Principale) */}
+            <Link href="/client/play" className="block bg-linear-to-r from-slate-900 to-slate-800 p-6 rounded-[2.5rem] border border-white/5 relative overflow-hidden group active:scale-[0.98] transition-all shadow-xl">
+              <div className="flex justify-between items-center relative z-10">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-black tracking-tight flex items-center gap-2">
+                    Loterie Live <Sparkles size={16} className="text-amber-500" />
+                  </h3>
+                  <p className="text-[9px] text-slate-500 tracking-[0.2em] font-bold">Mises rapides & Gains instantanés</p>
+                </div>
+                <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center group-hover:bg-emerald-500 transition-all duration-300">
+                  <ArrowRightCircle className="text-emerald-500 group-hover:text-slate-950 transition-all" size={28} />
+                </div>
+              </div>
+              {/* Effet de brillance au survol */}
+              <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            </Link>
+
+            {/* Placeholder pour prochains jeux (Coming Soon) */}
+            <div className="grid grid-cols-2 gap-3 opacity-60">
+              <div className="bg-slate-900/30 border border-dashed border-white/10 p-4 rounded-3xl flex flex-col items-center justify-center gap-2">
+                <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center">
+                  <span className="text-[10px]">🎰</span>
+                </div>
+                <span className="text-[8px] tracking-widest text-slate-600 font-bold">Slots</span>
+              </div>
+              <div className="bg-slate-900/30 border border-dashed border-white/10 p-4 rounded-3xl flex flex-col items-center justify-center gap-2">
+                <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center">
+                  <span className="text-[10px]">🎲</span>
+                </div>
+                <span className="text-[8px] tracking-widest text-slate-600 font-bold">Dice</span>
+              </div>
             </div>
           </div>
-          {/* Lueur d'accentuation */}
-          <div className="absolute top-0 right-0 w-full h-full bg-linear-to-r from-transparent to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </Link>
+        </div>
       </div>
 
       {/* NAV BAS DE PAGE */}
