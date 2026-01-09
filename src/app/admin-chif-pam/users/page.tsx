@@ -18,22 +18,42 @@ export default function AdminUsers() {
     setLoading(false);
   };
 
+  // --- FONCTION CORRIGÉE ET OPTIMISÉE ---
   const toggleBan = async (id: string, currentStatus: boolean) => {
     let banReason = null;
+
+    // Si on veut bannir (passer de false à true)
     if (!currentStatus) {
-      banReason = prompt("Motif du blocage (affiché au client) :");
-      if (banReason === null) return; // Annule si on ferme le prompt
+      banReason = prompt("Motif du blocage (Ex: Fraude, non-respect des règles...) :");
+      if (banReason === null) return; // Annulation si le prompt est fermé
     }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ 
-        is_banned: !currentStatus,
-        ban_reason: banReason 
-      })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          is_banned: !currentStatus,
+          ban_reason: !currentStatus ? (banReason || "Non spécifié") : null 
+        })
+        .eq('id', id);
 
-    if (!error) fetchUsers();
+      if (error) {
+        console.error("Erreur lors du changement de statut:", error.message);
+        alert("Erreur technique lors du bannissement.");
+        return;
+      }
+
+      // Mise à jour locale immédiate pour une UX fluide
+      setUsers(prevUsers => 
+        prevUsers.map(u => u.id === id 
+          ? { ...u, is_banned: !currentStatus, ban_reason: !currentStatus ? banReason : null } 
+          : u
+        )
+      );
+
+    } catch (err) {
+      console.error("Erreur inattendue:", err);
+    }
   };
 
   const adjustBalance = async (id: string) => {
@@ -44,7 +64,6 @@ export default function AdminUsers() {
     }
   };
 
-  // Recherche étendue : Numéro OU Nom (username)
   const filteredUsers = users.filter(u => 
     u.phone.includes(searchTerm) || 
     (u.username && u.username.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -71,7 +90,6 @@ export default function AdminUsers() {
         {filteredUsers.map(user => (
           <div key={user.id} className={`p-6 rounded-[2.5rem] border transition-all duration-500 ${user.is_banned ? 'bg-rose-500/5 border-rose-500/20' : 'bg-slate-900/50 border-white/5 shadow-xl'}`}>
             
-            {/* Header Profil */}
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg ${user.is_banned ? 'bg-rose-500' : 'bg-emerald-500 text-slate-950'}`}>
@@ -87,7 +105,6 @@ export default function AdminUsers() {
               </button>
             </div>
 
-            {/* Infos Détails */}
             <div className="space-y-3 mb-6">
               <div className="flex items-center gap-2 text-[9px] text-slate-500">
                 <Calendar size={12} />
@@ -105,7 +122,6 @@ export default function AdminUsers() {
               </div>
             </div>
 
-            {/* Zone Blocage */}
             {user.is_banned && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-rose-500">
@@ -126,3 +142,4 @@ export default function AdminUsers() {
     </div>
   );
 }
+
