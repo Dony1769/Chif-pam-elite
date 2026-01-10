@@ -1,47 +1,44 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
 import { 
-  ChevronLeft, Gem, Bomb, Wallet, Play, 
-  RotateCcw, Trophy, AlertTriangle, Info,
-  Volume2, VolumeX, ShieldCheck
-} from 'lucide-react';
+  ArrowLeft, Gem, Bomb, Wallet, Trophy, 
+  Settings2, ShieldCheck, RefreshCcw, Volume2 
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-// Configuration des niveaux
+// --- CONFIGURATION DES NIVEAUX ---
 const LEVELS = {
-  facile: { grid: 36, mines: 3, empties: 10, startMult: 1.15, label: 'Facile' },
-  intermediaire: { grid: 25, mines: 5, empties: 5, startMult: 1.45, label: 'Amateur' },
-  difficile: { grid: 16, mines: 5, empties: 2, startMult: 2.10, label: 'Élite' },
+  FACILE: { grid: 5, mines: 3, empty: 5, label: "Amateur", color: "text-emerald-500" },
+  INTERMEDIAIRE: { grid: 6, mines: 8, empty: 8, label: "Stratège", color: "text-blue-500" },
+  DIFFICILE: { grid: 4, mines: 6, empty: 2, label: "Élite", color: "text-rose-500" },
 };
 
-export default function MinesGame() {
+export default function MinesPage() {
   const router = useRouter();
   const [balance, setBalance] = useState(0);
-  const [bet, setBet] = useState(10);
-  const [level, setLevel] = useState<keyof typeof LEVELS>('intermediaire');
-  const [gameState, setGameState] = useState<'idle' | 'playing' | 'won' | 'lost'>('idle');
-  const [grid, setGrid] = useState<any[]>([]);
-  const [multiplier, setMultiplier] = useState(1.0);
+  const [betAmount, setBetAmount] = useState(10);
+  const [level, setLevel] = useState<keyof typeof LEVELS>("FACILE");
+  const [grid, setGrid] = useState<(string | null)[]>([]);
   const [revealed, setRevealed] = useState<number[]>([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [minesPositions, setMinesPositions] = useState<number[]>([]);
+  const [emptyPositions, setEmptyPositions] = useState<number[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [multiplier, setMultiplier] = useState(1.0);
+  const [gameOver, setGameOver] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Sons (Utilisation de sons synthétiques pour éviter les fichiers lourds)
-  const playSound = (type: 'click' | 'gem' | 'empty' | 'bomb' | 'win') => {
-    if (!soundEnabled || typeof window === 'undefined') return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'gem') { osc.frequency.setValueAtTime(880, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2); }
-    if (type === 'bomb') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5); }
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.3);
+  // --- AUDIO ENGINE ---
+  const playSound = (type: 'click' | 'win' | 'lost' | 'empty') => {
+    const sounds = {
+      click: "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3",
+      win: "https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3",
+      lost: "https://assets.mixkit.co/active_storage/sfx/2513/2513-preview.mp3",
+      empty: "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"
+    };
+    new Audio(sounds[type]).play().catch(() => {});
   };
 
   useEffect(() => { fetchBalance(); }, []);
@@ -49,188 +46,182 @@ export default function MinesGame() {
   const fetchBalance = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data } = await supabase.from('profiles').select('balance').eq('id', user.id).single();
+      const { data } = await supabase.from("profiles").select("balance").eq("id", user.id).single();
       setBalance(data?.balance || 0);
     }
   };
 
   const startGame = async () => {
-    if (bet > balance || bet <= 0) return alert("Solde insuffisant");
+    if (betAmount > balance || betAmount <= 0) return alert("Solde insuffisant");
+    
     setLoading(true);
+    const config = LEVELS[level];
+    const totalCells = config.grid * config.grid;
     
-    // Initialisation de la grille locale (les mines sont placées aléatoirement)
-    const currentLevel = LEVELS[level];
-    let newGrid = Array(currentLevel.grid).fill('gem');
-    
-    // Placer les mines
-    let minesPlaced = 0;
-    while (minesPlaced < currentLevel.mines) {
-      let idx = Math.floor(Math.random() * currentLevel.grid);
-      if (newGrid[idx] !== 'mine') { newGrid[idx] = 'mine'; minesPlaced++; }
-    }
-    
-    // Placer les cases vides
-    let emptiesPlaced = 0;
-    while (emptiesPlaced < currentLevel.empties) {
-      let idx = Math.floor(Math.random() * currentLevel.grid);
-      if (newGrid[idx] === 'gem') { newGrid[idx] = 'empty'; emptiesPlaced++; }
-    }
+    // Génération aléatoire des mines et cases vides
+    const positions = Array.from({ length: totalCells }, (_, i) => i);
+    const shuffled = positions.sort(() => Math.random() - 0.5);
+    const mines = shuffled.slice(0, config.mines);
+    const empty = shuffled.slice(config.mines, config.mines + config.empty);
 
-    // Débit du solde (Simulation via UI, le trigger SQL fera le reste en DB)
-    setBalance(prev => prev - bet);
-    setGrid(newGrid);
+    setMinesPositions(mines);
+    setEmptyPositions(empty);
     setRevealed([]);
-    setMultiplier(currentLevel.startMult);
-    setGameState('playing');
+    setMultiplier(1.0);
+    setIsPlaying(true);
+    setGameOver(false);
     setLoading(false);
     playSound('click');
+
+    // Débit du solde via ta table SQL existante (Trigger gérera le reste)
+    await supabase.from("mines_games").insert([{
+      user_id: (await supabase.auth.getUser()).data.user?.id,
+      bet_amount: betAmount,
+      mines_count: config.mines,
+      mine_positions: mines,
+      is_active: true
+    }]);
   };
 
-  const handleTileClick = (idx: number) => {
-    if (gameState !== 'playing' || revealed.includes(idx)) return;
+  const handleCellClick = (index: number) => {
+    if (!isPlaying || revealed.includes(index) || gameOver) return;
 
-    const content = grid[idx];
-    setRevealed(prev => [...prev, idx]);
-
-    if (content === 'mine') {
-      setGameState('lost');
-      playSound('bomb');
-    } else if (content === 'empty') {
-      playSound('click');
-      // Les cases vides ne montent pas le multiplicateur mais maintiennent le jeu
+    if (minesPositions.includes(index)) {
+      setGameOver(true);
+      setIsPlaying(false);
+      playSound('lost');
+      // Perte automatique gérée par le trigger SQL
+    } else if (emptyPositions.includes(index)) {
+      setRevealed([...revealed, index]);
+      playSound('empty'); // Son neutre, pas d'augmentation de multiplicateur
     } else {
-      setMultiplier(prev => prev + (level === 'difficile' ? 0.5 : 0.15));
-      playSound('gem');
+      const newMultiplier = multiplier + (level === "DIFFICILE" ? 0.8 : 0.3);
+      setMultiplier(Number(newMultiplier.toFixed(2)));
+      setRevealed([...revealed, index]);
+      playSound('win');
     }
   };
 
   const cashOut = async () => {
-    if (gameState !== 'playing' || revealed.length === 0) return;
-    setLoading(true);
-    const gain = Math.floor(bet * multiplier);
-    
-    // Logique Supabase pour mettre à jour le gain réel
-    // (A faire ici : Appel à ta table mines_games avec status 'won')
-    
-    setGameState('won');
-    setBalance(prev => prev + gain);
+    if (!isPlaying || gameOver) return;
+    setIsPlaying(false);
+    setGameOver(true);
     playSound('win');
-    setLoading(false);
+
+    const winAmount = betAmount * multiplier;
+    // Mise à jour via Supabase (le trigger handle_game_transaction fera le crédit)
+    await supabase.from("mines_games")
+      .update({ is_won: true, multiplier: multiplier, is_active: false })
+      .eq("is_active", true);
+    
+    fetchBalance();
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-4 font-sans italic uppercase">
-      {/* HEADER PRO */}
-      <div className="flex justify-between items-center mb-6">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
-          <ChevronLeft size={24} className="text-emerald-500" />
+    <div className="min-h-screen bg-[#020617] text-white p-4 pb-24 font-sans italic uppercase">
+      {/* HEADER NAVIGATION */}
+      <div className="flex items-center justify-between mb-8">
+        <button onClick={() => router.back()} className="p-3 bg-slate-900 rounded-2xl border border-white/5 active:scale-90 transition-all">
+          <ArrowLeft size={20} className="text-emerald-500" />
         </button>
-        <div className="flex items-center gap-2 bg-slate-900 px-4 py-2 rounded-2xl border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
-          <Wallet size={16} className="text-emerald-500" />
-          <span className="text-sm font-black tracking-tighter">{balance.toLocaleString()} HTG</span>
+        <div className="flex flex-col items-end">
+          <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-2xl border border-emerald-500/20">
+            <Wallet size={16} className="text-emerald-500" />
+            <span className="text-sm font-black tracking-tighter">{balance.toLocaleString()} HTG</span>
+          </div>
         </div>
-        <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-3 bg-white/5 rounded-2xl">
-          {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-        </button>
       </div>
 
-      {/* SÉLECTEUR DE NIVEAU */}
-      {gameState === 'idle' && (
-        <div className="grid grid-cols-3 gap-2 mb-6">
-          {(Object.keys(LEVELS) as Array<keyof typeof LEVELS>).map((l) => (
-            <button key={l} onClick={() => setLevel(l)} className={`py-3 rounded-xl text-[10px] border transition-all ${level === l ? 'bg-emerald-500 text-slate-950 border-emerald-500' : 'bg-slate-900 border-white/5 text-slate-500'}`}>
-              {LEVELS[l].label}
-            </button>
-          ))}
+      {/* STATS DU JEU */}
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="bg-slate-900/50 p-4 rounded-3xl border border-white/5 flex flex-col items-center">
+          <span className="text-[10px] text-slate-500 mb-1">Multiplicateur</span>
+          <span className="text-2xl text-emerald-500 font-black">{multiplier}x</span>
         </div>
-      )}
-
-      {/* ZONE DE JEU */}
-      <div className="bg-slate-900/50 rounded-[2.5rem] border border-white/5 p-6 backdrop-blur-xl relative overflow-hidden">
-        <div className="flex justify-between items-center mb-6">
-          <div className="space-y-1">
-            <h2 className="text-xs text-slate-500 tracking-widest">Multiplicateur</h2>
-            <p className="text-4xl font-black text-emerald-500">{multiplier.toFixed(2)}x</p>
-          </div>
-          {gameState === 'playing' && (
-            <button onClick={cashOut} className="px-6 py-3 bg-emerald-500 text-slate-950 rounded-2xl font-black animate-pulse shadow-lg shadow-emerald-500/20">
-              CASH OUT
-            </button>
-          )}
+        <div className="bg-slate-900/50 p-4 rounded-3xl border border-white/5 flex flex-col items-center">
+          <span className="text-[10px] text-slate-500 mb-1">Gain Potentiel</span>
+          <span className="text-2xl text-white font-black">{(betAmount * multiplier).toFixed(0)}</span>
         </div>
+      </div>
 
-        {/* GRILLE DYNAMIQUE */}
-        <div className={`grid gap-2 mx-auto`} style={{ 
-          gridTemplateColumns: `repeat(${Math.sqrt(LEVELS[level].grid)}, minmax(0, 1fr))` 
-        }}>
-          {Array(LEVELS[level].grid).fill(null).map((_, i) => (
+      {/* GRILLE DYNAMIQUE */}
+      <div className="flex justify-center mb-8">
+        <div 
+          className="grid gap-2 p-3 bg-slate-900/30 rounded-[2.5rem] border border-white/5 backdrop-blur-xl"
+          style={{ gridTemplateColumns: `repeat(${LEVELS[level].grid}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: LEVELS[level].grid * LEVELS[level].grid }).map((_, i) => (
             <button
               key={i}
-              onClick={() => handleTileClick(i)}
-              disabled={gameState !== 'playing' || revealed.includes(i)}
-              className={`aspect-square rounded-xl border-2 transition-all duration-300 flex items-center justify-center
-                ${revealed.includes(i) 
-                  ? grid[i] === 'mine' ? 'bg-rose-500 border-rose-400 shadow-lg shadow-rose-500/20' 
-                  : grid[i] === 'empty' ? 'bg-slate-800 border-white/10 opacity-40'
-                  : 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/20'
-                : 'bg-slate-800 border-white/5 hover:border-emerald-500/30'}`}
+              onClick={() => handleCellClick(i)}
+              className={`
+                w-12 h-12 md:w-16 md:h-16 rounded-2xl transition-all duration-300 flex items-center justify-center
+                ${revealed.includes(i) ? "bg-slate-800" : "bg-slate-800/40 hover:bg-slate-700 active:scale-90"}
+                ${gameOver && minesPositions.includes(i) ? "bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]" : ""}
+                border border-white/5
+              `}
             >
               {revealed.includes(i) && (
-                <>
-                  {grid[i] === 'mine' && <Bomb size={20} className="text-white animate-bounce" />}
-                  {grid[i] === 'gem' && <Gem size={20} className="text-white" />}
-                  {grid[i] === 'empty' && <div className="w-2 h-2 rounded-full bg-slate-600" />}
-                </>
+                emptyPositions.includes(i) ? null : <Gem className="text-emerald-500 animate-in zoom-in" size={20} />
               )}
+              {gameOver && minesPositions.includes(i) && <Bomb size={20} className="text-slate-950 animate-bounce" />}
             </button>
           ))}
         </div>
       </div>
 
-      {/* CONTRÔLES BAS */}
-      <div className="mt-8 space-y-4">
-        <div className="flex items-center gap-4 bg-slate-900 p-4 rounded-3xl border border-white/5">
-          <div className="flex-1">
-            <p className="text-[8px] text-slate-500 mb-1 px-2">Montant de la mise</p>
-            <input 
-              type="number" 
-              value={bet} 
-              onChange={(e) => setBet(Number(e.target.value))}
-              disabled={gameState === 'playing'}
-              className="bg-transparent text-xl font-black w-full px-2 outline-none"
-            />
+      {/* CONTRÔLES PREMIUM */}
+      <div className="space-y-6">
+        {/* Sélecteur de Niveau */}
+        {!isPlaying && (
+          <div className="flex gap-2 p-1 bg-slate-900 rounded-2xl border border-white/5">
+            {Object.keys(LEVELS).map((lvl) => (
+              <button
+                key={lvl}
+                onClick={() => setLevel(lvl as any)}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black transition-all ${level === lvl ? "bg-emerald-500 text-slate-950 shadow-lg" : "text-slate-500"}`}
+              >
+                {LEVELS[lvl as keyof typeof LEVELS].label}
+              </button>
+            ))}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setBet(b => b/2)} className="px-3 py-2 bg-white/5 rounded-xl text-[10px]">/2</button>
-            <button onClick={() => setBet(b => b*2)} className="px-3 py-2 bg-white/5 rounded-xl text-[10px]">x2</button>
-          </div>
+        )}
+
+        {/* Input Mise */}
+        <div className="relative">
+          <input 
+            type="number" 
+            value={betAmount} 
+            onChange={(e) => setBetAmount(Number(e.target.value))}
+            disabled={isPlaying}
+            className="w-full bg-slate-900 border border-white/10 rounded-3xl p-5 text-center font-black text-xl outline-none focus:border-emerald-500 transition-all"
+            placeholder="Mise HTG"
+          />
+          <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"><Settings2 size={18} /></div>
         </div>
 
-        <button 
-          onClick={gameState === 'idle' ? startGame : () => setGameState('idle')}
-          disabled={loading}
-          className={`w-full py-6 rounded-[2rem] font-black text-lg flex items-center justify-center gap-3 transition-all active:scale-95
-            ${gameState === 'playing' ? 'bg-slate-800 text-slate-500 border border-white/5' : 'bg-emerald-500 text-slate-950 shadow-xl shadow-emerald-500/20'}`}
-        >
-          {gameState === 'playing' ? <RotateCcw size={24} /> : <Play size={24} />}
-          {gameState === 'playing' ? 'Abandonner' : 'Lancer la Mine'}
-        </button>
-      </div>
-
-      {/* MODAL FIN DE PARTIE */}
-      {gameState === 'lost' && (
-        <div className="fixed inset-0 bg-[#020617]/95 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in zoom-in">
-          <div className="bg-slate-900 border border-rose-500/30 p-10 rounded-[3rem] text-center space-y-6 shadow-2xl">
-            <div className="w-20 h-20 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto">
-              <AlertTriangle size={40} className="text-rose-500" />
+        {/* Bouton Action */}
+        {!isPlaying ? (
+          <button 
+            onClick={startGame}
+            disabled={loading}
+            className="w-full bg-emerald-500 text-slate-950 py-6 rounded-[2rem] font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-3"
+          >
+            {loading ? <RefreshCcw className="animate-spin" /> : <>C'est parti <ShieldCheck /></>}
+          </button>
+        ) : (
+          <button 
+            onClick={cashOut}
+            className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 py-6 rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all flex flex-col items-center leading-none"
+          >
+            <span className="text-[10px] opacity-70 mb-1">Récupérer les gains</span>
+            <div className="flex items-center gap-2">
+              <span>{(betAmount * multiplier).toFixed(0)} HTG</span>
+              <Trophy size={20} />
             </div>
-            <h3 className="text-3xl font-black italic">Mine Explosée !</h3>
-            <p className="text-slate-500 text-sm italic">Patience est mère de sûreté. <br/>Réessaie avec sagesse.</p>
-            <button onClick={() => setGameState('idle')} className="w-full py-4 bg-white/5 rounded-2xl font-black">Réessayer</button>
-          </div>
-        </div>
-      )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
-
