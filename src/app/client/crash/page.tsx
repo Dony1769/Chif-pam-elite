@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Sprout, Leaf, ChevronLeft, ShieldCheck, TrendingUp, Wallet, Loader2 } from 'lucide-react';
+import { Sprout, Leaf, ChevronLeft, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function GrowthGame() {
@@ -13,6 +13,32 @@ export default function GrowthGame() {
   const [loading, setLoading] = useState(false);
   const growthInterval = useRef<NodeJS.Timeout | null>(null);
 
+  // Système de sons intégré
+  const playSound = (type: 'start' | 'collect' | 'crash') => {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'start') {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+    } else if (type === 'collect') {
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.2);
+    } else {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(50, ctx.currentTime + 0.3);
+    }
+    
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  };
+
   const startGrowth = async () => {
     if (bet < 10 || loading) return;
     setLoading(true);
@@ -21,7 +47,6 @@ export default function GrowthGame() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // DÉDUCTION SÉCURISÉE
       const { data: success } = await supabase.rpc('process_game_bet', { 
         amount_to_deduct: bet,
         game_name: 'CRASH'
@@ -29,6 +54,7 @@ export default function GrowthGame() {
 
       if (!success) throw new Error("Solde insuffisant");
 
+      playSound('start');
       const seed = Math.random();
       const crashPoint = Math.max(1.01, (0.98 / (1 - seed))).toFixed(2); 
 
@@ -41,6 +67,7 @@ export default function GrowthGame() {
           if (next >= parseFloat(crashPoint)) {
             clearInterval(growthInterval.current!);
             setStatus('crashed');
+            playSound('crash');
             return parseFloat(crashPoint);
           }
           return next;
@@ -58,16 +85,23 @@ export default function GrowthGame() {
     setLoading(true);
     
     const winAmount = Math.floor(bet * multiplier);
-    await supabase.rpc('process_game_win_crash', { amount: winAmount, mult: multiplier });
-    
-    setStatus('collected');
-    setLoading(false);
+    try {
+      await supabase.rpc('process_game_win_crash', { amount: winAmount, mult: multiplier });
+      playSound('collect');
+      setStatus('collected');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black italic uppercase overflow-hidden">
       <div className="flex justify-between items-center mb-8">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all"><ChevronLeft size={24} /></button>
+        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all">
+          <ChevronLeft size={24} />
+        </button>
         <div className="text-right">
           <h1 className="text-xl text-emerald-500">Croissance Elite</h1>
           <span className="text-[7px] text-slate-500 tracking-[0.4em]">Algorithme Provably Fair</span>
@@ -94,9 +128,11 @@ export default function GrowthGame() {
           <button onClick={status === 'growing' ? collectFruits : startGrowth} disabled={loading} className={`w-full py-6 rounded-[2rem] font-black text-lg transition-all ${status === 'growing' ? 'bg-amber-500' : 'bg-emerald-500'} text-slate-950`}>
             {loading ? <Loader2 className="animate-spin mx-auto" /> : status === 'growing' ? `Récolter ${(bet * multiplier).toFixed(0)} HTG` : "Semer la graine"}
           </button>
+          {status !== 'growing' && status !== 'idle' && (
+            <button onClick={() => setStatus('idle')} className="w-full text-xs text-slate-500 pt-2">Rejouer</button>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
