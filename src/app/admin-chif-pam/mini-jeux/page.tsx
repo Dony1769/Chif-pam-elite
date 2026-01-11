@@ -25,28 +25,26 @@ export default function AdminMiniGames() {
 
   const fetchAdminStats = async () => {
     try {
-      // Extraction parallèle pour plus de rapidité
       const [minesRes, crashRes, playersRes] = await Promise.all([
         supabase.from('mines_games').select('bet_amount, is_won, multiplier'),
-        supabase.from('crash_games').select('bet_amount, status, crash_point'), // Utilisation de crash_point selon ta DB
+        supabase.from('crash_games').select('bet_amount, status, multiplier'),
         supabase.from('profiles').select('id', { count: 'exact' })
       ]);
 
-      // Logique Mines : Profit = Mise - (Mise * Multiplier si gagné)
+      // Calcul Mines (Déjà fonctionnel)
       const minesData = minesRes.data || [];
       const mV = minesData.reduce((acc, curr) => acc + (curr.bet_amount || 0), 0);
       const mP = minesData.reduce((acc, curr) => {
-        const payout = curr.is_won ? (curr.bet_amount * curr.multiplier) : 0;
+        const payout = curr.is_won ? (curr.bet_amount * (curr.multiplier || 0)) : 0;
         return acc + (curr.bet_amount - payout);
       }, 0);
 
-      // Logique Crash : Profit = Mise - (Mise * multiplier_final si 'won')
-      // Note : J'utilise multiplier ici car il est standard pour le gain
+      // Calcul Crash (CORRIGÉ)
       const crashData = crashRes.data || [];
       const cV = crashData.reduce((acc, curr) => acc + (curr.bet_amount || 0), 0);
       const cP = crashData.reduce((acc, curr) => {
-        // Un pari perdu (crash) est un profit de 100% pour la plateforme
-        const payout = curr.status === 'won' ? (curr.bet_amount * (curr.crash_point || 1)) : 0;
+        // Si 'won', le payout est mise * multiplier. Si 'lost', le payout est 0.
+        const payout = curr.status === 'won' ? (curr.bet_amount * (curr.multiplier || 0)) : 0;
         return acc + (curr.bet_amount - payout);
       }, 0);
 
@@ -58,7 +56,7 @@ export default function AdminMiniGames() {
         totalPlayers: playersRes.count || 0
       });
     } catch (error) {
-      console.error("Erreur d'analyse des données:", error);
+      console.error("Erreur Admin Stats:", error);
     } finally {
       setLoading(false);
     }
@@ -72,7 +70,6 @@ export default function AdminMiniGames() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-8 font-black italic uppercase">
-      {/* Header */}
       <div className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-4">
           <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/5 hover:bg-emerald-500 hover:text-slate-950 transition-all">
@@ -86,14 +83,12 @@ export default function AdminMiniGames() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {/* Card Profit Global */}
         <div className="bg-emerald-500 p-8 rounded-[2.5rem] text-slate-950 shadow-2xl shadow-emerald-500/20 relative overflow-hidden">
           <p className="text-[10px] font-bold opacity-70">Profit Net Global</p>
           <h2 className="text-5xl mt-2">{(stats.minesProfit + stats.crashProfit).toLocaleString()} <span className="text-sm font-medium">HTG</span></h2>
           <TrendingUp size={120} className="absolute -right-6 -bottom-6 opacity-10" />
         </div>
 
-        {/* Mines Stat */}
         <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-white/5 relative">
           <Target className="text-rose-500 mb-4" size={32} />
           <p className="text-[10px] text-slate-500">Volume Mines</p>
@@ -103,7 +98,6 @@ export default function AdminMiniGames() {
           </div>
         </div>
 
-        {/* Crash Stat */}
         <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-white/5 relative">
           <Sprout className="text-emerald-500 mb-4" size={32} />
           <p className="text-[10px] text-slate-500">Volume Crash</p>
@@ -114,7 +108,6 @@ export default function AdminMiniGames() {
         </div>
       </div>
 
-      {/* Section Intégrité */}
       <div className="bg-slate-900/50 border border-white/5 rounded-[2.5rem] p-8">
         <div className="flex items-center gap-4 mb-6">
           <ShieldAlert className="text-amber-500" size={24} />
@@ -134,4 +127,3 @@ export default function AdminMiniGames() {
     </div>
   );
 }
-
