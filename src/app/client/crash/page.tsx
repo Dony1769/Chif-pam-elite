@@ -13,30 +13,18 @@ export default function GrowthGame() {
   const [loading, setLoading] = useState(false);
   const growthInterval = useRef<NodeJS.Timeout | null>(null);
 
-  // Système de sons intégré
-  const playSound = (type: 'start' | 'collect' | 'crash') => {
+  const playSound = (freq: number, type: OscillatorType = 'sine', duration = 0.2) => {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'start') {
-      osc.frequency.setValueAtTime(440, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
-    } else if (type === 'collect') {
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.2);
-    } else {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(100, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(50, ctx.currentTime + 0.3);
-    }
-    
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    g.gain.setValueAtTime(0.1, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.connect(g);
+    g.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime + 0.3);
+    osc.stop(ctx.currentTime + duration);
   };
 
   const startGrowth = async () => {
@@ -47,27 +35,30 @@ export default function GrowthGame() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
+      // Déduction du solde dans 'profiles'
       const { data: success } = await supabase.rpc('process_game_bet', { 
         amount_to_deduct: bet,
         game_name: 'CRASH'
       });
 
-      if (!success) throw new Error("Solde insuffisant");
+      if (!success) {
+        alert("Solde insuffisant !");
+        setLoading(false);
+        return;
+      }
 
-      playSound('start');
-      const seed = Math.random();
-      const crashPoint = Math.max(1.01, (0.98 / (1 - seed))).toFixed(2); 
-
+      const crashPoint = Math.max(1.01, (0.99 / (1 - Math.random()))).toFixed(2);
       setStatus('growing');
       setMultiplier(1.0);
+      playSound(523.25);
 
       growthInterval.current = setInterval(() => {
         setMultiplier(prev => {
           const next = prev + (0.01 * Math.pow(prev, 0.5));
           if (next >= parseFloat(crashPoint)) {
-            clearInterval(growthInterval.current!);
+            if (growthInterval.current) clearInterval(growthInterval.current);
             setStatus('crashed');
-            playSound('crash');
+            playSound(150, 'sawtooth', 0.5);
             return parseFloat(crashPoint);
           }
           return next;
@@ -84,16 +75,14 @@ export default function GrowthGame() {
     clearInterval(growthInterval.current);
     setLoading(true);
     
-    const winAmount = Math.floor(bet * multiplier);
     try {
+      const winAmount = Math.floor(bet * multiplier);
       await supabase.rpc('process_game_win_crash', { amount: winAmount, mult: multiplier });
-      playSound('collect');
+      playSound(1046.50, 'sine', 0.4);
       setStatus('collected');
     } catch (e) {
       console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -113,9 +102,8 @@ export default function GrowthGame() {
           <h2 className={`text-7xl tracking-tighter z-10 transition-all duration-75 ${status === 'crashed' ? 'text-rose-500 scale-110' : 'text-white'}`}>
             {multiplier.toFixed(2)}<span className="text-2xl text-emerald-500 uppercase not-italic">x</span>
           </h2>
-
           <div className="absolute bottom-0 w-full flex justify-center">
-            <div style={{ height: status === 'idle' ? '20px' : `${Math.min(150 * (multiplier / 5), 200)}px`, transition: 'height 0.1s linear' }} className={`w-2 bg-emerald-500 rounded-t-full relative ${status === 'crashed' ? 'opacity-30' : 'opacity-100'}`}>
+            <div style={{ height: status === 'idle' ? '20px' : `${Math.min(150 * (multiplier / 5), 200)}px` }} className={`w-2 bg-emerald-500 rounded-t-full relative transition-all duration-100 ${status === 'crashed' ? 'bg-rose-900 opacity-50' : 'opacity-100'}`}>
               <Leaf className="absolute -left-6 top-10 text-emerald-400 rotate-[-45deg]" size={24} />
               <Leaf className="absolute -right-6 top-20 text-emerald-600 rotate-[45deg]" size={24} />
               <Sprout className="absolute -top-8 -left-3 text-emerald-300" size={32} />
@@ -124,13 +112,11 @@ export default function GrowthGame() {
         </div>
 
         <div className="w-full bg-slate-900/80 p-6 rounded-[3rem] border border-white/5 space-y-4 shadow-2xl backdrop-blur-md">
-          <input type="number" value={bet} onChange={(e) => setBet(Math.max(0, Number(e.target.value)))} disabled={status === 'growing'} className="w-full bg-slate-950 p-5 rounded-2xl border border-white/5 outline-none text-2xl text-center text-emerald-500" />
-          <button onClick={status === 'growing' ? collectFruits : startGrowth} disabled={loading} className={`w-full py-6 rounded-[2rem] font-black text-lg transition-all ${status === 'growing' ? 'bg-amber-500' : 'bg-emerald-500'} text-slate-950`}>
-            {loading ? <Loader2 className="animate-spin mx-auto" /> : status === 'growing' ? `Récolter ${(bet * multiplier).toFixed(0)} HTG` : "Semer la graine"}
+          <input type="number" value={bet} onChange={(e) => setBet(Math.max(10, Number(e.target.value)))} disabled={status === 'growing'} className="w-full bg-slate-950 p-5 rounded-2xl border border-white/5 outline-none text-2xl text-center text-emerald-500 font-bold" />
+          <button onClick={status === 'growing' ? collectFruits : startGrowth} disabled={loading} className={`w-full py-6 rounded-[2rem] font-black text-lg transition-all active:scale-95 ${status === 'growing' ? 'bg-amber-500' : 'bg-emerald-500'} text-slate-950`}>
+            {loading ? <Loader2 className="animate-spin mx-auto" /> : status === 'growing' ? `Récolter ${(bet * multiplier).toFixed(0)} HTG` : "Lancer la croissance"}
           </button>
-          {status !== 'growing' && status !== 'idle' && (
-            <button onClick={() => setStatus('idle')} className="w-full text-xs text-slate-500 pt-2">Rejouer</button>
-          )}
+          {status !== 'growing' && status !== 'idle' && <button onClick={() => setStatus('idle')} className="w-full text-center text-[10px] text-slate-500 uppercase tracking-widest pt-2">Réessayer</button>}
         </div>
       </div>
     </div>
