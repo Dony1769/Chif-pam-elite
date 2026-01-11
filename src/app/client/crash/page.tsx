@@ -21,10 +21,8 @@ export default function GrowthGame() {
   const [multiplier, setMultiplier] = useState(1.0);
   const [status, setStatus] = useState<'idle' | 'growing' | 'crashed' | 'collected'>('idle');
   const [loading, setLoading] = useState(false);
-  const [userBalance, setUserBalance] = useState(0); // Ajout pour le suivi réel
   const growthInterval = useRef<NodeJS.Timeout | null>(null);
 
-  // Nettoyage de l'intervalle si on quitte la page
   useEffect(() => {
     return () => {
       if (growthInterval.current) clearInterval(growthInterval.current);
@@ -45,8 +43,6 @@ export default function GrowthGame() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // 1. Logique Provably Fair (Côté Client pour l'affichage, mais normalement géré par le serveur)
-      // Note: Dans une version finale, appelle une Edge Function ici.
       const seed = Math.random();
       const crashPoint = Math.max(1, (0.99 / (1 - seed))).toFixed(2); 
 
@@ -56,7 +52,6 @@ export default function GrowthGame() {
 
       growthInterval.current = setInterval(() => {
         setMultiplier(prev => {
-          // Accélération basée sur le multiplicateur actuel
           const increment = 0.01 * Math.pow(prev, 0.5); 
           const next = prev + increment;
           
@@ -79,13 +74,8 @@ export default function GrowthGame() {
     if (status !== 'growing' || !growthInterval.current) return;
     
     clearInterval(growthInterval.current);
-    const finalMultiplier = multiplier;
     setStatus('collected');
     playSound(SOUNDS.collect);
-
-    // TODO: Appel Supabase pour enregistrer le gain
-    // const gain = bet * finalMultiplier;
-    // await supabase.rpc('add_balance', { amount: gain });
   };
 
   return (
@@ -173,6 +163,11 @@ export default function GrowthGame() {
           )}
         </div>
 
-        <div className="mt-8 flex gap-8 opacity-30">
+        <div className="mt-8 flex gap-8 opacity-30 pb-10">
            <div className="flex flex-col items-center"><ShieldCheck size={20} /><span className="text-[8px] mt-1">Sécurisé</span></div>
            <div className="flex flex-col items-center"><TrendingUp size={20} /><span className="text-[8px] mt-1">Elite</span></div>
+        </div>
+      </div>
+    </div>
+  );
+}
