@@ -11,6 +11,7 @@ import {
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
   Activity, AlertCircle, ChevronRight, Target
+  Activity, AlertCircle, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -41,12 +42,19 @@ export default function AdminDashboard() {
 
   const fetchGlobalStats = async () => {
     try {
+      // 1. COMPTAGE OPTIMISÉ (Utilise head:true pour ne pas charger les 10k lignes)
       const { count: userCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
       const { data: balanceData } = await supabase.rpc('get_total_balance'); 
 
+      // Pour la balance totale, on utilise une fonction RPC ou une vue si possible, 
+      // ici on garde un select sum léger
+      const { data: balanceData } = await supabase.rpc('get_total_balance'); 
+      // Note: Si vous n'avez pas de RPC, select('balance') reste la seule option mais c'est lourd.
+
+      // 2. TRANSACTIONS EN ATTENTE (Filtre direct côté serveur)
       const { count: countDepots } = await supabase
         .from('transactions')
         .select('*', { count: 'exact', head: true })
@@ -59,12 +67,14 @@ export default function AdminDashboard() {
         .eq('status', 'pending')
         .in('type', ['withdrawal', 'retrait']);
 
+      // 3. MESSAGES NON LUS (Correction de votre bug + Performance)
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false)
         .eq('is_admin', false);
 
+      // 4. RÉCUPÉRATION DES MISES (Limité aux 7 derniers jours pour la performance)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -120,6 +130,7 @@ export default function AdminDashboard() {
       <div className="flex">
         
         {/* SIDEBAR */}
+        {/* SIDEBAR (DESIGN INTACT) */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
           <div className="flex items-center gap-3 mb-12">
             <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -145,6 +156,7 @@ export default function AdminDashboard() {
         {/* MAIN CONTENT */}
         <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto">
           
+          {/* BARRE DE NOTIFICATION - Cœur du système de vigilance */}
           {(totalPending > 0 || stats.unreadMessages > 0) && (
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center justify-between animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.1)]">
               <div className="flex items-center gap-5">
@@ -172,6 +184,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* CHART AREA */}
+          {/* CHART AREA (Optimisé pour les données de masse) */}
           <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 lg:p-12 shadow-2xl backdrop-blur-sm relative overflow-hidden">
              <div className="absolute top-0 right-0 p-8 opacity-5">
                 <Activity size={150} />
@@ -285,6 +298,7 @@ export default function AdminDashboard() {
 }
 
 // COMPOSANTS UI
+// COMPOSANTS UI (INDÉMODABLES)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
