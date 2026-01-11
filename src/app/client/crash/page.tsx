@@ -12,6 +12,20 @@ export default function CrashElite() {
   const [loading, setLoading] = useState(false);
   const timer = useRef<any>(null);
 
+  // Fonction utilitaire pour sauvegarder la partie dans la base de données
+  const saveGame = async (crashPoint: number, multiplier: number, gameStatus: 'won' | 'lost') => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('crash_games').insert({
+      user_id: user.id,
+      bet_amount: bet,
+      crash_point: crashPoint,
+      multiplier: multiplier,
+      status: gameStatus
+    });
+  };
+
   const playSound = (freq: number, type: OscillatorType = 'sine', duration = 0.2) => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -35,7 +49,6 @@ export default function CrashElite() {
     if (!ok) { alert("Solde insuffisant"); setLoading(false); return; }
 
     const result = Math.random();
-    // House Edge 3% (crash instantané à 1.00)
     const crashAt = result < 0.03 ? 1.0 : (0.97 / (1 - result));
     
     setStatus('running');
@@ -50,6 +63,10 @@ export default function CrashElite() {
           clearInterval(timer.current);
           setStatus('crashed');
           playSound(100, 'sawtooth', 0.6);
+          
+          // Enregistrement automatique de la perte lors du crash
+          saveGame(crashAt, 1.0, 'lost'); 
+          
           return parseFloat(crashAt.toFixed(2));
         }
         return next;
@@ -61,11 +78,16 @@ export default function CrashElite() {
     if (status !== 'running') return;
     clearInterval(timer.current);
     setLoading(true);
-    const win = Math.floor(bet * mult);
     
-    // Sécurité : Mise à jour du solde
+    const finalMult = parseFloat(mult.toFixed(2));
+    const win = Math.floor(bet * finalMult);
+    
+    // Mise à jour du solde
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.rpc('process_game_win_crash', { amount: win, mult: mult });
+    await supabase.rpc('process_game_win_crash', { amount: win, mult: finalMult });
+    
+    // Enregistrement de la victoire dans la table crash_games
+    await saveGame(finalMult, finalMult, 'won');
     
     playSound(1046.50, 'sine', 0.3);
     setStatus('collected');
@@ -116,4 +138,3 @@ export default function CrashElite() {
     </div>
   );
 }
-
