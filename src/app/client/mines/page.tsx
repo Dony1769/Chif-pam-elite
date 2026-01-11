@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Gem, Bomb, ChevronLeft, ShieldCheck, Coins, Trophy, Loader2 } from 'lucide-react';
+import { Gem, Bomb, ChevronLeft, Coins, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 const LEVELS = {
-  facile: { grid: 25, mines: 3, label: "5x5", startMult: 1.10 },
-  intermédiaire: { grid: 25, mines: 5, label: "5x5", startMult: 1.25 },
-  difficile: { grid: 25, mines: 10, label: "5x5", startMult: 1.80 }
+  facile: { grid: 25, mines: 3, startMult: 1.10 },
+  intermédiaire: { grid: 25, mines: 5, startMult: 1.25 },
+  difficile: { grid: 25, mines: 10, startMult: 1.80 }
 };
 
 export default function MinesGame() {
@@ -21,21 +21,33 @@ export default function MinesGame() {
   const [loading, setLoading] = useState(false);
   const [gameData, setGameData] = useState<any>(null);
 
+  const playSound = (isWin: boolean) => {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(isWin ? 880 : 110, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(isWin ? 1200 : 50, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  };
+
   const startGame = async () => {
     if (bet < 10 || loading) return;
     setLoading(true);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // VERIFICATION ET DEDUCTION SOLDE (RPC Sécurisé)
-      const { data: success, error: payError } = await supabase.rpc('process_game_bet', { 
+      const { data: success } = await supabase.rpc('process_game_bet', { 
         amount_to_deduct: bet,
         game_name: 'MINES'
       });
 
-      if (!success || payError) throw new Error("Solde insuffisant");
+      if (!success) throw new Error("Solde insuffisant");
 
       const positions = Array.from({ length: 25 }, (_, i) => i)
         .sort(() => Math.random() - 0.5).slice(0, LEVELS[level].mines);
@@ -62,11 +74,12 @@ export default function MinesGame() {
     if (gameState !== 'playing' || revealed.includes(index)) return;
 
     if (gameData.mine_positions.includes(index)) {
-      setGameState('ended'); // PERDU : Déjà déduit au début
+      setGameState('ended');
+      playSound(false);
     } else {
+      playSound(true);
       const newRevealed = [...revealed, index];
       setRevealed(newRevealed);
-      // Calcul multiplicateur progressif
       const prob = (25 - LEVELS[level].mines - revealed.length) / (25 - revealed.length);
       setCurrentMult(prev => parseFloat((prev * (0.97 / prob)).toFixed(2)));
     }
@@ -75,14 +88,12 @@ export default function MinesGame() {
   const cashOut = async () => {
     if (gameState !== 'playing' || revealed.length === 0) return;
     setLoading(true);
-    
     const winAmount = Math.floor(bet * currentMult);
     await supabase.rpc('process_game_win', { 
       amount_to_add: winAmount,
       game_id: gameData.id,
       final_mult: currentMult
     });
-
     setGameState('ended');
     setLoading(false);
   };
@@ -90,7 +101,9 @@ export default function MinesGame() {
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black italic uppercase">
       <div className="flex justify-between items-center mb-6">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all"><ChevronLeft size={24} /></button>
+        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all">
+          <ChevronLeft size={24} />
+        </button>
         <div className="text-right">
           <h1 className="text-xl text-emerald-500">Mines Elite</h1>
           <span className="text-[8px] text-slate-500 tracking-[0.3em]">Certifié Fair-Play</span>
@@ -108,9 +121,12 @@ export default function MinesGame() {
             <Coins className="text-emerald-500" size={20} />
             <input type="number" value={bet} onChange={(e) => setBet(Number(e.target.value))} disabled={gameState === 'playing'} className="bg-transparent flex-1 outline-none text-lg" />
           </div>
-          <button onClick={gameState === 'idle' ? startGame : cashOut} disabled={loading} className={`w-full py-5 rounded-[2rem] shadow-lg transition-all ${gameState === 'idle' ? 'bg-emerald-500 text-slate-950' : 'bg-amber-500 text-slate-950'}`}>
+          <button onClick={gameState === 'idle' ? startGame : cashOut} disabled={loading || (gameState === 'playing' && revealed.length === 0)} className={`w-full py-5 rounded-[2rem] shadow-lg transition-all ${gameState === 'idle' ? 'bg-emerald-500 text-slate-950' : 'bg-amber-500 text-slate-950'}`}>
             {loading ? <Loader2 className="animate-spin mx-auto" /> : gameState === 'idle' ? "Lancer" : `Encaisser ${(bet * currentMult).toFixed(0)} HTG`}
           </button>
+          {gameState === 'ended' && (
+            <button onClick={() => setGameState('idle')} className="w-full text-center text-xs text-slate-500">Rejouer</button>
+          )}
         </div>
 
         <div className="grid grid-cols-5 gap-2">
@@ -125,3 +141,4 @@ export default function MinesGame() {
     </div>
   );
 }
+
