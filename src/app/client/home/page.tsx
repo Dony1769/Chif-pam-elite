@@ -6,12 +6,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell, Wallet, Gamepad2, History, User as UserIcon,
   TrendingUp, Loader2, Plus, ArrowDownCircle, Sparkles, 
-  ArrowRightCircle, CheckCircle2, MessagesSquare, Home,
-  Zap, Trophy, Target, BarChart3
+  ArrowRightCircle, MessagesSquare, Home,
+  Zap, Target, BarChart3
 } from 'lucide-react';
 import Link from 'next/link';
 
-// --- VOTRE LOGO PRÉSERVÉ ---
 const LogoSmall = () => (
   <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
@@ -70,7 +69,6 @@ export default function ClientHome() {
   };
 
   const setupSubscriptions = (userId: string) => {
-    // 1. Écoute des NOTIFICATIONS (Cloche opérationnelle)
     const channelNotif = supabase.channel(`notifs-${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, 
       (payload) => {
@@ -79,7 +77,6 @@ export default function ClientHome() {
         if (window.navigator.vibrate) window.navigator.vibrate(100);
       }).subscribe();
 
-    // 2. Écoute du PROFIL (Sécurité Realtime)
     const channelProfile = supabase.channel(`profile-${userId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, 
       async (payload) => {
@@ -110,7 +107,6 @@ export default function ClientHome() {
       <div className="p-6 space-y-6">
         
         {/* HEADER */}
-        {/* HEADER - CLOCHE OPÉRATIONNELLE */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <LogoSmall />
@@ -133,47 +129,38 @@ export default function ClientHome() {
           <TrendingUp size={80} className="absolute -right-4 -bottom-4 opacity-10 text-emerald-500" />
         </div>
 
-        {/* ACTIONS */}
+        {/* ACTIONS RAPIDES */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-2 shadow-lg active:scale-95 transition-transform"><Plus size={24} /><span>Dépôt</span></Link>
-          <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-2 active:scale-95 transition-transform"><ArrowDownCircle size={24} className="text-rose-500" /><span>Retrait</span></Link>
+          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-4xl text-slate-950 flex flex-col items-center gap-2 shadow-lg active:scale-95 transition-transform font-black">
+            <Plus size={24} /><span>Dépôt</span>
+          </Link>
+          <Link href="/client/finance" className="bg-slate-900 p-6 rounded-4xl border border-white/5 flex flex-col items-center gap-2 active:scale-95 transition-transform">
+            <ArrowDownCircle size={24} className="text-rose-500" /><span>Retrait</span>
+          </Link>
         </div>
 
-        {/* RAPPORTS CLIENTS */}
-        <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
-           <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-500/10 rounded-2xl"><BarChart3 size={20} className="text-blue-500"/></div>
-              <div>
-                <p className="text-[10px] text-slate-400">Rapports d'activité</p>
-                <p className="text-xs">Statistiques de jeu</p>
-              </div>
-           </div>
-           <Link href="/client/reports" className="text-blue-500 text-[10px] border-b border-blue-500/30">Détails</Link>
-        </div>
-
-        {/* JEU PRINCIPAL */}
+        {/* JEU PRINCIPAL : LOTERIE */}
         <div className="space-y-3">
-          <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Jeux Disponibles</h3>
+          <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black">Loteries Live</h3>
           <Link href="/client/play" className="block bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-[2.5rem] border border-white/5 relative group overflow-hidden">
             <div className="flex justify-between items-center relative z-10">
               <div className="space-y-1">
                 <h3 className="text-xl font-black flex items-center gap-2">Loterie Live <Sparkles size={16} className="text-amber-500" /></h3>
-                <p className="text-[9px] text-slate-500 tracking-widest">Mises rapides & Gains instantanés</p>
+                <p className="text-[9px] text-slate-500 tracking-widest lowercase italic">Mises rapides & Gains instantanés</p>
               </div>
               <ArrowRightCircle className="text-emerald-500 group-hover:translate-x-1 transition-transform" size={28} />
             </div>
             <div className="absolute top-0 right-0 p-2 bg-emerald-500/20 rounded-bl-2xl">
-                <span className="text-[8px] text-emerald-500">Ouvert</span>
+                <span className="text-[8px] text-emerald-500 font-black">Ouvert</span>
             </div>
           </Link>
         </div>
 
-        {/* JEUX D'AGILITÉ & STRATÉGIE (Mise à jour effectuée ici) */}
+        {/* MINI JEUX : AGILITÉ */}
         <div className="space-y-3">
           <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black">Agilité & Stratégie</h3>
           <div className="grid grid-cols-2 gap-4">
-            
-            {/* CRASH / CROISSANCE */}
+            {/* CROISSANCE */}
             <Link href="/client/crash" className="bg-slate-900 p-6 rounded-[2rem] border border-white/5 flex flex-col items-center gap-3 active:scale-95 transition-all group">
                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-slate-950 transition-colors">
                  <Zap size={24}/>
@@ -194,54 +181,19 @@ export default function ClientHome() {
                  <p className="text-[7px] text-slate-500 lowercase italic">Gestion du risque</p>
                </div>
             </Link>
-            
+          </div>
         </div>
 
-        {/* RAPPORTS CLIENTS (Nouvelle Section) */}
+        {/* RAPPORTS ACTIVITÉ */}
         <div className="bg-slate-900/50 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
            <div className="flex items-center gap-4">
               <div className="p-3 bg-blue-500/10 rounded-2xl"><BarChart3 size={20} className="text-blue-500"/></div>
               <div>
-                <p className="text-[10px] text-slate-400">Rapports d'activité</p>
-                <p className="text-xs">Statistiques de jeu</p>
+                <p className="text-[10px] text-slate-400 font-black uppercase">Statistiques</p>
+                <p className="text-xs font-black italic">Rapports d'activité</p>
               </div>
            </div>
-           <Link href="/client/reports" className="text-blue-500 text-[10px] border-b border-blue-500/30">Détails</Link>
-        </div>
-
-        {/* JEU PRINCIPAL */}
-        <div className="space-y-3">
-          <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Jeux Disponibles</h3>
-          <Link href="/client/play" className="block bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-[2.5rem] border border-white/5 relative group overflow-hidden">
-            <div className="flex justify-between items-center relative z-10">
-              <div className="space-y-1">
-                <h3 className="text-xl font-black flex items-center gap-2">Loterie Live <Sparkles size={16} className="text-amber-500" /></h3>
-                <p className="text-[9px] text-slate-500 tracking-widest">Mises rapides & Gains instantanés</p>
-              </div>
-              <ArrowRightCircle className="text-emerald-500 group-hover:translate-x-1 transition-transform" size={28} />
-            </div>
-            <div className="absolute top-0 right-0 p-2 bg-emerald-500/20 rounded-bl-2xl">
-                <span className="text-[8px] text-emerald-500">Ouvert</span>
-            </div>
-          </Link>
-        </div>
-
-        {/* MINI JEUX À VENIR (Nouvelles Cases) */}
-        <div className="space-y-3">
-          <h3 className="text-[10px] text-slate-500 tracking-widest px-2">Bientôt Disponible</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 flex flex-col items-center gap-3 opacity-60 grayscale group">
-               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500"><Zap size={24}/></div>
-               <span className="text-[10px] text-center">Crash Game</span>
-               <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-800 rounded-full text-[6px]">Coming</div>
-            </div>
-            
-            <div className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 flex flex-col items-center gap-3 opacity-60 grayscale">
-               <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500"><Target size={24}/></div>
-               <span className="text-[10px] text-center">Mines</span>
-               <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-800 rounded-full text-[6px]">Coming</div>
-            </div>
-          </div>
+           <Link href="/client/reports" className="text-blue-500 text-[10px] border-b border-blue-500/30 font-black">Détails</Link>
         </div>
 
       </div>
@@ -262,7 +214,8 @@ function NavLink({ href, icon, label, active }: any) {
   return (
     <Link href={href} className={`flex flex-col items-center gap-1.5 ${active ? 'text-emerald-400' : 'text-slate-600'}`}>
       {icon}
-      <span className="text-[8px] font-black tracking-tighter">{label}</span>
+      <span className="text-[8px] font-black tracking-tighter uppercase">{label}</span>
     </Link>
   );
 }
+
