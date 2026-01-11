@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Gem, Bomb, Coins, Loader2, ChevronLeft } from 'lucide-react';
+import { Gem, Bomb, Coins, Loader2, ChevronLeft, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function MinesElite() {
@@ -46,32 +46,22 @@ export default function MinesElite() {
   };
 
   const start = async () => {
-    if (bet <= 0 || loading) return;
+    if (bet < 10) return alert("Mise minimum 10 HTG");
     setLoading(true);
-    
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        alert("Session expirée. Reconnectez-vous.");
-        return;
-      }
+      if (!user) return alert("Veuillez vous connecter");
 
-      // 1. DÉDUCTION DU SOLDE
-      const { data: ok, error: rpcError } = await supabase.rpc('process_bet', { amount: bet });
-      
-      if (rpcError || !ok) {
-        alert("Solde insuffisant dans votre profil !");
+      const { data: ok } = await supabase.rpc('process_bet', { amount: bet });
+      if (!ok) {
+        alert("Solde insuffisant !");
         setLoading(false);
         return;
       }
 
-      // 2. GÉNÉRATION DES MINES
-      const pos = Array.from({ length: 25 }, (_, i) => i)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, mines);
+      const pos = Array.from({ length: 25 }, (_, i) => i).sort(() => Math.random() - 0.5).slice(0, mines);
       
-      // 3. CRÉATION DE LA PARTIE EN BASE DE DONNÉES
-      const { data, error: insertError } = await supabase.from('mines_games').insert([{
+      const { data, error } = await supabase.from('mines_games').insert([{
         user_id: user.id,
         bet_amount: bet,
         mines_count: mines,
@@ -80,23 +70,16 @@ export default function MinesElite() {
         is_active: true
       }]).select().single();
 
-      if (insertError) {
-        console.error("Détails de l'erreur d'insertion:", insertError);
-        alert("Erreur lors de la création du jeu. Contactez le support.");
-        setLoading(false);
-        return;
-      }
+      if (error) throw error;
 
-      // 4. LANCEMENT DU JEU
       setGameId(data.id);
       setMinePositions(pos);
       setRevealed([]);
-      setStatus('playing'); // Changement d'état critique
+      setStatus('playing');
       playSound(440);
-      
     } catch (err) {
-      console.error("Erreur critique:", err);
-      alert("Une erreur inattendue est survenue.");
+      console.error(err);
+      alert("Erreur technique. Vérifiez votre connexion.");
     } finally {
       setLoading(false);
     }
@@ -107,31 +90,28 @@ export default function MinesElite() {
     
     if (minePositions.includes(i)) {
       setStatus('ended');
-      playSound(150, 'sawtooth', 0.5);
+      playSound(100, 'sawtooth', 0.6);
       return;
     }
     
     const newRevealed = [...revealed, i];
     setRevealed(newRevealed);
-    playSound(600 + (newRevealed.length * 40));
+    playSound(500 + (newRevealed.length * 50));
   };
 
   const cashout = async () => {
     if (status !== 'playing' || revealed.length === 0 || loading) return;
     setLoading(true);
     try {
-      const { data: winAmount, error } = await supabase.rpc('claim_mines_win', { 
+      const { data: win, error } = await supabase.rpc('claim_mines_win', { 
         game_id: gameId, 
         current_tiles_count: revealed.length 
       });
-
       if (error) throw error;
 
-      playSound(1000, 'sine', 0.4);
+      playSound(800, 'sine', 0.5);
       setStatus('ended');
-      alert(`Félicitations ! Vous avez gagné ${winAmount.toFixed(0)} HTG`);
     } catch (err) {
-      console.error(err);
       alert("Erreur lors de l'encaissement.");
     } finally {
       setLoading(false);
@@ -139,56 +119,58 @@ export default function MinesElite() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 font-black italic uppercase select-none">
-      {/* Header */}
-      <div className="flex justify-between items-center max-w-md mx-auto mb-6">
-        <button onClick={() => router.push('/client/home')} className="p-2 bg-[#111] rounded-xl border border-white/5 active:scale-90 transition-all">
-          <ChevronLeft size={20} />
+    <div className="min-h-screen bg-[#020205] text-white p-4 font-black italic uppercase select-none flex flex-col items-center">
+      <div className="w-full max-w-md flex justify-between items-center mb-8">
+        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-75 transition-all">
+          <ChevronLeft size={24} />
         </button>
         <div className="text-right">
-          <h1 className="text-lg text-emerald-500 tracking-tighter italic">MINES ELITE</h1>
-          <p className="text-[6px] text-slate-500 tracking-[0.3em] not-italic">SÉCURISÉ & SYSTÈME PROVABLY FAIR</p>
+          <h1 className="text-2xl text-emerald-500 tracking-tighter leading-none">MINES ELITE</h1>
+          <span className="text-[7px] text-slate-500 tracking-[0.5em] not-italic">PROVABLY FAIR SYSTEM</span>
         </div>
       </div>
 
-      <div className="max-w-md mx-auto space-y-4">
+      <div className="w-full max-w-md space-y-6">
         {/* Difficultés */}
-        <div className="grid grid-cols-3 gap-2 bg-[#111] p-1.5 rounded-2xl border border-white/5 shadow-inner">
-          {(['facile', 'intermédiaire', 'difficile'] as const).map((level) => (
+        <div className="flex gap-2 p-1.5 bg-white/5 rounded-2xl border border-white/5">
+          {['facile', 'intermédiaire', 'difficile'].map((level) => (
             <button
               key={level}
-              onClick={() => setDifficulty(level)}
+              onClick={() => setDifficulty(level as any)}
               disabled={status === 'playing'}
-              className={`py-2 rounded-xl text-[10px] transition-all duration-300 ${difficulty === level ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'text-slate-500 hover:text-white'}`}
+              className={`flex-1 py-3 rounded-xl text-[10px] transition-all ${difficulty === level ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:bg-white/5'}`}
             >
               {level}
             </button>
           ))}
         </div>
 
-        {/* Mise et Actions */}
-        <div className="bg-[#0f0f0f] p-5 rounded-[2.5rem] border border-white/5 space-y-4 shadow-2xl">
-          <div className="bg-black p-4 rounded-2xl border border-white/5 flex items-center gap-3">
-            <Coins className="text-emerald-500" size={18} />
-            <input 
-              type="number" 
-              value={bet} 
-              onChange={(e) => setBet(Number(e.target.value))}
-              disabled={status === 'playing'}
-              className="bg-transparent flex-1 outline-none text-xl text-emerald-500 font-bold"
-            />
+        {/* Panneau de contrôle */}
+        <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 shadow-2xl space-y-5">
+          <div className="relative group">
+            <label className="text-[10px] text-emerald-500/50 ml-4 mb-1 block tracking-widest">MISE TOTALE (HTG)</label>
+            <div className="flex items-center gap-4 bg-black/40 p-5 rounded-2xl border border-white/10 group-focus-within:border-emerald-500/50 transition-all">
+              <Coins className="text-emerald-500" size={20} />
+              <input 
+                type="number" 
+                value={bet} 
+                onChange={(e) => setBet(Number(e.target.value))}
+                disabled={status === 'playing'}
+                className="bg-transparent flex-1 outline-none text-2xl text-emerald-500 font-bold"
+              />
+            </div>
           </div>
 
           {status === 'playing' ? (
             <button 
               onClick={cashout}
               disabled={loading || revealed.length === 0}
-              className="w-full py-5 rounded-[1.5rem] text-lg flex flex-col items-center justify-center transition-all active:scale-95 bg-amber-500 text-black font-black"
+              className="w-full py-6 rounded-3xl bg-amber-500 text-black flex flex-col items-center justify-center active:scale-95 transition-all shadow-xl shadow-amber-500/10"
             >
               {loading ? <Loader2 className="animate-spin" /> : (
                 <>
-                  <span className="text-[10px] tracking-widest opacity-80">ENCAISSER</span>
-                  <span className="text-2xl">{(bet * getMultiplier()).toFixed(0)} HTG</span>
+                  <span className="text-[10px] font-bold tracking-[0.2em]">ENCAISSER MAINTENANT</span>
+                  <span className="text-3xl">{(bet * getMultiplier()).toFixed(0)} HTG</span>
                 </>
               )}
             </button>
@@ -196,40 +178,42 @@ export default function MinesElite() {
             <button 
               onClick={start}
               disabled={loading}
-              className="w-full py-5 rounded-[1.5rem] text-lg flex items-center justify-center transition-all active:scale-95 bg-emerald-500 text-black font-black shadow-[0_10px_20px_rgba(16,185,129,0.2)]"
+              className="w-full py-6 rounded-3xl bg-emerald-500 text-black text-2xl flex items-center justify-center active:scale-95 transition-all shadow-xl shadow-emerald-500/20"
             >
-              {loading ? <Loader2 className="animate-spin" /> : "LANCER LA PARTIE"}
+              {loading ? <Loader2 className="animate-spin" /> : "JOUER"}
             </button>
           )}
         </div>
 
-        {/* Grille */}
-        <div className="grid grid-cols-5 gap-2.5 pt-2">
+        {/* Grille de jeu */}
+        <div className="grid grid-cols-5 gap-3">
           {Array.from({ length: 25 }).map((_, i) => (
             <button
               key={i}
               onClick={() => clickTile(i)}
-              className={`aspect-square rounded-2xl flex items-center justify-center transition-all duration-300 border-2 ${
+              className={`aspect-square rounded-2xl flex items-center justify-center transition-all duration-500 border-2 ${
                 revealed.includes(i) 
-                ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.25)]' 
+                ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.3)]' 
                 : status === 'ended' && minePositions.includes(i)
-                ? 'bg-rose-600 border-rose-400 scale-95 shadow-[0_0_25px_rgba(225,29,72,0.5)]'
-                : 'bg-[#121212] border-white/5 active:bg-[#181818] active:scale-90'
+                ? 'bg-rose-500 border-rose-300 scale-110 z-10 animate-bounce'
+                : 'bg-white/5 border-white/5 hover:bg-white/10 active:scale-90'
               }`}
             >
-              {revealed.includes(i) && <Gem className="text-emerald-400 w-7 h-7 animate-in zoom-in duration-300" />}
-              {status === 'ended' && minePositions.includes(i) && <Bomb className="text-black w-7 h-7" />}
+              {revealed.includes(i) && <Gem className="text-emerald-400 w-8 h-8 drop-shadow-glow animate-in zoom-in" />}
+              {status === 'ended' && minePositions.includes(i) && <Bomb className="text-black w-8 h-8" />}
             </button>
           ))}
         </div>
 
         {status === 'ended' && (
-          <button 
-            onClick={() => { setStatus('idle'); setRevealed([]); setMinePositions([]); }} 
-            className="w-full py-4 text-slate-500 text-[11px] tracking-[0.4em] hover:text-white transition-colors"
-          >
-            &gt; RECOMMENCER &lt;
-          </button>
+          <div className="text-center animate-in fade-in slide-in-from-bottom-4">
+            <button 
+              onClick={() => { setStatus('idle'); setRevealed([]); setGameId(null); }} 
+              className="px-8 py-3 bg-white/5 rounded-full text-[10px] tracking-[0.4em] text-slate-400 hover:text-white transition-all border border-white/5"
+            >
+              NOUVELLE CHANCE ?
+            </button>
+          </div>
         )}
       </div>
     </div>
