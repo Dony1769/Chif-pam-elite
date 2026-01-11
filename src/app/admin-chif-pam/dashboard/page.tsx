@@ -11,7 +11,6 @@ import {
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
   Activity, AlertCircle, ChevronRight, Target
-  Activity, AlertCircle, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
