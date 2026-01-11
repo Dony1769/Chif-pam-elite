@@ -15,12 +15,20 @@ export default function MinesElite() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // Ajuster les mines selon la difficulté choisie (Comme sur tes screens)
   useEffect(() => {
     if (difficulty === 'facile') setMines(1);
     if (difficulty === 'intermédiaire') setMines(3);
     if (difficulty === 'difficile') setMines(5);
   }, [difficulty]);
+
+  // Calcul du multiplicateur actuel (avec marge maison de 3%)
+  const getMultiplier = () => {
+    let m = 1.0;
+    for (let i = 0; i < revealed.length; i++) {
+      m = m * (0.97 / ((25 - mines - i) / (25 - i)));
+    }
+    return m;
+  };
 
   const playSound = (freq: number, type: OscillatorType = 'sine', duration = 0.1) => {
     try {
@@ -42,15 +50,12 @@ export default function MinesElite() {
     setLoading(true);
     try {
       const { data: ok, error: rpcError } = await supabase.rpc('process_bet', { amount: bet });
-      
       if (rpcError || !ok) {
-        alert("Solde insuffisant dans votre profil !"); // Message exact de tes screens
+        alert("Solde insuffisant dans votre profil !");
         setLoading(false);
         return;
       }
-
       const pos = Array.from({ length: 25 }, (_, i) => i).sort(() => Math.random() - 0.5).slice(0, mines);
-      
       const { data, error } = await supabase.from('mines_games').insert([{
         user_id: (await supabase.auth.getUser()).data.user?.id,
         bet_amount: bet,
@@ -58,16 +63,13 @@ export default function MinesElite() {
         mine_positions: pos,
         difficulty_level: difficulty
       }]).select().single();
-
       if (error) throw error;
-
       setGameId(data.id);
       setMinePositions(pos);
       setRevealed([]);
       setStatus('playing');
       playSound(440);
     } catch (err) {
-      console.error(err);
       alert("Erreur de connexion au serveur.");
     } finally {
       setLoading(false);
@@ -76,21 +78,41 @@ export default function MinesElite() {
 
   const clickTile = (i: number) => {
     if (status !== 'playing' || revealed.includes(i)) return;
-    
     if (minePositions.includes(i)) {
       setStatus('ended');
       playSound(150, 'sawtooth', 0.5);
       return;
     }
-    
     const newRevealed = [...revealed, i];
     setRevealed(newRevealed);
     playSound(600 + (newRevealed.length * 40));
   };
 
+  // NOUVELLE FONCTION : ENCAISSEMENT
+  const cashout = async () => {
+    if (status !== 'playing' || revealed.length === 0 || loading) return;
+    setLoading(true);
+    try {
+      // On utilise la fonction RPC claim_mines_win que nous avons créée en SQL
+      const { data: winAmount, error } = await supabase.rpc('claim_mines_win', { 
+        game_id: gameId, 
+        current_tiles_count: revealed.length 
+      });
+
+      if (error) throw error;
+
+      playSound(1000, 'sine', 0.4);
+      setStatus('ended');
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de l'encaissement.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-4 font-black italic uppercase select-none">
-      {/* Header */}
+    <div className="min-h-screen bg-[#020617] text-white p-4 font-black italic uppercase select-none">
       <div className="flex justify-between items-center max-w-md mx-auto mb-6">
         <button onClick={() => router.push('/client/home')} className="p-2 bg-[#111] rounded-xl border border-white/5 active:scale-90 transition-all">
           <ChevronLeft size={20} />
@@ -102,7 +124,6 @@ export default function MinesElite() {
       </div>
 
       <div className="max-w-md mx-auto space-y-4">
-        {/* Sélecteur de Difficulté (Design exact screenshot) */}
         <div className="grid grid-cols-3 gap-2 bg-[#111] p-1.5 rounded-2xl border border-white/5">
           {(['facile', 'intermédiaire', 'difficile'] as const).map((level) => (
             <button
@@ -116,7 +137,6 @@ export default function MinesElite() {
           ))}
         </div>
 
-        {/* Zone de Mise */}
         <div className="bg-[#0f0f0f] p-5 rounded-[2rem] border border-white/5 space-y-4">
           <div className="bg-black/50 p-4 rounded-2xl border border-white/5 flex items-center gap-3">
             <Coins className="text-emerald-500" size={18} />
@@ -129,16 +149,31 @@ export default function MinesElite() {
             />
           </div>
 
-          <button 
-            onClick={status === 'playing' ? () => {} : start}
-            disabled={loading}
-            className={`w-full py-5 rounded-[1.5rem] text-lg flex items-center justify-center transition-all active:scale-95 ${status === 'playing' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-emerald-500 text-black'}`}
-          >
-            {loading ? <Loader2 className="animate-spin" /> : status === 'playing' ? "JEU EN COURS..." : "JOUER"}
-          </button>
+          {/* Bouton Dynamique : Jouer ou Encaisser */}
+          {status === 'playing' ? (
+            <button 
+              onClick={cashout}
+              disabled={loading || revealed.length === 0}
+              className="w-full py-5 rounded-[1.5rem] text-lg flex flex-col items-center justify-center transition-all active:scale-95 bg-amber-500 text-black shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : (
+                <>
+                  <span className="text-xs opacity-70">ENCAISSER</span>
+                  <span>{(bet * getMultiplier()).toFixed(0)} HTG</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button 
+              onClick={start}
+              disabled={loading}
+              className="w-full py-5 rounded-[1.5rem] text-lg flex items-center justify-center transition-all active:scale-95 bg-emerald-500 text-black"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : "JOUER"}
+            </button>
+          )}
         </div>
 
-        {/* Grille de Jeu (Responsive Mobile) */}
         <div className="grid grid-cols-5 gap-2 pt-2">
           {Array.from({ length: 25 }).map((_, i) => (
             <button
@@ -163,7 +198,7 @@ export default function MinesElite() {
             onClick={() => { setStatus('idle'); setRevealed([]); }} 
             className="w-full py-3 text-slate-500 text-[10px] tracking-widest hover:text-white"
           >
-            REESSAYER
+            NOUVELLE PARTIE
           </button>
         )}
       </div>
