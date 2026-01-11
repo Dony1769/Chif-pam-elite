@@ -25,7 +25,6 @@ export default function ClientReports() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Récupération des données des deux jeux
         const [mines, crash] = await Promise.all([
           supabase.from('mines_games').select('*').eq('user_id', user.id),
           supabase.from('crash_games').select('*').eq('user_id', user.id)
@@ -34,11 +33,14 @@ export default function ClientReports() {
         const mData = mines.data || [];
         const cData = crash.data || [];
 
-        // Calculs
+        // Investissement total (Mines + Crash)
         const invested = [...mData, ...cData].reduce((acc, g) => acc + (g.bet_amount || 0), 0);
         
-        const minesWon = mData.filter(g => g.is_won).reduce((acc, g) => acc + (g.bet_amount * g.multiplier), 0);
-        const crashWon = cData.filter(g => g.status === 'won').reduce((acc, g) => acc + (g.bet_amount * (g.multiplier || 1)), 0);
+        // Gains Mines
+        const minesWon = mData.filter(g => g.is_won).reduce((acc, g) => acc + (g.bet_amount * (g.multiplier || 0)), 0);
+        
+        // Gains Crash (CORRIGÉ)
+        const crashWon = cData.filter(g => g.status === 'won').reduce((acc, g) => acc + (g.bet_amount * (g.multiplier || 0)), 0);
 
         setData({
           minesCount: mData.length,
@@ -48,7 +50,7 @@ export default function ClientReports() {
         });
 
       } catch (e) {
-        console.error(e);
+        console.error("Erreur Client Reports:", e);
       } finally {
         setLoading(false);
       }
@@ -70,16 +72,14 @@ export default function ClientReports() {
       </div>
 
       <div className="space-y-6">
-        {/* Main Card Profit */}
         <div className="bg-slate-900 rounded-[2.5rem] p-8 border border-white/5 relative overflow-hidden shadow-2xl">
           <p className="text-[10px] text-slate-500 tracking-widest mb-1 font-bold">Performance Net (HTG)</p>
           <h2 className={`text-4xl font-black ${netProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {netProfit > 0 ? '+' : ''}{netProfit.toLocaleString()}
+            {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()}
           </h2>
           <PieChart className="absolute -right-4 -bottom-4 opacity-5" size={120} />
         </div>
 
-        {/* Quick Stats Grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900/50 p-6 rounded-3xl border border-white/5">
             <TrendingUp className="text-emerald-500 mb-2" size={20} />
@@ -93,7 +93,6 @@ export default function ClientReports() {
           </div>
         </div>
 
-        {/* Game Breakdown */}
         <div className="space-y-3">
           <h3 className="text-[10px] text-slate-500 px-2 tracking-widest font-bold">Répartition des sessions</h3>
           
@@ -102,7 +101,7 @@ export default function ClientReports() {
             name="Mines Elite" 
             count={data.minesCount} 
             color="bg-rose-500" 
-            percent={data.minesCount > 0 ? 100 : 0} 
+            percent={data.minesCount > 0 ? (data.minesCount / (data.minesCount + data.crashCount) * 100) : 0} 
           />
           
           <GameStatRow 
@@ -110,7 +109,7 @@ export default function ClientReports() {
             name="Crash Game" 
             count={data.crashCount} 
             color="bg-emerald-500" 
-            percent={data.crashCount > 0 ? 100 : 0} 
+            percent={data.crashCount > 0 ? (data.crashCount / (data.minesCount + data.crashCount) * 100) : 0} 
           />
         </div>
       </div>
