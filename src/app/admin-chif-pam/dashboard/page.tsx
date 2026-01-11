@@ -41,19 +41,15 @@ export default function AdminDashboard() {
 
   const fetchGlobalStats = async () => {
     try {
-      // 1. COMPTAGE OPTIMISÉ (Utilise head:true pour ne pas charger les 10k lignes)
+      // 1. COMPTAGE UTILISATEURS
       const { count: userCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
+      // 2. RÉCUPÉRATION BALANCE (VARIABLE UNIQUE CORRIGÉE)
       const { data: balanceData } = await supabase.rpc('get_total_balance'); 
 
-      // Pour la balance totale, on utilise une fonction RPC ou une vue si possible, 
-      // ici on garde un select sum léger
-      const { data: balanceData } = await supabase.rpc('get_total_balance'); 
-      // Note: Si vous n'avez pas de RPC, select('balance') reste la seule option mais c'est lourd.
-
-      // 2. TRANSACTIONS EN ATTENTE (Filtre direct côté serveur)
+      // 3. TRANSACTIONS EN ATTENTE
       const { count: countDepots } = await supabase
         .from('transactions')
         .select('*', { count: 'exact', head: true })
@@ -66,14 +62,14 @@ export default function AdminDashboard() {
         .eq('status', 'pending')
         .in('type', ['withdrawal', 'retrait']);
 
-      // 3. MESSAGES NON LUS (Correction de votre bug + Performance)
+      // 4. MESSAGES NON LUS
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false)
         .eq('is_admin', false);
 
-      // 4. RÉCUPÉRATION DES MISES (Limité aux 7 derniers jours pour la performance)
+      // 5. CHART DATA (7 JOURS)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -129,7 +125,6 @@ export default function AdminDashboard() {
       <div className="flex">
         
         {/* SIDEBAR */}
-        {/* SIDEBAR (DESIGN INTACT) */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
           <div className="flex items-center gap-3 mb-12">
             <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -155,7 +150,7 @@ export default function AdminDashboard() {
         {/* MAIN CONTENT */}
         <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto">
           
-          {/* BARRE DE NOTIFICATION - Cœur du système de vigilance */}
+          {/* ALERTE */}
           {(totalPending > 0 || stats.unreadMessages > 0) && (
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center justify-between animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.1)]">
               <div className="flex items-center gap-5">
@@ -163,11 +158,11 @@ export default function AdminDashboard() {
                   <AlertCircle size={20} />
                 </div>
                 <span className="text-[11px] tracking-[0.2em] font-black">
-                  ALERTE OPÉRATIONNELLE : {totalPending} TRANSACTIONS & {stats.unreadMessages} MESSAGES CLIENTS EN ATTENTE
+                  ALERTE : {totalPending} TRANSACTIONS & {stats.unreadMessages} MESSAGES EN ATTENTE
                 </span>
               </div>
               <Link href="/admin-chif-pam/demandes" className="text-[10px] bg-white text-slate-950 px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-emerald-500 transition-colors">
-                OUVRIR LE CENTRE DE TRAITEMENT <ChevronRight size={14} />
+                OUVRIR <ChevronRight size={14} />
               </Link>
             </div>
           )}
@@ -175,37 +170,25 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-4xl uppercase tracking-tighter">Control <span className="text-emerald-500">Center</span></h1>
-              <p className="text-slate-500 text-[10px] tracking-[0.5em] mt-2 italic font-medium lowercase">Analyse temps réel des flux de masse</p>
             </div>
-            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all border border-white/5 shadow-xl group">
-              <RefreshCw size={20} className="group-active:rotate-180 transition-transform duration-500" />
+            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl border border-white/5 hover:bg-emerald-500 hover:text-slate-950 transition-all">
+              <RefreshCw size={20} />
             </button>
           </div>
 
-          {/* CHART AREA */}
-          {/* CHART AREA (Optimisé pour les données de masse) */}
-          <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 lg:p-12 shadow-2xl backdrop-blur-sm relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-8 opacity-5">
-                <Activity size={150} />
-             </div>
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12 relative z-10">
+          {/* CHART */}
+          <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 shadow-2xl relative overflow-hidden">
+            <div className="flex justify-between items-center mb-12 relative z-10">
               <div className="flex items-center gap-6">
-                <div className="p-5 bg-emerald-500 text-slate-950 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-                  <Activity size={32} />
-                </div>
-                <div>
-                  <h2 className="text-2xl uppercase tracking-tighter">Performance Hebdomadaire</h2>
-                  <p className="text-[10px] text-slate-500 tracking-widest lowercase not-italic">Revenus calculés sur {stats.totalUsers.toLocaleString()} profils</p>
-                </div>
+                <div className="p-5 bg-emerald-500 text-slate-950 rounded-3xl"><Activity size={32} /></div>
+                <h2 className="text-2xl">Performance</h2>
               </div>
-              <div className="bg-slate-950/80 p-6 rounded-[2rem] border border-emerald-500/20 min-w-[240px] text-right shadow-2xl">
+              <div className="bg-slate-950/80 p-6 rounded-[2rem] border border-emerald-500/20 text-right">
                 <p className={`text-3xl font-black italic ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} <span className="text-sm not-italic uppercase font-light">htg</span>
+                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} <span className="text-sm">HTG</span>
                 </p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">Solde Net de la Semaine</p>
               </div>
             </div>
-
             <div className="h-80 w-full relative z-10">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
@@ -215,78 +198,36 @@ export default function AdminDashboard() {
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '15px' }}
-                    itemStyle={{ color: '#10b981', fontWeight: 'bold', textTransform: 'uppercase' }}
-                  />
-                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
+                  <Tooltip contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '20px' }} />
+                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={4} fill="url(#colorRev)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* STAT CARDS */}
+          {/* STATS CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard title="Total Joueurs" value={stats.totalUsers.toLocaleString()} icon={<Users />} color="blue" />
-            <StatCard title="Trésorerie Globale" value={`${stats.totalBalance.toLocaleString()}`} icon={<Wallet />} color="emerald" />
-            <StatCard title="Dépôts en Attente" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
-            <StatCard title="Retraits en Attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
+            <StatCard title="Trésorerie" value={stats.totalBalance.toLocaleString()} icon={<Wallet />} color="emerald" />
+            <StatCard title="Dépôts Attente" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
+            <StatCard title="Retraits Attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* QUICK ACTIONS SECTION */}
+          {/* ACTIONS RAPIDES */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
-               <ActionCard 
-                href="/admin-chif-pam/loterie" 
-                label="Pilotage des Tirages" 
-                count="LIVE" 
-                icon={<Dices size={24}/>} 
-                color="bg-emerald-500" 
-               />
-               <ActionCard 
-                href="/admin-chif-pam/mini-jeux" 
-                label="Audit Mini-Jeux (Mines/Crash)" 
-                icon={<Target size={24}/>} 
-                color="bg-slate-900" 
-                textColor="text-emerald-500"
-                border="border-emerald-500/20"
-               />
-               <ActionCard 
-                href="/admin-chif-pam/users" 
-                label="Audit des Utilisateurs" 
-                icon={<Users size={24}/>} 
-                color="bg-blue-600" 
-                textColor="text-white"
-               />
+               <ActionCard href="/admin-chif-pam/loterie" label="Pilotage Tirages" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
+               <ActionCard href="/admin-chif-pam/mini-jeux" label="Audit Mini-Jeux" icon={<Target size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
+               <ActionCard href="/admin-chif-pam/users" label="Audit Utilisateurs" icon={<Users size={24}/>} color="bg-blue-600" textColor="text-white" />
             </div>
 
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Financial & Support</h3>
-               <ActionCard 
-                href="/admin-chif-pam/demandes" 
-                label="Validation des Flux" 
-                count={totalPending} 
-                icon={<ClipboardList size={24}/>} 
-                color="bg-white" 
-               />
+               <ActionCard href="/admin-chif-pam/demandes" label="Validation Flux" count={totalPending} icon={<ClipboardList size={24}/>} color="bg-white" />
                <div className="grid grid-cols-2 gap-4">
-                  <ActionCard 
-                    href="/admin-chif-pam/notifications" 
-                    label="Alertes" 
-                    icon={<Bell size={20}/>} 
-                    color="bg-amber-500/10" 
-                    textColor="text-amber-500"
-                    border="border-amber-500/20"
-                  />
-                  <ActionCard 
-                    href="/admin-chif-pam/chat" 
-                    label="Centre Support" 
-                    count={stats.unreadMessages} 
-                    icon={<MessageSquare size={20}/>} 
-                    color="bg-slate-800" 
-                    textColor="text-white"
-                  />
+                  <ActionCard href="/admin-chif-pam/notifications" label="Alertes" icon={<Bell size={20}/>} color="bg-amber-500/10" textColor="text-amber-500" border="border-amber-500/20" />
+                  <ActionCard href="/admin-chif-pam/chat" label="Support" count={stats.unreadMessages} icon={<MessageSquare size={20}/>} color="bg-slate-800" textColor="text-white" />
                </div>
             </div>
           </div>
@@ -297,12 +238,10 @@ export default function AdminDashboard() {
 }
 
 // COMPOSANTS UI
-// COMPOSANTS UI (INDÉMODABLES)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
-      {icon}
-      <span className="text-[10px] font-black tracking-widest">{label}</span>
+      {icon} <span className="text-[10px] font-black tracking-widest">{label}</span>
     </Link>
   );
 }
@@ -315,30 +254,28 @@ function StatCard({ title, value, icon, color }: any) {
     rose: "text-rose-500 bg-rose-500/10 border-rose-500/20",
   };
   return (
-    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden group transition-all shadow-xl`}>
+    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden shadow-xl`}>
       <div className="relative z-10">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">{title}</p>
+        <p className="text-[9px] uppercase opacity-60 mb-2">{title}</p>
         <p className="text-3xl font-black italic">{value}</p>
       </div>
-      <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-700">
-        {React.cloneElement(icon, { size: 90 })}
-      </div>
+      <div className="absolute -right-4 -bottom-4 opacity-10">{React.cloneElement(icon, { size: 90 })}</div>
     </div>
   );
 }
 
 function ActionCard({ href, label, count, icon, color, textColor = "text-slate-950", border="border-transparent" }: any) {
   return (
-    <Link href={href} className={`flex items-center justify-between p-6 ${color} ${border} border rounded-[2rem] hover:scale-[1.02] transition-all group shadow-xl`}>
+    <Link href={href} className={`flex items-center justify-between p-6 ${color} ${border} border rounded-[2rem] hover:scale-[1.02] transition-all shadow-xl`}>
       <div className="flex items-center gap-4">
         <div className="p-3 bg-black/10 rounded-xl">{icon}</div>
         <div className={textColor}>
-          <p className="text-[10px] font-black uppercase opacity-60 tracking-tighter">Accès Rapide</p>
-          <p className="text-sm font-black uppercase tracking-tight">{label}</p>
+          <p className="text-[10px] opacity-60">Accès Rapide</p>
+          <p className="text-sm font-black uppercase">{label}</p>
         </div>
       </div>
       {count !== undefined && count !== 0 && (
-        <div className={`px-4 py-2 bg-black/20 rounded-full text-[10px] ${textColor} font-black border border-black/5`}>{count}</div>
+        <div className={`px-4 py-2 bg-black/20 rounded-full text-[10px] ${textColor} font-black`}>{count}</div>
       )}
     </Link>
   );
