@@ -9,6 +9,7 @@ import {
   Loader2, ChevronLeft, Target, Sprout, Shield
 } from 'lucide-react';
 
+
 // --- COMPOSANT LOGO MINI ---
 const LogoTiny = () => (
   <svg viewBox="0 0 100 100" className="w-6 h-6 drop-shadow-[0_0_5px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
