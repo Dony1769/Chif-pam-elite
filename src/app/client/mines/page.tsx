@@ -8,7 +8,10 @@ export default function MinesElite() {
   const router = useRouter();
   const [bet, setBet] = useState(10);
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
-  const [mines, setMines] = useState(3);
+  
+  // Augmentation du nombre de mines pour la sécurité de la banque
+  const [mines, setMines] = useState(5); 
+
   const [status, setStatus] = useState<'idle' | 'playing' | 'ended'>('idle');
   const [revealed, setRevealed] = useState<number[]>([]);
   const [minePositions, setMinePositions] = useState<number[]>([]);
@@ -16,16 +19,16 @@ export default function MinesElite() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [liveWinners, setLiveWinners] = useState<any[]>([]);
 
+  // Niveaux plus stricts : 3, 5 ou 8 mines sur 25 cases
   useEffect(() => {
-    if (difficulty === 'facile') setMines(1);
-    if (difficulty === 'intermédiaire') setMines(3);
-    if (difficulty === 'difficile') setMines(5);
+    if (difficulty === 'facile') setMines(3);
+    if (difficulty === 'intermédiaire') setMines(5);
+    if (difficulty === 'difficile') setMines(8);
   }, [difficulty]);
 
-  // Récupérer les gagnants en temps réel
   useEffect(() => {
     const fetchWinners = async () => {
-      const { data } = await supabase.from('live_winners').select('*');
+      const { data } = await supabase.from('live_winners').select('*').limit(5);
       if (data) setLiveWinners(data);
     };
     fetchWinners();
@@ -33,10 +36,15 @@ export default function MinesElite() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Calcul du multiplicateur avec une marge de 6% pour la banque (0.94)
   const getMultiplier = () => {
+    if (revealed.length === 0) return 1.0;
     let m = 1.0;
+    const houseEdge = 0.94; // Protection de la banque
+    
     for (let i = 0; i < revealed.length; i++) {
-      m = m * (0.97 / ((25 - mines - i) / (25 - i)));
+      const probabilityOfWinning = (25 - mines - i) / (25 - i);
+      m = m * (houseEdge / probabilityOfWinning);
     }
     return m;
   };
@@ -71,7 +79,10 @@ export default function MinesElite() {
         return;
       }
 
-      const pos = Array.from({ length: 25 }, (_, i) => i).sort(() => Math.random() - 0.5).slice(0, mines);
+      // Mélange aléatoire des mines
+      const pos = Array.from({ length: 25 }, (_, i) => i)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, mines);
       
       const { data, error } = await supabase.from('mines_games').insert([{
         user_id: user.id,
@@ -114,6 +125,7 @@ export default function MinesElite() {
     if (status !== 'playing' || revealed.length === 0 || loading) return;
     setLoading(true);
     try {
+      // Le calcul final du gain est géré par le RPC claim_mines_win pour la sécurité
       const { error } = await supabase.rpc('claim_mines_win', { 
         game_id: gameId, 
         current_tiles_count: revealed.length 
@@ -130,7 +142,6 @@ export default function MinesElite() {
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase select-none flex flex-col items-center">
-      {/* Header */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-75 transition-all">
           <ChevronLeft size={24} />
@@ -145,7 +156,6 @@ export default function MinesElite() {
       </div>
 
       <div className="w-full max-w-md space-y-5">
-        {/* Difficultés */}
         <div className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/5">
           {['facile', 'intermédiaire', 'difficile'].map((level) => (
             <button
@@ -154,12 +164,11 @@ export default function MinesElite() {
               disabled={status === 'playing'}
               className={`flex-1 py-3 rounded-xl text-[10px] transition-all ${difficulty === level ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'text-slate-500'}`}
             >
-              {level}
+              {level} ({level === 'facile' ? '3' : level === 'intermédiaire' ? '5' : '8'} Bombes)
             </button>
           ))}
         </div>
 
-        {/* Game Stats (Pro Touch) */}
         {status === 'playing' && (
           <div className="grid grid-cols-2 gap-3 animate-in fade-in zoom-in duration-300">
             <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex items-center gap-3">
@@ -179,9 +188,8 @@ export default function MinesElite() {
           </div>
         )}
 
-        {/* Panneau de contrôle */}
         <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 shadow-2xl space-y-4">
-          <div className="flex items-center gap-4 bg-black/40 p-5 rounded-2xl border border-white/10 group-focus-within:border-emerald-500/50 transition-all">
+          <div className="flex items-center gap-4 bg-black/40 p-5 rounded-2xl border border-white/10">
             <Coins className="text-emerald-500" size={20} />
             <input 
               type="number" 
@@ -206,7 +214,6 @@ export default function MinesElite() {
           </button>
         </div>
 
-        {/* Grille de jeu */}
         <div className="grid grid-cols-5 gap-3">
           {Array.from({ length: 25 }).map((_, i) => (
             <button
@@ -220,34 +227,17 @@ export default function MinesElite() {
                 : 'bg-white/5 border-white/5 hover:bg-white/10 active:scale-90'
               }`}
             >
-              {revealed.includes(i) && <Gem className="text-emerald-400 w-8 h-8 drop-shadow-glow animate-in zoom-in" />}
+              {revealed.includes(i) && <Gem className="text-emerald-400 w-8 h-8 drop-shadow-glow" />}
               {status === 'ended' && minePositions.includes(i) && <Bomb className="text-black w-8 h-8" />}
             </button>
           ))}
-        </div>
-
-        {/* Live Winners Feed */}
-        <div className="bg-black/20 rounded-3xl p-4 border border-white/5">
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy className="text-amber-500" size={14} />
-            <h2 className="text-[10px] tracking-widest text-slate-400">DERNIERS TOP GAGNANTS</h2>
-          </div>
-          <div className="space-y-2 overflow-hidden">
-            {liveWinners.map((win, idx) => (
-              <div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 p-2 rounded-lg border border-white/5 animate-in slide-in-from-right duration-500">
-                <span className="text-slate-300 font-bold truncate w-24">@{win.username || 'Joueur'}</span>
-                <span className="bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded text-[8px] font-black">{win.multiplier.toFixed(2)}X</span>
-                <span className="text-white font-black">{win.win_amount.toFixed(0)} HTG</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         {status === 'ended' && (
           <div className="text-center">
             <button 
               onClick={() => { setStatus('idle'); setRevealed([]); setGameId(null); }} 
-              className="px-8 py-3 bg-white/5 rounded-full text-[10px] tracking-[0.4em] text-slate-400 hover:text-white transition-all border border-white/5"
+              className="px-8 py-3 bg-white/5 rounded-full text-[10px] tracking-[0.4em] text-slate-400 border border-white/5"
             >
               &gt; RECOMMENCER &lt;
             </button>
@@ -257,4 +247,3 @@ export default function MinesElite() {
     </div>
   );
 }
-
