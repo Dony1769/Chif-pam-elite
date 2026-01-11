@@ -10,6 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
+  Activity, AlertCircle, ChevronRight, Target
   Activity, AlertCircle, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
@@ -45,6 +46,8 @@ export default function AdminDashboard() {
       const { count: userCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
+
+      const { data: balanceData } = await supabase.rpc('get_total_balance'); 
 
       // Pour la balance totale, on utilise une fonction RPC ou une vue si possible, 
       // ici on garde un select sum léger
@@ -126,6 +129,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
+        {/* SIDEBAR */}
         {/* SIDEBAR (DESIGN INTACT) */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
           <div className="flex items-center gap-3 mb-12">
@@ -179,6 +183,7 @@ export default function AdminDashboard() {
             </button>
           </div>
 
+          {/* CHART AREA */}
           {/* CHART AREA (Optimisé pour les données de masse) */}
           <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 lg:p-12 shadow-2xl backdrop-blur-sm relative overflow-hidden">
              <div className="absolute top-0 right-0 p-8 opacity-5">
@@ -241,6 +246,14 @@ export default function AdminDashboard() {
                 color="bg-emerald-500" 
                />
                <ActionCard 
+                href="/admin-chif-pam/mini-jeux" 
+                label="Audit Mini-Jeux (Mines/Crash)" 
+                icon={<Target size={24}/>} 
+                color="bg-slate-900" 
+                textColor="text-emerald-500"
+                border="border-emerald-500/20"
+               />
+               <ActionCard 
                 href="/admin-chif-pam/users" 
                 label="Audit des Utilisateurs" 
                 icon={<Users size={24}/>} 
@@ -284,6 +297,7 @@ export default function AdminDashboard() {
   );
 }
 
+// COMPOSANTS UI
 // COMPOSANTS UI (INDÉMODABLES)
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
@@ -330,4 +344,3 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
     </Link>
   );
 }
-
