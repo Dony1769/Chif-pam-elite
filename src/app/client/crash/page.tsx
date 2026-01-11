@@ -7,7 +7,6 @@ import {
   TrendingUp, Wallet, AlertTriangle 
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
 
 const SOUNDS = {
   plant: "https://assets.mixkit.co/active_storage/sfx/1105/1105-preview.mp3",
@@ -72,7 +71,6 @@ export default function GrowthGame() {
 
   const collectFruits = async () => {
     if (status !== 'growing' || !growthInterval.current) return;
-    
     clearInterval(growthInterval.current);
     setStatus('collected');
     playSound(SOUNDS.collect);
@@ -93,40 +91,34 @@ export default function GrowthGame() {
 
       <div className="max-w-md mx-auto flex flex-col items-center">
         
-        {/* Zone de Visualisation */}
+        {/* Zone de Visualisation (Animation CSS pure) */}
         <div className="relative w-full h-80 bg-slate-900/30 rounded-[3.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden mb-8 shadow-2xl">
           
-          <AnimatePresence mode="wait">
-            <motion.h2 
-              key={multiplier.toFixed(2)}
-              initial={{ opacity: 0.5, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className={`text-7xl font-black tracking-tighter z-10 ${status === 'crashed' ? 'text-rose-500' : 'text-white'}`}
-            >
-              {multiplier.toFixed(2)}<span className="text-2xl text-emerald-500 uppercase not-italic">x</span>
-            </motion.h2>
-          </AnimatePresence>
+          <h2 className={`text-7xl font-black tracking-tighter z-10 transition-all duration-75 ${status === 'crashed' ? 'text-rose-500 scale-110' : 'text-white'}`}>
+            {multiplier.toFixed(2)}<span className="text-2xl text-emerald-500 uppercase not-italic">x</span>
+          </h2>
 
-          {/* Animation de la Plante */}
+          {/* Animation de la Plante en CSS Tailwind */}
           <div className="absolute bottom-0 w-full flex justify-center">
-            <motion.div 
-              animate={{ 
-                height: status === 'idle' ? 20 : 150 * (Math.min(multiplier, 5) / 5),
-                scale: status === 'crashed' ? [1, 1.05, 1] : 1,
+            <div 
+              style={{ 
+                height: status === 'idle' ? '20px' : `${Math.min(150 * (multiplier / 5), 200)}px`,
+                transition: 'height 0.1s linear'
               }}
-              transition={{ type: 'spring', stiffness: 50 }}
-              className="w-2 bg-emerald-500 rounded-t-full relative"
+              className={`w-2 bg-emerald-500 rounded-t-full relative ${status === 'crashed' ? 'opacity-30' : 'opacity-100'}`}
             >
-              <Leaf className="absolute -left-6 top-10 text-emerald-400 rotate-[-45deg]" size={24} />
-              <Leaf className="absolute -right-6 top-20 text-emerald-600 rotate-[45deg]" size={24} />
+              <Leaf className={`absolute -left-6 top-10 text-emerald-400 rotate-[-45deg] transition-opacity ${status === 'idle' ? 'opacity-0' : 'opacity-100'}`} size={24} />
+              <Leaf className={`absolute -right-6 top-20 text-emerald-600 rotate-[45deg] transition-opacity ${multiplier < 2 ? 'opacity-0' : 'opacity-100'}`} size={24} />
               <Sprout className="absolute -top-8 -left-3 text-emerald-300" size={32} />
-            </motion.div>
+            </div>
           </div>
 
           {status === 'crashed' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-rose-500/20 flex items-center justify-center backdrop-blur-md z-20">
-              <div className="bg-rose-500 text-slate-950 px-6 py-2 rounded-full text-xs font-black shadow-xl">LA PLANTE A FANÉ !</div>
-            </motion.div>
+            <div className="absolute inset-0 bg-rose-500/20 flex items-center justify-center backdrop-blur-md z-20 transition-opacity">
+              <div className="bg-rose-500 text-slate-950 px-6 py-2 rounded-full text-xs font-black shadow-xl animate-bounce">
+                LA PLANTE A FANÉ !
+              </div>
+            </div>
           )}
         </div>
 
@@ -149,14 +141,14 @@ export default function GrowthGame() {
             <button 
               onClick={startGrowth}
               disabled={loading}
-              className="w-full py-6 bg-emerald-500 text-slate-950 rounded-[2rem] font-black text-lg shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50"
+              className="w-full py-6 bg-emerald-500 text-slate-950 rounded-[2rem] font-black text-lg shadow-lg active:scale-95 transition-all disabled:opacity-50"
             >
               SEMER LA GRAINE
             </button>
           ) : (
             <button 
               onClick={collectFruits}
-              className="w-full py-6 bg-amber-500 text-slate-950 rounded-[2rem] font-black text-lg shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+              className="w-full py-6 bg-amber-500 text-slate-950 rounded-[2rem] font-black text-lg shadow-lg active:scale-95 transition-all"
             >
               RÉCOLTER ({(bet * multiplier).toFixed(0)} HTG)
             </button>
@@ -171,3 +163,4 @@ export default function GrowthGame() {
     </div>
   );
 }
+
