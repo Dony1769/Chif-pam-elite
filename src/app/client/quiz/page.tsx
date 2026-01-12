@@ -44,92 +44,91 @@ export default function QuizSpeedrun() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [timeLeft, status]);
 
-  // Récupérer les questions (API EXTERNE - Pas de saturation)
   const fetchQuestions = async () => {
     try {
-      // On demande 15 questions à l'API Open Trivia Database
       const res = await fetch(`https://opentdb.com/api.php?amount=15&category=${category}&type=multiple`);
       const data = await res.json();
       
-      // On formate les questions pour le jeu
+      const decodeHTML = (html: string) => {
+        const txt = document.createElement('textarea');
+        txt.innerHTML = html;
+        return txt.value;
+      };
+
       return data.results.map((q: any) => ({
         question: decodeHTML(q.question),
         correct: decodeHTML(q.correct_answer),
         answers: [...q.incorrect_answers, q.correct_answer]
           .map(decodeHTML)
-          .sort(() => Math.random() - 0.5) // Mélange aléatoire
+          .sort(() => Math.random() - 0.5)
       }));
     } catch (e) {
-      alert("Erreur de connexion aux questions mondiales.");
       return null;
     }
-  };
-
-  const decodeHTML = (html: string) => {
-    const txt = document.createElement('textarea');
-    txt.innerHTML = html;
-    return txt.value;
   };
 
   const startGame = async () => {
     if (bet < 10) return alert("Mise minimum 10 HTG");
     setStatus('loading');
 
-    // 1. Débit immédiat
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) return router.push('/connexion');
-    
-    const { data: validBet } = await supabase.rpc('process_game_bet', { 
-      amount_to_deduct: bet, 
-      game_name: 'Quiz Speedrun' 
-    });
+    try {
+        const { data: user } = await supabase.auth.getUser();
+        if (!user.user) return router.push('/connexion');
+        
+        // On utilise la fonction générique process_bet (déjà existante pour Mines)
+        const { data: validBet, error: betError } = await supabase.rpc('process_bet', { 
+          amount: bet 
+        });
 
-    if (!validBet) {
-      setStatus('idle');
-      return alert("Solde insuffisant.");
+        if (!validBet || betError) {
+          setStatus('idle');
+          return alert("Solde insuffisant.");
+        }
+
+        const loadedQuestions = await fetchQuestions();
+        if (!loadedQuestions || loadedQuestions.length === 0) {
+            alert("Erreur chargement questions. Vérifiez votre connexion.");
+            setStatus('idle'); 
+            return;
+        }
+
+        const { data: game, error: gameError } = await supabase.from('quiz_games').insert([{
+          user_id: user.user.id,
+          bet_amount: bet,
+          difficulty: difficulty,
+          questions_data: loadedQuestions,
+          multiplier: 1.0,
+          is_active: true
+        }]).select().single();
+
+        if (gameError) throw gameError;
+
+        setGameId(game.id);
+        setQuestions(loadedQuestions);
+        setCurrentQIndex(0);
+        setMultiplier(1.0);
+        setTimeLeft(SETTINGS[difficulty].time);
+        setStatus('playing');
+    } catch (err) {
+        setStatus('idle');
+        alert("Erreur technique au lancement.");
     }
-
-    // 2. Charger les questions
-    const loadedQuestions = await fetchQuestions();
-    if (!loadedQuestions) {
-        setStatus('idle'); 
-        return;
-    }
-
-    // 3. Créer la session en base
-    const { data: game } = await supabase.from('quiz_games').insert([{
-      user_id: user.user.id,
-      bet_amount: bet,
-      difficulty: difficulty,
-      questions_data: loadedQuestions, // On sauvegarde pour preuve anti-triche
-      multiplier: 1.0
-    }]).select().single();
-
-    setGameId(game.id);
-    setQuestions(loadedQuestions);
-    setCurrentQIndex(0);
-    setMultiplier(1.0);
-    setTimeLeft(SETTINGS[difficulty].time);
-    setStatus('playing');
   };
 
   const handleAnswer = (answer: string) => {
     const currentQ = questions[currentQIndex];
     
     if (answer === currentQ.correct) {
-      // BONNE RÉPONSE
-      const nextMult = multiplier + SETTINGS[difficulty].step;
-      setMultiplier(parseFloat(nextMult.toFixed(2)));
+      const nextMult = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
+      setMultiplier(nextMult);
       
-      // Passage à la suivante
       if (currentQIndex + 1 < questions.length) {
         setCurrentQIndex(prev => prev + 1);
-        setTimeLeft(SETTINGS[difficulty].time); // Reset timer
+        setTimeLeft(SETTINGS[difficulty].time);
       } else {
-        cashout(nextMult); // Victoire totale (rare)
+        cashout(nextMult);
       }
     } else {
-      // MAUVAISE RÉPONSE
       handleGameOver();
     }
   };
@@ -137,28 +136,28 @@ export default function QuizSpeedrun() {
   const handleGameOver = async () => {
     setStatus('lost');
     if (timerRef.current) clearTimeout(timerRef.current);
-    // Mise à jour DB : perdu
-    await supabase.from('quiz_games').update({ is_active: false, is_won: false }).eq('id', gameId);
+    if (gameId) {
+        await supabase.from('quiz_games').update({ is_active: false, is_won: false }).eq('id', gameId);
+    }
   };
 
   const cashout = async (finalMult = multiplier) => {
-    setStatus('ended');
+    setStatus('ended'); // On passe en ended AVANT l'appel pour bloquer l'interface
     if (timerRef.current) clearTimeout(timerRef.current);
     
-    // Calcul du gain
-    const winAmount = Math.floor(bet * finalMult);
-    
-    // Appel RPC sécurisé pour créditer
-    await supabase.rpc('process_game_win', { 
-      amount_to_add: winAmount, 
-      game_id: gameId, 
-      final_mult: finalMult 
-    });
+    try {
+        const { error } = await supabase.rpc('claim_quiz_win', { 
+          game_id: gameId, 
+          final_multiplier: finalMult 
+        });
+        if (error) throw error;
+    } catch(e) {
+        alert("Erreur lors de l'enregistrement du gain.");
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-bold flex flex-col items-center select-none">
-      {/* Header */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-full"><ChevronLeft /></button>
         <h1 className="text-xl text-emerald-500 italic uppercase">Brain Storm</h1>
@@ -167,10 +166,9 @@ export default function QuizSpeedrun() {
 
       <div className="w-full max-w-md space-y-6">
         
-        {/* Écran de Configuration */}
-        {status === 'idle' && (
+        {/* CORRECTION ICI : On autorise l'affichage si IDLE ou LOADING */}
+        {(status === 'idle' || status === 'loading') && (
           <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
-            {/* Catégories */}
             <div>
                 <p className="text-xs text-slate-500 mb-2 uppercase tracking-widest">Sujet</p>
                 <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
@@ -187,7 +185,6 @@ export default function QuizSpeedrun() {
                 </div>
             </div>
 
-            {/* Difficulté */}
             <div>
                 <p className="text-xs text-slate-500 mb-2 uppercase tracking-widest">Mode</p>
                 <div className="flex gap-2">
@@ -205,7 +202,6 @@ export default function QuizSpeedrun() {
                 </div>
             </div>
 
-            {/* Mise */}
             <div className="bg-[#0a0a0f] p-6 rounded-[2rem] border border-white/10 space-y-4 shadow-2xl">
                 <div className="flex justify-between items-center bg-black/30 p-4 rounded-xl border border-white/5">
                     <span className="text-slate-400 text-sm">MISE (HTG)</span>
@@ -227,11 +223,8 @@ export default function QuizSpeedrun() {
           </div>
         )}
 
-        {/* Écran de Jeu */}
         {status === 'playing' && (
           <div className="animate-in zoom-in duration-300 space-y-6">
-            
-            {/* HUD */}
             <div className="flex justify-between items-end bg-white/5 p-4 rounded-2xl border border-white/5">
                 <div>
                     <p className="text-[10px] text-slate-500 mb-1">GAIN ACTUEL</p>
@@ -243,7 +236,6 @@ export default function QuizSpeedrun() {
                 </div>
             </div>
 
-            {/* Timer Bar */}
             <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                 <div 
                     className="h-full bg-rose-500 transition-all duration-100 ease-linear"
@@ -251,12 +243,10 @@ export default function QuizSpeedrun() {
                 />
             </div>
 
-            {/* Question Card */}
             <div className="bg-white text-black p-6 rounded-3xl shadow-xl min-h-[160px] flex items-center justify-center text-center">
-                <h2 className="text-lg leading-tight">{questions[currentQIndex]?.question}</h2>
+                <h2 className="text-lg leading-tight font-black">{questions[currentQIndex]?.question}</h2>
             </div>
 
-            {/* Réponses */}
             <div className="grid grid-cols-1 gap-3">
                 {questions[currentQIndex]?.answers.map((ans: string, i: number) => (
                     <button
@@ -279,14 +269,13 @@ export default function QuizSpeedrun() {
           </div>
         )}
 
-        {/* Écran Game Over */}
         {status === 'lost' && (
           <div className="text-center space-y-6 animate-in zoom-in">
             <div className="inline-flex p-6 bg-rose-500/10 rounded-full border border-rose-500/20 mb-4">
                 <XCircle className="text-rose-500 w-16 h-16" />
             </div>
             <h2 className="text-3xl text-rose-500 font-black italic">PERDU !</h2>
-            <p className="text-slate-400 text-sm">Le temps est écoulé ou la réponse était fausse.</p>
+            <p className="text-slate-400 text-sm">Temps écoulé ou mauvaise réponse.</p>
             <button 
                 onClick={() => setStatus('idle')}
                 className="w-full py-4 bg-white/10 rounded-xl mt-8"
@@ -296,7 +285,6 @@ export default function QuizSpeedrun() {
           </div>
         )}
 
-        {/* Écran Victoire */}
         {status === 'ended' && (
            <div className="text-center space-y-6 animate-in zoom-in">
             <div className="inline-flex p-6 bg-emerald-500/10 rounded-full border border-emerald-500/20 mb-4">
