@@ -13,11 +13,12 @@ export default function CrashElite() {
   const [gameId, setGameId] = useState<string | null>(null);
   
   const timer = useRef<any>(null);
-  const multRef = useRef(1.0); // Pour accéder à la valeur réelle dans le setInterval
+  const multRef = useRef(1.0);
 
-  // Nettoyage du timer au démontage du composant
   useEffect(() => {
-    return () => clearInterval(timer.current);
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
   }, []);
 
   const playSound = (freq: number, type: OscillatorType = 'sine', duration = 0.2) => {
@@ -47,7 +48,6 @@ export default function CrashElite() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // 1. Débiter la mise
       const { data: ok } = await supabase.rpc('process_bet', { amount: bet });
       if (!ok) {
         alert("Solde insuffisant");
@@ -55,11 +55,9 @@ export default function CrashElite() {
         return;
       }
 
-      // 2. Générer le point de crash (Logique Provably Fair)
       const result = Math.random();
       const crashAt = result < 0.03 ? 1.0 : parseFloat((0.97 / (1 - result)).toFixed(2));
       
-      // 3. Créer l'entrée du jeu en DB avec le statut 'playing'
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
         user_id: user.id,
         bet_amount: bet,
@@ -74,13 +72,12 @@ export default function CrashElite() {
       setLoading(false);
       playSound(523.25);
 
-      // 4. Lancer la boucle de croissance
       timer.current = setInterval(() => {
         const increment = 0.01 * Math.pow(multRef.current, 0.6);
         const nextMult = multRef.current + increment;
 
         if (nextMult >= crashAt) {
-          handleCrash(game.id);
+          handleCrash(game.id, crashAt);
         } else {
           multRef.current = nextMult;
           setMult(nextMult);
@@ -89,24 +86,22 @@ export default function CrashElite() {
 
     } catch (error) {
       console.error(error);
-      alert("Une erreur est survenue");
       setLoading(false);
     }
   };
 
-  const handleCrash = async (id: string) => {
-    clearInterval(timer.current);
+  const handleCrash = async (id: string, finalCrash: number) => {
+    if (timer.current) clearInterval(timer.current);
+    setMult(finalCrash);
     setStatus('crashed');
     playSound(100, 'sawtooth', 0.6);
-    
-    // Marquer comme perdu en DB
     await supabase.from('crash_games').update({ status: 'lost' }).eq('id', id);
   };
 
   const collect = async () => {
     if (status !== 'running' || !gameId || loading) return;
     
-    clearInterval(timer.current);
+    if (timer.current) clearInterval(timer.current);
     setLoading(true);
     const finalMult = parseFloat(multRef.current.toFixed(2));
 
@@ -120,7 +115,7 @@ export default function CrashElite() {
         setStatus('collected');
         playSound(1046.50, 'sine', 0.3);
       } else {
-        alert("Erreur lors de l'encaissement");
+        alert("Erreur transaction");
       }
     } catch (e) {
       console.error(e);
@@ -129,11 +124,13 @@ export default function CrashElite() {
     }
   };
 
+  // Correction de l'erreur TypeScript : on calcule d'abord le nombre
+  const potentialWin = Math.floor(bet * mult);
+
   return (
     <div className="min-h-screen bg-[#020617] text-white flex flex-col items-center p-6 italic font-black uppercase overflow-hidden">
-      {/* Header */}
       <div className="w-full flex justify-between items-center mb-12">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all">
+        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
           <ChevronLeft size={24} />
         </button>
         <div className="text-right">
@@ -143,7 +140,6 @@ export default function CrashElite() {
       </div>
 
       <div className="w-full max-w-md space-y-8">
-        {/* Graphique de Croissance */}
         <div className="relative h-80 bg-slate-900/30 rounded-[3.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl backdrop-blur-sm">
           <div className={`text-8xl tracking-tighter z-10 transition-transform duration-75 ${status === 'crashed' ? 'text-rose-500 scale-110' : 'text-white'}`}>
             {mult.toFixed(2)}<span className="text-3xl text-emerald-500 uppercase not-italic">x</span>
@@ -170,11 +166,11 @@ export default function CrashElite() {
           )}
         </div>
 
-        {/* Panneau de Contrôle */}
         <div className="bg-slate-900/80 p-8 rounded-[3rem] border border-white/5 space-y-4 shadow-2xl backdrop-blur-md">
           <div className="flex justify-between items-center px-2 mb-2">
-             <span className="text-[10px] text-slate-500">MONTANT DE LA MISE</span>
-             <span className="text-[10px] text-emerald-500">{bet * mult.toFixed(0)} HTG POTENTIEL</span>
+             <span className="text-[10px] text-slate-500">MONTANT MISE</span>
+             {/* CORRECTION ICI : Pas de multiplication avec toFixed() */}
+             <span className="text-[10px] text-emerald-500">{potentialWin} HTG POTENTIEL</span>
           </div>
           
           <input 
@@ -191,7 +187,7 @@ export default function CrashElite() {
               disabled={loading}
               className="w-full py-6 bg-amber-500 text-slate-950 rounded-[2rem] text-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2"
             >
-              {loading ? <Loader2 className="animate-spin"/> : `RÉCOLTER ${(bet * mult).toFixed(0)} HTG`}
+              {loading ? <Loader2 className="animate-spin"/> : `RÉCOLTER ${potentialWin} HTG`}
             </button>
           ) : (
             <button 
