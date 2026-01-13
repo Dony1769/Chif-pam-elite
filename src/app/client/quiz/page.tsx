@@ -28,7 +28,6 @@ export default function QuizElite() {
   const [category, setCategory] = useState(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost'>('idle');
   
-  // États du jeu
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -36,6 +35,7 @@ export default function QuizElite() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
+  const [isProcessingCashout, setIsProcessingCashout] = useState(false);
   
   const timerRef = useRef<any>(null);
 
@@ -57,8 +57,13 @@ export default function QuizElite() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      const { data: paid } = await supabase.rpc('process_bet', { amount: bet });
-      if (!paid) { alert("Solde insuffisant"); setStatus('idle'); return; }
+      // Appel RPC pour déduire la mise
+      const { data: paid, error: betError } = await supabase.rpc('process_bet', { amount: bet });
+      if (betError || !paid) { 
+        alert("Solde insuffisant ou erreur lors de la mise"); 
+        setStatus('idle'); 
+        return; 
+      }
 
       const res = await fetch(`https://opentdb.com/api.php?amount=15&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
@@ -75,13 +80,15 @@ export default function QuizElite() {
         };
       }));
 
-      const { data: game } = await supabase.from('quiz_games').insert([{
+      const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: user.id,
         bet_amount: bet,
         difficulty,
         questions_data: processed,
         is_active: true
       }]).select().single();
+
+      if (insertError) throw insertError;
 
       setGameId(game.id);
       setQuestions(processed);
@@ -90,8 +97,9 @@ export default function QuizElite() {
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
     } catch (e) {
+      console.error(e);
       setStatus('idle');
-      alert("Erreur réseau");
+      alert("Une erreur est survenue");
     }
   };
 
@@ -99,13 +107,13 @@ export default function QuizElite() {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => setTimeLeft(p => p - 0.1), 100);
     } else if (timeLeft <= 0 && status === 'playing' && !showCorrection) {
-      handleAnswer(null); // Temps écoulé = mauvaise réponse
+      handleAnswer(null);
     }
     return () => clearInterval(timerRef.current);
   }, [timeLeft, status, showCorrection]);
 
   const handleAnswer = (ans: string | null) => {
-    if (showCorrection) return;
+    if (showCorrection || isProcessingCashout) return;
     
     setSelectedAnswer(ans);
     const correctAns = questions[currentIndex].correct;
@@ -116,22 +124,38 @@ export default function QuizElite() {
       if (currentIndex < questions.length - 1) {
         setCurrentIndex(c => c + 1);
         setTimeLeft(SETTINGS[difficulty].time);
-      } else { cashout(newM); }
+      } else { 
+        cashout(newM); 
+      }
     } else {
-      // MAUVAISE RÉPONSE OU TEMPS ÉCOULÉ
       setShowCorrection(true);
       clearInterval(timerRef.current);
-      
-      // Laisser 2 secondes pour voir la correction avant le Game Over
-      setTimeout(() => {
-        setStatus('lost');
-      }, 2000);
+      setTimeout(() => setStatus('lost'), 2000);
     }
   };
 
-  const cashout = async (m: number) => {
-    setStatus('ended');
-    await supabase.rpc('claim_quiz_win', { game_id: gameId, final_multiplier: m });
+  const cashout = async (finalMultiplier: number) => {
+    if (isProcessingCashout || !gameId) return;
+    
+    setIsProcessingCashout(true);
+    clearInterval(timerRef.current);
+
+    try {
+      // APPEL RPC CRITIQUE : Calcule le gain et l'ajoute au profil
+      const { data, error } = await supabase.rpc('claim_quiz_win', { 
+        p_game_id: gameId, 
+        p_final_multiplier: finalMultiplier 
+      });
+
+      if (error) throw error;
+
+      setStatus('ended');
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de l'encaissement. Le gain n'a pas pu être traité.");
+    } finally {
+      setIsProcessingCashout(false);
+    }
   };
 
   return (
@@ -203,7 +227,7 @@ export default function QuizElite() {
                 if (showCorrection && isSelected && !isCorrect) btnStyle = "bg-rose-600 border-rose-400 text-white animate-shake";
 
                 return (
-                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection} className={`p-5 border rounded-2xl text-left transition-all font-bold ${btnStyle}`}>
+                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection || isProcessingCashout} className={`p-5 border rounded-2xl text-left transition-all font-bold ${btnStyle}`}>
                     {a}
                   </button>
                 );
@@ -211,7 +235,13 @@ export default function QuizElite() {
             </div>
 
             {!showCorrection && (
-              <button onClick={() => cashout(multiplier)} className="w-full py-5 bg-amber-500 text-black rounded-2xl font-black text-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all mt-2">ENCAISSER</button>
+              <button 
+                onClick={() => cashout(multiplier)} 
+                disabled={isProcessingCashout}
+                className="w-full py-5 bg-amber-500 text-black rounded-2xl font-black text-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all mt-2 flex justify-center items-center"
+              >
+                {isProcessingCashout ? <Loader2 className="animate-spin text-black" /> : "ENCAISSER"}
+              </button>
             )}
           </div>
         ) : (
