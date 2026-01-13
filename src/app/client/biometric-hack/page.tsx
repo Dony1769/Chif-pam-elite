@@ -90,8 +90,8 @@ export default function BiometricHack() {
       setMultiplier(nextMultiplier);
       
       // Augmenter la difficulté
-      if (nextMultiplier > 1.8 && gridSize === 3) setGridSize(4);
-      if (nextMultiplier > 3.0 && gridSize === 4) setGridSize(5);
+      if (nextMultiplier > 1.3 && gridSize === 3) setGridSize(4);
+      if (nextMultiplier > 2.0 && gridSize === 4) setGridSize(5);
       
       // Réduire le temps d'affichage (Anti-bot)
       setDisplayTime(prev => Math.max(300, prev - 100));
