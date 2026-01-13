@@ -51,12 +51,16 @@ export default function QuizElite() {
     if (bet < 10 || isProcessing) return;
     setIsProcessing(true);
     setStatus('loading');
+    
+    // Reset complet avant démarrage
+    setSelectedAnswer(null);
+    setShowCorrection(false);
+    setCurrentIndex(0);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // 1. Déduction du solde
       const { data: paid, error: betError } = await supabase.rpc('process_bet', { amount: bet });
       if (betError || !paid) { 
         alert("Solde insuffisant"); 
@@ -64,7 +68,6 @@ export default function QuizElite() {
         return; 
       }
 
-      // 2. Récupération des questions
       const res = await fetch(`https://opentdb.com/api.php?amount=15&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
       
@@ -79,7 +82,6 @@ export default function QuizElite() {
         };
       }));
 
-      // 3. Création de la partie en DB
       const { data: game, error: insErr } = await supabase.from('quiz_games').insert([{
         user_id: user.id,
         bet_amount: bet,
@@ -91,7 +93,6 @@ export default function QuizElite() {
 
       setGameId(game.id);
       setQuestions(processed);
-      setCurrentIndex(0);
       setMultiplier(1.0);
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
@@ -104,16 +105,17 @@ export default function QuizElite() {
   };
 
   useEffect(() => {
-    if (status === 'playing' && timeLeft > 0 && !showCorrection) {
+    // On ne démarre le timer que si on joue, qu'il reste du temps et qu'on ne montre pas une correction
+    if (status === 'playing' && timeLeft > 0 && !showCorrection && !isProcessing) {
       timerRef.current = setInterval(() => setTimeLeft(p => p - 0.1), 100);
-    } else if (timeLeft <= 0 && status === 'playing' && !showCorrection) {
-      handleAnswer(null);
+    } else if (timeLeft <= 0 && status === 'playing' && !showCorrection && !isProcessing) {
+      handleAnswer(null); // Temps écoulé
     }
     return () => clearInterval(timerRef.current);
-  }, [timeLeft, status, showCorrection]);
+  }, [timeLeft, status, showCorrection, isProcessing]);
 
   const handleAnswer = (ans: string | null) => {
-    if (showCorrection || isProcessing) return;
+    if (showCorrection || isProcessing || status !== 'playing') return;
     
     setSelectedAnswer(ans);
     const isCorrect = ans === questions[currentIndex].correct;
@@ -121,16 +123,27 @@ export default function QuizElite() {
     if (isCorrect) {
       const newM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
       setMultiplier(newM);
-      if (currentIndex < questions.length - 1) {
-        setCurrentIndex(c => c + 1);
-        setTimeLeft(SETTINGS[difficulty].time);
-      } else { 
-        cashout(newM); 
-      }
+      
+      // Bloquer l'UI brièvement pour montrer la bonne réponse en vert
+      setShowCorrection(true); 
+      clearInterval(timerRef.current);
+
+      setTimeout(() => {
+        if (currentIndex < questions.length - 1) {
+          setCurrentIndex(prev => prev + 1);
+          setSelectedAnswer(null);
+          setShowCorrection(false);
+          setTimeLeft(SETTINGS[difficulty].time);
+        } else { 
+          cashout(newM); 
+        }
+      }, 800); // Transition rapide de 0.8s pour la question suivante
+
     } else {
+      // MAUVAISE RÉPONSE
       setShowCorrection(true);
       clearInterval(timerRef.current);
-      setTimeout(() => setStatus('lost'), 2000);
+      setTimeout(() => setStatus('lost'), 1500);
     }
   };
 
@@ -156,9 +169,20 @@ export default function QuizElite() {
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center select-none">
-      {/* Header */}
+      {/* Header avec sécurité : Empêcher le retour accidentel si en jeu */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ChevronLeft/></button>
+        <button 
+          onClick={() => {
+            if (status === 'playing') {
+              if (confirm("Quitter maintenant annulera votre mise. Continuer ?")) router.back();
+            } else {
+              router.back();
+            }
+          }} 
+          className="p-3 bg-white/5 rounded-2xl border border-white/10"
+        >
+          <ChevronLeft/>
+        </button>
         <h1 className="text-2xl text-emerald-500 tracking-tighter">QUIZ ELITE</h1>
         <div className="w-10"/>
       </div>
@@ -196,20 +220,21 @@ export default function QuizElite() {
           <div className="space-y-5 animate-in zoom-in duration-300">
             <div className="flex justify-between gap-3 text-center">
               <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <p className="text-[8px] text-slate-500 mb-1">COTE</p>
+                <p className="text-[8px] text-slate-500 mb-1 font-black">COTE ACTUELLE</p>
                 <p className="text-emerald-500 text-xl">{multiplier.toFixed(2)}X</p>
               </div>
               <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <p className="text-[8px] text-slate-500 mb-1">GAIN PROBABLE</p>
+                <p className="text-[8px] text-slate-500 mb-1 font-black">GAIN POTENTIEL</p>
                 <p className="text-amber-500 text-xl">{(bet * multiplier).toFixed(0)}</p>
               </div>
             </div>
 
-            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-              <div className="h-full bg-rose-500" style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
+            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/10">
+              <div className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
 
-            <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex items-center justify-center shadow-2xl">
+            <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex flex-col items-center justify-center shadow-2xl">
+              <span className="text-[10px] text-slate-400 mb-2">QUESTION {currentIndex + 1} / 15</span>
               <p className="text-lg leading-tight uppercase font-black">{questions[currentIndex]?.question}</p>
             </div>
 
@@ -217,8 +242,9 @@ export default function QuizElite() {
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
                 const isCorrect = a === questions[currentIndex].correct;
                 const isSelected = a === selectedAnswer;
-                let style = "bg-white/5 border-white/10";
-                if (showCorrection && isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-105";
+                
+                let style = "bg-white/5 border-white/10 text-white";
+                if (showCorrection && isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] shadow-[0_0_20px_rgba(16,185,129,0.3)]";
                 if (showCorrection && isSelected && !isCorrect) style = "bg-rose-600 border-rose-400 text-white animate-shake";
 
                 return (
@@ -230,22 +256,23 @@ export default function QuizElite() {
             </div>
 
             {!showCorrection && (
-              <button onClick={() => cashout(multiplier)} disabled={isProcessing} className="w-full py-5 bg-amber-500 text-black rounded-2xl font-black text-xl active:scale-95 transition-all flex justify-center">
-                {isProcessing ? <Loader2 className="animate-spin" /> : "ENCAISSER"}
+              <button onClick={() => cashout(multiplier)} disabled={isProcessing} className="w-full py-5 bg-amber-500 text-black rounded-3xl font-black text-xl active:scale-95 transition-all flex justify-center mt-4">
+                {isProcessing ? <Loader2 className="animate-spin" /> : "SÉCURISER MES GAINS"}
               </button>
             )}
           </div>
         ) : (
-          <div className="text-center py-10 space-y-6">
-            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center ${status === 'lost' ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`}>
+          /* Écran de Fin (Gagné ou Perdu) */
+          <div className="text-center py-10 space-y-6 animate-in zoom-in">
+            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center ${status === 'lost' ? 'bg-rose-500/10 border border-rose-500/20' : 'bg-emerald-500/10 border border-emerald-500/20'}`}>
                 {status === 'lost' ? <XCircle size={50} className="text-rose-500"/> : <Trophy size={50} className="text-emerald-500"/>}
             </div>
-            <h2 className={`text-5xl font-black ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "ELITE !"}</h2>
+            <h2 className={`text-5xl font-black tracking-tighter ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "ELITE !"}</h2>
             <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                <p className="text-slate-400 text-xs mb-1">GAINS</p>
-                <p className="text-4xl font-black">{(status === 'lost' ? 0 : bet * multiplier).toFixed(0)} <span className="text-xs text-slate-500">HTG</span></p>
+                <p className="text-slate-400 text-xs mb-1 font-black">MONTANT CRÉDITÉ</p>
+                <p className="text-4xl font-black text-white">{(status === 'lost' ? 0 : bet * multiplier).toFixed(0)} <span className="text-xs text-slate-500 font-black">HTG</span></p>
             </div>
-            <button onClick={() => setStatus('idle')} className="w-full py-5 bg-white text-black rounded-3xl font-black text-lg">REJOUER</button>
+            <button onClick={() => setStatus('idle')} className="w-full py-5 bg-white text-black rounded-3xl font-black text-lg active:scale-95 transition-all">REJOUER UNE PARTIE</button>
           </div>
         )}
       </div>
