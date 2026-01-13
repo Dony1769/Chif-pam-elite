@@ -1,255 +1,316 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Loader2, XCircle, Trophy, CheckCircle, Wallet, PlayCircle } from 'lucide-react';
+import { ChevronLeft, Wallet, ShieldAlert, Footprints, Trophy } from 'lucide-react';
 
-const SETTINGS = {
-  facile: { rows: 5, cols: 2, step: 0.3 },
-  intermédiaire: { rows: 7, cols: 2, step: 0.5 },
-  difficile: { rows: 9, cols: 3, step: 0.8 }
+// Configuration du jeu
+const DIFFICULTIES = {
+  facile: { label: 'FACILE', rows: 6, cols: 2, multiplier_inc: 0.30 }, // x1.30, x1.60...
+  moyen: { label: 'MOYEN', rows: 9, cols: 2, multiplier_inc: 0.50 },
+  difficile: { label: 'EXTRÊME', rows: 12, cols: 3, multiplier_inc: 0.90 }
 };
 
-export default function SquidGlassElite() {
+export default function SquidGlassUltimate() {
   const router = useRouter();
-  const [bet, setBet] = useState(10);
-  const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost'>('idle');
   
+  // États du jeu
+  const [balance, setBalance] = useState<number | null>(null); // Pour affichage seulement
+  const [bet, setBet] = useState(50);
+  const [level, setLevel] = useState<'facile' | 'moyen' | 'difficile'>('moyen');
+  const [gameState, setGameState] = useState<'idle' | 'playing' | 'won' | 'lost' | 'cashing'>('idle');
+  
+  // États logiques
   const [gameId, setGameId] = useState<string | null>(null);
-  const [glassSequence, setGlassSequence] = useState<number[]>([]);
-  const [playerPath, setPlayerPath] = useState<number[]>([]);
-  const [brokenGlass, setBrokenGlass] = useState<{ row: number; col: number } | null>(null);
+  const [sequence, setSequence] = useState<number[]>([]); // La liste des bons verres
+  const [currentStep, setCurrentStep] = useState(0); // À quelle rangée on est
   const [multiplier, setMultiplier] = useState(1.0);
+  const [history, setHistory] = useState<number[]>([]); // Où le joueur a sauté
+  
+  // États d'animation
   const [isJumping, setIsJumping] = useState(false);
+  const [shatteredGlass, setShatteredGlass] = useState<{r: number, c: number} | null>(null);
 
-  const { rows, cols, step } = SETTINGS[difficulty];
-  const currentWin = Math.floor(bet * multiplier);
+  const config = DIFFICULTIES[level];
+  const currentGain = Math.floor(bet * multiplier);
+
+  // --- LOGIQUE JEU ---
 
   const startGame = async () => {
-    if (bet < 10 || status === 'loading') return;
-    setStatus('loading');
-    setPlayerPath([]);
-    setBrokenGlass(null);
+    if (bet < 10) return alert("Mise minimum 10 HTG");
+    setGameState('playing');
+    setShatteredGlass(null);
+    setHistory([]);
+    setCurrentStep(0);
     setMultiplier(1.0);
+    setSequence([]);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/connexion');
+      // 1. Générer la séquence secrète côté client (pour l'instant, idéalement serveur)
+      const newSequence = Array.from({ length: config.rows }, () => Math.floor(Math.random() * config.cols));
+      setSequence(newSequence);
 
-      const { data: paid } = await supabase.rpc('process_bet', { amount: bet });
-      if (!paid) { alert("Solde insuffisant"); setStatus('idle'); return; }
-
-      const sequence = Array.from({ length: rows }, () => Math.floor(Math.random() * cols));
-      setGlassSequence(sequence);
-
-      const { data: game } = await supabase.from('glass_games').insert([{
-        user_id: user.id, bet_amount: bet, difficulty, num_rows: rows, num_cols: cols,
-        glass_sequence: sequence, is_active: true
-      }]).select().single();
-
-      setGameId(game.id);
-      setStatus('playing');
-    } catch (e) {
-      alert("Erreur de connexion");
-      setStatus('idle');
-    }
-  };
-
-  const handleJump = async (colIndex: number) => {
-    if (status !== 'playing' || isJumping || brokenGlass) return;
-
-    setIsJumping(true);
-    const currentRow = playerPath.length;
-    const isCorrect = colIndex === glassSequence[currentRow];
-
-    // Délai pour l'animation
-    setTimeout(async () => {
-      if (isCorrect) {
-        setPlayerPath(prev => [...prev, colIndex]);
-        const nextMultiplier = parseFloat((multiplier + step).toFixed(2));
-        setMultiplier(nextMultiplier);
-        setIsJumping(false);
-
-        // Auto-cashout si fin du pont
-        if (currentRow + 1 === rows) {
-          cashout(nextMultiplier);
-        }
-      } else {
-        setBrokenGlass({ row: currentRow, col: colIndex });
-        setStatus('lost');
-        setIsJumping(false);
-        if (gameId) await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
-      }
-    }, 400);
-  };
-
-  // --- MISE À JOUR STRICTE SELON DEMANDE ---
-  const cashout = async (finalMult: number) => {
-    if (status !== 'playing' && playerPath.length === 0) return;
-    setStatus('loading');
-    
-    try {
-      // APPEL RPC : On doit passer le nom du paramètre 'override_multiplier'
-      const { data, error } = await supabase.rpc('claim_glass_win', { 
-        game_id: gameId, 
-        override_multiplier: finalMult 
+      // 2. Appel RPC pour créer le jeu et débiter
+      const { data: newGameId, error } = await supabase.rpc('start_glass_game', {
+        bet_amount: bet,
+        rows: config.rows,
+        cols: config.cols,
+        difficulty: level,
+        path_sequence: newSequence
       });
-  
+
       if (error) throw error;
-  
-      setStatus('ended');
+      setGameId(newGameId);
+
     } catch (e) {
       console.error(e);
-      alert("Erreur lors du retrait. Vérifiez votre connexion.");
-      setStatus('playing'); // On remet en jeu si le paiement échoue
+      alert("Erreur démarrage. Vérifiez votre solde.");
+      setGameState('idle');
     }
   };
-  // -----------------------------------------
+
+  const handleJump = (colIndex: number) => {
+    if (isJumping || gameState !== 'playing') return;
+    setIsJumping(true);
+
+    const isCorrect = sequence[currentStep] === colIndex;
+    
+    // Animation délai
+    setTimeout(async () => {
+      if (isCorrect) {
+        // SUCCÈS
+        setHistory(prev => [...prev, colIndex]);
+        const nextMult = parseFloat((multiplier + config.multiplier_inc).toFixed(2));
+        setMultiplier(nextMult);
+        setCurrentStep(prev => prev + 1);
+        setIsJumping(false);
+
+        // Si fin du pont atteinte
+        if (currentStep + 1 === config.rows) {
+          handleCashout(nextMult);
+        }
+      } else {
+        // ÉCHEC
+        setShatteredGlass({ r: currentStep, c: colIndex });
+        setGameState('lost');
+        setIsJumping(false);
+        // Mettre fin au jeu en base (optionnel, le serveur le sait déjà par inactivité, mais propre)
+        if (gameId) await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
+      }
+    }, 600); // Temps du saut
+  };
+
+  const handleCashout = async (finalMult: number) => {
+    setGameState('cashing');
+    try {
+      const { error } = await supabase.rpc('claim_glass_win', {
+        game_id: gameId,
+        final_multiplier: finalMult
+      });
+      if (error) throw error;
+      setGameState('won');
+    } catch (e) {
+      alert("Erreur encaissement");
+      setGameState('playing');
+    }
+  };
+
+  // --- RENDU VISUEL ---
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center overflow-x-hidden">
-      {/* HEADER AVEC LOGO CHIF PAM */}
-      <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ChevronLeft/></button>
-        <div className="flex flex-col items-center">
-            <span className="text-2xl tracking-tighter text-white">CHIF <span className="text-rose-500">PAM</span></span>
-            <span className="text-[7px] tracking-[0.3em] text-slate-500 -mt-1 font-light not-italic text-center">ELITE GAMING</span>
+    <div className="min-h-screen bg-[#0a0a0f] text-white font-sans overflow-hidden flex flex-col relative">
+      
+      {/* HEADER */}
+      <div className="z-10 p-4 flex justify-between items-center bg-[#121218] border-b border-white/5">
+        <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition">
+            <ChevronLeft size={24} />
+        </button>
+        <div className="text-center">
+            <h1 className="font-black text-2xl tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-orange-500">
+                CHIF PAM
+            </h1>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-gray-500">Glass Survival</p>
         </div>
-        <div className="w-10"/>
+        <div className="w-10" />
       </div>
 
-      <div className="w-full max-w-md flex-1 flex flex-col">
-        {status === 'idle' || status === 'loading' ? (
-          <div className="my-auto space-y-6 animate-in fade-in zoom-in duration-500 text-center">
-            <h1 className="text-3xl text-rose-500 tracking-widest mb-2 font-black">GLASS BRIDGE</h1>
+      {/* ZONE DE JEU (Scrollable inversée) */}
+      <div className="flex-1 relative overflow-y-auto no-scrollbar bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#050508] to-black">
+        <div className="min-h-full flex flex-col-reverse justify-start items-center pb-32 pt-10 gap-4">
             
-            <div className="flex gap-2 bg-white/5 p-1 rounded-2xl">
-              {(['facile', 'intermédiaire', 'difficile'] as const).map(d => (
-                <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-3 rounded-xl text-[10px] transition-all ${difficulty === d ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-500'}`}>{d}</button>
-              ))}
-            </div>
-            
-            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4">
-              <p className="text-xs text-slate-500">Mise Minimum: 10 HTG</p>
-              <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-center text-4xl w-full outline-none text-rose-500 font-black"/>
-              <button onClick={startGame} disabled={status === 'loading'} className="w-full py-5 bg-rose-500 text-white rounded-2xl text-xl shadow-lg hover:scale-105 active:scale-95 transition-all flex justify-center">
-                {status === 'loading' ? <Loader2 className="animate-spin"/> : "JOUER MAINTENANT"}
-              </button>
-            </div>
-          </div>
-        ) : status === 'playing' ? (
-          <div className="flex-1 flex flex-col animate-in fade-in">
-            {/* STATS */}
-            <div className="flex justify-between mb-4 gap-2">
-              <div className="flex-1 bg-white/5 p-3 rounded-xl border border-white/10">
-                <p className="text-[8px] text-slate-500 uppercase">Multiplicateur</p>
-                <p className="text-rose-500 text-lg">x{multiplier.toFixed(2)}</p>
-              </div>
-              <div className="flex-1 bg-white/5 p-3 rounded-xl border border-white/10 text-right">
-                <p className="text-[8px] text-slate-500 uppercase">Gain Actuel</p>
-                <p className="text-emerald-500 text-lg">{currentWin} HTG</p>
-              </div>
-            </div>
+            {/* GÉNÉRATION DU PONT */}
+            {gameState !== 'idle' && Array.from({ length: config.rows }).map((_, rIndex) => (
+                <div key={rIndex} className="relative w-full max-w-sm px-6">
+                    {/* Numéro de palier sur le côté */}
+                    <div className={`absolute -left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold ${rIndex === currentStep ? 'text-rose-500' : 'text-gray-700'}`}>
+                        {(rIndex + 1).toString().padStart(2, '0')}
+                    </div>
 
-            {/* LE PONT */}
-            <div className="flex-1 bg-black/40 rounded-3xl border border-white/5 p-4 flex flex-col-reverse gap-3 relative overflow-y-auto no-scrollbar">
-              {Array.from({ length: rows }).map((_, rIndex) => (
-                <div key={rIndex} className={`grid ${cols === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2 h-20`}>
-                  {Array.from({ length: cols }).map((_, cIndex) => {
-                    const isStepped = playerPath[rIndex] === cIndex;
-                    const isBroken = brokenGlass?.row === rIndex && brokenGlass?.col === cIndex;
-                    return (
-                      <motion.button
-                        key={cIndex}
-                        onClick={() => handleJump(cIndex)}
-                        disabled={playerPath.length !== rIndex || isJumping}
-                        className={`relative rounded-xl border-2 transition-all duration-500 ${
-                          isStepped ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 
-                          isBroken ? 'bg-transparent border-transparent' : 'bg-white/5 border-white/10'
-                        }`}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        {isBroken && <span className="absolute inset-0 flex items-center justify-center text-2xl">💥</span>}
-                        {isStepped && <CheckCircle className="text-cyan-400 mx-auto" size={20}/>}
-                      </motion.button>
-                    );
-                  })}
+                    <div className={`grid gap-4 ${config.cols === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                        {Array.from({ length: config.cols }).map((_, cIndex) => {
+                            // États de la tuile
+                            const isPastStep = rIndex < currentStep;
+                            const isCurrentStep = rIndex === currentStep;
+                            const wasChosen = history[rIndex] === cIndex;
+                            const isBroken = shatteredGlass?.r === rIndex && shatteredGlass?.c === cIndex;
+                            const isSafe = isPastStep && wasChosen;
+
+                            return (
+                                <motion.button
+                                    key={cIndex}
+                                    disabled={!isCurrentStep || isJumping || gameState !== 'playing'}
+                                    onClick={() => handleJump(cIndex)}
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ 
+                                        opacity: isBroken ? 0 : 1, 
+                                        scale: isBroken ? 1.2 : 1,
+                                        borderColor: isSafe ? '#10b981' : 'rgba(255,255,255,0.1)'
+                                    }}
+                                    transition={{ duration: 0.3, delay: rIndex * 0.05 }}
+                                    className={`
+                                        h-20 rounded-xl border-2 relative overflow-hidden transition-all
+                                        ${isBroken ? 'bg-red-500/20' : 'bg-white/5 backdrop-blur-sm'}
+                                        ${isSafe ? 'border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'border-white/10'}
+                                        ${isCurrentStep && !isJumping ? 'animate-pulse border-white/30 cursor-pointer hover:bg-white/10' : ''}
+                                    `}
+                                >
+                                    {/* EFFET DE BRISE DE VERRE */}
+                                    {isBroken && (
+                                        <motion.div 
+                                            initial={{ scale: 0 }} 
+                                            animate={{ scale: 1.5, opacity: 0 }} 
+                                            className="absolute inset-0 bg-rose-500 flex items-center justify-center"
+                                        >
+                                            <span className="text-4xl">💥</span>
+                                        </motion.div>
+                                    )}
+
+                                    {/* MARQUEUR DE PASSAGE */}
+                                    {isSafe && (
+                                        <motion.div 
+                                            initial={{ scale: 0 }} 
+                                            animate={{ scale: 1 }}
+                                            className="absolute inset-0 flex items-center justify-center"
+                                        >
+                                            <Footprints className="text-emerald-500 rotate-90" size={32} />
+                                        </motion.div>
+                                    )}
+                                </motion.button>
+                            );
+                        })}
+                    </div>
                 </div>
-              ))}
-
-              {/* PERSONNAGE */}
-              <AnimatePresence>
-                <motion.div
-                  className="absolute z-20 pointer-events-none"
-                  initial={false}
-                  animate={{
-                    x: playerPath.length === 0 ? "50%" : 
-                       cols === 2 ? (playerPath[playerPath.length-1] === 0 ? "25%" : "75%") :
-                       `${(playerPath[playerPath.length-1] * 33) + 16}%`,
-                    y: `-${(playerPath.length * 84) + 20}px`,
-                  }}
-                  transition={{ type: "spring", stiffness: 100, damping: 15 }}
-                >
-                  <motion.div 
-                    className="w-10 h-10 bg-rose-500 rounded-lg border-2 border-white shadow-2xl flex items-center justify-center"
-                    animate={isJumping ? { 
-                      scale: [1, 1.5, 1],
-                      y: [0, -40, 0],
-                      rotate: [0, 10, 0] 
-                    } : {}}
-                    transition={{ duration: 0.4 }}
-                  >
-                    <span className="text-[10px] text-white font-bold italic">#456</span>
-                  </motion.div>
-                  <motion.div 
-                    className="w-8 h-2 bg-black/40 rounded-full blur-sm mx-auto mt-1"
-                    animate={isJumping ? { scale: [1, 0.5, 1], opacity: [0.4, 0.1, 0.4] } : {}}
-                  />
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* CONTROLES */}
-            <div className="mt-4 flex gap-3">
-               <button 
-                onClick={() => cashout(multiplier)}
-                disabled={playerPath.length === 0 || isJumping}
-                className="flex-1 py-5 bg-emerald-500 text-black rounded-2xl font-black text-lg flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
-              >
-                <Wallet size={20}/> ENCAISSER {currentWin} HTG
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* ECRAN FIN */
-          <div className="my-auto text-center space-y-6 animate-in zoom-in">
-            {status === 'lost' ? (
-              <>
-                <XCircle size={80} className="text-rose-500 mx-auto animate-bounce"/>
-                <h2 className="text-4xl">ÉLIMINÉ</h2>
-                <p className="text-slate-500 uppercase">Le verre s'est brisé au niveau {playerPath.length + 1}</p>
-              </>
-            ) : (
-              <>
-                <Trophy size={80} className="text-emerald-500 mx-auto animate-pulse"/>
-                <h2 className="text-4xl text-emerald-500">SURVIVANT</h2>
-                <p className="text-2xl">+{currentWin} HTG</p>
-              </>
-            )}
+            ))}
             
-            <div className="flex flex-col gap-3">
-                <button onClick={startGame} className="w-full py-5 bg-white text-black rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <PlayCircle size={20}/> RECOMMENCER
-                </button>
-                <button onClick={() => setStatus('idle')} className="w-full py-5 bg-white/5 border border-white/10 rounded-2xl text-slate-400">
-                    RETOUR AU MENU
-                </button>
-            </div>
-          </div>
-        )}
+            {/* AVATAR JOUEUR (Flottant) */}
+            {gameState === 'playing' && (
+                <motion.div
+                    className="fixed bottom-32 pointer-events-none z-50 text-rose-500 drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]"
+                    animate={{
+                        y: isJumping ? -100 : 0,
+                        scale: isJumping ? 1.2 : 1
+                    }}
+                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                >
+                   {/* On peut mettre une icone ou laisser vide, l'effet visuel est sur les cases */}
+                </motion.div>
+            )}
+        </div>
       </div>
+
+      {/* INTERFACE DE CONTRÔLE (BAS) */}
+      <div className="z-20 bg-[#121218] border-t border-white/5 p-5 pb-8 rounded-t-3xl shadow-2xl">
+        <AnimatePresence mode="wait">
+            {gameState === 'idle' ? (
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="space-y-4"
+                >
+                    {/* SÉLECTEUR DIFFICULTÉ */}
+                    <div className="flex bg-black/40 p-1 rounded-xl">
+                        {(Object.keys(DIFFICULTIES) as Array<keyof typeof DIFFICULTIES>).map((d) => (
+                            <button
+                                key={d}
+                                onClick={() => setLevel(d)}
+                                className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all ${level === d ? 'bg-rose-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                            >
+                                {DIFFICULTIES[d].label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* INPUT MISE */}
+                    <div className="flex items-center gap-4 bg-black/40 p-4 rounded-xl border border-white/5">
+                        <Wallet className="text-gray-500" />
+                        <div className="flex-1">
+                            <p className="text-[10px] text-gray-500 uppercase font-bold">Votre Mise</p>
+                            <input 
+                                type="number" 
+                                value={bet} 
+                                onChange={(e) => setBet(Number(e.target.value))}
+                                className="bg-transparent text-2xl font-black text-white w-full outline-none"
+                            />
+                        </div>
+                        <span className="text-rose-500 font-bold">HTG</span>
+                    </div>
+
+                    <button 
+                        onClick={startGame}
+                        className="w-full py-4 bg-gradient-to-r from-rose-600 to-rose-500 rounded-xl font-black text-lg tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_30px_rgba(225,29,72,0.4)]"
+                    >
+                        JOUER
+                    </button>
+                </motion.div>
+            ) : gameState === 'playing' ? (
+                <motion.div 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="flex gap-4"
+                >
+                    <div className="flex-1 bg-black/40 rounded-xl p-3 border border-white/5">
+                        <p className="text-[10px] text-gray-500 font-bold">GAIN POTENTIEL</p>
+                        <p className="text-2xl font-black text-emerald-400">{currentGain} HTG</p>
+                    </div>
+                    
+                    <button 
+                        onClick={() => handleCashout(multiplier)}
+                        disabled={currentStep === 0 || isJumping}
+                        className="flex-[2] bg-emerald-500 text-black font-black text-xl rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        ENCAISSER <Wallet size={20} className="fill-black" />
+                    </button>
+                </motion.div>
+            ) : (
+                /* ÉCRAN DE FIN (GAGNÉ / PERDU) */
+                <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    className="text-center space-y-4"
+                >
+                    {gameState === 'won' ? (
+                        <>
+                            <Trophy className="mx-auto text-yellow-400 mb-2" size={60} />
+                            <h2 className="text-3xl font-black text-white">VICTOIRE !</h2>
+                            <p className="text-emerald-400 text-xl font-bold">Vous avez gagné {currentGain} HTG</p>
+                        </>
+                    ) : (
+                        <>
+                            <ShieldAlert className="mx-auto text-rose-600 mb-2" size={60} />
+                            <h2 className="text-3xl font-black text-white">ÉLIMINÉ</h2>
+                            <p className="text-gray-400">Le verre s'est brisé.</p>
+                        </>
+                    )}
+                    
+                    <button 
+                        onClick={() => setGameState('idle')}
+                        className="w-full py-4 bg-white/10 rounded-xl font-bold hover:bg-white/20 transition-all mt-4"
+                    >
+                        Rejouer
+                    </button>
+                </motion.div>
+            )}
+        </AnimatePresence>
+      </div>
+
     </div>
   );
 }
