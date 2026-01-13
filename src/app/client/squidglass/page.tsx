@@ -3,259 +3,242 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Loader2, XCircle, Trophy, Square, CheckCircle } from 'lucide-react';
+import { ChevronLeft, Loader2, XCircle, Trophy, CheckCircle, Wallet, PlayCircle } from 'lucide-react';
 
-// --- CONFIGURATION DU JEU ---
 const SETTINGS = {
-  facile: { rows: 4, cols: 2, winMultiplier: 2 },         // 4 lignes, 2 colonnes
-  intermédiaire: { rows: 6, cols: 2, winMultiplier: 3 },  // 6 lignes, 2 colonnes
-  difficile: { rows: 8, cols: 3, winMultiplier: 5 }       // 8 lignes, 3 colonnes
+  facile: { rows: 5, cols: 2, step: 0.3 },
+  intermédiaire: { rows: 7, cols: 2, step: 0.5 },
+  difficile: { rows: 9, cols: 3, step: 0.8 }
 };
 
-const GLASS_SOUND = new Audio('/sounds/glass_break.mp3'); // Assure-toi d'avoir un son de verre qui se brise
-const WALK_SOUND = new Audio('/sounds/walk.mp3');         // Et un son de pas
-
-export default function SquidGlass() {
+export default function SquidGlassElite() {
   const router = useRouter();
   const [bet, setBet] = useState(10);
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
-  
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost'>('idle');
+  
   const [gameId, setGameId] = useState<string | null>(null);
-  const [glassSequence, setGlassSequence] = useState<number[]>([]); // Séquence des verres solides (index de la colonne)
-  const [playerPath, setPlayerPath] = useState<number[]>([]);       // Chemin du joueur (colonne choisie à chaque rangée)
-  const [brokenGlass, setBrokenGlass] = useState<{ row: number; col: number } | null>(null); // Verre qui se brise
-  const [currentMultiplier, setCurrentMultiplier] = useState(1.0); // Multiplicateur affiché
-  const [showCorrection, setShowCorrection] = useState(false); // Afficher la bonne voie après l'erreur
+  const [glassSequence, setGlassSequence] = useState<number[]>([]);
+  const [playerPath, setPlayerPath] = useState<number[]>([]);
+  const [brokenGlass, setBrokenGlass] = useState<{ row: number; col: number } | null>(null);
+  const [multiplier, setMultiplier] = useState(1.0);
+  const [isJumping, setIsJumping] = useState(false);
 
-  const { rows, cols, winMultiplier } = SETTINGS[difficulty];
+  const { rows, cols, step } = SETTINGS[difficulty];
 
-  useEffect(() => {
-    // Le multiplicateur augmente à chaque pas réussi
-    const baseStep = { facile: 0.25, intermédiaire: 0.35, difficile: 0.5 }; // Augmentation par pas
-    setCurrentMultiplier(1 + (playerPath.length * baseStep[difficulty]));
-  }, [playerPath.length, difficulty]);
-
-
-  const generateGlassSequence = () => {
-    // Génère une séquence aléatoire de colonnes pour les verres solides
-    const sequence: number[] = [];
-    for (let i = 0; i < rows; i++) {
-      sequence.push(Math.floor(Math.random() * cols)); // 0, 1 ou 2 pour 3 colonnes
-    }
-    return sequence;
-  };
+  // Calcul du gain en temps réel
+  const currentWin = Math.floor(bet * multiplier);
 
   const startGame = async () => {
     if (bet < 10 || status === 'loading') return;
     setStatus('loading');
     setPlayerPath([]);
     setBrokenGlass(null);
-    setShowCorrection(false);
+    setMultiplier(1.0);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // 1. Débit de la mise
       const { data: paid } = await supabase.rpc('process_bet', { amount: bet });
       if (!paid) { alert("Solde insuffisant"); setStatus('idle'); return; }
 
-      // 2. Génération de la séquence de verres
-      const newSequence = generateGlassSequence();
-      setGlassSequence(newSequence);
+      const sequence = Array.from({ length: rows }, () => Math.floor(Math.random() * cols));
+      setGlassSequence(sequence);
 
-      // 3. Création du jeu en DB
-      const { data: game, error } = await supabase.from('glass_games').insert([{
-        user_id: user.id,
-        bet_amount: bet,
-        difficulty,
-        num_rows: rows,
-        num_cols: cols,
-        glass_sequence: newSequence, // Stocke la séquence secrète pour validation
-        is_active: true
+      const { data: game } = await supabase.from('glass_games').insert([{
+        user_id: user.id, bet_amount: bet, difficulty, num_rows: rows, num_cols: cols,
+        glass_sequence: sequence, is_active: true
       }]).select().single();
-
-      if (error) throw error;
 
       setGameId(game.id);
       setStatus('playing');
-
     } catch (e) {
-      alert("Erreur au démarrage du jeu.");
+      alert("Erreur de connexion");
       setStatus('idle');
     }
   };
 
-  const handleGlassClick = async (colIndex: number) => {
-    if (status !== 'playing' || brokenGlass !== null) return; // Ne rien faire si perdu ou en animation
+  const handleJump = async (colIndex: number) => {
+    if (status !== 'playing' || isJumping || brokenGlass) return;
 
+    setIsJumping(true);
     const currentRow = playerPath.length;
+    const isCorrect = colIndex === glassSequence[currentRow];
 
-    if (colIndex === glassSequence[currentRow]) {
-      // BON VERRE
-      WALK_SOUND.play();
-      setPlayerPath(prev => [...prev, colIndex]);
+    // Délai pour laisser l'animation de saut se faire
+    setTimeout(async () => {
+      if (isCorrect) {
+        setPlayerPath(prev => [...prev, colIndex]);
+        const nextMultiplier = parseFloat((multiplier + step).toFixed(2));
+        setMultiplier(nextMultiplier);
+        setIsJumping(false);
 
-      if (currentRow + 1 === rows) {
-        // VICTOIRE !
-        setStatus('ended');
-        await supabase.rpc('claim_glass_win', { game_id: gameId }); // Appelle la fonction de gain
+        // Si c'est la fin du pont
+        if (currentRow + 1 === rows) {
+          cashout(nextMultiplier);
+        }
+      } else {
+        setBrokenGlass({ row: currentRow, col: colIndex });
+        setStatus('lost');
+        setIsJumping(false);
+        if (gameId) await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
       }
-    } else {
-      // MAUVAIS VERRE
-      GLASS_SOUND.play();
-      setBrokenGlass({ row: currentRow, col: colIndex });
-      setShowCorrection(true); // Active l'affichage de la bonne voie
-      setStatus('lost'); // Passe en perdu immédiatement
-
-      // Met à jour la DB pour marquer le jeu comme perdu
-      if (gameId) {
-        await supabase.from('glass_games').update({ is_active: false, is_won: false }).eq('id', gameId);
-      }
-    }
+    }, 400); // Correspond à la durée du saut
   };
 
-  const getGlassStyle = (rowIndex: number, colIndex: number) => {
-    let base = "bg-white/5 border-white/10"; // Style par défaut
+  const cashout = async (finalMult: number) => {
+    if (status !== 'playing' && playerPath.length === 0) return;
+    setStatus('loading');
     
-    // Si le verre est cassé
-    if (brokenGlass && brokenGlass.row === rowIndex && brokenGlass.col === colIndex) {
-      return "bg-rose-700 border-rose-500 animate-pulse";
+    try {
+      await supabase.rpc('claim_glass_win', { 
+        game_id: gameId, 
+        override_multiplier: finalMult // Assure-toi que ta fonction SQL accepte le multiplicateur
+      });
+      setStatus('ended');
+    } catch (e) {
+      alert("Erreur lors du retrait");
     }
-    // Si c'est la voie du joueur
-    if (playerPath[rowIndex] === colIndex) {
-      return "bg-emerald-600 border-emerald-400";
-    }
-    // Si on est en mode correction et c'est la bonne voie future
-    if (showCorrection && rowIndex > playerPath.length && glassSequence[rowIndex] === colIndex) {
-        return "bg-emerald-500/30 border-emerald-500/20"; // Chemin transparent
-    }
-    return base;
   };
-
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center select-none">
-      {/* Header */}
-      <div className="w-full max-w-md flex justify-between items-center mb-8">
+    <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center overflow-x-hidden">
+      {/* HEADER */}
+      <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ChevronLeft/></button>
-        <h1 className="text-2xl text-emerald-500 tracking-tighter">SQUID GLASS</h1>
+        <h1 className="text-xl text-rose-500 tracking-widest">GLASS BRIDGE</h1>
         <div className="w-10"/>
       </div>
 
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-md flex-1 flex flex-col">
         {status === 'idle' || status === 'loading' ? (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            {/* Difficulté */}
-            <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
+          <div className="my-auto space-y-6 animate-in fade-in zoom-in duration-500">
+            <div className="flex gap-2 bg-white/5 p-1 rounded-2xl">
               {(['facile', 'intermédiaire', 'difficile'] as const).map(d => (
-                <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-3 rounded-xl text-[10px] transition-all ${difficulty === d ? 'bg-white text-black font-black' : 'text-slate-500 font-medium'}`}>
-                  {d} ({SETTINGS[d].rows} lignes, {SETTINGS[d].cols} colonnes)
-                </button>
+                <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-3 rounded-xl text-[10px] transition-all ${difficulty === d ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-500'}`}>{d}</button>
               ))}
             </div>
-
-            <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4">
-              <div className="bg-black/40 p-5 rounded-2xl border border-white/10 flex justify-between items-center">
-                <span className="text-emerald-500 text-xs">MISE HTG</span>
-                <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-right outline-none w-24 text-2xl font-black"/>
-              </div>
-              <button onClick={startGame} disabled={status === 'loading'} className="w-full py-6 bg-emerald-500 text-black rounded-3xl text-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex justify-center">
-                {status === 'loading' ? <Loader2 className="animate-spin"/> : "COMMENCER"}
+            
+            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4 text-center">
+              <p className="text-xs text-slate-500">Mise Minimum: 10 HTG</p>
+              <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-center text-4xl w-full outline-none text-rose-500 font-black"/>
+              <button onClick={startGame} disabled={status === 'loading'} className="w-full py-5 bg-rose-500 text-white rounded-2xl text-xl shadow-lg hover:scale-105 active:scale-95 transition-all flex justify-center">
+                {status === 'loading' ? <Loader2 className="animate-spin"/> : "JOUER MAINTENANT"}
               </button>
             </div>
           </div>
-        ) : status === 'playing' || showCorrection ? (
-          <div className="animate-in zoom-in duration-300">
-            {/* HUD */}
-            <div className="flex justify-between bg-white/5 p-4 rounded-2xl border border-white/10 mb-6">
-              <div>
-                <span className="text-[8px] text-slate-500">MULTI.</span>
-                <p className="text-emerald-500 text-2xl mt-1">{currentMultiplier.toFixed(2)}X</p>
+        ) : status === 'playing' ? (
+          <div className="flex-1 flex flex-col">
+            {/* STATS */}
+            <div className="flex justify-between mb-4 gap-2">
+              <div className="flex-1 bg-white/5 p-3 rounded-xl border border-white/10">
+                <p className="text-[8px] text-slate-500">PROFIL MULTI.</p>
+                <p className="text-rose-500 text-lg">x{multiplier.toFixed(2)}</p>
               </div>
-              <div className="text-right">
-                <span className="text-[8px] text-slate-500">POTENTIEL</span>
-                <p className="text-amber-500 text-2xl mt-1">{(bet * currentMultiplier).toFixed(0)} HTG</p>
+              <div className="flex-1 bg-white/5 p-3 rounded-xl border border-white/10 text-right">
+                <p className="text-[8px] text-slate-500">ENCAISSABLE</p>
+                <p className="text-emerald-500 text-lg">{currentWin} HTG</p>
               </div>
             </div>
 
-            {/* Grid de Verre */}
-            <div className="relative flex flex-col items-center justify-center gap-2" style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}>
-              {Array.from({ length: rows }).map((_, rowIndex) => (
-                <div key={rowIndex} className="flex gap-2" style={{ transform: `translateZ(-${rowIndex * 20}px) rotateX(15deg)` }}>
-                  {Array.from({ length: cols }).map((_, colIndex) => (
-                    <motion.button
-                      key={colIndex}
-                      className={`relative w-20 h-20 rounded-xl flex items-center justify-center text-xs border-2 transition-all duration-300 transform-gpu ${getGlassStyle(rowIndex, colIndex)}`}
-                      onClick={() => handleGlassClick(colIndex)}
-                      disabled={playerPath.length !== rowIndex || status !== 'playing' || brokenGlass !== null}
-                      initial={{ y: 0, opacity: 1, scale: 1 }}
-                      animate={brokenGlass && brokenGlass.row === rowIndex && brokenGlass.col === colIndex ? { y: 200, opacity: 0, rotateX: 90, transition: { duration: 0.5, ease: "easeIn" } } : { y: 0, opacity: 1, scale: 1 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {brokenGlass && brokenGlass.row === rowIndex && brokenGlass.col === colIndex && (
-                        <span className="absolute text-white text-5xl font-black -mt-2">💥</span>
-                      )}
-                      {playerPath[rowIndex] === colIndex && <CheckCircle size={30} className="text-white"/>}
-                    </motion.button>
-                  ))}
+            {/* LE PONT (Vue de dessus/biais) */}
+            <div className="flex-1 bg-black/40 rounded-3xl border border-white/5 p-4 flex flex-col-reverse gap-3 relative overflow-y-auto no-scrollbar">
+              {Array.from({ length: rows }).map((_, rIndex) => (
+                <div key={rIndex} className="grid grid-cols-3 gap-2 h-20">
+                    {/* On centre si seulement 2 colonnes */}
+                  {Array.from({ length: cols }).map((_, cIndex) => {
+                    const isCorrect = glassSequence[rIndex] === cIndex;
+                    const isStepped = playerPath[rIndex] === cIndex;
+                    const isBroken = brokenGlass?.row === rIndex && brokenGlass?.col === cIndex;
+
+                    return (
+                      <motion.button
+                        key={cIndex}
+                        onClick={() => handleJump(cIndex)}
+                        disabled={playerPath.length !== rIndex || isJumping}
+                        className={`relative rounded-xl border-2 transition-all duration-500 ${
+                          isStepped ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 
+                          isBroken ? 'bg-transparent border-transparent' : 'bg-white/5 border-white/10'
+                        }`}
+                        whileTap={{ scale: 0.9 }}
+                      >
+                        {isBroken && <span className="absolute inset-0 flex items-center justify-center text-2xl">💥</span>}
+                        {isStepped && <CheckCircle className="text-cyan-400 mx-auto" size={20}/>}
+                      </motion.button>
+                    );
+                  })}
                 </div>
               ))}
-              
-              {/* Le Joueur */}
+
+              {/* PERSONNAGE (Le sauteur) */}
               <AnimatePresence>
-                {playerPath.length < rows && (status === 'playing' || showCorrection) && (
-                  <motion.div
-                    className="absolute z-10 w-12 h-12 bg-white rounded-full border-2 border-emerald-500 flex items-center justify-center shadow-lg"
-                    initial={{ 
-                        y: -15, 
-                        x: cols === 2 ? (playerPath[0] === 0 ? -45 : 45) : (playerPath[0] === 0 ? -90 : playerPath[0] === 1 ? 0 : 90), // Position initiale pour 2 ou 3 colonnes
-                        z: 0 
-                    }}
-                    animate={{
-                        y: playerPath.length * 88, // 88 est la hauteur d'une dalle + l'espacement
-                        x: cols === 2 ? (playerPath[playerPath.length - 1] === 0 ? -45 : 45) : 
-                           (playerPath[playerPath.length - 1] === 0 ? -90 : playerPath[playerPath.length - 1] === 1 ? 0 : 90),
-                        transition: { type: "spring", stiffness: 200, damping: 20, duration: 0.3 }
-                    }}
-                    exit={{ opacity: 0, y: 50, transition: { duration: 0.2 } }}
-                    style={{
-                      transformOrigin: 'center bottom',
-                      bottom: 'auto',
-                      left: '50%',
-                      marginLeft: '-24px', // Centrer le joueur
-                      transform: `translateZ(${playerPath.length * -20}px) rotateX(15deg) translateY(${playerPath.length * 88}px)`
-                    }}
+                <motion.div
+                  className="absolute z-20 pointer-events-none"
+                  initial={false}
+                  animate={{
+                    // Position X basée sur la colonne, Y basée sur la rangée
+                    x: playerPath.length === 0 ? "50%" : `${(playerPath[playerPath.length-1] * 33) + 16}%`,
+                    y: `-${(playerPath.length * 84) + 20}px`,
+                  }}
+                  transition={{ type: "spring", stiffness: 100, damping: 15 }}
+                >
+                  <motion.div 
+                    className="w-10 h-10 bg-rose-500 rounded-lg border-2 border-white shadow-2xl flex items-center justify-center"
+                    animate={isJumping ? { 
+                      scale: [1, 1.5, 1], // Effet de saut vers la caméra
+                      y: [0, -40, 0],    // Arc de saut
+                      rotate: [0, 10, 0] 
+                    } : {}}
+                    transition={{ duration: 0.4 }}
                   >
-                    <span className="text-black text-xs font-bold">YOU</span>
+                    <span className="text-[10px] text-white">#456</span>
                   </motion.div>
-                )}
+                  {/* Ombre du perso */}
+                  <motion.div 
+                    className="w-8 h-2 bg-black/40 rounded-full blur-sm mx-auto mt-1"
+                    animate={isJumping ? { scale: [1, 0.5, 1], opacity: [0.4, 0.1, 0.4] } : {}}
+                  />
+                </motion.div>
               </AnimatePresence>
             </div>
-            {brokenGlass && (
-              <p className="text-center text-rose-500 text-sm mt-4">Oh non ! Le verre était fragile. Regarde la bonne voie.</p>
-            )}
+
+            {/* CONTROLES BAS */}
+            <div className="mt-4 flex gap-3">
+               <button 
+                onClick={() => cashout(multiplier)}
+                disabled={playerPath.length === 0 || isJumping}
+                className="flex-[2] py-5 bg-emerald-500 text-black rounded-2xl font-black text-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Wallet size={20}/> ENCAISSER {currentWin} HTG
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="text-center py-10 space-y-6 animate-in zoom-in">
-            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center ${status === 'lost' ? 'bg-rose-500/10 border border-rose-500/20' : 'bg-emerald-500/10 border border-emerald-500/20'}`}>
-                {status === 'lost' ? <XCircle size={50} className="text-rose-500"/> : <Trophy size={50} className="text-emerald-500"/>}
+          /* ECRAN FIN */
+          <div className="my-auto text-center space-y-6 animate-in zoom-in">
+            {status === 'lost' ? (
+              <>
+                <XCircle size={80} className="text-rose-500 mx-auto animate-bounce"/>
+                <h2 className="text-4xl">ÉLIMINÉ</h2>
+                <p className="text-slate-500 uppercase">Le verre s'est brisé au niveau {playerPath.length + 1}</p>
+              </>
+            ) : (
+              <>
+                <Trophy size={80} className="text-emerald-500 mx-auto animate-pulse"/>
+                <h2 className="text-4xl text-emerald-500">SURVIVANT</h2>
+                <p className="text-2xl">+{currentWin} HTG</p>
+              </>
+            )}
+            
+            <div className="flex flex-col gap-3">
+                <button onClick={startGame} className="w-full py-5 bg-white text-black rounded-2xl font-black flex items-center justify-center gap-2">
+                    <PlayCircle size={20}/> RECOMMENCER
+                </button>
+                <button onClick={() => setStatus('idle')} className="w-full py-5 bg-white/5 border border-white/10 rounded-2xl">
+                    RETOUR AU MENU
+                </button>
             </div>
-            <div>
-                <h2 className={`text-5xl font-black tracking-tighter ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "ÉLIMINÉ" : "VAINQUEUR !"}</h2>
-                <p className="text-slate-500 text-xs mt-1">
-                    {status === 'lost' 
-                    ? `TU AS FAIT ${playerPath.length} PAS SUR ${rows}` 
-                    : `TU AS GAGNÉ ${winMultiplier}X TA MISE !`}
-                </p>
-            </div>
-            <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                <p className="text-slate-400 text-xs mb-1">TOTAL GAGNÉ</p>
-                <p className="text-4xl font-black text-white">{status === 'lost' ? "0" : (bet * winMultiplier).toFixed(0)} <span className="text-xs text-slate-500">HTG</span></p>
-            </div>
-            <button onClick={() => setStatus('idle')} className="w-full py-5 bg-white text-black rounded-3xl font-black text-lg active:scale-95 transition-all">REJOUER</button>
           </div>
         )}
       </div>
