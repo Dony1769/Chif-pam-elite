@@ -57,7 +57,7 @@ export default function LaserVault() {
   
   // LOGIQUE DE DIFFICULTÉ
   const [questionsSolved, setQuestionsSolved] = useState(0);
-  const [baseSpeed, setBaseSpeed] = useState(1.0); // Vitesse qui augmente toutes les 2 questions
+  const [baseSpeed, setBaseSpeed] = useState(1.5); // Vitesse qui augmente toutes les 2 questions
   const [errorPenalty, setErrorPenalty] = useState(1.0); // Multiplicateur de vitesse en cas d'erreur
   
   const lastTickRef = useRef<number>(0);
