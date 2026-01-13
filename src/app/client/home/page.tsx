@@ -136,11 +136,11 @@ export default function ClientHome() {
           <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black">Jeux Populaires</h3>
           <div className="grid grid-cols-1 gap-3">
             
-            <GameRow href="/app/client/crash/page.tsx" icon={<Zap className="text-amber-500"/>} title="CROISSANCE" desc="Anticipez la courbe" players="1,248" />
-            <GameRow href="/app/client/mines/page.tsx" icon={<Target className="text-rose-500"/>} title="MINES" desc="Gestion du risque" players="856" />
-            <GameRow href="/app/client/biometric_hack/page.tsx" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Agilité Visuelle" players="652" />
-            <GameRow href="/app/client/quiz/page.tsx" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Connaissances" players="3012" />
-            <GameRow href="/app/client/laser-vault/page.tsx" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision" players="2094" />
+            <GameRow href="/client/crash" icon={<Zap className="text-amber-500"/>} title="CROISSANCE" desc="Anticipez la courbe" players="1,248" />
+            <GameRow href="/client/mines" icon={<Target className="text-rose-500"/>} title="MINES" desc="Gestion du risque" players="856" />
+            <GameRow href="/client/biometric_hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Agilité Visuelle" players="652" />
+            <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Connaissances" players="3012" />
+            <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision" players="2094" />
 
           </div>
         </div>
