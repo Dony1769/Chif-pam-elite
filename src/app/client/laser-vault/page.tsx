@@ -1,21 +1,40 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2 } from 'lucide-react';
+import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, Info, X } from 'lucide-react';
+
+// --- SYSTEME AUDIO ELITE (WebAudio) ---
+const playSound = (type: 'win' | 'lost' | 'laser' | 'click') => {
+  if (typeof window === 'undefined') return;
+  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  if (type === 'click') {
+    osc.frequency.setValueAtTime(400, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    osc.start(); osc.stop(ctx.currentTime + 0.1);
+  } else if (type === 'laser') {
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(100, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+    osc.start(); osc.stop(ctx.currentTime + 0.2);
+  } else if (type === 'lost') {
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(50, ctx.currentTime + 0.5);
+    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.start(); osc.stop(ctx.currentTime + 0.5);
+  }
+};
 
 const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }) => (
-  <motion.div 
-    className="relative w-12 h-20"
-    animate={status === 'lost' ? { rotate: 90, opacity: 0 } : {}}
-    transition={{ duration: 0.5 }}
-  >
-    <motion.div 
-      animate={isScared ? { x: [-1, 1, -1] } : {}} 
-      transition={{ repeat: Infinity, duration: 0.1 }}
-      className="absolute top-5 left-3 w-6 h-10 bg-emerald-600 rounded-lg border border-emerald-400/50 z-10" 
-    />
+  <motion.div className="relative w-12 h-20" animate={status === 'lost' ? { rotate: 90, opacity: 0 } : {}}>
+    <motion.div animate={isScared ? { x: [-1, 1, -1] } : {}} transition={{ repeat: Infinity, duration: 0.1 }} className="absolute top-5 left-3 w-6 h-10 bg-emerald-600 rounded-lg border border-emerald-400/50 z-10" />
     <div className="absolute top-0 left-4 w-5 h-5 bg-orange-200 rounded-full border-2 border-black/20" />
     <motion.div animate={isScared ? { rotate: [40, 60] } : { rotate: 20 }} className="absolute top-6 left-1 w-1.5 h-6 bg-emerald-700 rounded-full origin-top" />
     <motion.div animate={isScared ? { rotate: [-40, -60] } : { rotate: -20 }} className="absolute top-6 right-1 w-1.5 h-6 bg-emerald-700 rounded-full origin-top" />
@@ -25,6 +44,7 @@ const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }
 export default function LaserVault() {
   const router = useRouter();
   const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won'>('idle');
+  const [showTutorial, setShowTutorial] = useState(false);
   const [bet, setBet] = useState(50);
   const [laserY, setLaserY] = useState(0);
   const [problem, setProblem] = useState({ q: "", a: 0 });
@@ -33,12 +53,17 @@ export default function LaserVault() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
 
+  useEffect(() => {
+    const tutorialDone = localStorage.getItem('laser_tutorial_done');
+    if (!tutorialDone) setShowTutorial(true);
+  }, []);
+
   const generateProblem = useCallback((m: number) => {
-    const level = Math.floor(m);
-    const a = Math.floor(Math.random() * (10 * level)) + 5;
-    const b = Math.floor(Math.random() * (5 * level)) + 2;
+    const level = Math.floor(m * 1.5); // Difficulté plus rapide
+    const a = Math.floor(Math.random() * (10 * level)) + 2;
+    const b = Math.floor(Math.random() * (8 * level)) + 2;
     const ops = ['+', '-', '*'];
-    const op = ops[Math.min(level - 1, 2)];
+    const op = ops[Math.floor(Math.random() * Math.min(level, 3))];
     const res = op === '+' ? a + b : op === '-' ? a - b : a * b;
     setProblem({ q: `${a} ${op} ${b}`, a: res });
   }, []);
@@ -54,34 +79,37 @@ export default function LaserVault() {
       setInput("");
       generateProblem(1.0);
       setStatus('playing');
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { alert(e.message); } 
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
     if (status !== 'playing') return;
     const timer = setInterval(() => {
       setLaserY(prev => {
-        if (prev >= 82) { setStatus('lost'); return 82; }
-        return prev + (0.2 + (multiplier * 0.1));
+        if (prev >= 82) { playSound('lost'); setStatus('lost'); return 82; }
+        return prev + (0.25 + (multiplier * 0.12)); // Vitesse augmentée pour l'admin
       });
     }, 100);
     return () => clearInterval(timer);
   }, [status, multiplier]);
 
-  const handleKey = (num: string) => {
-    const newVal = input + num;
+  const handleKey = (val: string) => {
+    playSound('click');
+    if (val === '-' && input !== "") return;
+    const newVal = input + val;
     setInput(newVal);
-    if (parseInt(newVal) === problem.a) {
-      setMultiplier(prev => parseFloat((prev + 0.3).toFixed(1)));
+
+    if (newVal === problem.a.toString()) {
+      setMultiplier(prev => parseFloat((prev + 0.15).toFixed(2))); // Gain réduit à 0.15
       setLaserY(0);
       setInput("");
-      generateProblem(multiplier + 0.3);
-    } else if (newVal.length >= problem.a.toString().length && parseInt(newVal) !== problem.a) {
-        setTimeout(() => setInput(""), 200);
+      generateProblem(multiplier + 0.15);
+    } else if (newVal.length >= problem.a.toString().length && newVal !== "-") {
+      // Mauvaise réponse : Le laser descend de 5% d'un coup
+      playSound('laser');
+      setLaserY(p => Math.min(p + 5, 82));
+      setTimeout(() => setInput(""), 150);
     }
   };
 
@@ -91,79 +119,114 @@ export default function LaserVault() {
     setStatus('won');
   };
 
+  const closeTutorial = () => {
+    localStorage.setItem('laser_tutorial_done', 'true');
+    setShowTutorial(false);
+  };
+
   return (
-    <div className="h-screen bg-[#050508] text-white font-black italic uppercase overflow-hidden select-none relative">
-      <div className="p-6 flex justify-between items-center bg-black/40 border-b border-emerald-500/10 z-50 relative">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ChevronLeft/></button>
+    <div className="h-screen bg-[#050508] text-white font-black italic uppercase overflow-hidden flex flex-col">
+      
+      {/* HEADER COMPACT */}
+      <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50">
+        <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl border border-white/10"><ChevronLeft size={20}/></button>
         <div className="text-center">
-          <h1 className="text-xl text-emerald-500 tracking-tighter">LASER <span className="text-white font-black">VAULT</span></h1>
-          <p className="text-[7px] tracking-[0.3em] text-white/30 font-bold">SECURED TERMINAL</p>
+          <h1 className="text-lg text-emerald-500 tracking-tighter leading-none">LASER VAULT</h1>
+          <p className="text-[6px] tracking-[0.3em] text-white/30 font-bold">ANTI-HACK SYSTEM</p>
         </div>
-        <div className="w-10"/>
+        <button onClick={() => setShowTutorial(true)} className="p-2 text-zinc-500"><Info size={20}/></button>
       </div>
 
-      <div className="h-full flex flex-col p-6 items-center">
+      <div className="flex-1 relative flex flex-col p-4 gap-4 overflow-hidden">
         {status === 'idle' ? (
-          <div className="mt-20 w-full max-w-xs space-y-6 animate-in zoom-in">
-            <div className="bg-white/5 p-10 rounded-[3rem] border border-white/10 text-center shadow-2xl">
-                <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Lock className="text-emerald-500" size={40} />
+          <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in">
+             <div className="bg-white/5 p-8 rounded-[2.5rem] border border-white/10 w-full max-w-xs text-center">
+                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Lock className="text-emerald-500" size={30} />
                 </div>
-                <p className="text-xs text-zinc-500 mb-2 font-bold tracking-widest">MISE INITIALE</p>
-                <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-5xl font-black text-center w-full outline-none mb-8 text-emerald-500" />
-                <button onClick={startGame} className="w-full py-6 bg-emerald-600 text-black rounded-3xl text-xl font-bold active:scale-95 transition-all shadow-[0_10px_20px_rgba(16,185,129,0.2)]">
-                    {loading ? <Loader2 className="animate-spin mx-auto"/> : "ACTIVER"}
+                <p className="text-[10px] text-zinc-500 mb-1 tracking-widest font-bold">MISE HTG</p>
+                <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-4xl font-black text-center w-full outline-none mb-6 text-white" />
+                <button onClick={startGame} className="w-full py-5 bg-emerald-600 text-black rounded-2xl text-xl font-bold active:scale-95 transition-all">
+                    {loading ? <Loader2 className="animate-spin mx-auto"/> : "START HACK"}
                 </button>
             </div>
           </div>
         ) : (
-          <div className="w-full max-w-sm flex flex-col h-[82vh]">
-            <div className="relative flex-1 bg-zinc-900/50 rounded-[2.5rem] border-4 border-zinc-800 overflow-hidden shadow-inner mb-4">
-              <motion.div 
-                animate={{ opacity: [1, 0.4, 1], scaleX: [1, 1.05, 1] }}
-                transition={{ repeat: Infinity, duration: 0.1 }}
-                style={{ top: `${laserY}%` }}
-                className="absolute left-0 right-0 h-1 bg-red-600 shadow-[0_0_30px_red] z-30" 
-              />
-              <div className="absolute top-8 left-0 right-0 text-center z-10">
-                 <p className="text-[8px] tracking-[0.4em] text-zinc-500 font-bold">MULTIPLICATEUR</p>
-                 <h2 className="text-5xl text-emerald-400">x{multiplier.toFixed(1)}</h2>
+          <>
+            {/* VAULT DISPLAY */}
+            <div className="relative flex-[1.2] bg-zinc-900/40 rounded-[2rem] border-2 border-zinc-800 overflow-hidden shadow-inner">
+              <motion.div animate={{ opacity: [1, 0.4, 1] }} style={{ top: `${laserY}%` }} className="absolute left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_15px_red] z-30" />
+              
+              <div className="absolute top-4 left-0 right-0 text-center z-10">
+                 <p className="text-[7px] tracking-[0.3em] text-zinc-500 font-bold uppercase">Multiplicateur</p>
+                 <h2 className="text-3xl text-emerald-400 leading-none">x{multiplier.toFixed(2)}</h2>
               </div>
+
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                 <motion.div key={problem.q} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-                    <p className="text-7xl font-black mb-4 tracking-tighter text-white drop-shadow-2xl">{problem.q}</p>
-                    <div className="h-12 text-4xl text-emerald-500 border-b-4 border-emerald-500/30 px-8 min-w-[120px] font-bold">
+                 <motion.div key={problem.q} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
+                    <p className="text-5xl font-black tracking-tighter text-white/90">{problem.q}</p>
+                    <div className="mt-2 h-10 text-3xl text-emerald-500 border-b-2 border-emerald-500/20 px-4 inline-block min-w-[80px]">
                         {input}
                     </div>
                  </motion.div>
               </div>
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
                  <EliteAvatar status={status} isScared={laserY > 50} />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pb-6">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => (
-                <motion.button key={n} whileTap={{ scale: 0.9 }} onClick={() => handleKey(n.toString())} className="h-16 bg-white/5 border border-white/10 rounded-2xl text-2xl font-black hover:bg-white/10">
+            {/* KEYPAD COMPACT */}
+            <div className="flex-1 grid grid-cols-3 gap-1.5 max-h-[280px]">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, "-", 0].map(n => (
+                <button key={n} onClick={() => handleKey(n.toString())} className="bg-white/5 border border-white/5 rounded-xl text-xl font-black active:bg-white/20 transition-colors">
                   {n}
-                </motion.button>
+                </button>
               ))}
-              <button onClick={() => setInput("")} className="bg-rose-500/10 text-rose-500 rounded-2xl font-bold text-xs uppercase border border-rose-500/20">RESET</button>
-              <button onClick={cashout} className="col-span-3 py-5 bg-emerald-600 text-black font-black rounded-3xl text-xl shadow-xl active:scale-95 mt-2">
-                ENCAISSER {(bet * multiplier).toFixed(0)} HTG
-              </button>
+              <button onClick={() => setInput("")} className="bg-rose-500/10 text-rose-500 rounded-xl font-black text-xs">DEL</button>
             </div>
-          </div>
+          </>
         )}
       </div>
 
+      {/* FIXED FOOTER CASHOUT */}
+      {status === 'playing' && (
+        <div className="p-4 bg-black/80 backdrop-blur-md border-t border-white/5 animate-in slide-in-from-bottom">
+           <button onClick={cashout} className="w-full py-4 bg-emerald-600 text-black font-black rounded-2xl text-lg shadow-lg active:scale-95 transition-all">
+             ENCAISSER {(bet * multiplier).toFixed(0)} HTG
+           </button>
+        </div>
+      )}
+
+      {/* TUTORIAL MODAL */}
+      <AnimatePresence>
+        {showTutorial && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-6">
+            <div className="bg-zinc-900 border border-emerald-500/30 p-8 rounded-[2.5rem] max-w-xs w-full text-center relative">
+              <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <ShieldAlert className="text-emerald-500" />
+              </div>
+              <h3 className="text-2xl font-black mb-4 tracking-tighter">COMMENT JOUER</h3>
+              <ul className="text-left text-[11px] space-y-4 text-zinc-400 font-bold mb-8 italic uppercase">
+                <li className="flex gap-3"><Zap size={14} className="text-emerald-500 shrink-0"/> Résolvez le calcul pour réinitialiser le laser.</li>
+                <li className="flex gap-3"><Zap size={14} className="text-emerald-500 shrink-0"/> Chaque réussite augmente votre gain.</li>
+                <li className="flex gap-3"><Zap size={14} className="text-emerald-500 shrink-0"/> Attention: Une erreur fait descendre le laser !</li>
+                <li className="flex gap-3"><Zap size={14} className="text-emerald-500 shrink-0"/> Encassez avant que le laser ne touche l'avatar.</li>
+              </ul>
+              <button onClick={closeTutorial} className="w-full py-4 bg-white text-black rounded-2xl font-black">J'AI COMPRIS</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* RESULT MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-8 text-center">
-                {status === 'lost' ? <ShieldAlert size={100} className="text-rose-500 mb-6" /> : <Unlock size={100} className="text-emerald-500 mb-6" />}
-                <h2 className="text-6xl font-black italic tracking-tighter">{status === 'lost' ? 'ÉCHEC' : 'REMPORTÉ'}</h2>
-                <p className="text-zinc-500 mt-2 font-bold">{status === 'lost' ? 'ALERTE DE SÉCURITÉ' : `GAIN TOTAL : ${(bet * multiplier).toFixed(0)} HTG`}</p>
-                <button onClick={() => setStatus('idle')} className="mt-12 w-full max-w-xs py-6 bg-white text-black rounded-[2rem] font-black text-xl active:scale-95">CONTINUER</button>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[150] bg-black/98 flex flex-col items-center justify-center p-8 text-center">
+                {status === 'lost' ? <ShieldAlert size={80} className="text-rose-500 mb-4" /> : <Unlock size={80} className="text-emerald-500 mb-4" />}
+                <h2 className="text-5xl font-black italic tracking-tighter leading-none">{status === 'lost' ? 'DETECTION' : 'HACK REUSSI'}</h2>
+                <p className="text-zinc-500 mt-2 text-xs font-bold uppercase tracking-widest">{status === 'lost' ? 'Système verrouillé' : `Gain: ${(bet * multiplier).toFixed(0)} HTG`}</p>
+                <button onClick={() => setStatus('idle')} className="mt-10 w-full max-w-xs py-5 bg-white text-black rounded-2xl font-black active:scale-95">REJOUER</button>
             </motion.div>
         )}
       </AnimatePresence>
