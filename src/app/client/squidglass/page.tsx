@@ -64,6 +64,7 @@ export default function SquidGlassElite() {
     const currentRow = playerPath.length;
     const isCorrect = colIndex === glassSequence[currentRow];
 
+    // Délai pour l'animation
     setTimeout(async () => {
       if (isCorrect) {
         setPlayerPath(prev => [...prev, colIndex]);
@@ -71,6 +72,7 @@ export default function SquidGlassElite() {
         setMultiplier(nextMultiplier);
         setIsJumping(false);
 
+        // Auto-cashout si fin du pont
         if (currentRow + 1 === rows) {
           cashout(nextMultiplier);
         }
@@ -83,20 +85,20 @@ export default function SquidGlassElite() {
     }, 400);
   };
 
-  // MISE À JOUR : Fonction cashout optimisée pour le RPC
+  // --- MISE À JOUR STRICTE SELON DEMANDE ---
   const cashout = async (finalMult: number) => {
     if (status !== 'playing' && playerPath.length === 0) return;
     setStatus('loading');
     
     try {
-      // APPEL RPC : Utilise le paramètre override_multiplier attendu par le SQL
+      // APPEL RPC : On doit passer le nom du paramètre 'override_multiplier'
       const { data, error } = await supabase.rpc('claim_glass_win', { 
         game_id: gameId, 
         override_multiplier: finalMult 
       });
-
+  
       if (error) throw error;
-
+  
       setStatus('ended');
     } catch (e) {
       console.error(e);
@@ -104,6 +106,7 @@ export default function SquidGlassElite() {
       setStatus('playing'); // On remet en jeu si le paiement échoue
     }
   };
+  // -----------------------------------------
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center overflow-x-hidden">
@@ -120,7 +123,6 @@ export default function SquidGlassElite() {
       <div className="w-full max-w-md flex-1 flex flex-col">
         {status === 'idle' || status === 'loading' ? (
           <div className="my-auto space-y-6 animate-in fade-in zoom-in duration-500 text-center">
-            {/* Titre du Jeu */}
             <h1 className="text-3xl text-rose-500 tracking-widest mb-2 font-black">GLASS BRIDGE</h1>
             
             <div className="flex gap-2 bg-white/5 p-1 rounded-2xl">
