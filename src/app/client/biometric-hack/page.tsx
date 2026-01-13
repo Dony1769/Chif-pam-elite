@@ -23,19 +23,17 @@ export default function BiometricHack() {
   const [status, setStatus] = useState<'idle' | 'showing' | 'input' | 'lost' | 'won'>('idle');
   const [bet, setBet] = useState(50);
   const [multiplier, setMultiplier] = useState(1.0);
-  const [gridSize, setGridSize] = useState(3); // Commence par 3x3 (9 cases)
+  const [gridSize, setGridSize] = useState(3); 
   const [pattern, setPattern] = useState<number[]>([]);
   const [userPattern, setUserPattern] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
-
-  // Temps d'affichage (diminue à chaque niveau pour contrer les bots)
   const [displayTime, setDisplayTime] = useState(1000); 
 
   const generatePattern = useCallback((size: number) => {
     const cells = size * size;
-    const count = size + 1; // Nombre de cases à mémoriser
+    const count = size + 1; 
     const newPattern: number[] = [];
     while (newPattern.length < count) {
       const r = Math.floor(Math.random() * cells);
@@ -75,7 +73,6 @@ export default function BiometricHack() {
     const nextUserPattern = [...userPattern, idx];
     setUserPattern(nextUserPattern);
 
-    // Vérifier si le clic est correct
     if (!pattern.includes(idx)) {
       setStatus('lost');
       playSound(110, 0.5, 'sawtooth');
@@ -84,37 +81,47 @@ export default function BiometricHack() {
 
     playSound(880, 0.05);
 
-    // Si le pattern est complet
     if (nextUserPattern.length === pattern.length) {
       const nextMultiplier = parseFloat((multiplier + 0.2).toFixed(1));
       setMultiplier(nextMultiplier);
       
-      // Augmenter la difficulté
       if (nextMultiplier > 1.3 && gridSize === 3) setGridSize(5);
       if (nextMultiplier > 2.0 && gridSize === 5) setGridSize(7);
       
-      // Réduire le temps d'affichage (Anti-bot)
       setDisplayTime(prev => Math.max(300, prev - 100));
-      
       setTimeout(() => generatePattern(gridSize), 500);
     }
   };
 
+  // --- MISE À JOUR DE LA FONCTION CASHOUT ---
   const cashout = async () => {
-    const finalPayout = Math.floor(bet * multiplier);
-    await supabase.rpc('process_game_result', { 
-      p_game_id: gameId, 
-      p_table_name: 'biometric_games', 
-      p_payout: finalPayout, 
-      p_win: true 
-    });
-    setStatus('won');
-    playSound(523, 0.5);
+    if (!gameId || status !== 'input') return;
+
+    setLoading(true);
+    try {
+      const finalPayout = Math.floor(bet * multiplier);
+      
+      const { error } = await supabase.rpc('process_game_result', { 
+        p_game_id: gameId, 
+        p_table_name: 'biometric_games', 
+        p_payout: finalPayout, 
+        p_win: true 
+      });
+
+      if (error) throw error;
+
+      setStatus('won');
+      playSound(523, 0.5);
+    } catch (e: any) {
+      console.error(e.message);
+      alert("Erreur lors de l'encaissement. Contactez le support.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="h-screen bg-[#050508] text-white font-black italic uppercase overflow-hidden flex flex-col">
-      {/* HEADER ELITE */}
       <div className="p-4 flex justify-between items-center bg-black border-b border-emerald-500/20">
         <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-lg"><ChevronLeft/></button>
         <div className="text-center">
@@ -136,7 +143,6 @@ export default function BiometricHack() {
           </motion.div>
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
-            {/* STATS */}
             <div className="w-full flex justify-between mb-8 px-4">
                 <div className="text-left">
                     <p className="text-[7px] text-zinc-500">SÉCURITÉ</p>
@@ -152,7 +158,6 @@ export default function BiometricHack() {
                 </div>
             </div>
 
-            {/* GRID DYNAMIQUE */}
             <div 
               className="grid gap-2 p-4 bg-white/5 rounded-[2rem] border border-white/10"
               style={{ 
@@ -175,19 +180,17 @@ export default function BiometricHack() {
               ))}
             </div>
 
-            {/* BUTTON CASHOUT */}
             <button 
               onClick={cashout}
-              disabled={status === 'showing'}
-              className="w-full mt-10 py-5 bg-emerald-600 text-black font-black rounded-2xl text-xl active:scale-95 disabled:opacity-50"
+              disabled={status === 'showing' || loading}
+              className="w-full mt-10 py-5 bg-emerald-600 text-black font-black rounded-2xl text-xl active:scale-95 disabled:opacity-50 flex justify-center items-center"
             >
-              ENCAISSER {(bet * multiplier).toFixed(0)} HTG
+              {loading ? <Loader2 className="animate-spin" /> : `ENCAISSER ${(bet * multiplier).toFixed(0)} HTG`}
             </button>
           </div>
         )}
       </div>
 
-      {/* TUTORIAL MODAL */}
       <AnimatePresence>
         {showTutorial && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-6">
@@ -204,7 +207,6 @@ export default function BiometricHack() {
         )}
       </AnimatePresence>
 
-      {/* WIN/LOSS SCREENS */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/98 flex flex-col items-center justify-center p-8 text-center">
@@ -221,4 +223,3 @@ export default function BiometricHack() {
     </div>
   );
 }
-
