@@ -1,8 +1,8 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Wallet, Info, CheckCircle2, XCircle, Play } from 'lucide-react';
+import { ChevronLeft, Wallet, CheckCircle2, XCircle } from 'lucide-react';
 
 const CONFIG = {
   facile: { rows: 5, cols: 2, step: 0.3 },
@@ -10,30 +10,39 @@ const CONFIG = {
   difficile: { rows: 9, cols: 3, step: 0.8 }
 };
 
-export default function GlassElite() {
-  const [step, setStep] = useState(0); // 0: Menu, 1: Tuto, 2: Jeu
+export default function GlassEliteFinal() {
+  const [status, setStatus] = useState<'idle' | 'playing' | 'won' | 'lost' | 'loading'>('idle');
   const [difficulty, setDifficulty] = useState<keyof typeof CONFIG>('intermediaire');
   const [bet, setBet] = useState(10);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [path, setPath] = useState<number[]>([]);
-  const [history, setHistory] = useState<number[]>([]);
-  const [status, setStatus] = useState<'idle' | 'playing' | 'won' | 'lost' | 'loading'>('idle');
-  const [showTuto, setShowTuto] = useState(false);
-  const [tutoIndex, setTutoIndex] = useState(0);
+  const [path, setPath] = useState<number[]>([]); // Séquence gagnante
+  const [history, setHistory] = useState<number[]>([]); // Choix du joueur
+  const [isJumping, setIsJumping] = useState(false);
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const currentMult = 1 + (history.length * CONFIG[difficulty].step);
   const currentWin = Math.floor(bet * currentMult);
 
-  // Initialisation : Vérifier si le client veut voir le tuto
+  // --- PERSISTANCE : RÉCUPÉRER LE JEU AU CHARGEMENT ---
   useEffect(() => {
-    const skip = localStorage.getItem('skip_glass_tuto');
-    if (!skip) setShowTuto(true);
+    const checkActiveGame = async () => {
+      const { data, error } = await supabase.rpc('get_active_glass_game');
+      if (data && data.length > 0) {
+        const game = data[0];
+        setGameId(game.id);
+        setBet(game.bet_amount);
+        setDifficulty(game.difficulty as any);
+        setPath(game.path_sequence);
+        setHistory(game.current_path || []);
+        setStatus('playing');
+      }
+    };
+    checkActiveGame();
   }, []);
 
   const startGame = async () => {
     setStatus('loading');
     const sequence = Array.from({ length: CONFIG[difficulty].rows }, () => Math.floor(Math.random() * CONFIG[difficulty].cols));
-    
     try {
       const { data, error } = await supabase.rpc('start_glass_game', {
         p_bet: bet, p_rows: CONFIG[difficulty].rows, p_cols: CONFIG[difficulty].cols,
@@ -50,27 +59,36 @@ export default function GlassElite() {
     }
   };
 
-  const jump = async (col: number) => {
-    if (status !== 'playing') return;
-    const isCorrect = col === path[history.length];
+  const handleJump = async (colIndex: number) => {
+    if (isJumping || status !== 'playing') return;
     
-    if (isCorrect) {
-      const newHistory = [...history, col];
-      setHistory(newHistory);
-      if (newHistory.length === CONFIG[difficulty].rows) {
-        cashout(1 + (newHistory.length * CONFIG[difficulty].step));
+    setIsJumping(true);
+    const isCorrect = colIndex === path[history.length];
+
+    // Attendre la fin de l'animation de saut (600ms)
+    setTimeout(async () => {
+      if (isCorrect) {
+        const newHistory = [...history, colIndex];
+        setHistory(newHistory);
+        setIsJumping(false);
+        // Sauvegarder en DB pour le refresh
+        await supabase.rpc('update_glass_progress', { p_game_id: gameId, p_new_path: newHistory });
+        
+        if (newHistory.length === CONFIG[difficulty].rows) {
+          cashout(1 + (newHistory.length * CONFIG[difficulty].step));
+        }
+      } else {
+        setStatus('lost');
+        setIsJumping(false);
+        await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
       }
-    } else {
-      setStatus('lost');
-      await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
-    }
+    }, 500);
   };
 
   const cashout = async (mult: number) => {
     setStatus('loading');
     try {
-      const { error } = await supabase.rpc('claim_glass_win', { p_game_id: gameId, p_multiplier: mult });
-      if (error) throw error;
+      await supabase.rpc('claim_glass_win', { p_game_id: gameId, p_multiplier: mult });
       setStatus('won');
     } catch (e) {
       alert("Erreur encaissement");
@@ -78,142 +96,125 @@ export default function GlassElite() {
     }
   };
 
-  const tutoSteps = [
-    { text: "Choisissez votre mise et votre difficulté pour commencer.", icon: <Wallet className="text-rose-500" /> },
-    { text: "Traversez le pont en choisissant le bon verre à chaque rangée.", icon: <Play className="text-rose-500" /> },
-    { text: "Si le verre se brise, vous perdez tout. Encaissez quand vous voulez !", icon: <Info className="text-rose-500" /> }
-  ];
-
   return (
-    <div className="fixed inset-0 bg-[#050508] text-white flex flex-col font-bold overflow-hidden select-none">
+    <div className="fixed inset-0 bg-[#050508] text-white flex flex-col font-bold overflow-hidden">
       
-      {/* HEADER RESPONSIVE */}
-      <div className="h-[10%] border-b border-white/5 flex items-center justify-between px-6 bg-black/20">
-        <ChevronLeft onClick={() => window.history.back()} className="cursor-pointer" />
+      {/* HEADER COMPACT */}
+      <div className="h-[8%] flex items-center justify-between px-6 bg-black/40 border-b border-white/5">
+        <ChevronLeft onClick={() => window.history.back()} className="w-6 h-6" />
         <div className="text-center">
-          <h1 className="text-xl tracking-tighter uppercase italic font-black">CHIF <span className="text-rose-500">PAM</span></h1>
-          <p className="text-[8px] tracking-[0.3em] text-white/40 -mt-1">ELITE GAMING</p>
+            <span className="text-lg tracking-tighter">CHIF <span className="text-rose-500">PAM</span></span>
+            <p className="text-[7px] text-white/30 tracking-[.3em] uppercase">Elite Gaming</p>
         </div>
-        <div className="text-emerald-500 text-xs flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
-          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live
-        </div>
+        <div className="w-6" />
       </div>
 
-      {/* ZONE DE JEU (S'adapte à la hauteur restante) */}
-      <div className="flex-1 relative flex flex-col items-center justify-center p-4">
+      {/* ZONE DE JEU (RESPONSIVE) */}
+      <div className="flex-1 relative p-2 flex flex-col justify-end pb-24 items-center" ref={containerRef}>
         
         {status === 'idle' || status === 'loading' ? (
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-xs space-y-4">
-            <div className="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl border border-white/10">
-              {(['facile', 'intermediaire', 'difficile'] as const).map(d => (
-                <button key={d} onClick={() => setDifficulty(d)} className={`py-2 text-[10px] rounded-lg transition-all ${difficulty === d ? 'bg-rose-500 shadow-lg' : 'text-white/40'}`}>
+          <div className="w-full max-w-xs space-y-4 mb-20">
+             <div className="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl border border-white/10">
+              {['facile', 'intermediaire', 'difficile'].map(d => (
+                <button key={d} onClick={() => setDifficulty(d as any)} className={`py-2 text-[9px] rounded-lg transition-all ${difficulty === d ? 'bg-rose-500 shadow-lg' : 'text-white/40'}`}>
                   {d.toUpperCase()}
                 </button>
               ))}
             </div>
-            <div className="bg-white/5 p-6 rounded-3xl border border-white/10 text-center space-y-2">
-              <p className="text-[10px] text-white/40 uppercase tracking-widest">Mise en HTG</p>
-              <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-4xl w-full text-center outline-none font-black text-rose-500" />
-              <button onClick={startGame} disabled={status === 'loading'} className="w-full py-4 bg-rose-500 rounded-2xl shadow-xl shadow-rose-500/20 active:scale-95 transition-transform">
-                {status === 'loading' ? "CHARGEMENT..." : "JOUER MAINTENANT"}
-              </button>
+            <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10 text-center space-y-4">
+                <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-4xl w-full text-center outline-none font-black text-rose-500" />
+                <button onClick={startGame} className="w-full py-4 bg-rose-500 rounded-2xl shadow-lg active:scale-95 transition-transform">JOUER</button>
             </div>
-          </motion.div>
+          </div>
         ) : (
-          /* LE PONT (Inversé pour voir l'avancée vers le haut) */
-          <div className="h-full w-full flex flex-col-reverse justify-start gap-2 overflow-y-auto no-scrollbar py-10">
+          /* LE PONT ET L'AVATAR */
+          <div className="relative w-full max-w-[280px] h-full flex flex-col-reverse justify-start gap-1">
             {Array.from({ length: CONFIG[difficulty].rows }).map((_, rIndex) => (
-              <div key={rIndex} className="flex justify-center gap-3">
-                {Array.from({ length: CONFIG[difficulty].cols }).map((_, cIndex) => {
-                  const isCurrent = history.length === rIndex;
+              <div key={rIndex} className="grid grid-cols-2 gap-1 h-full max-h-[50px]">
+                {[0, 1].map((cIndex) => {
                   const isPassed = history.length > rIndex && history[rIndex] === cIndex;
+                  const isCurrent = history.length === rIndex;
                   return (
-                    <motion.div
+                    <div
                       key={cIndex}
-                      onClick={() => isCurrent && jump(cIndex)}
-                      whileTap={{ scale: 0.9 }}
-                      className={`h-14 w-20 rounded-xl border-2 transition-all flex items-center justify-center ${
-                        isPassed ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 
-                        isCurrent ? 'bg-white/5 border-white/20 animate-pulse' : 'bg-white/5 border-white/5 opacity-40'
+                      onClick={() => isCurrent && handleJump(cIndex)}
+                      className={`relative rounded-lg border transition-all ${
+                        isPassed ? 'bg-emerald-500/10 border-emerald-500/40' : 
+                        isCurrent ? 'bg-white/10 border-white/30 animate-pulse cursor-pointer' : 'bg-white/5 border-white/5'
                       }`}
                     >
-                      {isPassed && <CheckCircle2 className="text-emerald-500" size={18} />}
-                    </motion.div>
+                        {isPassed && <CheckCircle2 size={14} className="text-emerald-500 absolute top-1 right-1" />}
+                    </div>
                   );
                 })}
               </div>
             ))}
-          </div>
-        )}
 
-        {/* CONTROLES EN JEU */}
-        {status === 'playing' && (
-          <div className="absolute bottom-6 left-6 right-6 flex gap-3">
-            <div className="flex-1 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-3">
-              <p className="text-[8px] text-white/40 uppercase">Gain Actuel</p>
-              <p className="text-xl text-emerald-500 font-black">{currentWin} HTG</p>
-            </div>
-            <button onClick={() => cashout(currentMult)} disabled={history.length === 0} className="flex-[2] bg-emerald-500 text-black font-black rounded-2xl disabled:opacity-50">
-              ENCAISSER
-            </button>
+            {/* AVATAR #456 (TRAVAILLE AVEC FRAMER MOTION) */}
+            <AnimatePresence>
+                {status === 'playing' && (
+                    <motion.div
+                        initial={false}
+                        animate={{
+                            // Calcul de la position X et Y basé sur l'historique
+                            x: history.length === 0 ? "0%" : (history[history.length-1] === 0 ? "-55%" : "55%"),
+                            y: history.length === 0 ? "60px" : `-${(history.length - 1) * 54 + 54}px`,
+                            scale: isJumping ? 1.4 : 1,
+                        }}
+                        transition={{ type: "spring", stiffness: 120, damping: 15 }}
+                        className="absolute bottom-0 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                    >
+                        {/* Le petit personnage */}
+                        <div className="flex flex-col items-center">
+                            <div className="bg-rose-500 text-[10px] px-2 py-0.5 rounded-full mb-1 border border-white shadow-xl">#456</div>
+                            <div className="w-8 h-8 bg-teal-600 rounded-lg border-2 border-white/20 shadow-2xl overflow-hidden">
+                                <div className="w-full h-1/2 bg-white/10" /> {/* Design du survêtement */}
+                            </div>
+                            {/* Ombre portée */}
+                            <motion.div 
+                                animate={{ scale: isJumping ? 0.5 : 1, opacity: isJumping ? 0.2 : 0.4 }}
+                                className="w-6 h-1 bg-black rounded-full mt-1 blur-[1px]" 
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
           </div>
         )}
       </div>
 
-      {/* TUTORIEL MODAL */}
-      <AnimatePresence>
-        {showTuto && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
-            <motion.div initial={{ y: 50 }} animate={{ y: 0 }} className="bg-[#121218] w-full max-w-xs p-8 rounded-[2.5rem] border border-white/10 text-center space-y-6">
-              <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto border border-rose-500/20 text-2xl">
-                {tutoSteps[tutoIndex].icon}
-              </div>
-              <p className="text-sm font-medium leading-relaxed">{tutoSteps[tutoIndex].text}</p>
-              <div className="flex justify-center gap-1">
-                {tutoSteps.map((_, i) => <div key={i} className={`h-1 rounded-full transition-all ${i === tutoIndex ? 'w-4 bg-rose-500' : 'w-1 bg-white/20'}`} />)}
-              </div>
-              <button 
-                onClick={() => {
-                  if (tutoIndex < tutoSteps.length - 1) setTutoIndex(tutoIndex + 1);
-                  else { setShowTuto(false); localStorage.setItem('skip_glass_tuto', 'true'); }
-                }}
-                className="w-full py-4 bg-white text-black rounded-2xl font-black"
-              >
-                {tutoIndex < tutoSteps.length - 1 ? "SUIVANT" : "C'EST PARTI !"}
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* FOOTER CONTROLES */}
+      {status === 'playing' && (
+        <div className="h-[12%] bg-black/60 backdrop-blur-lg border-t border-white/5 p-4 flex gap-4">
+            <div className="flex-1 bg-white/5 rounded-2xl flex flex-col justify-center px-4 border border-white/5">
+                <span className="text-[9px] text-white/30 uppercase tracking-tighter">Gain Actuel</span>
+                <span className="text-emerald-400 text-lg">HTG {currentWin}</span>
+            </div>
+            <button 
+                onClick={() => cashout(currentMult)} 
+                disabled={history.length === 0}
+                className="flex-1 bg-emerald-500 text-black font-black rounded-2xl active:scale-95 disabled:opacity-20 transition-all"
+            >
+                ENCAISSER
+            </button>
+        </div>
+      )}
 
-      {/* ECRAN DE FIN */}
+      {/* ECRAN FIN */}
       <AnimatePresence>
         {(status === 'won' || status === 'lost') && (
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-            <div className="bg-[#121218] p-10 rounded-[3rem] border border-white/10 text-center space-y-6 w-full max-w-xs shadow-2xl">
-              {status === 'won' ? (
-                <>
-                  <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20">
-                    <CheckCircle2 size={40} className="text-emerald-500" />
-                  </div>
-                  <h2 className="text-3xl font-black italic">SURVIVANT</h2>
-                  <p className="text-emerald-500 text-2xl font-black">+{currentWin} HTG</p>
-                </>
-              ) : (
-                <>
-                  <div className="w-20 h-20 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto border border-rose-500/20">
-                    <XCircle size={40} className="text-rose-500" />
-                  </div>
-                  <h2 className="text-3xl font-black italic text-rose-500">ÉLIMINÉ</h2>
-                  <p className="text-white/40 uppercase text-xs">Le verre s'est brisé</p>
-                </>
-              )}
-              <button onClick={() => setStatus('idle')} className="w-full py-4 bg-white text-black rounded-2xl font-black">CONTINUER</button>
-            </div>
-          </motion.div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+                <div className="bg-[#121218] p-8 rounded-[2.5rem] border border-white/10 text-center space-y-6 w-full max-w-xs shadow-2xl">
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto border-2 ${status === 'won' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-rose-500/10 border-rose-500 text-rose-500'}`}>
+                        {status === 'won' ? <CheckCircle2 size={40} /> : <XCircle size={40} />}
+                    </div>
+                    <h2 className="text-3xl font-black italic">{status === 'won' ? 'GAGNÉ !' : 'ÉLIMINÉ'}</h2>
+                    <p className="text-xl text-white/60">{status === 'won' ? `+${currentWin} HTG` : 'Mise perdue'}</p>
+                    <button onClick={() => setStatus('idle')} className="w-full py-4 bg-white text-black rounded-2xl font-black">CONTINUER</button>
+                </div>
+            </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 }
-
