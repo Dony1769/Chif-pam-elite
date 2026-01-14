@@ -128,11 +128,11 @@ export default function ProfilePage() {
         {/* TOP BAR */}
         <div className="flex items-center justify-between mb-8">
           <button 
-            onClick={() => router.back()}
-            className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90"
-          >
-            <ArrowLeft size={20} className="text-slate-400" />
-          </button>
+  onClick={() => router.push('/client/home')}
+  className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90"
+>
+  <ArrowLeft size={20} className="text-slate-400" />
+</button>
           <div className="flex items-center gap-2 bg-slate-900/50 px-4 py-2 rounded-full border border-white/5">
             <LogoChifPamSmall />
             <span className="font-black italic text-sm tracking-tighter">CHIF-PAM</span>
@@ -163,7 +163,7 @@ export default function ProfilePage() {
         <div className="space-y-3">
           <h3 className="text-[10px] text-slate-500 uppercase tracking-[0.3em] ml-4 font-black italic">Assistance</h3>
           <Link href="/client/help">
-            <div className="w-full p-5 bg-slate-900/80 border border-emerald-500/10 rounded-[2rem] flex justify-between items-center group hover:border-emerald-500/30 transition-all active:scale-98">
+            <div className="w-full p-5 bg-slate-900/80 border border-emerald-500/10 rounded-4xl flex justify-between items-center group hover:border-emerald-500/30 transition-all active:scale-98">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-emerald-500/10 rounded-2xl">
                   <BookOpen size={20} className="text-emerald-500" />

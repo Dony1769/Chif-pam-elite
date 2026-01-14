@@ -4,10 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell, TrendingUp, Plus, ArrowDownCircle, Sparkles, 
-  MessagesSquare, Home, Zap, Target, BarChart3,
+  Bell, TrendingUp, Plus, ArrowDownCircle, 
+  MessagesSquare, Home, Zap, Target, 
   Gamepad2, History, User as UserIcon, Lock, Trophy,
-  Users, Activity, ChevronRight, Brain, Fingerprint
+  Users, Activity, ChevronRight, Brain, Fingerprint,
+  Layers, Disc
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -29,7 +30,7 @@ export default function ClientHome() {
 
   useEffect(() => {
     fetchData();
-    fetchTopWinners();
+    fetchWeeklyTopWinners();
   }, []);
 
   const fetchData = async () => {
@@ -49,13 +50,38 @@ export default function ClientHome() {
     } catch (error) { router.push('/connexion'); } finally { setLoading(false); }
   };
 
-  const fetchTopWinners = async () => {
-    // Simule ou récupère les plus gros gains récents dans 'transactions' ou 'mises'
-    const { data } = await supabase.from('profiles')
-      .select('username, balance')
-      .order('balance', { ascending: false })
+  const fetchWeeklyTopWinners = async () => {
+    // 1. Récupérer les vrais gros gains de la semaine depuis la table transactions
+    // On suppose que type='gain' ou 'win' et que le montant est positif
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const { data: realWins } = await supabase
+      .from('transactions')
+      .select('profiles(username), amount')
+      .eq('type', 'gain') 
+      .gte('created_at', oneWeekAgo.toISOString())
+      .order('amount', { ascending: false })
       .limit(3);
-    if (data) setTopWinners(data);
+
+    const formattedRealWins = (realWins || []).map((w: any) => ({
+      username: w.profiles?.username || 'Anonyme',
+      amount: w.amount
+    }));
+
+    // 2. Création de 2 gagnants fictifs "dynamiques" (basés sur le numéro de la semaine)
+    const weekNumber = Math.ceil(new Date().getDate() / 7);
+    const fictionalWinners = [
+      { username: `Elite_Player${weekNumber}`, amount: 15250 + (weekNumber * 100) },
+      { username: `Boss_Haiti`, amount: 12400 - (weekNumber * 50) }
+    ];
+
+    // 3. Fusionner, trier par montant et garder le Top 5
+    const combined = [...formattedRealWins, ...fictionalWinners]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+
+    setTopWinners(combined);
   };
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Activity className="animate-spin text-emerald-500" /></div>;
@@ -95,59 +121,44 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* LOTERIE FERMÉE */}
-        <div className="opacity-60 grayscale pointer-events-none relative">
-          <div className="absolute inset-0 z-20 flex items-center justify-center">
-            <div className="bg-black/80 px-4 py-2 rounded-full border border-white/10 flex items-center gap-2">
-               <Lock size={14} className="text-amber-500"/>
-               <span className="text-[10px] text-white tracking-widest">PROCHAINEMENT</span>
-            </div>
-          </div>
-          <div className="bg-slate-900/50 p-6 rounded-[2.5rem] border border-white/5 flex justify-between items-center">
-            <div>
-              <h3 className="text-xl">Loterie Live</h3>
-              <p className="text-[8px] text-slate-500">Mises & Gains instantanés</p>
-            </div>
-            <span className="text-[8px] text-rose-500 border border-rose-500/30 px-2 py-1 rounded-lg font-black">FERMÉ</span>
-          </div>
-        </div>
-
         {/* TOP GAGNANTS DE LA SEMAINE */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-2">
             <Trophy size={16} className="text-amber-500"/>
-            <h3 className="text-[10px] text-slate-500 tracking-widest">Top Gagnants Semaine</h3>
+            <h3 className="text-[10px] text-slate-500 tracking-widest font-black uppercase">Top Gains de la Semaine</h3>
           </div>
-          <div className="bg-slate-900/30 border border-white/5 rounded-[2rem] divide-y divide-white/5 overflow-hidden">
+          <div className="bg-slate-900/30 border border-white/5 rounded-4xl divide-y divide-white/5 overflow-hidden">
             {topWinners.map((winner, idx) => (
-              <div key={idx} className="flex items-center justify-between p-4">
+              <div key={idx} className="flex items-center justify-between p-4 bg-white/2">
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs font-black ${idx === 0 ? 'text-amber-500' : 'text-slate-500'}`}>#0{idx + 1}</span>
+                  <span className={`text-[10px] font-black ${idx === 0 ? 'text-amber-500' : 'text-slate-500'}`}>#0{idx + 1}</span>
                   <p className="text-[11px] font-black tracking-tighter">@{winner.username}</p>
                 </div>
-                <p className="text-xs text-emerald-500">+{winner.balance.toLocaleString()} HTG</p>
+                <p className="text-xs text-emerald-500">+{winner.amount.toLocaleString()} HTG</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* TOP JEUX (LISTE DYNAMIQUE) */}
+        {/* JEUX POPULAIRES */}
         <div className="space-y-4">
-          <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black">Jeux Populaires</h3>
+          <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black uppercase">Jeux Populaires</h3>
           <div className="grid grid-cols-1 gap-3">
             
             <GameRow href="/client/crash" icon={<Zap className="text-amber-500"/>} title="CROISSANCE" desc="Anticipez la courbe" players="1,248" />
+            <GameRow href="/client/squidglass" icon={<Layers className="text-rose-500"/>} title="SQUID GLASS" desc="Le pont de la survie" players="942" />
+            <GameRow href="/client/plinko" icon={<Disc className="text-indigo-400"/>} title="PLINKO ELITE" desc="Multiplicateurs en cascade" players="1,105" />
             <GameRow href="/client/mines" icon={<Target className="text-rose-500"/>} title="MINES" desc="Gestion du risque" players="856" />
             <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Agilité Visuelle" players="652" />
-            <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Connaissances" players="3012" />
-            <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision" players="2094" />
+            <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Connaissances" players="3,012" />
+            <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision" players="2,094" />
 
           </div>
         </div>
 
       </div>
 
-      {/* NAV BASSE CORRIGÉE */}
+      {/* NAV BASSE */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-2xl border-t border-white/5 px-8 py-5 flex justify-between items-center z-50 rounded-t-[2.5rem]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jouer" active={pathname === '/client/list'} />
@@ -166,7 +177,7 @@ function GameRow({ href, icon, title, desc, players }: any) {
       <div className="flex items-center gap-4">
         <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">{icon}</div>
         <div>
-          <h4 className="text-[11px] font-black italic">{title}</h4>
+          <h4 className="text-[11px] font-black italic tracking-tighter uppercase">{title}</h4>
           <p className="text-[8px] text-slate-500 lowercase">{desc}</p>
         </div>
       </div>
