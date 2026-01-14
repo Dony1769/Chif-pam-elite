@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, Settings2, Trophy, History as HistoryIcon } from 'lucide-react';
+import { ChevronLeft, History as HistoryIcon, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // CONFIGURATION DU JEU
@@ -16,9 +16,9 @@ const COLORS = {
   ball: '#ff0055',
   multipliers: (index: number) => {
     const dist = Math.abs(index - ROWS / 2);
-    if (dist > 6) return '#ef4444'; // High Risk
-    if (dist > 3) return '#f97316'; // Mid Risk
-    return '#f59e0b';               // Low Risk
+    if (dist > 6) return '#ef4444'; // Rouge (Extrémités)
+    if (dist > 3) return '#f97316'; // Orange
+    return '#f59e0b';               // Jaune (Centre)
   }
 };
 
@@ -41,10 +41,9 @@ export default function PlinkoElite() {
   const [history, setHistory] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   
+  // CORRECTION DES REFS : Initialisation obligatoire pour Vercel
   const ballsRef = useRef<Ball[]>([]);
-  const requestRef = useRef<number>();
-  
-  // Audio Refs avec sécurité
+  const requestRef = useRef<number | null>(null);
   const popSound = useRef<HTMLAudioElement | null>(null);
   const winSound = useRef<HTMLAudioElement | null>(null);
 
@@ -68,18 +67,20 @@ export default function PlinkoElite() {
   }, []);
 
   const fetchBalance = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('balance').eq('id', user.id).single();
-      if (data) setBalance(data.balance);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase.from('profiles').select('balance').eq('id', user.id).single();
+        if (data) setBalance(data.balance);
+      }
+    } catch (e) {
+      console.error("Erreur balance:", e);
     }
   };
 
-  // --- LOGIQUE DE MISE (VOTRE MISE À JOUR) ---
   const dropBall = async () => {
     if (bet > balance || loading) return;
     
-    // Débit visuel immédiat pour la réactivité
     setBalance(prev => prev - bet);
 
     try {
@@ -94,7 +95,6 @@ export default function PlinkoElite() {
       const cvs = canvasRef.current;
       if (!cvs) return;
 
-      // Création de la bille avec le chemin dicté par le serveur
       const newBall: Ball = {
         id: Math.random().toString(),
         x: cvs.width / 2,
@@ -110,7 +110,7 @@ export default function PlinkoElite() {
 
     } catch (e) {
       console.error("Erreur de mise:", e);
-      fetchBalance(); // Resynchroniser en cas d'échec
+      fetchBalance(); 
     }
   };
 
@@ -121,13 +121,12 @@ export default function PlinkoElite() {
     const rowSpacing = (cvs.height - 120) / ROWS;
 
     ballsRef.current.forEach((ball, index) => {
-      ball.progress += 0.05; // Vitesse de chute
+      ball.progress += 0.05;
 
       if (ball.progress >= 1) {
         ball.currentRow++;
         ball.progress = 0;
         
-        // Effet sonore de collision
         if (popSound.current) {
           const s = popSound.current.cloneNode() as HTMLAudioElement;
           s.volume = 0.1;
@@ -135,7 +134,6 @@ export default function PlinkoElite() {
         }
 
         if (ball.currentRow >= ROWS) {
-          // FIN DE TRAJET
           ballsRef.current.splice(index, 1);
           setHistory(prev => [ball.multiplier, ...prev].slice(0, 8));
           if (ball.value > 0) {
@@ -148,7 +146,6 @@ export default function PlinkoElite() {
         }
       }
 
-      // Calcul de trajectoire physique
       const pathSum = ball.path.slice(0, ball.currentRow).reduce((a, b) => a + b, 0);
       const startPinX = cvs.width / 2 + (pathSum - ball.currentRow / 2) * rowSpacing;
       
@@ -160,79 +157,81 @@ export default function PlinkoElite() {
 
       const t = ball.progress;
       ball.x = startPinX + (targetPinX - startPinX) * t;
-      // Arc de cercle pour simuler le rebond sur le clou
       ball.y = startPinY + (targetPinY - startPinY) * t - Math.sin(t * Math.PI) * (rowSpacing * 0.25);
     });
   };
 
   const draw = () => {
     const cvs = canvasRef.current;
-    if (!ctx(cvs)) return;
-    const ctx_ = ctx(cvs)!;
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+    if (!ctx) return;
 
-    ctx_.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
     const rowSpacing = (cvs.height - 120) / ROWS;
 
-    // 1. Dessiner les clous
-    ctx_.fillStyle = COLORS.pins;
+    // 1. Clous
+    ctx.fillStyle = COLORS.pins;
     for (let r = 0; r <= ROWS; r++) {
       for (let i = 0; i <= r; i++) {
         const x = cvs.width / 2 + (i - r / 2) * rowSpacing;
         const y = PYRAMID_TOP + r * rowSpacing;
-        ctx_.beginPath();
-        ctx_.arc(x, y, PIN_RADIUS, 0, Math.PI * 2);
-        ctx_.fill();
+        ctx.beginPath();
+        ctx.arc(x, y, PIN_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    // 2. Dessiner les multiplicateurs
+    // 2. Buckets Multiplicateurs
     const bucketY = PYRAMID_TOP + ROWS * rowSpacing + 25;
     MULTIPLIERS_16.forEach((m, i) => {
       const x = cvs.width / 2 + (i - ROWS / 2) * rowSpacing;
       const w = rowSpacing - 4;
-      ctx_.fillStyle = COLORS.multipliers(i);
-      ctx_.beginPath();
-      ctx_.roundRect(x - w/2, bucketY, w, 25, 4);
-      ctx_.fill();
-      ctx_.fillStyle = "#000";
-      ctx_.font = "bold 10px Arial";
-      ctx_.textAlign = "center";
-      ctx_.fillText(m < 1 ? m.toString() : m.toFixed(0), x, bucketY + 16);
+      ctx.fillStyle = COLORS.multipliers(i);
+      ctx.beginPath();
+      // Polyfill pour roundRect car certains vieux navigateurs sur Vercel pourraient rouspéter
+      if (ctx.roundRect) {
+        ctx.roundRect(x - w/2, bucketY, w, 25, 4);
+      } else {
+        ctx.rect(x - w/2, bucketY, w, 25);
+      }
+      ctx.fill();
+      ctx.fillStyle = "#000";
+      ctx.font = "bold 10px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(m < 1 ? m.toString() : m.toFixed(0), x, bucketY + 16);
     });
 
-    // 3. Dessiner les billes
+    // 3. Billes
     ballsRef.current.forEach(b => {
-      ctx_.beginPath();
-      ctx_.arc(b.x, b.y, BALL_RADIUS, 0, Math.PI * 2);
-      ctx_.fillStyle = COLORS.ball;
-      ctx_.shadowBlur = 15;
-      ctx_.shadowColor = COLORS.ball;
-      ctx_.fill();
-      ctx_.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.ball;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = COLORS.ball;
+      ctx.fill();
+      ctx.shadowBlur = 0;
     });
   };
 
-  const ctx = (c: HTMLCanvasElement | null) => c?.getContext('2d');
-
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-white flex flex-col font-black uppercase italic overflow-hidden">
-      {/* Header Pro */}
+      {/* Header */}
       <div className="p-4 flex justify-between items-center bg-[#151c2c] border-b border-white/5">
         <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all"><ChevronLeft /></button>
         <div className="flex flex-col items-center">
-            <span className="text-[10px] text-slate-500 tracking-widest">SOLDE ACTUEL</span>
-            <span className="text-xl text-emerald-500">{balance.toLocaleString()} <span className="text-xs">HTG</span></span>
+            <span className="text-[10px] text-slate-500 tracking-widest">SOLDE</span>
+            <span className="text-xl text-emerald-500">{Math.floor(balance).toLocaleString()} <span className="text-xs">HTG</span></span>
         </div>
         <div className="w-10" />
       </div>
 
       <div className="flex flex-1 flex-col lg:flex-row">
-        {/* Panneau de contrôle */}
-        <div className="lg:w-80 bg-[#151c2c] p-6 space-y-6 border-r border-white/5 shadow-2xl">
+        {/* Contrôles */}
+        <div className="lg:w-80 bg-[#151c2c] p-6 space-y-6 border-r border-white/5 shadow-2xl z-20">
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] text-slate-400">
               <span>MONTANT MISE</span>
-              <span>MIN: 10 HTG</span>
             </div>
             <div className="flex bg-[#0a0f1a] rounded-xl border border-white/10 overflow-hidden">
               <input 
@@ -241,7 +240,7 @@ export default function PlinkoElite() {
                 onChange={(e) => setBet(Number(e.target.value))}
                 className="bg-transparent w-full p-4 outline-none text-emerald-500 font-bold"
               />
-              <button onClick={() => setBet(b => Math.max(10, b/2))} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">/2</button>
+              <button onClick={() => setBet(b => Math.max(10, Math.floor(b/2)))} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">/2</button>
               <button onClick={() => setBet(b => b*2)} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">x2</button>
             </div>
           </div>
@@ -251,14 +250,13 @@ export default function PlinkoElite() {
             disabled={loading}
             className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 transition-all text-xl font-black"
           >
-            LANCER LA BILLE
+            MISER
           </button>
 
-          {/* Historique visuel */}
           <div className="pt-6 border-t border-white/5">
             <div className="flex items-center gap-2 mb-4 text-slate-500">
               <HistoryIcon size={14} />
-              <span className="text-[10px] tracking-widest">HISTORIQUE RÉCENT</span>
+              <span className="text-[10px] tracking-widest uppercase">Historique</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {history.map((h, i) => (
@@ -270,7 +268,7 @@ export default function PlinkoElite() {
           </div>
         </div>
 
-        {/* Zone Canvas */}
+        {/* Game Area */}
         <div className="flex-1 relative flex items-center justify-center bg-[#0a0f1a] p-4">
             <canvas 
                 ref={canvasRef}
@@ -278,10 +276,9 @@ export default function PlinkoElite() {
                 height={600}
                 className="w-full max-w-[700px] h-auto pointer-events-none drop-shadow-2xl"
             />
-            {/* Overlay Déco */}
-            <div className="absolute bottom-10 left-10 flex items-center gap-2 opacity-20">
+            <div className="absolute bottom-10 left-10 flex items-center gap-2 opacity-20 hidden md:flex">
                 <Trophy size={40} />
-                <div className="flex flex-col">
+                <div className="flex flex-col text-left">
                     <span className="text-2xl font-black italic">PLINKO</span>
                     <span className="text-[10px] tracking-widest">ELITE SYSTEM V1.0</span>
                 </div>
@@ -291,4 +288,3 @@ export default function PlinkoElite() {
     </div>
   );
 }
-
