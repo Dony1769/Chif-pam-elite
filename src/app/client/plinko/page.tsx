@@ -1,35 +1,36 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, Settings2, Volume2, VolumeX, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Settings2, Trophy, History as HistoryIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// CONFIGURATION VISUELLE
-const ROWS = 16; // Mode expert par défaut
+// CONFIGURATION DU JEU
+const ROWS = 16;
 const PIN_RADIUS = 3;
-const BALL_RADIUS = 5;
+const BALL_RADIUS = 6;
+const PYRAMID_TOP = 60;
+const MULTIPLIERS_16 = [1000, 130, 26, 9, 4, 2, 0.2, 0.2, 0.2, 0.2, 0.2, 2, 4, 9, 26, 130, 1000];
+
 const COLORS = {
-  pins: '#ffffff',
-  ball: '#ff0055', // Rose fluo style Stake
-  text: '#ffffff',
-  multipliers: {
-    low: '#f59e0b',    // Jaune/Orange (Centre)
-    medium: '#f97316', // Orange
-    high: '#ef4444',   // Rouge (Extrémités)
+  pins: '#475569',
+  ball: '#ff0055',
+  multipliers: (index: number) => {
+    const dist = Math.abs(index - ROWS / 2);
+    if (dist > 6) return '#ef4444'; // High Risk
+    if (dist > 3) return '#f97316'; // Mid Risk
+    return '#f59e0b';               // Low Risk
   }
 };
-
-// MULTIPLICATEURS (Doivent matcher le SQL pour l'affichage)
-const MULTIPLIERS_16 = [1000, 130, 26, 9, 4, 2, 0.2, 0.2, 0.2, 0.2, 0.2, 2, 4, 9, 26, 130, 1000];
 
 interface Ball {
   id: string;
   x: number;
   y: number;
-  path: number[]; // 0 = gauche, 1 = droite
+  path: number[];
   currentRow: number;
-  progress: number; // 0 à 1 entre deux rangées
-  value: number; // Gain potentiel
+  progress: number;
+  value: number;
+  multiplier: number;
 }
 
 export default function PlinkoElite() {
@@ -37,21 +38,23 @@ export default function PlinkoElite() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [bet, setBet] = useState(10);
   const [balance, setBalance] = useState(0);
+  const [history, setHistory] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
-  const ballsRef = useRef<Ball[]>([]); // Ref pour l'animation sans re-render
+  
+  const ballsRef = useRef<Ball[]>([]);
   const requestRef = useRef<number>();
   
-  // Audio
+  // Audio Refs avec sécurité
   const popSound = useRef<HTMLAudioElement | null>(null);
   const winSound = useRef<HTMLAudioElement | null>(null);
 
-  // Initialisation
   useEffect(() => {
     fetchBalance();
-    popSound.current = new Audio('/sounds/pop.mp3'); // Ajoutez des sons dans public/sounds/
-    winSound.current = new Audio('/sounds/win.mp3');
     
-    // Animation Loop
+    // Initialisation Audio
+    popSound.current = new Audio('/sounds/pop.mp3');
+    winSound.current = new Audio('/sounds/win.mp3');
+
     const animate = () => {
       draw();
       updateBalls();
@@ -59,7 +62,9 @@ export default function PlinkoElite() {
     };
     requestRef.current = requestAnimationFrame(animate);
 
-    return () => cancelAnimationFrame(requestRef.current!);
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
   }, []);
 
   const fetchBalance = async () => {
@@ -70,18 +75,14 @@ export default function PlinkoElite() {
     }
   };
 
-  // ----------------------------------------------------------------
-  // LOGIQUE DU JEU (Moteur Physique Simplifié)
-  // ----------------------------------------------------------------
+  // --- LOGIQUE DE MISE (VOTRE MISE À JOUR) ---
   const dropBall = async () => {
     if (bet > balance || loading) return;
     
-    // On ne met pas loading à true globalement pour permettre le spam-click (multiball)
-    // On débite visuellement tout de suite
+    // Débit visuel immédiat pour la réactivité
     setBalance(prev => prev - bet);
 
     try {
-      // Appel RPC Supabase
       const { data, error } = await supabase.rpc('play_plinko', {
         p_bet_amount: bet,
         p_rows: ROWS,
@@ -90,26 +91,26 @@ export default function PlinkoElite() {
 
       if (error) throw error;
 
-      // Créer la balle avec le chemin prédéfini par le serveur
-      const startX = canvasRef.current!.width / 2;
-      const startY = 50;
-      
+      const cvs = canvasRef.current;
+      if (!cvs) return;
+
+      // Création de la bille avec le chemin dicté par le serveur
       const newBall: Ball = {
         id: Math.random().toString(),
-        x: startX,
-        y: startY,
-        path: data.path, // Tableau de 0 et 1
+        x: cvs.width / 2,
+        y: PYRAMID_TOP - 20, 
+        path: data.path,
         currentRow: 0,
         progress: 0,
-        value: data.payout
+        value: data.payout,
+        multiplier: data.multiplier
       };
 
       ballsRef.current.push(newBall);
 
     } catch (e) {
-      console.error(e);
-      setBalance(prev => prev + bet); // Rembourser si erreur
-      alert("Erreur réseau");
+      console.error("Erreur de mise:", e);
+      fetchBalance(); // Resynchroniser en cas d'échec
     }
   };
 
@@ -117,200 +118,176 @@ export default function PlinkoElite() {
     const cvs = canvasRef.current;
     if (!cvs) return;
 
-    // Dimensions dynamiques
-    const pyramidHeight = cvs.height - 100;
-    const rowSpacing = pyramidHeight / ROWS;
+    const rowSpacing = (cvs.height - 120) / ROWS;
 
     ballsRef.current.forEach((ball, index) => {
-      ball.progress += 0.04; // Vitesse de chute
+      ball.progress += 0.05; // Vitesse de chute
 
       if (ball.progress >= 1) {
-        // La balle a atteint la rangée suivante
         ball.currentRow++;
         ball.progress = 0;
         
-        // Petit son de collision
+        // Effet sonore de collision
         if (popSound.current) {
-            const clone = popSound.current.cloneNode() as HTMLAudioElement;
-            clone.volume = 0.2;
-            clone.play().catch(() => {});
+          const s = popSound.current.cloneNode() as HTMLAudioElement;
+          s.volume = 0.1;
+          s.play().catch(() => {});
         }
 
-        // Si la balle a fini son chemin
         if (ball.currentRow >= ROWS) {
-          // GESTION FIN DE PARTIE
+          // FIN DE TRAJET
           ballsRef.current.splice(index, 1);
-          
-          // Mise à jour finale du solde (pour être synchro avec le serveur)
+          setHistory(prev => [ball.multiplier, ...prev].slice(0, 8));
           if (ball.value > 0) {
-             setBalance(prev => prev + ball.value);
-             // Son de gain si gros gain
-             if (ball.value > bet * 2 && winSound.current) winSound.current.play().catch(()=>{});
+            setBalance(prev => prev + ball.value);
+            if (ball.multiplier >= 2 && winSound.current) {
+              winSound.current.play().catch(() => {});
+            }
           }
           return;
         }
       }
 
-      // Interpolation de position (Physique visuelle)
-      // Calculer X cible basé sur le chemin (0 = gauche, 1 = droite)
-      const currentDir = ball.path[ball.currentRow]; // 0 ou 1
-      const xOffset = (currentDir === 0 ? -1 : 1) * (rowSpacing / 2);
-      
-      // Position de base de la rangée
-      // La pyramide s'élargit vers le bas
-      const startX = cvs.width / 2 + (ball.currentRow - ROWS/2) * rowSpacing; // Approx simplification
-      // Ce calcul est complexe pour une pyramide parfaite, simplifions :
-      
-      // Approche par coordonnées relatives aux pins
-      // Pin(Row, Index) -> Pin(Row+1, Index) OU Pin(Row+1, Index+1)
+      // Calcul de trajectoire physique
       const pathSum = ball.path.slice(0, ball.currentRow).reduce((a, b) => a + b, 0);
       const startPinX = cvs.width / 2 + (pathSum - ball.currentRow / 2) * rowSpacing;
       
       const nextDir = ball.path[ball.currentRow];
       const targetPinX = cvs.width / 2 + ((pathSum + nextDir) - (ball.currentRow + 1) / 2) * rowSpacing;
       
-      const startPinY = 50 + ball.currentRow * rowSpacing;
-      const targetPinY = 50 + (ball.currentRow + 1) * rowSpacing;
+      const startPinY = PYRAMID_TOP + ball.currentRow * rowSpacing;
+      const targetPinY = PYRAMID_TOP + (ball.currentRow + 1) * rowSpacing;
 
-      // Interpolation quadratique pour faire un petit saut
       const t = ball.progress;
       ball.x = startPinX + (targetPinX - startPinX) * t;
-      // Parabole inversée pour le rebond : Y linéaire + courbe
-      ball.y = startPinY + (targetPinY - startPinY) * t - Math.sin(t * Math.PI) * (rowSpacing * 0.2);
+      // Arc de cercle pour simuler le rebond sur le clou
+      ball.y = startPinY + (targetPinY - startPinY) * t - Math.sin(t * Math.PI) * (rowSpacing * 0.25);
     });
   };
 
   const draw = () => {
     const cvs = canvasRef.current;
-    if (!cvs) return;
-    const ctx = cvs.getContext('2d');
-    if (!ctx) return;
+    if (!ctx(cvs)) return;
+    const ctx_ = ctx(cvs)!;
 
-    // Clear
-    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx_.clearRect(0, 0, cvs.width, cvs.height);
+    const rowSpacing = (cvs.height - 120) / ROWS;
 
-    const pyramidTop = 50;
-    const pyramidHeight = cvs.height - 100;
-    const rowSpacing = pyramidHeight / ROWS;
-
-    // 1. Dessiner les Pins (Pyramide)
-    ctx.fillStyle = COLORS.pins;
-    for (let row = 0; row <= ROWS; row++) {
-      const pinsInRow = row + 1;
-      const y = pyramidTop + row * rowSpacing;
-      for (let i = 0; i < pinsInRow; i++) {
-        // Centrer la rangée
-        const x = cvs.width / 2 + (i - row / 2) * rowSpacing;
-        
-        ctx.beginPath();
-        ctx.arc(x, y, PIN_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = 'rgba(255,255,255,0.5)';
+    // 1. Dessiner les clous
+    ctx_.fillStyle = COLORS.pins;
+    for (let r = 0; r <= ROWS; r++) {
+      for (let i = 0; i <= r; i++) {
+        const x = cvs.width / 2 + (i - r / 2) * rowSpacing;
+        const y = PYRAMID_TOP + r * rowSpacing;
+        ctx_.beginPath();
+        ctx_.arc(x, y, PIN_RADIUS, 0, Math.PI * 2);
+        ctx_.fill();
       }
     }
-    ctx.shadowBlur = 0;
 
-    // 2. Dessiner les Buckets (Multiplicateurs) en bas
-    const bucketY = pyramidTop + ROWS * rowSpacing + 20;
-    MULTIPLIERS_16.forEach((mult, i) => {
+    // 2. Dessiner les multiplicateurs
+    const bucketY = PYRAMID_TOP + ROWS * rowSpacing + 25;
+    MULTIPLIERS_16.forEach((m, i) => {
       const x = cvs.width / 2 + (i - ROWS / 2) * rowSpacing;
       const w = rowSpacing - 4;
-      
-      // Couleur basée sur le risque (Centre = low, Extérieurs = high)
-      const distFromCenter = Math.abs(i - ROWS/2);
-      let color = COLORS.multipliers.low;
-      if (distFromCenter > 3) color = COLORS.multipliers.medium;
-      if (distFromCenter > 6) color = COLORS.multipliers.high;
-
-      ctx.fillStyle = color;
-      
-      // Forme du bucket (arrondi)
-      ctx.beginPath();
-      ctx.roundRect(x - w/2, bucketY, w, 30, 4);
-      ctx.fill();
-
-      // Texte
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.font = 'bold 9px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(mult + 'x', x, bucketY + 18);
+      ctx_.fillStyle = COLORS.multipliers(i);
+      ctx_.beginPath();
+      ctx_.roundRect(x - w/2, bucketY, w, 25, 4);
+      ctx_.fill();
+      ctx_.fillStyle = "#000";
+      ctx_.font = "bold 10px Arial";
+      ctx_.textAlign = "center";
+      ctx_.fillText(m < 1 ? m.toString() : m.toFixed(0), x, bucketY + 16);
     });
 
-    // 3. Dessiner les balles
-    ballsRef.current.forEach(ball => {
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.ball;
-      ctx.fill();
-      // Effet de traînée ou brillance
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = COLORS.ball;
+    // 3. Dessiner les billes
+    ballsRef.current.forEach(b => {
+      ctx_.beginPath();
+      ctx_.arc(b.x, b.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx_.fillStyle = COLORS.ball;
+      ctx_.shadowBlur = 15;
+      ctx_.shadowColor = COLORS.ball;
+      ctx_.fill();
+      ctx_.shadowBlur = 0;
     });
-    ctx.shadowBlur = 0;
   };
 
+  const ctx = (c: HTMLCanvasElement | null) => c?.getContext('2d');
+
   return (
-    <div className="min-h-screen bg-[#0f1728] text-white flex flex-col font-sans select-none overflow-hidden">
-        {/* Header */}
-        <div className="p-4 flex justify-between items-center bg-[#1a2332] border-b border-white/5">
-            <button onClick={() => router.back()} className="p-2 hover:bg-white/10 rounded-full transition"><ChevronLeft /></button>
-            <div className="flex items-center gap-2 bg-[#0f1728] px-4 py-2 rounded-full border border-emerald-500/30">
-                <span className="text-emerald-500 font-bold">{balance.toFixed(0)} HTG</span>
+    <div className="min-h-screen bg-[#0a0f1a] text-white flex flex-col font-black uppercase italic overflow-hidden">
+      {/* Header Pro */}
+      <div className="p-4 flex justify-between items-center bg-[#151c2c] border-b border-white/5">
+        <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all"><ChevronLeft /></button>
+        <div className="flex flex-col items-center">
+            <span className="text-[10px] text-slate-500 tracking-widest">SOLDE ACTUEL</span>
+            <span className="text-xl text-emerald-500">{balance.toLocaleString()} <span className="text-xs">HTG</span></span>
+        </div>
+        <div className="w-10" />
+      </div>
+
+      <div className="flex flex-1 flex-col lg:flex-row">
+        {/* Panneau de contrôle */}
+        <div className="lg:w-80 bg-[#151c2c] p-6 space-y-6 border-r border-white/5 shadow-2xl">
+          <div className="space-y-2">
+            <div className="flex justify-between text-[10px] text-slate-400">
+              <span>MONTANT MISE</span>
+              <span>MIN: 10 HTG</span>
             </div>
-            <button className="p-2 hover:bg-white/10 rounded-full"><Settings2 size={20}/></button>
+            <div className="flex bg-[#0a0f1a] rounded-xl border border-white/10 overflow-hidden">
+              <input 
+                type="number" 
+                value={bet} 
+                onChange={(e) => setBet(Number(e.target.value))}
+                className="bg-transparent w-full p-4 outline-none text-emerald-500 font-bold"
+              />
+              <button onClick={() => setBet(b => Math.max(10, b/2))} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">/2</button>
+              <button onClick={() => setBet(b => b*2)} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">x2</button>
+            </div>
+          </div>
+
+          <button 
+            onClick={dropBall}
+            disabled={loading}
+            className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 transition-all text-xl font-black"
+          >
+            LANCER LA BILLE
+          </button>
+
+          {/* Historique visuel */}
+          <div className="pt-6 border-t border-white/5">
+            <div className="flex items-center gap-2 mb-4 text-slate-500">
+              <HistoryIcon size={14} />
+              <span className="text-[10px] tracking-widest">HISTORIQUE RÉCENT</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {history.map((h, i) => (
+                <div key={i} className={`py-2 rounded-lg text-center text-[10px] font-bold border ${h >= 2 ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500' : 'bg-white/5 border-white/10 text-slate-400'}`}>
+                  {h}x
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-1 flex-col lg:flex-row">
-            {/* Sidebar de contrôle (Gauche sur Desktop, Bas sur Mobile) */}
-            <div className="lg:w-80 bg-[#1a2332] p-6 flex flex-col gap-6 border-r border-white/5 z-10 shadow-xl">
-                <div>
-                    <label className="text-xs text-slate-400 font-bold mb-2 block tracking-wider">MONTANT DU PARI</label>
-                    <div className="flex bg-[#0f1728] rounded-md border border-white/10 overflow-hidden focus-within:border-emerald-500 transition-colors">
-                        <input 
-                            type="number" 
-                            value={bet} 
-                            onChange={(e) => setBet(Math.max(0, Number(e.target.value)))}
-                            className="bg-transparent w-full p-3 outline-none font-bold"
-                        />
-                        <button onClick={() => setBet(b => b/2)} className="px-3 text-xs font-bold text-slate-500 hover:bg-white/5">½</button>
-                        <button onClick={() => setBet(b => b*2)} className="px-3 text-xs font-bold text-slate-500 hover:bg-white/5">2x</button>
-                    </div>
+        {/* Zone Canvas */}
+        <div className="flex-1 relative flex items-center justify-center bg-[#0a0f1a] p-4">
+            <canvas 
+                ref={canvasRef}
+                width={700}
+                height={600}
+                className="w-full max-w-[700px] h-auto pointer-events-none drop-shadow-2xl"
+            />
+            {/* Overlay Déco */}
+            <div className="absolute bottom-10 left-10 flex items-center gap-2 opacity-20">
+                <Trophy size={40} />
+                <div className="flex flex-col">
+                    <span className="text-2xl font-black italic">PLINKO</span>
+                    <span className="text-[10px] tracking-widest">ELITE SYSTEM V1.0</span>
                 </div>
-
-                <div>
-                    <label className="text-xs text-slate-400 font-bold mb-2 block tracking-wider">DIFFICULTÉ</label>
-                    <select className="w-full bg-[#0f1728] p-3 rounded-md border border-white/10 outline-none font-bold text-sm">
-                        <option>16 Rows (High Risk)</option>
-                        {/* Pour l'instant on hardcode 16 rows dans le UI pour matcher le canvas */}
-                    </select>
-                </div>
-
-                <div className="mt-auto">
-                    <button 
-                        onClick={dropBall}
-                        className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-[#0f1728] font-black rounded-lg shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 transition-all text-lg"
-                    >
-                        MISER
-                    </button>
-                </div>
-            </div>
-
-            {/* Zone de Jeu (Canvas) */}
-            <div className="flex-1 relative flex items-center justify-center bg-[#0f1728] overflow-hidden">
-                {/* Score History Flottant */}
-                <div className="absolute top-4 right-4 flex gap-2 flex-col-reverse">
-                    {/* On pourrait mapper l'historique ici */}
-                </div>
-
-                <canvas 
-                    ref={canvasRef}
-                    width={800}
-                    height={600}
-                    className="max-w-full max-h-full object-contain"
-                />
             </div>
         </div>
+      </div>
     </div>
   );
 }
