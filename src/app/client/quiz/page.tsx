@@ -1,13 +1,13 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Zap, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin } from 'lucide-react';
+import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 const SETTINGS = {
-  facile: { time: 10, step: 0.15 },
-  intermédiaire: { time: 7, step: 0.25 },
-  difficile: { time: 4, step: 0.50 }
+  facile: { time: 12, step: 0.15 },
+  intermédiaire: { time: 8, step: 0.25 },
+  difficile: { time: 5, step: 0.50 }
 };
 
 const CATEGORIES = [
@@ -39,16 +39,20 @@ export default function QuizElite() {
   
   const timerRef = useRef<any>(null);
 
-  // Sécurité de traduction : Si ça prend plus de 4s, on arrête pour ne pas bloquer
-  const translate = async (text: string) => {
+  // Traduction optimisée avec Timeout et Retry
+  const translateText = async (text: string, attempt = 0): Promise<string> => {
     try {
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      
       const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fr&dt=t&q=${encodeURIComponent(text)}`, { signal: controller.signal });
-      clearTimeout(id);
+      clearTimeout(timeout);
       const data = await res.json();
       return data[0][0][0];
-    } catch { return text; }
+    } catch (e) {
+      if (attempt < 2) return translateText(text, attempt + 1);
+      return text; // Retourne l'original si la traduction échoue
+    }
   };
 
   const start = async () => {
@@ -60,16 +64,24 @@ export default function QuizElite() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // ÉTAPE 1 : ON CHARGE LES QUESTIONS D'ABORD (SANS DÉBITER)
+      // 1. Fetch Questions d'abord
       const res = await fetch(`https://opentdb.com/api.php?amount=10&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
       
       if (!raw.results || raw.results.length === 0) throw new Error("API Indisponible");
 
+      // 2. Traduction en masse
       const processed = await Promise.all(raw.results.map(async (q: any) => {
-        const qFr = await translate(decodeURIComponent(q.question));
-        const cFr = await translate(decodeURIComponent(q.correct_answer));
-        const iFr = await Promise.all(q.incorrect_answers.map((ans: string) => translate(decodeURIComponent(ans))));
+        const decodedQ = decodeURIComponent(q.question);
+        const decodedC = decodeURIComponent(q.correct_answer);
+        const decodedI = q.incorrect_answers.map((ans: string) => decodeURIComponent(ans));
+
+        const [qFr, cFr, ...iFr] = await Promise.all([
+            translateText(decodedQ),
+            translateText(decodedC),
+            ...decodedI.map((ans: string) => translateText(ans))
+        ]);
+
         return {
           question: qFr,
           correct: cFr,
@@ -77,7 +89,7 @@ export default function QuizElite() {
         };
       }));
 
-      // ÉTAPE 2 : SEULEMENT SI LES QUESTIONS SONT PRÊTES, ON DÉBITE L'ARGENT
+      // 3. Débiter l'argent SEULEMENT si tout est prêt
       const { data: paid, error: betError } = await supabase.rpc('process_bet', { amount: bet });
       
       if (betError || !paid) { 
@@ -86,7 +98,7 @@ export default function QuizElite() {
         return; 
       }
 
-      // ÉTAPE 3 : CRÉATION DE LA PARTIE
+      // 4. Enregistrer la partie
       const { data: game, error: insErr } = await supabase.from('quiz_games').insert([{
         user_id: user.id,
         bet_amount: bet,
@@ -104,7 +116,7 @@ export default function QuizElite() {
       setStatus('playing');
     } catch (e) {
       console.error(e);
-      alert("Erreur de connexion. L'argent n'a pas été débité. Réessayez.");
+      alert("Erreur de connexion. Vérifiez votre internet. Aucun frais n'a été appliqué.");
       setStatus('idle');
     } finally {
       setIsProcessing(false);
@@ -113,7 +125,7 @@ export default function QuizElite() {
 
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection && !isProcessing) {
-      timerRef.current = setInterval(() => setTimeLeft(p => p - 0.1), 100);
+      timerRef.current = setInterval(() => setTimeLeft(p => Math.max(0, p - 0.1)), 100);
     } else if (timeLeft <= 0 && status === 'playing' && !showCorrection && !isProcessing) {
       handleAnswer(null); 
     }
@@ -141,7 +153,7 @@ export default function QuizElite() {
         } else { 
           cashout(newM); 
         }
-      }, 800);
+      }, 1000);
     } else {
       setShowCorrection(true);
       clearInterval(timerRef.current);
@@ -171,12 +183,11 @@ export default function QuizElite() {
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center select-none">
       
-      {/* HEADER AVEC REDIRECTION HOME */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button 
           onClick={() => {
             if (status === 'playing') {
-              if (confirm("En quittant maintenant, votre mise sera perdue. Continuer ?")) router.push('/client/home');
+              if (confirm("Votre mise sera perdue. Quitter ?")) router.push('/client/home');
             } else {
               router.push('/client/home');
             }
@@ -210,24 +221,24 @@ export default function QuizElite() {
 
             <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4">
               <div className="bg-black/40 p-5 rounded-2xl border border-white/10 flex justify-between items-center">
-                <span className="text-emerald-500 text-xs">MISE HTG</span>
+                <span className="text-emerald-500 text-xs font-black">MISE HTG</span>
                 <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-right outline-none w-24 text-2xl font-black"/>
               </div>
               <button onClick={start} disabled={status === 'loading'} className="w-full py-6 bg-emerald-500 text-black rounded-3xl text-2xl shadow-lg active:scale-95 transition-all flex justify-center">
-                {status === 'loading' ? <Loader2 className="animate-spin"/> : "LANCER LE QUIZ"}
+                {status === 'loading' ? <Loader2 className="animate-spin"/> : "JOUER"}
               </button>
             </div>
           </div>
         ) : status === 'playing' ? (
-          <div className="space-y-5">
+          <div className="space-y-5 animate-in fade-in duration-500">
             <div className="flex justify-between gap-3 text-center">
               <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10">
                 <p className="text-[8px] text-slate-500 mb-1">COTE</p>
-                <p className="text-emerald-500 text-xl">{multiplier.toFixed(2)}X</p>
+                <p className="text-emerald-500 text-xl font-black">{multiplier.toFixed(2)}X</p>
               </div>
               <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10">
                 <p className="text-[8px] text-slate-500 mb-1">POTENTIEL</p>
-                <p className="text-amber-500 text-xl">{(bet * multiplier).toFixed(0)}</p>
+                <p className="text-amber-500 text-xl font-black">{(bet * multiplier).toFixed(0)}</p>
               </div>
             </div>
 
@@ -235,9 +246,9 @@ export default function QuizElite() {
               <div className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
 
-            <div className="bg-white text-black p-8 rounded-4xl text-center min-h-40 flex flex-col items-center justify-center">
+            <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex flex-col items-center justify-center">
               <span className="text-[10px] text-slate-400 mb-2 italic">QUESTION {currentIndex + 1} / 10</span>
-              <p className="text-lg leading-tight font-black">{questions[currentIndex]?.question}</p>
+              <p className="text-lg leading-tight font-black uppercase">{questions[currentIndex]?.question}</p>
             </div>
 
             <div className="grid gap-2">
@@ -256,21 +267,21 @@ export default function QuizElite() {
               })}
             </div>
 
-            {!showCorrection && (
+            {!showCorrection && multiplier > 1 && (
               <button onClick={() => cashout(multiplier)} className="w-full py-5 bg-amber-500 text-black rounded-3xl font-black text-xl active:scale-95 transition-all">
-                SÉCURISER {(bet * multiplier).toFixed(0)} HTG
+                ENCAISSER {(bet * multiplier).toFixed(0)} HTG
               </button>
             )}
           </div>
         ) : (
-          <div className="text-center py-10 space-y-6">
+          <div className="text-center py-10 space-y-6 animate-in zoom-in">
             <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center ${status === 'lost' ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`}>
                 {status === 'lost' ? <XCircle size={50} className="text-rose-500"/> : <Trophy size={50} className="text-emerald-500"/>}
             </div>
             <h2 className={`text-5xl font-black ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "GAGNÉ !"}</h2>
             <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                <p className="text-slate-400 text-xs mb-1">MONTANT</p>
-                <p className="text-4xl font-black text-white">{(status === 'lost' ? 0 : bet * multiplier).toFixed(0)} HTG</p>
+                <p className="text-slate-400 text-xs mb-1">SOLDE HTG</p>
+                <p className="text-4xl font-black text-white">{(status === 'lost' ? 0 : bet * multiplier).toFixed(0)}</p>
             </div>
             <button onClick={() => setStatus('idle')} className="w-full py-5 bg-white text-black rounded-3xl font-black text-lg">REJOUER</button>
           </div>
