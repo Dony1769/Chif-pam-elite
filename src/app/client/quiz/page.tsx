@@ -51,10 +51,11 @@ export default function QuizElite() {
     } catch { return text; }
   };
 
+  // --- MISE À JOUR : START ---
   const start = async () => {
     if (bet < 10 || isProcessing) return;
     
-    // --- PROTECTION ANTI-BUG : Reset complet des états ---
+    // RESET TOTAL IMMÉDIAT (Évite le bug de la réponse verte)
     setIsProcessing(true);
     setStatus('loading');
     setQuestions([]);
@@ -86,15 +87,17 @@ export default function QuizElite() {
       if (betError || !paid) { 
         alert("Solde insuffisant."); 
         setStatus('idle');
+        setIsProcessing(false);
         return; 
       }
 
-      // 4. Création en base (is_active est true par défaut)
+      // 4. Création en base
       const { data: game, error: insErr } = await supabase.from('quiz_games').insert([{
         user_id: user.id,
         bet_amount: bet,
         difficulty,
-        questions_data: processed
+        questions_data: processed,
+        is_active: true
       }]).select().single();
 
       if (insErr) throw insErr;
@@ -121,13 +124,17 @@ export default function QuizElite() {
     return () => clearInterval(timerRef.current);
   }, [timeLeft, status, showCorrection]);
 
+  // --- MISE À JOUR : HANDLE ANSWER ---
   const handleAnswer = (ans: string | null) => {
-    if (showCorrection || status !== 'playing') return;
+    // SÉCURITÉ : Si on est en train d'encaisser (isProcessing), on ignore le timer/clic
+    if (showCorrection || status !== 'playing' || isProcessing) return;
+    
     clearInterval(timerRef.current);
     setSelectedAnswer(ans);
     setShowCorrection(true);
 
-    const isCorrect = ans === questions[currentIndex].correct;
+    const currentQ = questions[currentIndex];
+    const isCorrect = ans === currentQ.correct;
 
     if (isCorrect) {
       const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
@@ -138,27 +145,30 @@ export default function QuizElite() {
           setSelectedAnswer(null);
           setShowCorrection(false);
           setTimeLeft(SETTINGS[difficulty].time);
-        } else { cashout(nextM); }
+        } else { 
+          cashout(nextM); 
+        }
       }, 1500);
     } else {
-      // Marquer la partie comme perdue en base
       if (gameId) supabase.from('quiz_games').update({ is_active: false }).eq('id', gameId);
       setTimeout(() => setStatus('lost'), 2000);
     }
   };
 
+  // --- MISE À JOUR : CASHOUT ---
   const cashout = async (finalM: number) => {
     if (!gameId || isProcessing) return;
-    setIsProcessing(true);
+    setIsProcessing(true); // Bloque handleAnswer pour "sauver" l'argent (priorité sur le timer)
     try {
-      const { error } = await supabase.rpc('claim_quiz_win', { 
+      const { data, error } = await supabase.rpc('claim_quiz_win', { 
         p_game_id: gameId, 
         p_final_multiplier: finalM 
       });
       if (error) throw error;
       setStatus('ended');
     } catch (e) {
-      alert("Erreur lors de l'encaissement. Contactez le support.");
+      console.error("Détail erreur:", e);
+      alert("Erreur lors de l'encaissement. Vérifiez votre connexion.");
     } finally {
       setIsProcessing(false);
     }
@@ -260,4 +270,3 @@ export default function QuizElite() {
     </div>
   );
 }
-
