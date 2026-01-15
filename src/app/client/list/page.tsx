@@ -6,18 +6,32 @@ import {
   Search, Heart, Zap, Layers, Target, Grid, 
   Fingerprint, Brain, Lock, ChevronLeft, Star,
   Home, Gamepad2, Ticket, MessageSquare, User,
-  Users
+  Users, LucideIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// --- TYPES ---
+interface GameConfig {
+  id: string;
+  name: string;
+  desc: string;
+  path: string;
+  Icon: LucideIcon; // On passe le composant, pas l'élément
+  iconColor: string;
+  color: string;
+  players: string;
+  category: string;
+}
+
 // --- CONFIGURATION DES JEUX ---
-const GAMES = [
+const GAMES: GameConfig[] = [
   {
     id: 'crash',
     name: "CROISSANCE",
     desc: "Anticipez la courbe",
     path: "/client/crash",
-    icon: <Zap className="text-amber-400" />,
+    Icon: Zap,
+    iconColor: "text-amber-400",
     color: "from-amber-500/20",
     players: "1,248",
     category: "Multiplicateur"
@@ -27,7 +41,8 @@ const GAMES = [
     name: "SQUID GLASS",
     desc: "Le pont de la survie",
     path: "/client/squidglass",
-    icon: <Layers className="text-rose-500" />,
+    Icon: Layers,
+    iconColor: "text-rose-500",
     color: "from-rose-500/20",
     players: "942",
     category: "Agilité"
@@ -37,7 +52,8 @@ const GAMES = [
     name: "PLINKO ELITE",
     desc: "Multiplicateurs en cascade",
     path: "/client/plinko",
-    icon: <Target className="text-blue-400" />,
+    Icon: Target,
+    iconColor: "text-blue-400",
     color: "from-blue-500/20",
     players: "1,105",
     category: "Hasard"
@@ -47,7 +63,8 @@ const GAMES = [
     name: "MINES",
     desc: "Gestion du risque",
     path: "/client/mines",
-    icon: <Grid className="text-emerald-500" />,
+    Icon: Grid,
+    iconColor: "text-emerald-500",
     color: "from-emerald-500/20",
     players: "856",
     category: "Stratégie"
@@ -57,7 +74,8 @@ const GAMES = [
     name: "BIOMETRIC HACK",
     desc: "Agilité visuelle",
     path: "/client/biometric-hack",
-    icon: <Fingerprint className="text-cyan-400" />,
+    Icon: Fingerprint,
+    iconColor: "text-cyan-400",
     color: "from-cyan-500/20",
     players: "652",
     category: "Réflexes"
@@ -67,7 +85,8 @@ const GAMES = [
     name: "CHIF QUIZ",
     desc: "Connaissances",
     path: "/client/quiz",
-    icon: <Brain className="text-purple-400" />,
+    Icon: Brain,
+    iconColor: "text-purple-400",
     color: "from-purple-500/20",
     players: "3,012",
     category: "Savoir"
@@ -77,7 +96,8 @@ const GAMES = [
     name: "LASER VAULT",
     desc: "Précision",
     path: "/client/laser-vault",
-    icon: <Lock className="text-orange-500" />,
+    Icon: Lock,
+    iconColor: "text-orange-500",
     color: "from-orange-500/20",
     players: "2,094",
     category: "Précision"
@@ -89,7 +109,6 @@ export default function GameListPage() {
   const [search, setSearch] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
 
-  // Chargement des favoris
   useEffect(() => {
     const saved = localStorage.getItem('fav_games');
     if (saved) setFavorites(JSON.parse(saved));
@@ -123,26 +142,26 @@ export default function GameListPage() {
           onClick={() => router.back()}
           className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 active:scale-90 transition-all"
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={20} className="text-white" />
         </button>
-        <h1 className="text-lg font-black italic tracking-tighter">
-          QUIZ <span className="text-emerald-500">ELITE</span>
+        <h1 className="text-lg font-black italic tracking-tighter uppercase">
+          ELITE <span className="text-emerald-500">GAMES</span>
         </h1>
         <div className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
-          <Star size={16} className="text-emerald-500" />
+          <Star size={16} className="text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
         </div>
       </div>
 
       <main className="p-5 pb-32">
-        {/* Recherche */}
+        {/* Barre de Recherche */}
         <div className="relative mb-8">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
           <input 
             type="text"
-            placeholder="RECHERCHER UN JEU..."
+            placeholder="RECHERCHER UN DÉFI..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-emerald-500/50 transition-all text-xs font-bold tracking-widest uppercase"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-emerald-500/50 transition-all text-xs font-bold tracking-widest uppercase text-white"
           />
         </div>
 
@@ -161,15 +180,17 @@ export default function GameListPage() {
                 {favoriteGames.map(game => (
                   <motion.div 
                     key={`fav-${game.id}`}
-                    layoutId={game.id}
+                    layoutId={`fav-${game.id}`}
                     onClick={() => router.push(game.path)}
-                    className="min-w-[150px] bg-gradient-to-br from-white/5 to-transparent border border-white/10 p-5 rounded-[2rem] relative"
+                    className="min-w-[150px] bg-gradient-to-br from-white/5 to-transparent border border-white/10 p-5 rounded-[2rem] relative active:scale-95 transition-transform"
                   >
-                    <div className="mb-4">{game.icon}</div>
+                    <div className="mb-4">
+                      <game.Icon size={28} className={game.iconColor} />
+                    </div>
                     <p className="text-[11px] font-black truncate uppercase">{game.name}</p>
                     <button 
                       onClick={(e) => toggleFavorite(e, game.id)}
-                      className="absolute top-4 right-4"
+                      className="absolute top-4 right-4 p-1"
                     >
                       <Heart size={14} className="fill-rose-500 text-rose-500" />
                     </button>
@@ -180,45 +201,51 @@ export default function GameListPage() {
           )}
         </AnimatePresence>
 
-        {/* Grille des jeux */}
+        {/* Grille de tous les jeux */}
         <section>
           <h2 className="text-[10px] font-black text-slate-500 mb-6 tracking-[0.3em] uppercase">
-            {search ? `Résultats (${filteredGames.length})` : "Jeux Populaires"}
+            {search ? `Résultats (${filteredGames.length})` : "Tous les Jeux"}
           </h2>
           
           <div className="flex flex-col gap-4">
-            {filteredGames.map((game) => (
+            {filteredGames.map((game, index) => (
               <motion.div
                 key={game.id}
-                layout
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
                 onClick={() => router.push(game.path)}
-                className="group relative bg-[#0d0d12] border border-white/5 rounded-[1.8rem] p-4 flex items-center gap-4 active:scale-[0.97] transition-all overflow-hidden"
+                className="group relative bg-[#0a0a0f] border border-white/5 rounded-[1.8rem] p-4 flex items-center gap-4 active:scale-[0.98] transition-all overflow-hidden"
               >
-                <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-5`} />
+                {/* Glow discret au hover */}
+                <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity`} />
 
-                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                  {React.cloneElement(game.icon as React.ReactElement, { size: 28 })}
+                {/* Icône du jeu */}
+                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 z-10">
+                  <game.Icon size={26} className={game.iconColor} />
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-sm tracking-tight uppercase truncate">{game.name}</h3>
-                  </div>
-                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider italic">{game.desc}</p>
+                {/* Infos du jeu */}
+                <div className="flex-1 min-w-0 z-10">
+                  <h3 className="font-black text-sm tracking-tight uppercase truncate">{game.name}</h3>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">{game.desc}</p>
                   
                   <div className="flex items-center gap-2 mt-2">
                     <Users size={10} className="text-emerald-500" />
-                    <span className="text-[9px] text-emerald-500/80 font-black">{game.players} en ligne</span>
+                    <span className="text-[9px] text-emerald-500/80 font-black uppercase tracking-tighter">
+                      {game.players} JOUEURS EN LIGNE
+                    </span>
                   </div>
                 </div>
 
+                {/* Bouton Favori */}
                 <button 
                   onClick={(e) => toggleFavorite(e, game.id)}
-                  className="p-2 z-10"
+                  className="p-3 z-20 relative"
                 >
                   <Heart 
-                    size={18} 
-                    className={favorites.includes(game.id) ? "fill-rose-500 text-rose-500" : "text-slate-800"} 
+                    size={20} 
+                    className={favorites.includes(game.id) ? "fill-rose-500 text-rose-500" : "text-white/10 group-hover:text-white/30"} 
                   />
                 </button>
               </motion.div>
@@ -227,25 +254,32 @@ export default function GameListPage() {
         </section>
       </main>
 
-      {/* Navigation Basse (Premium) */}
-      <nav className="fixed bottom-0 inset-x-0 bg-[#0a0a0f]/90 backdrop-blur-xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50">
-        <NavIcon icon={<Home size={22} />} label="ACCUEIL" active />
-        <NavIcon icon={<Gamepad2 size={22} />} label="JOUER" />
-        <NavIcon icon={<Ticket size={22} />} label="BILLETS" />
-        <NavIcon icon={<MessageSquare size={22} />} label="SUPPORT" />
-        <NavIcon icon={<User size={22} />} label="COMPTE" />
+      {/* Barre de Navigation Basse */}
+      <nav className="fixed bottom-0 inset-x-0 bg-[#050508]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50">
+        <NavIcon icon={<Home size={20} />} label="ACCUEIL" />
+        <NavIcon icon={<Gamepad2 size={20} />} label="JEUX" active />
+        <NavIcon icon={<Ticket size={20} />} label="SHOP" />
+        <NavIcon icon={<MessageSquare size={20} />} label="CHAT" />
+        <NavIcon icon={<User size={20} />} label="PROFIL" />
       </nav>
     </div>
   );
 }
 
-// Composant Helper pour la Nav
+// Composant Interne pour la Navigation
 function NavIcon({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) {
   return (
-    <div className={`flex flex-col items-center gap-1 ${active ? 'text-emerald-500' : 'text-slate-600'}`}>
-      {icon}
-      <span className="text-[7px] font-black tracking-[0.1em]">{label}</span>
-      {active && <motion.div layoutId="nav-glow" className="w-1 h-1 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" />}
+    <div className={`flex flex-col items-center gap-1.5 transition-colors ${active ? 'text-emerald-500' : 'text-slate-500'}`}>
+      <div className={`${active ? 'scale-110 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]' : ''} transition-transform`}>
+        {icon}
+      </div>
+      <span className="text-[7px] font-black tracking-widest uppercase">{label}</span>
+      {active && (
+        <motion.div 
+          layoutId="nav-glow" 
+          className="w-1 h-1 bg-emerald-500 rounded-full" 
+        />
+      )}
     </div>
   );
 }
