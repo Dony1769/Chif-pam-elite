@@ -44,9 +44,6 @@ export default function BiometricHack() {
     setStatus('showing');
   }, []);
   
-  const start = async () => {
-    if (bet < 10 || isProcessing) return;
-
   useEffect(() => {
     if (status === 'showing') {
       const timer = setTimeout(() => {
