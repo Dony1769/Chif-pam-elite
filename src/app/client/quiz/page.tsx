@@ -5,9 +5,9 @@ import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Fil
 import { useRouter } from 'next/navigation';
 
 const SETTINGS = {
-  facile: { time: 10, step: 0.20 },
-  intermédiaire: { time: 7, step: 0.50 },
-  difficile: { time: 4, step: 1.00 }
+  facile: { time: 10, step: 0.15 },
+  intermédiaire: { time: 7, step: 0.20 },
+  difficile: { time: 4, step: 0.50 }
 };
 
 const CATEGORIES = [
