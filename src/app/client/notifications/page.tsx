@@ -5,6 +5,25 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Inbox, Loader2, CheckCheck } from 'lucide-react';
 import Link from 'next/link';
+import { subscribeUserToPush } from "@/lib/push";
+
+const enablePush = async () => {
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return alert("Permission refusée");
+
+  const subscription = await subscribeUserToPush();
+  if (!subscription) return;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("push_subscriptions").upsert({
+    user_id: user.id,
+    subscription
+  });
+
+  alert("Notifications activées ✅");
+};
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -66,8 +85,15 @@ export default function ClientNotifications() {
           <button onClick={markAllAsRead} className="flex items-center gap-2 text-[10px] text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full">
             <CheckCheck size={14} /> Tout lire
           </button>
-        )}
+      <button
+  onClick={enablePush}
+  className="w-full mb-4 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] tracking-widest text-emerald-500"
+>
+  ACTIVER LES NOTIFICATIONS
+</button>
       </div>
+        )}
+        
 
       <div className="p-6 space-y-4">
         {notifications.length === 0 ? (
