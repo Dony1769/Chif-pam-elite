@@ -188,6 +188,33 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        <button
+  onClick={async () => {
+    if (!("Notification" in window)) {
+      alert("Notifications non supportées sur cet appareil");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    if (permission === "granted") {
+      // Notification test immédiate
+      navigator.serviceWorker.ready.then(swReg => {
+        swReg.showNotification("ChifPam", {
+          body: "Notification test activée ! ✅",
+          icon: "/icons/icon-192.png"
+        });
+      });
+      alert("Notifications activées ✅");
+    } else {
+      alert("Notifications refusées ❌");
+    }
+  }}
+  className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest"
+>
+  Activer les notifications
+</button>
+
         {/* NOUVEAU : SECTION AIDE & INFOS (Demandé dans le rapport) */}
         <div className="space-y-3">
           <h3 className="text-[10px] text-slate-500 uppercase tracking-[0.3em] ml-4 font-black italic">Assistance</h3>
@@ -316,6 +343,7 @@ export default function ProfilePage() {
     </main>
   );
 }
+
 
 
 
