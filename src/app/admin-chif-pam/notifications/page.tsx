@@ -2,24 +2,24 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, Bell, CheckCircle2, Loader2, Users } from 'lucide-react';
+import { Send, Bell, CheckCircle2, Loader2 } from 'lucide-react';
 
 export default function AdminNotifications() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-// /app/admin/notifications/page.tsx
-const broadcastNotification = async (e: React.FormEvent) => {
+
+  const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!confirm("Voulez-vous envoyer ce message à TOUS les clients ?")) return;
+    if (!confirm("Diffuser à TOUS les clients ?")) return;
     
     setLoading(true);
     try {
       const { data: users } = await supabase.from('profiles').select('id');
       
-      if (users) {
-        // A. Insertion Base de données (pour l'historique dans l'app)
+      if (users && users.length > 0) {
+        // 1. Database internal notif
         const payload = users.map(u => ({
           user_id: u.id,
           title: title.toUpperCase(),
@@ -28,9 +28,10 @@ const broadcastNotification = async (e: React.FormEvent) => {
         }));
         await supabase.from('notifications').insert(payload);
 
-        // B. Envoi Push Mobile (pour la barre de notif)
+        // 2. Real-time Push
         await fetch('/api/push', {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title, message }),
         });
 
@@ -39,60 +40,38 @@ const broadcastNotification = async (e: React.FormEvent) => {
         setTimeout(() => setSent(false), 3000);
       }
     } catch (error) {
-      alert("Erreur lors de la diffusion.");
-    } finally {
-      setLoading(false);
-    }
-};
-
-  const broadcastNotification = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!confirm("Voulez-vous envoyer ce message à TOUS les clients ?")) return;
-    
-    setLoading(true);
-    try {
-      const { data: users, error: userError } = await supabase.from('profiles').select('id');
-      if (userError) throw userError;
-
-      if (users && users.length > 0) {
-        const payload = users.map(u => ({
-          user_id: u.id,
-          title: title.toUpperCase(),
-          content: message,
-          is_read: false
-        }));
-
-        const { error: insertError } = await supabase.from('notifications').insert(payload);
-        if (insertError) throw insertError;
-
-        setSent(true);
-        setTitle('');
-        setMessage('');
-        setTimeout(() => setSent(false), 3000);
-      }
-    } catch (error: any) {
-      alert("Erreur critique : " + error.message);
+      alert("Erreur de diffusion");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-6 lg:p-12 max-w-2xl mx-auto space-y-10 text-white font-black italic uppercase">
-      <div className="space-y-2">
-        <h1 className="text-4xl flex items-center gap-4">
-          <Bell className="text-emerald-500" size={40} /> Diffusion
-        </h1>
-        <p className="text-slate-500 text-[10px] tracking-[0.4em]">Alerte générale en temps réel</p>
-      </div>
-
-      <form onSubmit={broadcastNotification} className="bg-slate-900 p-8 lg:p-12 rounded-[3rem] border border-white/5 space-y-8 shadow-2xl">
-        <div className="space-y-4">
-          <label className="text-[10px] text-emerald-500 tracking-widest px-2">Sujet de l'alerte</label>
-          <input 
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="EX: MAINTENANCE DU SYSTÈME"
+    <div className="p-6 max-w-2xl mx-auto text-white uppercase italic font-black">
+      <h1 className="text-3xl flex items-center gap-4 mb-8">
+        <Bell className="text-emerald-500" /> DIFFUSION
+      </h1>
+      <form onSubmit={handleBroadcast} className="bg-slate-900 p-8 rounded-[2rem] border border-white/5 space-y-6">
+        <input 
+          value={title} onChange={(e) => setTitle(e.target.value)}
+          placeholder="Titre de l'alerte"
+          className="w-full bg-black/50 p-4 rounded-xl border border-white/10 outline-none focus:border-emerald-500"
+          required
+        />
+        <textarea 
+          value={message} onChange={(e) => setMessage(e.target.value)}
+          placeholder="Message..." rows={4}
+          className="w-full bg-black/50 p-4 rounded-xl border border-white/10 outline-none focus:border-emerald-500"
+          required
+        />
+        <button disabled={loading || sent} className="w-full bg-emerald-500 text-black p-5 rounded-xl font-bold flex justify-center items-center gap-2">
+          {loading ? <Loader2 className="animate-spin" /> : sent ? <CheckCircle2 /> : <Send size={20} />}
+          {sent ? "ENVOYÉ" : "DIFFUSER"}
+        </button>
+      </form>
+    </div>
+  );
+}
             className="w-full bg-slate-950 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500 transition-all text-sm"
             required
           />
