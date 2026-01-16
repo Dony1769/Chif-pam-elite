@@ -9,6 +9,41 @@ export default function AdminNotifications() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+// /app/admin/notifications/page.tsx
+const broadcastNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirm("Voulez-vous envoyer ce message à TOUS les clients ?")) return;
+    
+    setLoading(true);
+    try {
+      const { data: users } = await supabase.from('profiles').select('id');
+      
+      if (users) {
+        // A. Insertion Base de données (pour l'historique dans l'app)
+        const payload = users.map(u => ({
+          user_id: u.id,
+          title: title.toUpperCase(),
+          content: message,
+          is_read: false
+        }));
+        await supabase.from('notifications').insert(payload);
+
+        // B. Envoi Push Mobile (pour la barre de notif)
+        await fetch('/api/push', {
+          method: 'POST',
+          body: JSON.stringify({ title, message }),
+        });
+
+        setSent(true);
+        setTitle(''); setMessage('');
+        setTimeout(() => setSent(false), 3000);
+      }
+    } catch (error) {
+      alert("Erreur lors de la diffusion.");
+    } finally {
+      setLoading(false);
+    }
+};
 
   const broadcastNotification = async (e: React.FormEvent) => {
     e.preventDefault();
