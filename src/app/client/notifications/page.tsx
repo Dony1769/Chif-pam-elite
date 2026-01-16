@@ -3,149 +3,70 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Inbox, Loader2, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell } from 'lucide-react';
 import Link from 'next/link';
 import { subscribeUserToPush } from "@/lib/push";
-
-// /app/client/notifications/page.tsx
-// ... (garder les imports et fonctions au dessus)
-
-  return (
-    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-10">
-      <div className="p-6 flex flex-col gap-4 sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-20 border-b border-white/5">
-        <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/client/home" className="p-2 bg-slate-900 rounded-full"><ArrowLeft size={20} /></Link>
-              <h1 className="text-xl">Alertes</h1>
-            </div>
-            {notifications.some(n => !n.is_read) && (
-              <button onClick={markAllAsRead} className="text-[10px] text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full flex items-center gap-2">
-                <CheckCheck size={14} /> Tout lire
-              </button>
-            )}
-        </div>
-        
-        <button
-          onClick={enablePush}
-          className="w-full p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] tracking-widest text-emerald-500 flex items-center justify-center gap-2"
-        >
-          <Bell size={14} /> ACTIVER LES NOTIFICATIONS SUR MON MOBILE
-        </button>
-      </div>
-
-      <div className="p-6 space-y-4">
-        {notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-700">
-            <Inbox size={64} />
-            <p className="text-[10px] tracking-widest mt-4">Aucun message</p>
-          </div>
-        ) : (
-          notifications.map((n) => (
-            <div 
-              key={n.id} 
-              onClick={() => !n.is_read && markAsRead(n.id)}
-              className={`p-6 rounded-[2rem] border ${n.is_read ? 'bg-slate-900/30 border-white/5 opacity-50' : 'bg-slate-900 border-emerald-500/20'}`}
-            >
-              <h3 className="text-sm mb-1">{n.title}</h3>
-              <p className="text-[11px] lowercase not-italic text-slate-400">{n.content}</p>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
+  useEffect(() => { fetchNotifications(); }, []);
 
   const fetchNotifications = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/connexion');
-
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setNotifications(data || []);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return router.push('/connexion');
+    const { data } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+    setNotifications(data || []);
+    setLoading(false);
   };
 
-  const markAsRead = async (id: string) => {
-    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    if (!error) {
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  const enablePush = async () => {
+    const sub = await subscribeUserToPush();
+    if (sub) {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("push_subscriptions").upsert({ user_id: user?.id, subscription: sub.toJSON() });
+      alert("Notifications activées ! ✅");
     }
   };
 
   const markAllAsRead = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id);
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-10">
-      <div className="p-6 flex items-center justify-between sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-20 border-b border-white/5">
-        <div className="flex items-center gap-4">
-          <Link href="/client/home" className="p-2 bg-slate-900 rounded-full border border-white/10"><ArrowLeft size={20} /></Link>
-          <h1 className="text-xl tracking-tighter">Alertes</h1>
+    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase">
+      <div className="p-6 sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-20 border-b border-white/5 space-y-4">
+        <div className="flex items-center justify-between">
+          <Link href="/client/home" className="p-2 bg-slate-900 rounded-full"><ArrowLeft size={20} /></Link>
+          {notifications.some(n => !n.is_read) && (
+            <button onClick={markAllAsRead} className="text-[10px] text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full flex items-center gap-2">
+              <CheckCheck size={14} /> TOUT LIRE
+            </button>
+          )}
         </div>
-        {notifications.some(n => !n.is_read) && (
-          <button onClick={markAllAsRead} className="flex items-center gap-2 text-[10px] text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full">
-            <CheckCheck size={14} /> Tout lire
-          </button>
-      <button
-  onClick={enablePush}
-  className="w-full mb-4 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] tracking-widest text-emerald-500"
->
-  ACTIVER LES NOTIFICATIONS
-</button>
+        <button onClick={enablePush} className="w-full p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-500 flex items-center justify-center gap-2">
+          <Bell size={14} /> ACTIVER LES NOTIFICATIONS MOBILE
+        </button>
       </div>
-        )}
-        
 
       <div className="p-6 space-y-4">
         {notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-700 space-y-4">
-            <Inbox size={64} strokeWidth={1} />
-            <p className="text-[10px] tracking-[0.5em]">Aucun message</p>
+          <div className="flex flex-col items-center py-20 text-slate-700">
+            <Inbox size={48} />
+            <p className="text-[10px] mt-4">AUCUNE ALERTE</p>
           </div>
         ) : (
-          notifications.map((n) => (
-            <div 
-              key={n.id} 
-              onClick={() => !n.is_read && markAsRead(n.id)}
-              className={`p-6 rounded-[2rem] border transition-all ${n.is_read ? 'bg-slate-900/30 border-white/5 opacity-50' : 'bg-slate-900 border-emerald-500/20 shadow-lg shadow-emerald-500/5'}`}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-[8px] text-slate-500 tracking-widest">
-                  {new Date(n.created_at).toLocaleDateString()}
-                </span>
-                {!n.is_read && <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />}
-              </div>
-              <h3 className="text-sm mb-1">{n.title}</h3>
-              <p className="text-[11px] lowercase not-italic text-slate-400 leading-tight">{n.content}</p>
+          notifications.map(n => (
+            <div key={n.id} className={`p-5 rounded-2xl border ${n.is_read ? 'bg-slate-900/30 border-white/5 opacity-50' : 'bg-slate-900 border-emerald-500/20'}`}>
+              <h3 className="text-sm">{n.title}</h3>
+              <p className="text-[11px] lowercase not-italic text-slate-400 mt-1">{n.content}</p>
             </div>
           ))
         )}
