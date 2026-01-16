@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   User, LogOut, Camera, Loader2, ChevronRight, 
   CheckCircle2, ArrowLeft, Save, Shield, HelpCircle,
@@ -23,6 +24,7 @@ const LogoChifPamSmall = () => (
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { canInstall, install } = usePWAInstall();
   const [profile, setProfile] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,6 +142,15 @@ export default function ProfilePage() {
           <div className="w-10"></div>
         </div>
 
+        {canInstall && (
+  <button
+    onClick={install}
+    className="w-full p-4 rounded-2xl bg-emerald-500 text-black text-xs tracking-widest"
+  >
+    Installer l’application
+  </button>
+)}
+        
         {/* HEADER PROFIL */}
         <div className="flex flex-col items-center gap-4 py-2">
           <div className="relative group">
@@ -287,4 +298,5 @@ export default function ProfilePage() {
     </main>
   );
 }
+
 
