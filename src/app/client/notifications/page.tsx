@@ -8,24 +8,52 @@ import Link from 'next/link';
 import { subscribeUserToPush } from "@/lib/push";
 
 // /app/client/notifications/page.tsx
-const enablePush = async () => {
-  setLoading(true);
-  try {
-    const sub = await subscribeUserToPush();
-    if (sub) {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("push_subscriptions").upsert({
-        user_id: user?.id,
-        subscription: sub.toJSON()
-      });
-      alert("Alertes mobiles activées ! ✅");
-    }
-  } catch (e) {
-    alert("Veuillez autoriser les notifications dans les réglages du téléphone.");
-  } finally {
-    setLoading(false);
-  }
-};
+// ... (garder les imports et fonctions au dessus)
+
+  return (
+    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-10">
+      <div className="p-6 flex flex-col gap-4 sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-20 border-b border-white/5">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/client/home" className="p-2 bg-slate-900 rounded-full"><ArrowLeft size={20} /></Link>
+              <h1 className="text-xl">Alertes</h1>
+            </div>
+            {notifications.some(n => !n.is_read) && (
+              <button onClick={markAllAsRead} className="text-[10px] text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full flex items-center gap-2">
+                <CheckCheck size={14} /> Tout lire
+              </button>
+            )}
+        </div>
+        
+        <button
+          onClick={enablePush}
+          className="w-full p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[10px] tracking-widest text-emerald-500 flex items-center justify-center gap-2"
+        >
+          <Bell size={14} /> ACTIVER LES NOTIFICATIONS SUR MON MOBILE
+        </button>
+      </div>
+
+      <div className="p-6 space-y-4">
+        {notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-700">
+            <Inbox size={64} />
+            <p className="text-[10px] tracking-widest mt-4">Aucun message</p>
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <div 
+              key={n.id} 
+              onClick={() => !n.is_read && markAsRead(n.id)}
+              className={`p-6 rounded-[2rem] border ${n.is_read ? 'bg-slate-900/30 border-white/5 opacity-50' : 'bg-slate-900 border-emerald-500/20'}`}
+            >
+              <h3 className="text-sm mb-1">{n.title}</h3>
+              <p className="text-[11px] lowercase not-italic text-slate-400">{n.content}</p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
