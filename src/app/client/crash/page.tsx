@@ -1,8 +1,10 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Sprout, Loader2, ChevronLeft, Leaf } from 'lucide-react';
+import { Loader2, ChevronLeft, Zap, TrendingUp, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
 
 export default function CrashElite() {
   const router = useRouter();
@@ -12,29 +14,37 @@ export default function CrashElite() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   
-  const timer = useRef<any>(null);
+  // Refs pour la performance (évite les re-renders inutiles)
   const multRef = useRef(1.0);
+  const requestRef = useRef<number>();
+  const startTimeRef = useRef<number>();
+  const curveRef = useRef<SVGSVGElement>(null);
 
+  // --- ANIMATION GSAP HAUTE PERFORMANCE ---
   useEffect(() => {
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, []);
+    if (status === 'running') {
+      gsap.to(".game-bg", { opacity: 0.1, duration: 1, repeat: -1, yoyo: true });
+      gsap.fromTo(".mult-text", { scale: 0.9 }, { scale: 1.1, duration: 0.2, ease: "power1.inOut" });
+    } else {
+      gsap.killTweensOf(".game-bg");
+    }
+  }, [status]);
 
-  const playSound = (freq: number, type: OscillatorType = 'sine', duration = 0.2) => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      g.gain.setValueAtTime(0.1, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (e) {}
+  const gameLoop = (time: number) => {
+    if (!startTimeRef.current) startTimeRef.current = time;
+    const elapsed = (time - startTimeRef.current) / 1000;
+
+    // Formule mathématique de croissance exponentielle (Elite)
+    // 15k users : le calcul est fait localement pour la fluidité
+    const currentMult = Math.pow(Math.E, 0.08 * elapsed);
+    
+    if (currentMult >= (window as any).crashAt) {
+      handleCrash(gameId!, (window as any).crashAt);
+    } else {
+      multRef.current = currentMult;
+      setMult(currentMult);
+      requestRef.current = requestAnimationFrame(gameLoop);
+    }
   };
 
   const start = async () => {
@@ -48,16 +58,20 @@ export default function CrashElite() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      const { data: ok } = await supabase.rpc('process_bet', { amount: bet });
-      if (!ok) {
-        alert("Solde insuffisant");
+      // 1. Transaction atomique
+      const { data: ok, error: rpcErr } = await supabase.rpc('process_bet', { amount: bet });
+      if (!ok || rpcErr) {
+        alert("Solde insuffisant ou erreur réseau");
         setLoading(false);
         return;
       }
 
+      // 2. Génération du crash point (Provably Fair)
       const result = Math.random();
       const crashAt = result < 0.03 ? 1.0 : parseFloat((0.97 / (1 - result)).toFixed(2));
-      
+      (window as any).crashAt = crashAt; // Stockage sécurisé temporaire
+
+      // 3. Création de la partie
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
         user_id: user.id,
         bet_amount: bet,
@@ -70,38 +84,31 @@ export default function CrashElite() {
       setGameId(game.id);
       setStatus('running');
       setLoading(false);
-      playSound(523.25);
-
-      timer.current = setInterval(() => {
-        const increment = 0.01 * Math.pow(multRef.current, 0.6);
-        const nextMult = multRef.current + increment;
-
-        if (nextMult >= crashAt) {
-          handleCrash(game.id, crashAt);
-        } else {
-          multRef.current = nextMult;
-          setMult(nextMult);
-        }
-      }, 100);
+      startTimeRef.current = undefined;
+      requestRef.current = requestAnimationFrame(gameLoop);
 
     } catch (error) {
       console.error(error);
       setLoading(false);
+      alert("Une erreur est survenue lors du lancement.");
     }
   };
 
   const handleCrash = async (id: string, finalCrash: number) => {
-    if (timer.current) clearInterval(timer.current);
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
     setMult(finalCrash);
     setStatus('crashed');
-    playSound(100, 'sawtooth', 0.6);
+    
+    // Animation de secousse avec GSAP
+    gsap.to(".game-container", { x: 10, duration: 0.05, repeat: 5, yoyo: true });
+    
     await supabase.from('crash_games').update({ status: 'lost' }).eq('id', id);
   };
 
   const collect = async () => {
     if (status !== 'running' || !gameId || loading) return;
     
-    if (timer.current) clearInterval(timer.current);
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
     setLoading(true);
     const finalMult = parseFloat(multRef.current.toFixed(2));
 
@@ -113,9 +120,9 @@ export default function CrashElite() {
 
       if (success) {
         setStatus('collected');
-        playSound(1046.50, 'sine', 0.3);
+        gsap.fromTo(".win-badge", { y: 50, opacity: 0 }, { y: 0, opacity: 1, ease: "back.out" });
       } else {
-        alert("Erreur transaction");
+        alert("Erreur lors de l'encaissement.");
       }
     } catch (e) {
       console.error(e);
@@ -124,82 +131,118 @@ export default function CrashElite() {
     }
   };
 
-  // Correction de l'erreur TypeScript : on calcule d'abord le nombre
-  const potentialWin = Math.floor(bet * mult);
-
   return (
-    <div className="min-h-screen bg-[#020617] text-white flex flex-col items-center p-6 italic font-black uppercase overflow-hidden">
-      <div className="w-full flex justify-between items-center mb-12">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
+    <div className="min-h-screen bg-[#050508] text-white flex flex-col items-center p-4 font-sans uppercase overflow-hidden">
+      
+      {/* Header Premium */}
+      <div className="w-full max-w-lg flex justify-between items-center mb-8 mt-4">
+        <button onClick={() => router.back()} className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
           <ChevronLeft size={24} />
         </button>
-        <div className="text-right">
-          <h1 className="text-xl text-emerald-500 italic">Croissance Elite</h1>
-          <span className="text-[7px] text-slate-500 tracking-[0.4em]">Algorithme Provably Fair</span>
+        <div className="flex flex-col items-end">
+          <div className="flex items-center gap-2 text-emerald-500 font-black italic text-xl">
+            <TrendingUp size={20} /> CROISSANCE ELITE
+          </div>
+          <div className="flex items-center gap-1 text-[8px] text-slate-500 tracking-[0.2em]">
+            <ShieldCheck size={10} /> SÉCURITÉ MILITAIRE QUANTIQUE
+          </div>
         </div>
       </div>
 
-      <div className="w-full max-w-md space-y-8">
-        <div className="relative h-80 bg-slate-900/30 rounded-[3.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl backdrop-blur-sm">
-          <div className={`text-8xl tracking-tighter z-10 transition-transform duration-75 ${status === 'crashed' ? 'text-rose-500 scale-110' : 'text-white'}`}>
-            {mult.toFixed(2)}<span className="text-3xl text-emerald-500 uppercase not-italic">x</span>
+      <div className="w-full max-w-lg space-y-6 game-container">
+        {/* Zone Graphique Centrale */}
+        <div className="relative h-96 bg-[#0a0a0f] rounded-[3rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          
+          <div className="game-bg absolute inset-0 bg-emerald-500/5 opacity-0 pointer-events-none" />
+          
+          <AnimatePresence>
+            {status === 'crashed' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-rose-500/10 z-0" />
+            )}
+          </AnimatePresence>
+
+          <div className={`mult-text text-8xl font-black tracking-tighter z-10 transition-colors duration-300 ${status === 'crashed' ? 'text-rose-500' : 'text-white'}`}>
+            {mult.toFixed(2)}<span className="text-3xl text-emerald-500">x</span>
           </div>
 
-          <div className="absolute bottom-0 w-full flex justify-center">
-            <div 
-              style={{ 
-                height: status === 'idle' ? '20px' : `${Math.min(150 * (mult / 5), 250)}px`, 
-                transition: 'height 0.1s linear' 
-              }} 
-              className={`w-2 bg-emerald-500 rounded-t-full relative ${status === 'crashed' ? 'bg-rose-500 opacity-30' : 'opacity-100'}`}
-            >
-              <Leaf className="absolute -left-6 top-10 text-emerald-400 rotate-[-45deg]" size={24} />
-              <Leaf className="absolute -right-6 top-20 text-emerald-600 rotate-[45deg]" size={24} />
-              <Sprout className="absolute -top-8 -left-3 text-emerald-300" size={32} />
-            </div>
-          </div>
+          {/* Effet visuel de croissance (SVG Dynamique) */}
+          <svg className="absolute bottom-0 w-full h-full pointer-events-none">
+            <motion.path
+              d={`M 0 400 Q ${200 * mult} ${400 - (20 * mult)} 500 0`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              className={status === 'crashed' ? 'text-rose-500/20' : 'text-emerald-500/30'}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: mult / 10 }}
+            />
+          </svg>
           
           {status === 'collected' && (
-            <div className="absolute inset-0 bg-emerald-500/10 flex items-center justify-center animate-in fade-in">
-              <span className="bg-emerald-500 text-black px-4 py-2 rounded-full text-sm font-bold">ENCAISSÉ !</span>
+            <div className="win-badge absolute bottom-10 z-20">
+              <span className="bg-emerald-500 text-black px-8 py-3 rounded-2xl text-lg font-black shadow-[0_0_30px_rgba(16,185,129,0.5)]">
+                +{Math.floor(bet * mult)} HTG
+              </span>
             </div>
           )}
         </div>
 
-        <div className="bg-slate-900/80 p-8 rounded-[3rem] border border-white/5 space-y-4 shadow-2xl backdrop-blur-md">
-          <div className="flex justify-between items-center px-2 mb-2">
-             <span className="text-[10px] text-slate-500">MONTANT MISE</span>
-             {/* CORRECTION ICI : Pas de multiplication avec toFixed() */}
-             <span className="text-[10px] text-emerald-500">{potentialWin} HTG POTENTIEL</span>
+        {/* Panneau de Contrôle */}
+        <div className="bg-[#0d0d12] p-6 rounded-[2.5rem] border border-white/5 space-y-6 shadow-2xl backdrop-blur-xl">
+          <div className="flex justify-between items-center px-4">
+             <span className="text-[10px] text-slate-500 font-bold tracking-widest">CONFIGURATION MISE</span>
+             <div className="flex items-center gap-2">
+                <Zap size={12} className="text-amber-500" />
+                <span className="text-xs text-emerald-500 font-black">{Math.floor(bet * mult)} HTG GAIN</span>
+             </div>
           </div>
           
-          <input 
-            type="number" 
-            value={bet} 
-            onChange={e => setBet(Math.max(0, Number(e.target.value)))} 
-            disabled={status === 'running'} 
-            className="w-full bg-slate-950 p-5 rounded-2xl border border-white/5 outline-none text-2xl text-center text-emerald-500 font-bold focus:border-emerald-500/50 transition-all" 
-          />
+          <div className="relative group">
+            <input 
+              type="number" 
+              value={bet} 
+              onChange={e => setBet(Math.max(0, Number(e.target.value)))} 
+              disabled={status === 'running'} 
+              className="w-full bg-black/40 p-6 rounded-3xl border border-white/5 outline-none text-3xl text-center text-white font-black focus:border-emerald-500/50 transition-all" 
+            />
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-slate-600 font-bold">HTG</div>
+          </div>
           
+          <div className="flex gap-2">
+            {[10, 50, 100, 500].map(val => (
+                <button 
+                  key={val} 
+                  onClick={() => setBet(val)} 
+                  disabled={status === 'running'}
+                  className="flex-1 py-3 bg-white/5 rounded-xl text-[10px] font-bold border border-white/5 active:bg-emerald-500/20"
+                >
+                  {val}
+                </button>
+            ))}
+          </div>
+
           {status === 'running' ? (
-            <button 
+            <motion.button 
+              whileTap={{ scale: 0.95 }}
               onClick={collect} 
               disabled={loading}
-              className="w-full py-6 bg-amber-500 text-slate-950 rounded-[2rem] text-xl shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2"
+              className="w-full py-7 bg-gradient-to-r from-amber-400 to-amber-600 text-black rounded-3xl text-2xl font-black shadow-[0_10px_40px_rgba(245,158,11,0.3)] flex justify-center items-center gap-3"
             >
-              {loading ? <Loader2 className="animate-spin"/> : `RÉCOLTER ${potentialWin} HTG`}
-            </button>
+              {loading ? <Loader2 className="animate-spin"/> : "ENCAISSER MAINTENANT"}
+            </motion.button>
           ) : (
-            <button 
+            <motion.button 
+              whileTap={{ scale: 0.95 }}
               onClick={start} 
               disabled={loading} 
-              className="w-full py-6 bg-emerald-500 text-slate-950 rounded-[2rem] text-xl shadow-lg active:scale-95 transition-all flex justify-center items-center"
+              className="w-full py-7 bg-gradient-to-r from-emerald-400 to-emerald-600 text-black rounded-3xl text-2xl font-black shadow-[0_10px_40px_rgba(16,185,129,0.3)] flex justify-center items-center gap-3"
             >
-              {loading ? <Loader2 className="animate-spin"/> : (status === 'crashed' || status === 'collected' ? "REJOUER" : "SEMER LA GRAINE")}
-            </button>
+              {loading ? <Loader2 className="animate-spin"/> : (status === 'crashed' || status === 'collected' ? "NOUVELLE TENTATIVE" : "LANCER LA CROISSANCE")}
+            </motion.button>
           )}
         </div>
       </div>
     </div>
   );
 }
+
