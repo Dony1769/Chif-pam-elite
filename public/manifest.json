@@ -1,0 +1,16 @@
+{
+  "name": "Chif Pam",
+  "short_name": "ChifPam",
+  "description": "Plateforme sécurisée de services et transactions",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10B981",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
