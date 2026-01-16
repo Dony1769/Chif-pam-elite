@@ -7,22 +7,24 @@ import { ArrowLeft, Inbox, Loader2, CheckCheck } from 'lucide-react';
 import Link from 'next/link';
 import { subscribeUserToPush } from "@/lib/push";
 
+// /app/client/notifications/page.tsx
 const enablePush = async () => {
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return alert("Permission refusée");
-
-  const subscription = await subscribeUserToPush();
-  if (!subscription) return;
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-
-  await supabase.from("push_subscriptions").upsert({
-    user_id: user.id,
-    subscription
-  });
-
-  alert("Notifications activées ✅");
+  setLoading(true);
+  try {
+    const sub = await subscribeUserToPush();
+    if (sub) {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("push_subscriptions").upsert({
+        user_id: user?.id,
+        subscription: sub.toJSON()
+      });
+      alert("Alertes mobiles activées ! ✅");
+    }
+  } catch (e) {
+    alert("Veuillez autoriser les notifications dans les réglages du téléphone.");
+  } finally {
+    setLoading(false);
+  }
 };
 
 export default function ClientNotifications() {
