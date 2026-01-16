@@ -1,5 +1,23 @@
 "use client";
+<button
+  onClick={async () => {
+    if (!("Notification" in window)) {
+      alert("Notifications non supportées sur cet appareil");
+      return;
+    }
 
+    const permission = await Notification.requestPermission();
+
+    if (permission === "granted") {
+      alert("Notifications activées avec succès ✅");
+    } else {
+      alert("Notifications refusées ❌");
+    }
+  }}
+  className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest"
+>
+  Activer les notifications
+</button>
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -298,5 +316,6 @@ export default function ProfilePage() {
     </main>
   );
 }
+
 
 
