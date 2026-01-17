@@ -1,23 +1,5 @@
 "use client";
-<button
-  onClick={async () => {
-    if (!("Notification" in window)) {
-      alert("Notifications non supportées sur cet appareil");
-      return;
-    }
 
-    const permission = await Notification.requestPermission();
-
-    if (permission === "granted") {
-      alert("Notifications activées avec succès ✅");
-    } else {
-      alert("Notifications refusées ❌");
-    }
-  }}
-  className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest"
->
-  Activer les notifications
-</button>
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -42,7 +24,8 @@ const LogoChifPamSmall = () => (
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { canInstall, install } = usePWAInstall();
+  // CORRECTION : Utilisation de isInstallable au lieu de canInstall
+  const { isInstallable, install } = usePWAInstall();
   const [profile, setProfile] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,11 +131,11 @@ export default function ProfilePage() {
         {/* TOP BAR */}
         <div className="flex items-center justify-between mb-8">
           <button 
-  onClick={() => router.push('/client/home')}
-  className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90"
->
-  <ArrowLeft size={20} className="text-slate-400" />
-</button>
+            onClick={() => router.push('/client/home')}
+            className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90"
+          >
+            <ArrowLeft size={20} className="text-slate-400" />
+          </button>
           <div className="flex items-center gap-2 bg-slate-900/50 px-4 py-2 rounded-full border border-white/5">
             <LogoChifPamSmall />
             <span className="font-black italic text-sm tracking-tighter">CHIF-PAM</span>
@@ -160,14 +143,14 @@ export default function ProfilePage() {
           <div className="w-10"></div>
         </div>
 
-        {canInstall && (
-  <button
-    onClick={install}
-    className="w-full p-4 rounded-2xl bg-emerald-500 text-black text-xs tracking-widest"
-  >
-    Installer l’application
-  </button>
-)}
+        {isInstallable && (
+          <button
+            onClick={install}
+            className="w-full p-4 rounded-2xl bg-emerald-500 text-black text-xs tracking-widest"
+          >
+            Installer l’application
+          </button>
+        )}
         
         {/* HEADER PROFIL */}
         <div className="flex flex-col items-center gap-4 py-2">
@@ -189,33 +172,32 @@ export default function ProfilePage() {
         </div>
 
         <button
-  onClick={async () => {
-    if (!("Notification" in window)) {
-      alert("Notifications non supportées sur cet appareil");
-      return;
-    }
+          onClick={async () => {
+            if (!("Notification" in window)) {
+              alert("Notifications non supportées sur cet appareil");
+              return;
+            }
 
-    const permission = await Notification.requestPermission();
+            const permission = await Notification.requestPermission();
 
-    if (permission === "granted") {
-      // Notification test immédiate
-      navigator.serviceWorker.ready.then(swReg => {
-        swReg.showNotification("ChifPam", {
-          body: "Notification test activée ! ✅",
-          icon: "/icons/icon-192.png"
-        });
-      });
-      alert("Notifications activées ✅");
-    } else {
-      alert("Notifications refusées ❌");
-    }
-  }}
-  className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest"
->
-  Activer les notifications
-</button>
+            if (permission === "granted") {
+              navigator.serviceWorker.ready.then(swReg => {
+                swReg.showNotification("ChifPam", {
+                  body: "Notification test activée ! ✅",
+                  icon: "/icons/icon-192.png"
+                });
+              });
+              alert("Notifications activées ✅");
+            } else {
+              alert("Notifications refusées ❌");
+            }
+          }}
+          className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest"
+        >
+          Activer les notifications
+        </button>
 
-        {/* NOUVEAU : SECTION AIDE & INFOS (Demandé dans le rapport) */}
+        {/* NOUVEAU : SECTION AIDE & INFOS */}
         <div className="space-y-3">
           <h3 className="text-[10px] text-slate-500 uppercase tracking-[0.3em] ml-4 font-black italic">Assistance</h3>
           <Link href="/client/help">
@@ -343,7 +325,3 @@ export default function ProfilePage() {
     </main>
   );
 }
-
-
-
-
