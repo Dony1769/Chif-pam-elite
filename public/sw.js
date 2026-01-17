@@ -1,25 +1,22 @@
-// /public/sw.js
-
 self.addEventListener("push", (event) => {
-  let data = { title: "Chif Pam", body: "Nouvelle mise à jour disponible !" };
+  let data = { title: "Chif Pam", body: "Nouvelle mise à jour !", url: "/client/notifications" };
 
   if (event.data) {
     try {
-      data = event.data.json();
+      const json = event.data.json();
+      data = { ...data, ...json }; // Fusionne les valeurs par défaut
     } catch (e) {
-      data = { title: "Chif Pam", body: event.data.text() };
+      data.body = event.data.text();
     }
   }
 
   const options = {
     body: data.body,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png", // Petite icône monochrome pour la barre d'état
+    icon: "/icons/icon-192.png", // Assure-toi que cette image existe dans /public/icons/
+    badge: "/icons/icon-192.png",
     vibrate: [200, 100, 200],
-    tag: "crash-elite-notif", // Empêche le flood (remplace la précédente)
-    renotify: true,
     data: {
-      url: data.url || "/client/notifications"
+      url: data.url
     },
     actions: [
       { action: "open", title: "Voir" }
@@ -33,17 +30,17 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data.url;
+  const targetUrl = event.notification.data.url || "/client/notifications";
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      // Si l'onglet est déjà ouvert, on fait le focus dessus
+      // Focus sur l'onglet existant s'il y en a un
       for (const client of clientList) {
         if (client.url.includes(targetUrl) && "focus" in client) {
           return client.focus();
         }
       }
-      // Sinon on ouvre une nouvelle fenêtre
+      // Sinon ouvrir une nouvelle fenêtre
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
