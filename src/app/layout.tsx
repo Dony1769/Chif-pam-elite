@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import PWARegister from "@/components/PWARegister";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   title: "Chif Pam",
   description: "Plateforme sécurisée",
   manifest: "/manifest.json",
+};
+
+// CORRECTION : Le themeColor doit être dans viewport maintenant
+export const viewport: Viewport = {
   themeColor: "#10B981",
 };
 
@@ -26,17 +30,12 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").then((registration) => {
-    console.log("Service Worker enregistré ✅", registration);
-  });
-  }
+  // SUPPRESSION DU CODE JS ICI. C'est le rôle de PWARegister.
+  
   return (
-    <html lang="en">
-      <body 
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-      <PWARegister />
+    <html lang="fr">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <PWARegister />
         {children}
         <SpeedInsights />
       </body>
