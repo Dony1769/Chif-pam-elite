@@ -110,12 +110,12 @@ export default function ProfilePage() {
         .insert({ user_id: user.id, coupon_id: coupon.id });
 
       if (redemptionError) throw new Error("Vous avez déjà utilisé ce coupon.");
-
-      // 3. Ajouter la balance (RPC sécurisé)
-      const { error: rpcError } = await supabase.rpc('increment_balance', { 
-        user_id: user.id, 
-        amount: coupon.amount 
-      });
+      // Avant : row_id: user.id
+// Après : user_id: user.id
+const { error: rpcError } = await supabase.rpc('increment_balance', { 
+  user_id: user.id, 
+  amount: coupon.amount 
+});
 
       if (rpcError) throw rpcError;
 
@@ -358,4 +358,5 @@ export default function ProfilePage() {
     </main>
   );
 }
+
 
