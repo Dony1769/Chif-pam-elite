@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   User, LogOut, Camera, Loader2, ChevronRight, 
-  CheckCircle2, ArrowLeft, Save, Shield, HelpCircle,
-  BookOpen, Info
+  CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
+  Ticket, Share2, Copy, Gift
 } from 'lucide-react';
 import { 
   AreaChart, Area, Tooltip, ResponsiveContainer, XAxis, YAxis, ReferenceLine 
@@ -24,7 +24,6 @@ const LogoChifPamSmall = () => (
 
 export default function ProfilePage() {
   const router = useRouter();
-  // CORRECTION : Utilisation de isInstallable au lieu de canInstall
   const { isInstallable, install } = usePWAInstall();
   const [profile, setProfile] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -32,6 +31,11 @@ export default function ProfilePage() {
   const [updating, setUpdating] = useState(false);
   const [stats, setStats] = useState({ deposits: 0, withdrawals: 0, netBalance: 0 });
 
+  // États pour Coupon & Parrainage
+  const [couponCode, setCouponCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+
+  // États pour Update Profil
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
@@ -43,6 +47,7 @@ export default function ProfilePage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // On récupère aussi le referral_code
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     const { data: transactions } = await supabase.from('transactions').select('amount, type, created_at, status').eq('user_id', user.id).eq('status', 'approved');
     const { data: mises } = await supabase.from('mises').select('montant, status, created_at').eq('user_id', user.id);
@@ -81,17 +86,67 @@ export default function ProfilePage() {
     setStats({ deposits: totalDep, withdrawals: totalWith, netBalance: netRunningBalance });
   };
 
+  // --- LOGIQUE COUPONS ---
+  const handleRedeemCoupon = async () => {
+    if (!couponCode) return;
+    setRedeeming(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Vérifier le coupon
+      const { data: coupon, error: couponError } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', couponCode.toUpperCase())
+        .eq('is_active', true)
+        .single();
+      
+      if (couponError || !coupon) throw new Error("Code invalide ou expiré.");
+
+      // 2. Vérifier si déjà utilisé
+      const { error: redemptionError } = await supabase
+        .from('coupon_redemptions')
+        .insert({ user_id: user.id, coupon_id: coupon.id });
+
+      if (redemptionError) throw new Error("Vous avez déjà utilisé ce coupon.");
+
+      // 3. Ajouter la balance (RPC sécurisé)
+      const { error: rpcError } = await supabase.rpc('increment_balance', { 
+        row_id: user.id, 
+        amount: coupon.amount 
+      });
+
+      if (rpcError) throw rpcError;
+
+      alert(`Succès ! +${coupon.amount} HTG ajoutés à votre compte. 🎉`);
+      setCouponCode('');
+      fetchCompleteData(); // Rafraîchir
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
+  // --- LOGIQUE PARRAINAGE ---
+  const shareReferral = () => {
+    const text = `Rejoins-moi sur Chif Pam ! Utilise mon code *${profile?.referral_code}* pour gagner 10 HTG dès ton inscription.`;
+    if (navigator.share) {
+      navigator.share({ title: 'Chif Pam', text, url: window.location.origin });
+    } else {
+      navigator.clipboard.writeText(`${text} ${window.location.origin}`);
+      alert("Code copié ! Partagez-le avec vos amis.");
+    }
+  };
+
   const handleUpdateProfile = async () => {
     setUpdating(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { error: profError } = await supabase
-        .from('profiles')
-        .update({ username: newUsername })
-        .eq('id', user.id);
-
+      const { error: profError } = await supabase.from('profiles').update({ username: newUsername }).eq('id', user.id);
       if (profError) throw profError;
 
       if (newPassword.length >= 6) {
@@ -110,12 +165,8 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      window.location.replace('/connexion');
-    } catch (error) {
-      window.location.href = '/connexion';
-    }
+    try { await supabase.auth.signOut(); window.location.replace('/connexion'); } 
+    catch (error) { window.location.href = '/connexion'; }
   };
 
   if (loading) return (
@@ -130,10 +181,7 @@ export default function ProfilePage() {
         
         {/* TOP BAR */}
         <div className="flex items-center justify-between mb-8">
-          <button 
-            onClick={() => router.push('/client/home')}
-            className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90"
-          >
+          <button onClick={() => router.push('/client/home')} className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90">
             <ArrowLeft size={20} className="text-slate-400" />
           </button>
           <div className="flex items-center gap-2 bg-slate-900/50 px-4 py-2 rounded-full border border-white/5">
@@ -144,10 +192,7 @@ export default function ProfilePage() {
         </div>
 
         {isInstallable && (
-          <button
-            onClick={install}
-            className="w-full p-4 rounded-2xl bg-emerald-500 text-black text-xs tracking-widest"
-          >
+          <button onClick={install} className="w-full p-4 rounded-2xl bg-emerald-500 text-black text-xs tracking-widest font-black uppercase">
             Installer l’application
           </button>
         )}
@@ -157,9 +202,6 @@ export default function ProfilePage() {
           <div className="relative group">
             <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)] transition-transform">
               <User size={40} className="text-emerald-500" />
-            </div>
-            <div className="absolute bottom-0 right-0 bg-emerald-500 p-2 rounded-full border-4 border-[#020617] cursor-pointer">
-              <Camera size={14} className="text-slate-950" />
             </div>
           </div>
           <div className="text-center">
@@ -171,33 +213,66 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* SECTION PARRAINAGE & COUPONS (NOUVEAU) */}
+        <div className="grid grid-cols-1 gap-4">
+          
+          {/* CARTE PARRAINAGE */}
+          <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 p-6 rounded-[2rem] text-white relative overflow-hidden shadow-lg shadow-emerald-500/20">
+            <div className="absolute top-0 right-0 p-4 opacity-20"><Gift size={80} /></div>
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-2">Votre Code Parrain</p>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-3xl font-black tracking-tighter">{profile?.referral_code || "LOADING..."}</h2>
+              <button onClick={() => navigator.clipboard.writeText(profile?.referral_code)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors">
+                <Copy size={16} />
+              </button>
+            </div>
+            <p className="text-[10px] font-bold opacity-90 mb-4 pr-12">Invitez vos amis et gagnez 2% sur chacun de leurs dépôts à vie !</p>
+            <button onClick={shareReferral} className="w-full py-3 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+              <Share2 size={14} /> Partager mon lien
+            </button>
+          </div>
+
+          {/* CARTE COUPON */}
+          <div className="bg-slate-900 border border-white/10 p-6 rounded-[2rem] space-y-3">
+            <div className="flex items-center gap-2 text-emerald-500 mb-1">
+              <Ticket size={18} />
+              <p className="text-[10px] font-black uppercase tracking-widest">Code Promo</p>
+            </div>
+            <div className="flex gap-2">
+              <input 
+                value={couponCode} 
+                onChange={(e) => setCouponCode(e.target.value)}
+                placeholder="ENTREZ LE CODE"
+                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs font-bold outline-none focus:border-emerald-500/50 placeholder:text-slate-600"
+              />
+              <button 
+                onClick={handleRedeemCoupon}
+                disabled={redeeming || !couponCode}
+                className="px-4 bg-emerald-500 text-black rounded-xl font-black text-[10px] disabled:opacity-50"
+              >
+                {redeeming ? <Loader2 className="animate-spin" size={14}/> : "VALIDER"}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <button
           onClick={async () => {
-            if (!("Notification" in window)) {
-              alert("Notifications non supportées sur cet appareil");
-              return;
-            }
-
+            if (!("Notification" in window)) return alert("Notifications non supportées");
             const permission = await Notification.requestPermission();
-
             if (permission === "granted") {
               navigator.serviceWorker.ready.then(swReg => {
-                swReg.showNotification("ChifPam", {
-                  body: "Notification test activée ! ✅",
-                  icon: "/icons/icon-192.png"
-                });
+                swReg.showNotification("ChifPam", { body: "Notifications activées ! ✅", icon: "/icons/icon-192.png" });
               });
               alert("Notifications activées ✅");
-            } else {
-              alert("Notifications refusées ❌");
             }
           }}
-          className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest"
+          className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest uppercase font-bold text-slate-400 hover:bg-slate-800 transition-colors"
         >
           Activer les notifications
         </button>
 
-        {/* NOUVEAU : SECTION AIDE & INFOS */}
+        {/* AIDE */}
         <div className="space-y-3">
           <h3 className="text-[10px] text-slate-500 uppercase tracking-[0.3em] ml-4 font-black italic">Assistance</h3>
           <Link href="/client/help">
@@ -216,7 +291,7 @@ export default function ProfilePage() {
           </Link>
         </div>
 
-        {/* PERFORMANCE RÉELLE */}
+        {/* GRAPHIQUE */}
         <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] p-6 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl"></div>
           <div className="mb-6 relative z-10">
@@ -237,36 +312,16 @@ export default function ProfilePage() {
                 </defs>
                 <XAxis dataKey="name" hide />
                 <YAxis hide domain={['auto', 'auto']} />
-                <Tooltip 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-slate-950 border border-white/10 p-3 rounded-2xl shadow-xl">
-                          <p className="text-[10px] text-slate-500 uppercase font-bold">{payload[0].payload.name}</p>
-                          <p className={`font-bold ${Number(payload[0].value) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {Number(payload[0].value).toLocaleString()} HTG
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
+                <Tooltip content={({ active, payload }) => active && payload && payload.length ? (
+                  <div className="bg-slate-950 border border-white/10 p-3 rounded-2xl shadow-xl">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">{payload[0].payload.name}</p>
+                    <p className={`font-bold ${Number(payload[0].value) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{Number(payload[0].value).toLocaleString()} HTG</p>
+                  </div>
+                ) : null} />
                 <ReferenceLine y={0} stroke="rgba(255,255,255,0.05)" />
                 <Area type="monotone" dataKey="gain" stroke={stats.netBalance >= 0 ? "#10b981" : "#f43f5e"} fillOpacity={1} fill="url(#colorGain)" strokeWidth={3} />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 pt-6 border-t border-white/5 mt-4 relative z-10">
-            <div>
-              <p className="text-[9px] uppercase text-slate-500 tracking-tighter mb-1 font-bold italic">Total Dépôts</p>
-              <p className="text-lg font-black text-emerald-500">+{stats.deposits.toLocaleString()}</p>
-            </div>
-            <div className="border-l border-white/10 pl-4">
-              <p className="text-[9px] uppercase text-slate-500 tracking-tighter mb-1 font-bold italic">Total Retraits</p>
-              <p className="text-lg font-black text-rose-500">-{stats.withdrawals.toLocaleString()}</p>
-            </div>
           </div>
         </div>
 
@@ -276,46 +331,24 @@ export default function ProfilePage() {
             <Shield size={16} className="text-emerald-500" />
             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sécurité du Compte</h3>
           </div>
-          
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-[9px] uppercase text-slate-500 ml-4 font-bold tracking-widest">Identifiant</label>
-              <input 
-                type="text" 
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-sm font-bold"
-              />
+              <input type="text" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-sm font-bold"/>
             </div>
             <div className="space-y-1">
               <label className="text-[9px] uppercase text-slate-500 ml-4 font-bold tracking-widest">Modifier mot de passe</label>
-              <input 
-                type="password" 
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-sm font-bold"
-              />
+              <input type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-sm font-bold"/>
             </div>
-            <button 
-              onClick={handleUpdateProfile}
-              disabled={updating}
-              className="w-full bg-emerald-500 text-slate-950 p-4 rounded-2xl font-black text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
-            >
+            <button onClick={handleUpdateProfile} disabled={updating} className="w-full bg-emerald-500 text-slate-950 p-4 rounded-2xl font-black text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50">
               {updating ? <Loader2 className="animate-spin" size={16} /> : <><Save size={16} /> ENREGISTRER</>}
             </button>
           </div>
         </div>
 
-        {/* DÉCONNEXION */}
-        <button 
-          onClick={handleLogout}
-          className="w-full p-5 bg-rose-500/5 border border-rose-500/10 rounded-3xl flex justify-between items-center group hover:bg-rose-500/10 transition-all active:scale-95"
-        >
+        <button onClick={handleLogout} className="w-full p-5 bg-rose-500/5 border border-rose-500/10 rounded-3xl flex justify-between items-center group hover:bg-rose-500/10 transition-all active:scale-95">
           <div className="flex items-center gap-4">
-            <div className="p-2 bg-rose-500/10 rounded-xl">
-               <LogOut size={18} className="text-rose-500" />
-            </div>
+            <div className="p-2 bg-rose-500/10 rounded-xl"><LogOut size={18} className="text-rose-500" /></div>
             <span className="text-xs font-black text-rose-500 uppercase tracking-widest">Déconnexion</span>
           </div>
           <ChevronRight size={18} className="text-rose-500/30 group-hover:translate-x-1 transition-transform" />
