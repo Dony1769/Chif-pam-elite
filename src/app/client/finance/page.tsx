@@ -3,20 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  ArrowUpCircle, 
-  ArrowDownCircle, 
-  Upload, 
-  Loader2, 
-  Clock, 
-  Smartphone,
-  ChevronLeft,
-  TrendingUp,
-  Wallet,
-  CheckCircle2,
-  Copy
+  ArrowUpCircle, ArrowDownCircle, Upload, Loader2, Clock, 
+  Smartphone, ChevronLeft, TrendingUp, Wallet, CheckCircle2, Copy
 } from 'lucide-react';
 
-// --- COMPOSANT LOGO CHIF-PAM ---
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
     <svg viewBox="0 0 100 100" className="w-12 h-12 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -85,7 +75,7 @@ export default function FinancePage() {
         type: 'deposit',
         amount: parseFloat(amount),
         proof_url: filePath,
-        method: method, // NOUVEAU CHAMP
+        method: method,
         status: 'pending'
       });
       if (transError) throw transError;
@@ -93,11 +83,8 @@ export default function FinancePage() {
       alert("Dépôt envoyé ! Validation en cours.");
       setView('menu');
       setMethod(null);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch (err: any) { alert(err.message); } 
+    finally { setIsSubmitting(false); }
   };
 
   const handleWithdrawal = async (e: React.FormEvent) => {
@@ -120,7 +107,7 @@ export default function FinancePage() {
         type: 'withdrawal',
         amount: amt,
         phone_number: phone,
-        method: method, // NOUVEAU CHAMP
+        method: method,
         status: 'pending'
       });
       if (transError) throw transError;
@@ -128,19 +115,11 @@ export default function FinancePage() {
       alert("Demande de retrait enregistrée.");
       setView('menu');
       setMethod(null);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch (err: any) { alert(err.message); } 
+    finally { setIsSubmitting(false); }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
-      <LogoChifPam className="animate-pulse" />
-      <Loader2 className="animate-spin text-emerald-500" />
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   const availableBalance = (profile?.balance || 0) - (profile?.locked_balance || 0);
 
@@ -149,13 +128,7 @@ export default function FinancePage() {
       <div className="max-w-md mx-auto space-y-8 animate-in fade-in duration-500">
         
         <div className="flex items-center justify-between">
-          <button 
-            onClick={() => {
-              if (method) setMethod(null);
-              else view === 'menu' ? window.history.back() : setView('menu');
-            }}
-            className="p-3 bg-slate-900 rounded-2xl border border-white/5 hover:bg-slate-800 transition-all active:scale-90"
-          >
+          <button onClick={() => { if (method) setMethod(null); else view === 'menu' ? window.history.back() : setView('menu'); }} className="p-3 bg-slate-900 rounded-2xl border border-white/5 hover:bg-slate-800 transition-all active:scale-90">
             <ChevronLeft size={24} className="text-emerald-500" />
           </button>
           <LogoChifPam />
@@ -168,7 +141,7 @@ export default function FinancePage() {
           <h2 className="text-4xl text-emerald-500 mb-4">{availableBalance.toLocaleString()} <span className="text-sm text-white/50">HTG</span></h2>
           {profile?.locked_balance! > 0 && (
             <div className="flex items-center gap-2 text-[10px] text-amber-500 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 animate-pulse">
-              <Clock size={14} /> {profile?.locked_balance} HTG bloqués (Retrait en cours)
+              <Clock size={14} /> {profile?.locked_balance} HTG bloqués
             </div>
           )}
         </div>
@@ -176,31 +149,27 @@ export default function FinancePage() {
         {view === 'menu' && (
           <div className="grid grid-cols-1 gap-4">
             <button onClick={() => setView('deposit')} className="group p-8 bg-emerald-500 text-slate-950 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
-              <ArrowUpCircle size={36} className="group-hover:translate-y-[-4px] transition-transform" /> 
-              <span className="text-lg">Dépôt</span>
+              <ArrowUpCircle size={36} className="group-hover:translate-y-[-4px] transition-transform" /> <span className="text-lg">Dépôt</span>
             </button>
             <button onClick={() => setView('withdrawal')} className="group p-8 bg-slate-900 border border-white/5 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95">
-              <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-[4px] transition-transform" /> 
-              <span className="text-lg">Retrait</span>
+              <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-[4px] transition-transform" /> <span className="text-lg">Retrait</span>
             </button>
           </div>
         )}
 
-        {/* --- SECTION DÉPÔT --- */}
-        {view === 'deposit' && !method && (
+        {(view === 'deposit' || view === 'withdrawal') && !method && (
           <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
-            <h3 className="text-center text-emerald-500 text-sm tracking-widest">Choisir le service de dépôt</h3>
-            <button onClick={() => setMethod('MonCash')} className="w-full p-6 bg-[#CC1011]/10 border border-[#CC1011]/20 rounded-2xl flex items-center justify-between hover:bg-[#CC1011]/20 transition-all group">
-              <span className="text-[#CC1011]">MONCASH</span>
-              <Smartphone className="group-hover:scale-110 transition-transform" />
-            </button>
-            <button onClick={() => setMethod('NatCash')} className="w-full p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between hover:bg-emerald-500/20 transition-all group">
-              <span className="text-emerald-500">NATCASH</span>
-              <Smartphone className="group-hover:scale-110 transition-transform" />
-            </button>
+            <h3 className="text-center text-emerald-500 text-sm tracking-widest">Choisir le service</h3>
+            {['MonCash', 'NatCash'].map(m => (
+              <button key={m} onClick={() => setMethod(m as any)} className="w-full p-6 bg-slate-900/50 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-slate-800 transition-all">
+                <span className={m === 'MonCash' ? 'text-[#CC1011]' : 'text-emerald-500'}>{m}</span>
+                <Smartphone size={20} className="text-slate-500" />
+              </button>
+            ))}
           </div>
         )}
 
+        {/* Formulaires simplifiés pour Dépôt/Retrait */}
         {view === 'deposit' && method && (
           <form onSubmit={handleDeposit} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-emerald-500/20 animate-in zoom-in-95 duration-300">
             <div className="text-center space-y-2">
@@ -209,66 +178,31 @@ export default function FinancePage() {
                 <span className="text-sm font-sans tracking-normal italic-none">{adminNumbers[method]}</span>
                 {copied ? <CheckCircle2 size={16} className="text-emerald-500" /> : <Copy size={16} className="text-slate-500" />}
               </div>
-              <p className="text-[8px] text-slate-500">Transférez le montant sur ce numéro puis uploadez la preuve ci-dessous.</p>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2">Montant HTG</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500 transition-all text-emerald-500" placeholder="Ex: 1000" />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2 uppercase">Preuve de paiement</label>
-              <label className="w-full flex flex-col items-center p-8 bg-black/40 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-all">
-                <Upload size={32} className="text-slate-500 mb-2" />
-                <span className="text-[10px] text-slate-400">{file ? file.name : "Capture d'écran"}</span>
-                <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
-              </label>
-            </div>
-
+            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-emerald-500 transition-all text-emerald-500" placeholder="Montant HTG" />
+            <label className="w-full flex flex-col items-center p-8 bg-black/40 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-all">
+              <Upload size={32} className="text-slate-500 mb-2" />
+              <span className="text-[10px] text-slate-400">{file ? file.name : "Preuve (Image)"}</span>
+              <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="hidden" />
+            </label>
             <div className="flex gap-3 pt-4">
               <button type="button" onClick={() => setMethod(null)} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5">Retour</button>
-              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-emerald-500 text-slate-950 rounded-2xl flex justify-center items-center shadow-lg">
-                {issubmitting ? <Loader2 className="animate-spin" /> : "Envoyer"}
-              </button>
+              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-emerald-500 text-slate-950 rounded-2xl flex justify-center items-center shadow-lg">{issubmitting ? <Loader2 className="animate-spin" /> : "Envoyer"}</button>
             </div>
           </form>
-        )}
-
-        {/* --- SECTION RETRAIT --- */}
-        {view === 'withdrawal' && !method && (
-          <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
-            <h3 className="text-center text-amber-500 text-sm tracking-widest">Recevoir via quel service ?</h3>
-            <button onClick={() => setMethod('MonCash')} className="w-full p-6 bg-[#CC1011]/10 border border-[#CC1011]/20 rounded-2xl flex items-center justify-between hover:bg-[#CC1011]/20 transition-all">
-              <span className="text-[#CC1011]">MONCASH</span>
-              <ArrowDownCircle className="text-[#CC1011]" />
-            </button>
-            <button onClick={() => setMethod('NatCash')} className="w-full p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between hover:bg-emerald-500/20 transition-all">
-              <span className="text-emerald-500">NATCASH</span>
-              <ArrowDownCircle className="text-emerald-500" />
-            </button>
-          </div>
         )}
 
         {view === 'withdrawal' && method && (
           <form onSubmit={handleWithdrawal} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-amber-500/20 animate-in zoom-in-95 duration-300">
             <h3 className="text-center text-amber-500 text-xl">Retrait {method}</h3>
-            <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2">Montant à retirer</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-amber-500 transition-all text-amber-500" placeholder="Ex: 500" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] text-slate-500 ml-2 uppercase">Numéro de réception</label>
-              <div className="relative">
-                <Smartphone className="absolute left-5 top-5 text-slate-500" size={20} />
-                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 pl-14 rounded-2xl outline-none focus:border-amber-500 transition-all font-sans" placeholder="4848..." />
-              </div>
+            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl outline-none focus:border-amber-500 transition-all text-amber-500" placeholder="Montant HTG" />
+            <div className="relative">
+              <Smartphone className="absolute left-5 top-5 text-slate-500" size={20} />
+              <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-black/40 border border-white/10 p-5 pl-14 rounded-2xl outline-none focus:border-amber-500 transition-all font-sans" placeholder="Numéro Réception" />
             </div>
             <div className="flex gap-3 pt-4">
               <button type="button" onClick={() => setMethod(null)} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5">Retour</button>
-              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-white text-slate-950 rounded-2xl flex justify-center items-center">
-                {issubmitting ? <Loader2 className="animate-spin" /> : "Confirmer"}
-              </button>
+              <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-white text-slate-950 rounded-2xl flex justify-center items-center">{issubmitting ? <Loader2 className="animate-spin" /> : "Confirmer"}</button>
             </div>
           </form>
         )}
