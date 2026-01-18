@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { UserCircle, Phone, Lock, ArrowRight, Loader2, AlertCircle, Users } from 'lucide-react';
 import Link from 'next/link';
 
-// --- COMPOSANT LOGO CHIF-PAM ---
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`relative flex flex-col items-center ${className}`}>
     <svg viewBox="0 0 100 100" className="w-20 h-20 drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -23,7 +22,7 @@ export default function Inscription() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [referralCode, setReferralCode] = useState(''); // Nouveau champ
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -43,7 +42,7 @@ export default function Inscription() {
 
       // 1. Vérification du code parrain
       if (referralCode.trim().length > 0) {
-        const { data: referrer } = await supabase
+        const { data: referrer, error: refError } = await supabase
           .from('profiles')
           .select('id')
           .eq('referral_code', referralCode.trim().toUpperCase())
@@ -51,37 +50,34 @@ export default function Inscription() {
         
         if (referrer) {
           referrerId = referrer.id;
-          startBalance = 10; // Bonus de bienvenue 10 HTG
+          startBalance = 10; 
+        } else {
+            console.log("Code parrain non trouvé");
         }
       }
 
-      // 2. Création Auth
+      // 2. Création du compte Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
       });
 
-      if (authError) {
-        if (authError.message.includes("already registered")) {
-          setError("Ce numéro possède déjà un compte.");
-          setTimeout(() => router.push('/connexion'), 2000);
-          return;
-        }
-        throw authError;
-      }
+      if (authError) throw authError;
 
-      // 3. Création Profil avec Parrainage
+      // 3. Création du Profil
       if (authData.user) {
         const { error: profileError } = await supabase.from('profiles').insert([{
           id: authData.user.id,
           phone: cleanPhone,
           username: username.trim(),
-          balance: startBalance, // Appliquer le bonus
+          balance: startBalance, // Le bonus est injecté ici directement à la création
           is_banned: false,
-          referred_by: referrerId // Lier au parrain
+          referred_by: referrerId
         }]);
 
         if (profileError) throw profileError;
+
+        alert("Compte créé ! Connectez-vous pour commencer.");
         router.push('/connexion');
       }
     } catch (err: any) {
@@ -133,7 +129,6 @@ export default function Inscription() {
               </div>
             </div>
 
-            {/* CHAMPS PARRAINAGE */}
             <div className="space-y-1">
               <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest ml-4">Code Parrain (Optionnel)</label>
               <div className="relative">
