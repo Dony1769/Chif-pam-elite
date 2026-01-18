@@ -4,6 +4,11 @@ import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Send, Bell, CheckCircle2, Loader2 } from 'lucide-react';
 
+// Correction Viewport
+export const viewport = {
+  themeColor: "#020617",
+};
+
 export default function AdminNotifications() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
@@ -16,8 +21,10 @@ export default function AdminNotifications() {
     
     setLoading(true);
     try {
-      const { data: users } = await supabase.from('profiles').select('id');
+      const { data: users, error: userError } = await supabase.from('profiles').select('id');
       
+      if (userError) throw userError;
+
       if (users && users.length > 0) {
         const payload = users.map(u => ({
           user_id: u.id,
@@ -25,8 +32,12 @@ export default function AdminNotifications() {
           content: message,
           is_read: false
         }));
-        await supabase.from('notifications').insert(payload);
 
+        // 1. Insertion en base de données
+        const { error: insertError } = await supabase.from('notifications').insert(payload);
+        if (insertError) throw insertError;
+
+        // 2. Appel de l'API Push
         await fetch('/api/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -34,11 +45,12 @@ export default function AdminNotifications() {
         });
 
         setSent(true);
-        setTitle(''); setMessage('');
+        setTitle(''); 
+        setMessage('');
         setTimeout(() => setSent(false), 3000);
       }
     } catch (error) {
-      console.error(error);
+      console.error("Erreur de diffusion:", error);
       alert("Erreur de diffusion");
     } finally {
       setLoading(false);
@@ -69,7 +81,7 @@ export default function AdminNotifications() {
             required
           />
         </div>
-        <button disabled={loading || sent} className="w-full bg-emerald-500 text-black p-5 rounded-xl font-bold flex justify-center items-center gap-2">
+        <button disabled={loading || sent} className="w-full bg-emerald-500 text-black p-5 rounded-xl font-bold flex justify-center items-center gap-2 disabled:opacity-50">
           {loading ? <Loader2 className="animate-spin" /> : sent ? <CheckCircle2 /> : <Send size={20} />}
           {sent ? "MESSAGE ENVOYÉ" : "DIFFUSER AUX CLIENTS"}
         </button>
