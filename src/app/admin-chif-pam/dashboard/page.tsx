@@ -4,12 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  XAxis, Tooltip, ResponsiveContainer, AreaChart, Area 
+  XAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid 
 } from 'recharts';
 import { 
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
-  Dices, MessageSquare, LogOut, ShieldCheck, ClipboardList,
+  Dices, MessageSquare, LogOut, Ticket, ClipboardList,
   Activity, AlertCircle, ChevronRight, Target
 } from 'lucide-react';
 import Link from 'next/link';
@@ -18,6 +18,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  
+  // États
   const [stats, setStats] = useState({
     totalUsers: 0, 
     totalBalance: 0, 
@@ -27,13 +29,16 @@ export default function AdminDashboard() {
   });
   const [chartData, setChartData] = useState<any[]>([]);
 
+  // Realtime & Initial Fetch
   useEffect(() => {
     fetchGlobalStats();
     
+    // Système de notification temps réel conservé
     const channel = supabase
       .channel('admin-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchGlobalStats())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchGlobalStats())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => fetchGlobalStats()) // Ajout écoute sur les jeux pour le graph
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -46,7 +51,7 @@ export default function AdminDashboard() {
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
-      // 2. RÉCUPÉRATION BALANCE (VARIABLE UNIQUE CORRIGÉE)
+      // 2. RÉCUPÉRATION BALANCE DU SYSTÈME
       const { data: balanceData } = await supabase.rpc('get_total_balance'); 
 
       // 3. TRANSACTIONS EN ATTENTE
@@ -69,17 +74,20 @@ export default function AdminDashboard() {
         .eq('is_read', false)
         .eq('is_admin', false);
 
-      // 5. CHART DATA (7 JOURS)
+      // 5. CHART DATA (LOGIQUE HOUSE EDGE CORRIGÉE)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+      // On récupère montant (mise) et gain (payout) si dispo
       const { data: flux } = await supabase
         .from('mises')
-        .select('montant, status, created_at')
+        .select('montant, gain, status, created_at') 
         .gte('created_at', sevenDaysAgo.toISOString());
 
       if (flux) {
         const dailyStats: { [key: string]: number } = {};
+        
+        // Initialiser les 7 derniers jours à 0
         const last7DaysLabels = [...Array(7)].map((_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - i);
@@ -90,8 +98,23 @@ export default function AdminDashboard() {
 
         flux.forEach(item => {
           const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-          let impactAdmin = item.status === 'perdu' ? item.montant : (item.status === 'gagne' || item.status === 'gagné' ? -item.montant : 0);
-          if (dailyStats[day] !== undefined) dailyStats[day] += impactAdmin;
+          
+          let impactAdmin = 0;
+
+          // LOGIQUE CAISSE (ADMIN) :
+          if (item.status === 'perdu') {
+            // Le client perd sa mise => C'est un GAIN pour l'Admin (+)
+            impactAdmin = item.montant;
+          } else if (['gagne', 'gagné', 'win'].includes(item.status)) {
+            // Le client gagne => C'est une PERTE pour l'Admin (-)
+            // Si la colonne 'gain' existe on l'utilise, sinon on estime la perte au montant de la mise (ou mise * multiplicateur si tu préfères)
+            const payout = item.gain || item.montant; 
+            impactAdmin = -payout; 
+          }
+
+          if (dailyStats[day] !== undefined) {
+            dailyStats[day] += impactAdmin;
+          }
         });
 
         setChartData(Object.keys(dailyStats).map(day => ({ name: day, revenue: dailyStats[day] })));
@@ -119,13 +142,15 @@ export default function AdminDashboard() {
   );
 
   const totalPending = stats.pendingDepots + stats.pendingRetraits;
+  // Calcul du total revenue sur la période pour l'affichage
+  const totalRevenuePeriod = chartData.reduce((acc, curr) => acc + curr.revenue, 0);
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
         {/* SIDEBAR */}
-        <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen">
+        <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen overflow-y-auto">
           <div className="flex items-center gap-3 mb-12">
             <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
@@ -136,6 +161,8 @@ export default function AdminDashboard() {
           <nav className="space-y-2">
             <SidebarLink href="/admin-chif-pam/dashboard" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname.includes('dashboard')} />
             <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
+            {/* NOUVEAU LIEN COUPON */}
+            <SidebarLink href="/admin-chif-pam/coupon" icon={<Ticket size={20}/>} label="Gestion Coupons" active={pathname.includes('coupon')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
             <SidebarLink href="/admin-chif-pam/notifications" icon={<Bell size={20}/>} label="Notifications" active={pathname.includes('notifications')} />
@@ -148,9 +175,9 @@ export default function AdminDashboard() {
         </aside>
 
         {/* MAIN CONTENT */}
-        <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto">
+        <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto h-screen">
           
-          {/* ALERTE */}
+          {/* ALERTE NOTIFICATIONS */}
           {(totalPending > 0 || stats.unreadMessages > 0) && (
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center justify-between animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.1)]">
               <div className="flex items-center gap-5">
@@ -176,16 +203,21 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* CHART */}
+          {/* CHART - PROFIT/PERTE MAISON */}
           <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 shadow-2xl relative overflow-hidden">
             <div className="flex justify-between items-center mb-12 relative z-10">
               <div className="flex items-center gap-6">
-                <div className="p-5 bg-emerald-500 text-slate-950 rounded-3xl"><Activity size={32} /></div>
-                <h2 className="text-2xl">Performance</h2>
+                <div className={`p-5 ${totalRevenuePeriod >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} text-slate-950 rounded-3xl transition-colors`}>
+                    <Activity size={32} />
+                </div>
+                <div>
+                    <h2 className="text-2xl">Bénéfice Net (7j)</h2>
+                    <p className="text-[10px] text-slate-500 not-italic tracking-normal">Gains Clients = Pertes Admin</p>
+                </div>
               </div>
               <div className="bg-slate-950/80 p-6 rounded-[2rem] border border-emerald-500/20 text-right">
-                <p className={`text-3xl font-black italic ${chartData.reduce((acc, curr) => acc + curr.revenue, 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {chartData.reduce((acc, curr) => acc + curr.revenue, 0).toLocaleString()} <span className="text-sm">HTG</span>
+                <p className={`text-3xl font-black italic ${totalRevenuePeriod >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {totalRevenuePeriod > 0 ? '+' : ''}{totalRevenuePeriod.toLocaleString()} <span className="text-sm">HTG</span>
                 </p>
               </div>
             </div>
@@ -194,12 +226,23 @@ export default function AdminDashboard() {
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor={totalRevenuePeriod >= 0 ? "#10b981" : "#f43f5e"} stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor={totalRevenuePeriod >= 0 ? "#10b981" : "#f43f5e"} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <Tooltip contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '20px' }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={4} fill="url(#colorRev)" />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value: number) => [`${value} HTG`, 'Bénéfice Net']}
+                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <Area 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    stroke={totalRevenuePeriod >= 0 ? "#10b981" : "#f43f5e"} 
+                    strokeWidth={4} 
+                    fill="url(#colorRev)" 
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -219,7 +262,9 @@ export default function AdminDashboard() {
                <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
                <ActionCard href="/admin-chif-pam/loterie" label="Pilotage Tirages" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
                <ActionCard href="/admin-chif-pam/mini-jeux" label="Audit Mini-Jeux" icon={<Target size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
-               <ActionCard href="/admin-chif-pam/users" label="Audit Utilisateurs" icon={<Users size={24}/>} color="bg-blue-600" textColor="text-white" />
+               
+               {/* AJOUT BOUTON COUPONS DANS LES ACTIONS RAPIDES */}
+               <ActionCard href="/admin-chif-pam/coupon" label="Coupons & Promos" icon={<Ticket size={24}/>} color="bg-indigo-600" textColor="text-white" />
             </div>
 
             <div className="space-y-4">
@@ -229,6 +274,7 @@ export default function AdminDashboard() {
                   <ActionCard href="/admin-chif-pam/notifications" label="Alertes" icon={<Bell size={20}/>} color="bg-amber-500/10" textColor="text-amber-500" border="border-amber-500/20" />
                   <ActionCard href="/admin-chif-pam/chat" label="Support" count={stats.unreadMessages} icon={<MessageSquare size={20}/>} color="bg-slate-800" textColor="text-white" />
                </div>
+               <ActionCard href="/admin-chif-pam/users" label="Audit Utilisateurs" icon={<Users size={24}/>} color="bg-slate-900" textColor="text-blue-500" border="border-blue-500/20" />
             </div>
           </div>
         </main>
@@ -280,3 +326,4 @@ function ActionCard({ href, label, count, icon, color, textColor = "text-slate-9
     </Link>
   );
 }
+
