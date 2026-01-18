@@ -12,37 +12,32 @@ webpush.setVapidDetails(
 
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    
+    // Correction : On passe la fonction asynchrone directement dans la configuration
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) { return cookieStore.get(name)?.value; },
+          async get(name: string) {
+            const cookieStore = await cookies();
+            return cookieStore.get(name)?.value;
+          },
         },
       }
     );
 
     const { title, message } = await req.json();
 
-    // On récupère TOUS les champs pour déboguer si besoin
     const { data: subs, error } = await supabase
       .from('push_subscriptions')
       .select('subscription');
 
     if (error || !subs || subs.length === 0) {
-      console.log("Aucun abonnement trouvé en base.");
       return NextResponse.json({ success: true, message: "Aucun abonné" });
     }
 
-    console.log(`Envoi à ${subs.length} abonnés...`);
-
     const pushPromises = subs.map((item: any) => {
-      // IMPORTANT : Vérification que l'abonnement est valide
-      if (!item.subscription || !item.subscription.endpoint) {
-        return Promise.resolve(); // Ignore les abonnements corrompus
-      }
+      if (!item.subscription || !item.subscription.endpoint) return Promise.resolve();
 
       return webpush.sendNotification(
         item.subscription,
@@ -52,13 +47,7 @@ export async function POST(req: Request) {
           url: "/client/notifications"
         })
       ).catch((err: any) => {
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          // L'utilisateur n'existe plus ou a révoqué la permission
-          console.log("Abonnement expiré, nettoyage recommandé.");
-          // Ici, tu pourrais ajouter une logique pour supprimer cet abonnement de la DB
-        } else {
-          console.error("Erreur WebPush:", err.statusCode, err.body);
-        }
+        console.error("Erreur WebPush sur un abonné:", err.statusCode);
       });
     });
 
@@ -66,7 +55,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
 
   } catch (err: any) {
-    console.error("Erreur API Push:", err);
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
