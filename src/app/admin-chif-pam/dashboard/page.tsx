@@ -19,7 +19,6 @@ export default function AdminDashboard() {
   const router = useRouter();
   const pathname = usePathname();
   
-  // États
   const [stats, setStats] = useState({
     totalUsers: 0, 
     totalBalance: 0, 
@@ -29,16 +28,14 @@ export default function AdminDashboard() {
   });
   const [chartData, setChartData] = useState<any[]>([]);
 
-  // Realtime & Initial Fetch
   useEffect(() => {
     fetchGlobalStats();
     
-    // Système de notification temps réel conservé
     const channel = supabase
       .channel('admin-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchGlobalStats())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchGlobalStats())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => fetchGlobalStats()) // Ajout écoute sur les jeux pour le graph
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => fetchGlobalStats())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -46,15 +43,12 @@ export default function AdminDashboard() {
 
   const fetchGlobalStats = async () => {
     try {
-      // 1. COMPTAGE UTILISATEURS
       const { count: userCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
-      // 2. RÉCUPÉRATION BALANCE DU SYSTÈME
       const { data: balanceData } = await supabase.rpc('get_total_balance'); 
 
-      // 3. TRANSACTIONS EN ATTENTE
       const { count: countDepots } = await supabase
         .from('transactions')
         .select('*', { count: 'exact', head: true })
@@ -67,18 +61,15 @@ export default function AdminDashboard() {
         .eq('status', 'pending')
         .in('type', ['withdrawal', 'retrait']);
 
-      // 4. MESSAGES NON LUS
       const { count: unread } = await supabase
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('is_read', false)
         .eq('is_admin', false);
 
-      // 5. CHART DATA (LOGIQUE HOUSE EDGE CORRIGÉE)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      // On récupère montant (mise) et gain (payout) si dispo
       const { data: flux } = await supabase
         .from('mises')
         .select('montant, gain, status, created_at') 
@@ -86,8 +77,6 @@ export default function AdminDashboard() {
 
       if (flux) {
         const dailyStats: { [key: string]: number } = {};
-        
-        // Initialiser les 7 derniers jours à 0
         const last7DaysLabels = [...Array(7)].map((_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - i);
@@ -98,23 +87,17 @@ export default function AdminDashboard() {
 
         flux.forEach(item => {
           const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-          
           let impactAdmin = 0;
 
-          // LOGIQUE CAISSE (ADMIN) :
+          // LOGIQUE MAISON (HOUSE EDGE)
           if (item.status === 'perdu') {
-            // Le client perd sa mise => C'est un GAIN pour l'Admin (+)
-            impactAdmin = item.montant;
+            impactAdmin = item.montant; // Client perd = Admin gagne
           } else if (['gagne', 'gagné', 'win'].includes(item.status)) {
-            // Le client gagne => C'est une PERTE pour l'Admin (-)
-            // Si la colonne 'gain' existe on l'utilise, sinon on estime la perte au montant de la mise (ou mise * multiplicateur si tu préfères)
             const payout = item.gain || item.montant; 
-            impactAdmin = -payout; 
+            impactAdmin = -payout; // Client gagne = Admin perd
           }
 
-          if (dailyStats[day] !== undefined) {
-            dailyStats[day] += impactAdmin;
-          }
+          if (dailyStats[day] !== undefined) dailyStats[day] += impactAdmin;
         });
 
         setChartData(Object.keys(dailyStats).map(day => ({ name: day, revenue: dailyStats[day] })));
@@ -142,7 +125,6 @@ export default function AdminDashboard() {
   );
 
   const totalPending = stats.pendingDepots + stats.pendingRetraits;
-  // Calcul du total revenue sur la période pour l'affichage
   const totalRevenuePeriod = chartData.reduce((acc, curr) => acc + curr.revenue, 0);
 
   return (
@@ -161,7 +143,6 @@ export default function AdminDashboard() {
           <nav className="space-y-2">
             <SidebarLink href="/admin-chif-pam/dashboard" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname.includes('dashboard')} />
             <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
-            {/* NOUVEAU LIEN COUPON */}
             <SidebarLink href="/admin-chif-pam/coupon" icon={<Ticket size={20}/>} label="Gestion Coupons" active={pathname.includes('coupon')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
@@ -177,7 +158,6 @@ export default function AdminDashboard() {
         {/* MAIN CONTENT */}
         <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto h-screen">
           
-          {/* ALERTE NOTIFICATIONS */}
           {(totalPending > 0 || stats.unreadMessages > 0) && (
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center justify-between animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.1)]">
               <div className="flex items-center gap-5">
@@ -195,24 +175,22 @@ export default function AdminDashboard() {
           )}
 
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-4xl uppercase tracking-tighter">Control <span className="text-emerald-500">Center</span></h1>
-            </div>
+            <h1 className="text-4xl uppercase tracking-tighter">Control <span className="text-emerald-500">Center</span></h1>
             <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl border border-white/5 hover:bg-emerald-500 hover:text-slate-950 transition-all">
               <RefreshCw size={20} />
             </button>
           </div>
 
-          {/* CHART - PROFIT/PERTE MAISON */}
+          {/* CHART */}
           <div className="bg-slate-900/50 rounded-[3.5rem] border border-white/5 p-8 shadow-2xl relative overflow-hidden">
             <div className="flex justify-between items-center mb-12 relative z-10">
               <div className="flex items-center gap-6">
-                <div className={`p-5 ${totalRevenuePeriod >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} text-slate-950 rounded-3xl transition-colors`}>
+                <div className={`p-5 ${totalRevenuePeriod >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} text-slate-950 rounded-3xl`}>
                     <Activity size={32} />
                 </div>
                 <div>
                     <h2 className="text-2xl">Bénéfice Net (7j)</h2>
-                    <p className="text-[10px] text-slate-500 not-italic tracking-normal">Gains Clients = Pertes Admin</p>
+                    <p className="text-[10px] text-slate-500 not-italic">Gains Clients = Pertes Admin</p>
                 </div>
               </div>
               <div className="bg-slate-950/80 p-6 rounded-[2rem] border border-emerald-500/20 text-right">
@@ -230,25 +208,19 @@ export default function AdminDashboard() {
                       <stop offset="95%" stopColor={totalRevenuePeriod >= 0 ? "#10b981" : "#f43f5e"} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
+                  {/* CORRECTION DU TYPE ICI POUR LE BUILD */}
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', color: '#fff' }}
+                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px' }}
                     itemStyle={{ color: '#fff' }}
-                    formatter={(value: number) => [`${value} HTG`, 'Bénéfice Net']}
+                    formatter={(value: any) => [`${Number(value).toLocaleString()} HTG`, 'Bénéfice Net']}
                   />
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <Area 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke={totalRevenuePeriod >= 0 ? "#10b981" : "#f43f5e"} 
-                    strokeWidth={4} 
-                    fill="url(#colorRev)" 
-                  />
+                  <Area type="monotone" dataKey="revenue" stroke={totalRevenuePeriod >= 0 ? "#10b981" : "#f43f5e"} strokeWidth={4} fill="url(#colorRev)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* STATS CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard title="Total Joueurs" value={stats.totalUsers.toLocaleString()} icon={<Users />} color="blue" />
             <StatCard title="Trésorerie" value={stats.totalBalance.toLocaleString()} icon={<Wallet />} color="emerald" />
@@ -256,14 +228,11 @@ export default function AdminDashboard() {
             <StatCard title="Retraits Attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
           </div>
 
-          {/* ACTIONS RAPIDES */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
                <ActionCard href="/admin-chif-pam/loterie" label="Pilotage Tirages" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
                <ActionCard href="/admin-chif-pam/mini-jeux" label="Audit Mini-Jeux" icon={<Target size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
-               
-               {/* AJOUT BOUTON COUPONS DANS LES ACTIONS RAPIDES */}
                <ActionCard href="/admin-chif-pam/coupon" label="Coupons & Promos" icon={<Ticket size={24}/>} color="bg-indigo-600" textColor="text-white" />
             </div>
 
@@ -283,7 +252,6 @@ export default function AdminDashboard() {
   );
 }
 
-// COMPOSANTS UI
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
     <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'hover:bg-white/5 text-slate-500'}`}>
