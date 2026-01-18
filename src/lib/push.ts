@@ -1,16 +1,22 @@
 // /lib/push.ts
+
 export async function subscribeUserToPush() {
-  if (!('serviceWorker' in navigator)) return null;
+  // Correction : Vérifier si nous sommes bien dans le navigateur
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return null;
+  }
 
   try {
     const registration = await navigator.serviceWorker.ready;
     
-    // Vérifier si une souscription existe déjà
     let subscription = await registration.pushManager.getSubscription();
     
     if (!subscription) {
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidPublicKey) throw new Error("VAPID Public Key manquante");
+      if (!vapidPublicKey) {
+        console.error("VAPID Public Key manquante");
+        return null;
+      }
 
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -25,6 +31,9 @@ export async function subscribeUserToPush() {
 }
 
 function urlBase64ToUint8Array(base64String: string) {
+  // Correction : Protection contre l'exécution côté serveur
+  if (typeof window === 'undefined') return new Uint8Array();
+
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
