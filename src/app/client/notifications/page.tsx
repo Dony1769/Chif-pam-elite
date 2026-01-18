@@ -5,13 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell } from 'lucide-react';
 import Link from 'next/link';
-// Assurez-vous que ce fichier existe et exporte bien subscribeUserToPush
 import { subscribeUserToPush } from "@/lib/push";
-
-// Correction Build Next 15 : Le themeColor doit être ici, pas dans metadata
-export const viewport = {
-  themeColor: "#020617",
-};
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -21,11 +15,16 @@ export default function ClientNotifications() {
   useEffect(() => { fetchNotifications(); }, []);
 
   const fetchNotifications = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return router.push('/connexion');
-    const { data } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    setNotifications(data || []);
-    setLoading(false);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.push('/connexion');
+      const { data } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      setNotifications(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const enablePush = async () => {
