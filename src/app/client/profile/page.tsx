@@ -113,7 +113,7 @@ export default function ProfilePage() {
 
       // 3. Ajouter la balance (RPC sécurisé)
       const { error: rpcError } = await supabase.rpc('increment_balance', { 
-        row_id: user.id, 
+        user_id: user.id, 
         amount: coupon.amount 
       });
 
@@ -358,3 +358,4 @@ export default function ProfilePage() {
     </main>
   );
 }
+
