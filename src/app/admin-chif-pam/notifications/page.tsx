@@ -4,11 +4,6 @@ import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Send, Bell, CheckCircle2, Loader2 } from 'lucide-react';
 
-// Correction Viewport
-export const viewport = {
-  themeColor: "#020617",
-};
-
 export default function AdminNotifications() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
@@ -33,11 +28,9 @@ export default function AdminNotifications() {
           is_read: false
         }));
 
-        // 1. Insertion en base de données
         const { error: insertError } = await supabase.from('notifications').insert(payload);
         if (insertError) throw insertError;
 
-        // 2. Appel de l'API Push
         await fetch('/api/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -68,7 +61,7 @@ export default function AdminNotifications() {
            <input 
             value={title} onChange={(e) => setTitle(e.target.value)}
             placeholder="EX: MAINTENANCE"
-            className="w-full bg-black/50 p-4 rounded-xl border border-white/10 outline-none"
+            className="w-full bg-black/50 p-4 rounded-xl border border-white/10 outline-none text-white"
             required
           />
         </div>
@@ -77,11 +70,11 @@ export default function AdminNotifications() {
           <textarea 
             value={message} onChange={(e) => setMessage(e.target.value)}
             placeholder="Contenu..." rows={4}
-            className="w-full bg-black/50 p-4 rounded-xl border border-white/10 outline-none"
+            className="w-full bg-black/50 p-4 rounded-xl border border-white/10 outline-none text-white"
             required
           />
         </div>
-        <button disabled={loading || sent} className="w-full bg-emerald-500 text-black p-5 rounded-xl font-bold flex justify-center items-center gap-2 disabled:opacity-50">
+        <button disabled={loading || sent} className="w-full bg-emerald-500 text-black p-5 rounded-xl font-bold flex justify-center items-center gap-2 disabled:opacity-50 transition-opacity">
           {loading ? <Loader2 className="animate-spin" /> : sent ? <CheckCircle2 /> : <Send size={20} />}
           {sent ? "MESSAGE ENVOYÉ" : "DIFFUSER AUX CLIENTS"}
         </button>
