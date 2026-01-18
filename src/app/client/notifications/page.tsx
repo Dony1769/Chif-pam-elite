@@ -5,7 +5,13 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell } from 'lucide-react';
 import Link from 'next/link';
+// Assurez-vous que ce fichier existe et exporte bien subscribeUserToPush
 import { subscribeUserToPush } from "@/lib/push";
+
+// Correction Build Next 15 : Le themeColor doit être ici, pas dans metadata
+export const viewport = {
+  themeColor: "#020617",
+};
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -23,11 +29,18 @@ export default function ClientNotifications() {
   };
 
   const enablePush = async () => {
-    const sub = await subscribeUserToPush();
-    if (sub) {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("push_subscriptions").upsert({ user_id: user?.id, subscription: sub.toJSON() });
-      alert("Notifications activées ! ✅");
+    try {
+        const sub = await subscribeUserToPush();
+        if (sub) {
+          const { data: { user } } = await supabase.auth.getUser();
+          await supabase.from("push_subscriptions").upsert({ 
+            user_id: user?.id, 
+            subscription: JSON.parse(JSON.stringify(sub)) 
+          });
+          alert("Notifications activées ! ✅");
+        }
+    } catch (err) {
+        console.error("Push Error:", err);
     }
   };
 
@@ -38,7 +51,11 @@ export default function ClientNotifications() {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
-  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
+  if (loading) return (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase">
@@ -74,4 +91,3 @@ export default function ClientNotifications() {
     </div>
   );
 }
-
