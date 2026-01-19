@@ -141,7 +141,7 @@ export default function LaserVault() {
       generateProblem(multiplier + 0.1);
     } else if (newVal.length >= problem.a.toString().length) {
       // ERREUR : Le laser descend plus vite définitivement (+25% de vitesse)
-      setErrorPenalty(p => p + 0.25);
+      setErrorPenalty(p => p + 0.4);
       setInput("");
       playSound('error');
     }
