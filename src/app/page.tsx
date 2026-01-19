@@ -46,24 +46,26 @@ export default function Inscription() {
       let referrerId = null;
       let startBalance = 0;
 
-      // ÉTAPE 1 : Vérifier le code parrain AVANT l'inscription
+      // ---------------------------------------------------------
+      // 1. VÉRIFICATION DU CODE PARRAIN (Via Fonction RPC Sécurisée)
+      // ---------------------------------------------------------
       if (referralCode.trim().length > 0) {
-        const { data: referrer, error: refError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('referral_code', referralCode.trim().toLowerCase())
-          .single();
+        // On appelle la fonction SQL qu'on a créée pour contourner la sécurité RLS
+        const { data: foundId, error: rpcError } = await supabase
+          .rpc('get_referrer_id_by_code', { code_input: referralCode.trim() });
         
-        // Si on trouve un parrain valide
-        if (referrer && !refError) {
-          referrerId = referrer.id;
-          startBalance = 10; // Bonus validé
+        if (foundId) {
+          referrerId = foundId;
+          startBalance = 10; // ✅ Bonus de 10 HTG activé
+          console.log("Parrain trouvé :", foundId);
         } else {
-          console.log("Code parrain invalide ou introuvable");
+          console.log("Code invalide ou introuvable");
         }
       }
 
-      // ÉTAPE 2 : Création du compte Auth
+      // ---------------------------------------------------------
+      // 2. CRÉATION DU COMPTE AUTH
+      // ---------------------------------------------------------
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
@@ -77,29 +79,31 @@ export default function Inscription() {
 
       if (authError) throw authError;
 
-      // ÉTAPE 3 : Insertion Manuelle dans Profiles avec le referred_by
+      // ---------------------------------------------------------
+      // 3. CRÉATION DU PROFIL AVEC LE LIEN PARRAIN
+      // ---------------------------------------------------------
       if (authData?.user) {
         const { error: profileError } = await supabase.from('profiles').insert({
           id: authData.user.id,
           phone: cleanPhone,
           username: username.trim(),
           email: internalEmail,
-          balance: startBalance,
-          referred_by: referrerId // C'EST ICI QUE LA COLONNE SE REMPLIT ENFIN
+          balance: startBalance, // 0 ou 10 selon le code
+          referred_by: referrerId // ✅ L'ID du parrain est inséré ici
         });
 
         if (profileError) {
-            // Si erreur (ex: doublon), on l'affiche mais le compte auth est créé
-            console.error("Erreur profil:", profileError);
-            throw new Error("Erreur lors de la création du profil.");
+             console.error("Erreur profil:", profileError);
+             // On ne bloque pas tout si le profil plante, mais c'est critique
+             throw new Error("Erreur lors de la création du profil.");
         }
 
-        // Notification de succès
-        alert(`Compte créé avec succès ! ${startBalance > 0 ? 'Bonus de 10 HTG ajouté ! 🎁' : ''}`);
+        alert(`Bienvenue ! ${startBalance > 0 ? 'Vous avez reçu 10 HTG de bienvenue ! 🎁' : ''}`);
         router.push('/connexion');
       }
 
     } catch (err: any) {
+      console.error(err);
       setError(err.message || "Erreur lors de l'inscription");
     } finally {
       setLoading(false);
