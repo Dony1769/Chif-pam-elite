@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-// --- TON LOGO OFFICIEL RÉINTÉGRÉ ---
+// --- TON LOGO OFFICIEL ---
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`relative flex flex-col items-center ${className}`}>
     <svg viewBox="0 0 100 100" className="w-20 h-20 drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -43,9 +43,27 @@ export default function Inscription() {
 
     try {
       const internalEmail = `${cleanPhone}@chifpam.ht`;
+      let referrerId = null;
+      let startBalance = 0;
 
-      // 1. On inscrit l'utilisateur dans Supabase Auth
-      // On passe le code parrain dans 'options.data' pour que le Trigger SQL le récupère
+      // ÉTAPE 1 : Vérifier le code parrain AVANT l'inscription
+      if (referralCode.trim().length > 0) {
+        const { data: referrer, error: refError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('referral_code', referralCode.trim().toLowerCase())
+          .single();
+        
+        // Si on trouve un parrain valide
+        if (referrer && !refError) {
+          referrerId = referrer.id;
+          startBalance = 10; // Bonus validé
+        } else {
+          console.log("Code parrain invalide ou introuvable");
+        }
+      }
+
+      // ÉTAPE 2 : Création du compte Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
@@ -59,21 +77,28 @@ export default function Inscription() {
 
       if (authError) throw authError;
 
-      // 2. Création du profil dans ta table 'profiles'
+      // ÉTAPE 3 : Insertion Manuelle dans Profiles avec le referred_by
       if (authData?.user) {
         const { error: profileError } = await supabase.from('profiles').insert({
           id: authData.user.id,
           phone: cleanPhone,
           username: username.trim(),
           email: internalEmail,
-          balance: 0 // Le bonus de 10 sera ajouté par le SQL si le code est bon
+          balance: startBalance,
+          referred_by: referrerId // C'EST ICI QUE LA COLONNE SE REMPLIT ENFIN
         });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+            // Si erreur (ex: doublon), on l'affiche mais le compte auth est créé
+            console.error("Erreur profil:", profileError);
+            throw new Error("Erreur lors de la création du profil.");
+        }
 
-        alert("Compte créé avec succès ! 🎉");
+        // Notification de succès
+        alert(`Compte créé avec succès ! ${startBalance > 0 ? 'Bonus de 10 HTG ajouté ! 🎁' : ''}`);
         router.push('/connexion');
       }
+
     } catch (err: any) {
       setError(err.message || "Erreur lors de l'inscription");
     } finally {
@@ -191,3 +216,4 @@ export default function Inscription() {
     </main>
   );
 }
+
