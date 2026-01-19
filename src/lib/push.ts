@@ -13,7 +13,7 @@ export async function subscribeUserToPush() {
     
     if (!subscription) {
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidPublicKey) {
+      if (!vapidPublicKey)  {
         console.error("VAPID Public Key manquante");
         return null;
       }
