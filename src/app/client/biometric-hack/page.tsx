@@ -60,7 +60,7 @@ export default function BiometricHack() {
       if (error) throw new Error(error.message);
       setGameId(id);
       setMultiplier(1.0);
-      setGridSize(3);
+      setGridSize(4);
       setDisplayTime(1000);
       generatePattern(3);
       playSound(440, 0.1);
@@ -85,8 +85,8 @@ export default function BiometricHack() {
       const nextMultiplier = parseFloat((multiplier + 0.2).toFixed(1));
       setMultiplier(nextMultiplier);
       
-      if (nextMultiplier > 1.2 && gridSize === 3) setGridSize(5);
-      if (nextMultiplier > 1.5 && gridSize === 5) setGridSize(7);
+      if (nextMultiplier > 1.2 && gridSize === 4) setGridSize(5);
+      if (nextMultiplier > 1.5 && gridSize === 5) setGridSize(6);
       
       setDisplayTime(prev => Math.max(300, prev - 100));
       setTimeout(() => generatePattern(gridSize), 500);
