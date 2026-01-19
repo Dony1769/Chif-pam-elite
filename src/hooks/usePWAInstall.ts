@@ -7,7 +7,7 @@ export const usePWAInstall = () => {
   const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = (e: Event) =>  {
       e.preventDefault();
       setDeferredPrompt(e);
       setIsInstallable(true);
