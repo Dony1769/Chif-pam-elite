@@ -19,7 +19,7 @@ export default function Connexion() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // --- LOGIQUE SUPPORT CORRIGÉE ---
+  // --- LOGIQUE SUPPORT OPTIMISÉE ---
   const handleSupportRequest = async (reason: string) => {
     const cleanPhone = phone.trim();
     if (!cleanPhone) {
@@ -31,19 +31,15 @@ export default function Connexion() {
     let clientName = "Non identifié";
 
     try {
-      // 1. Récupération du pseudo pour un message personnalisé
-      const { data } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('phone', cleanPhone)
-        .maybeSingle();
+      // APPEL À LA FONCTION SQL SÉCURISÉE (Bypass RLS proprement)
+      const { data, error } = await supabase
+        .rpc('get_username_by_phone', { phone_input: cleanPhone });
 
-      if (data?.username) {
-        clientName = data.username;
+      // Si on trouve un résultat (data est un tableau avec le rpc)
+      if (data && data.length > 0) {
+        clientName = data[0].username;
       }
 
-      // 2. CONFIGURATION DU MESSAGE
-      // Remplace 509XXXXXXXX par ton numéro WhatsApp réel
       const ADMIN_PHONE = "50940451937"; 
       const intent = reason === 'banni' ? "COMPTE BANNI 🚫" : "MOT DE PASSE OUBLIÉ 🔑";
       
@@ -53,12 +49,11 @@ export default function Connexion() {
                           `📞 Numéro: ${cleanPhone}\n\n` +
                           `Merci de m'aider à accéder à mon compte.`;
 
-      // 3. ENCODAGE ET REDIRECTION (Format API Standard pour que le texte s'affiche)
       const whatsappUrl = `https://api.whatsapp.com/send?phone=${ADMIN_PHONE}&text=${encodeURIComponent(messageText)}`;
 
       window.open(whatsappUrl, '_blank');
     } catch (err) {
-      console.error("Erreur redirection support:", err);
+      console.error("Erreur support:", err);
     } finally {
       setLoading(false);
     }
