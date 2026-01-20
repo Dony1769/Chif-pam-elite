@@ -1,11 +1,13 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp } from 'lucide-react';
+import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function MinesElite() {
   const router = useRouter();
+  
+  // --- ÉTATS DU JEU ---
   const [bet, setBet] = useState(10);
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [mines, setMines] = useState(8);
@@ -14,11 +16,37 @@ export default function MinesElite() {
   const [minePositions, setMinePositions] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
-  const { data: settings } = await supabase.from('game_settings').eq('game_id', 'mines').single();
-if (!settings.is_active) {
-  // Afficher le message de maintenance
-}
 
+  // --- ÉTAT MAINTENANCE ---
+  const [isMaintenance, setIsMaintenance] = useState(false);
+  const [maintenanceMsg, setMaintenanceMsg] = useState('');
+  const [checkingSystem, setCheckingSystem] = useState(true);
+
+  // 1. VÉRIFICATION SYSTÈME (MAINTENANCE)
+  useEffect(() => {
+    const checkSystemStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('game_settings')
+          .select('is_active, maintenance_msg')
+          .eq('game_id', 'mines') // ID correspondant au SQL
+          .maybeSingle();
+
+        if (data && data.is_active === false) {
+          setIsMaintenance(true);
+          setMaintenanceMsg(data.maintenance_msg || "Maintenance en cours...");
+        }
+      } catch (err) {
+        console.error("Erreur vérification système");
+      } finally {
+        setCheckingSystem(false);
+      }
+    };
+
+    checkSystemStatus();
+  }, []);
+
+  // 2. LOGIQUE JEU (Inchangée)
   useEffect(() => {
     const counts = { facile: 5, intermédiaire: 8, difficile: 11 };
     setMines(counts[difficulty]);
@@ -31,6 +59,9 @@ if (!settings.is_active) {
   };
 
   const start = async () => {
+    // Double vérification maintenance au clic (Sécurité supplémentaire)
+    if (isMaintenance) return;
+    
     if (bet < 10 || loading) return;
     setLoading(true);
     try {
@@ -90,6 +121,49 @@ if (!settings.is_active) {
     } finally { setLoading(false); }
   };
 
+  // --- ÉCRAN DE CHARGEMENT INITIAL ---
+  if (checkingSystem) {
+    return (
+      <div className="min-h-screen bg-[#050508] flex items-center justify-center">
+        <Loader2 className="text-emerald-500 animate-spin" size={40} />
+      </div>
+    );
+  }
+
+  // --- ÉCRAN DE MAINTENANCE (BLOQUANT) ---
+  if (isMaintenance) {
+    return (
+      <div className="min-h-screen bg-[#050508] text-white p-6 flex flex-col items-center justify-center text-center font-black italic uppercase relative overflow-hidden">
+        {/* Effet d'arrière-plan */}
+        <div className="absolute inset-0 bg-amber-500/5 animate-pulse"></div>
+        
+        <div className="relative z-10 bg-[#0a0a0f] border border-amber-500/20 p-10 rounded-[3rem] shadow-2xl shadow-amber-500/10 max-w-md w-full">
+          <div className="mx-auto w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mb-6 text-amber-500 border border-amber-500/20">
+            <ShieldAlert size={40} />
+          </div>
+          
+          <h1 className="text-3xl text-amber-500 mb-2 tracking-tighter">MAINTENANCE</h1>
+          <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mb-8">ACCÈS TEMPORAIREMENT RESTREINT</p>
+          
+          <div className="bg-slate-900/50 p-6 rounded-2xl border border-white/5 mb-8">
+            <Lock className="mx-auto text-slate-500 mb-2" size={20} />
+            <p className="text-sm text-slate-300 normal-case not-italic font-medium leading-relaxed">
+              "{maintenanceMsg}"
+            </p>
+          </div>
+
+          <button 
+            onClick={() => router.back()} 
+            className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-xs tracking-widest transition-all"
+          >
+            RETOURNER AU MENU
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- INTERFACE DE JEU NORMALE ---
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center">
       {/* Header */}
