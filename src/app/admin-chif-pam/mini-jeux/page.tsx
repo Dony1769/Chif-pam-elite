@@ -22,14 +22,11 @@ export default function AdminMiniGames() {
   const [globalStats, setGlobalStats] = useState({ totalPlayers: 0, totalVolume: 0, totalProfit: 0 });
   const [games, setGames] = useState<{ [key: string]: GameStats }>({});
 
-  const fetchAllGamesData = async () => {
+    const fetchAllGamesData = async () => {
     try {
       setLoading(true);
-      
-      // 1. Récupérer les statuts de maintenance (Table game_settings)
       const { data: settings } = await supabase.from('game_settings').select('*');
 
-      // 2. Configuration des tables avec détection automatique du type de victoire
       const config = [
         { id: 'mines', table: 'mines_games' },
         { id: 'crash', table: 'crash_games' },
@@ -45,25 +42,33 @@ export default function AdminMiniGames() {
       let totalV = 0;
       let totalP = 0;
 
-      // Boucle asynchrone pour traiter chaque table proprement
       for (const item of config) {
         const { data, error } = await supabase.from(item.table).select('*');
         
         if (error) {
-          console.error(`Erreur sur ${item.table}:`, error.message);
           results[item.id] = { volume: 0, profit: 0, count: 0, isActive: true };
           continue;
         }
 
         const volume = data?.reduce((acc, curr) => acc + (Number(curr.bet_amount) || 0), 0) || 0;
-        const profit = data?.reduce((acc, curr) => {
-          // Détection intelligente : certain jeux utilisent is_won (boolean), Crash utilise status ('won')
-          const isWin = curr.is_won !== undefined ? curr.is_won : curr.status === 'won';
-          const multiplier = Number(curr.multiplier) || 0;
+        
+        // --- LOGIQUE DE PROFIT CORRIGÉE ---
+        const totalPayout = data?.reduce((acc, curr) => {
+          // 1. Déterminer si c'est une victoire
+          const isWin = curr.is_won === true || curr.status === 'won' || curr.status === 'completed';
+          
+          // 2. Récupérer le multiplicateur (tente plusieurs noms de colonnes au cas où)
+          const multiplier = Number(curr.multiplier || curr.final_multiplier || 0);
+          
+          // 3. Calculer le gain reversé au joueur
           const bet = Number(curr.bet_amount) || 0;
           const payout = isWin ? (bet * multiplier) : 0;
-          return acc + (bet - payout);
+          
+          return acc + payout;
         }, 0) || 0;
+
+        // Profit = Ce qui est entré (Mises) - Ce qui est sorti (Gains)
+        const profit = volume - totalPayout;
 
         const s = settings?.find(setting => setting.game_id === item.id);
 
@@ -78,7 +83,6 @@ export default function AdminMiniGames() {
         totalP += profit;
       }
 
-      // 3. Récupérer le nombre total de joueurs
       const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
 
       setGames(results);
@@ -89,11 +93,12 @@ export default function AdminMiniGames() {
       });
 
     } catch (err) {
-      console.error("Erreur générale Dashboard:", err);
+      console.error("Erreur Dashboard:", err);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchAllGamesData();
