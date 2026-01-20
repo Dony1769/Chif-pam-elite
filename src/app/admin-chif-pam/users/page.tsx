@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare } from 'lucide-react';
+import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare, Key } from 'lucide-react';
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
@@ -18,14 +18,33 @@ export default function AdminUsers() {
     setLoading(false);
   };
 
-  // --- FONCTION CORRIGÉE ET OPTIMISÉE ---
+  // --- NOUVELLE FONCTION DE RÉINITIALISATION ---
+  const resetPassword = async (id: string, username: string) => {
+    const newPass = prompt(`Nouveau mot de passe pour @${username || 'cet utilisateur'} :`);
+    if (!newPass || newPass.length < 6) {
+      if (newPass) alert("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.rpc('admin_reset_password', {
+        target_user_id: id,
+        new_password: newPass
+      });
+
+      if (error) throw error;
+      alert("✅ Mot de passe modifié avec succès !");
+    } catch (err: any) {
+      console.error(err);
+      alert("Erreur lors de la réinitialisation.");
+    }
+  };
+
   const toggleBan = async (id: string, currentStatus: boolean) => {
     let banReason = null;
-
-    // Si on veut bannir (passer de false à true)
     if (!currentStatus) {
       banReason = prompt("Motif du blocage (Ex: Fraude, non-respect des règles...) :");
-      if (banReason === null) return; // Annulation si le prompt est fermé
+      if (banReason === null) return;
     }
 
     try {
@@ -37,22 +56,16 @@ export default function AdminUsers() {
         })
         .eq('id', id);
 
-      if (error) {
-        console.error("Erreur lors du changement de statut:", error.message);
-        alert("Erreur technique lors du bannissement.");
-        return;
-      }
+      if (error) throw error;
 
-      // Mise à jour locale immédiate pour une UX fluide
       setUsers(prevUsers => 
         prevUsers.map(u => u.id === id 
           ? { ...u, is_banned: !currentStatus, ban_reason: !currentStatus ? banReason : null } 
           : u
         )
       );
-
     } catch (err) {
-      console.error("Erreur inattendue:", err);
+      alert("Erreur technique lors du bannissement.");
     }
   };
 
@@ -100,9 +113,15 @@ export default function AdminUsers() {
                   <p className="text-[10px] text-emerald-500 font-bold">+{user.phone}</p>
                 </div>
               </div>
-              <button onClick={() => toggleBan(user.id, user.is_banned)} className={`p-3 rounded-2xl transition-all active:scale-90 ${user.is_banned ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                {user.is_banned ? <UserCheck size={20} /> : <Ban size={20} />}
-              </button>
+              <div className="flex gap-2">
+                {/* BOUTON RESET MOT DE PASSE */}
+                <button onClick={() => resetPassword(user.id, user.username)} className="p-3 bg-slate-800 rounded-2xl text-amber-500 hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-90">
+                  <Key size={18} />
+                </button>
+                <button onClick={() => toggleBan(user.id, user.is_banned)} className={`p-3 rounded-2xl transition-all active:scale-90 ${user.is_banned ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                  {user.is_banned ? <UserCheck size={20} /> : <Ban size={20} />}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3 mb-6">
