@@ -19,11 +19,38 @@ export default function Connexion() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const contactSupport = (reason: string, userPhone: string) => {
+  // --- NOUVELLE LOGIQUE DE SUPPORT AMÉLIORÉE ---
+  const handleSupportRequest = async (reason: string) => {
+    const cleanPhone = phone.trim();
+    if (!cleanPhone) {
+      alert("Veuillez entrer votre numéro de téléphone d'abord.");
+      return;
+    }
+
+    setLoading(true);
+    let clientName = "Client inconnu";
+
+    try {
+      // On cherche le pseudo associé au numéro dans la table profiles
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('phone', cleanPhone)
+        .maybeSingle();
+
+      if (data?.username) {
+        clientName = data.username;
+      }
+    } catch (err) {
+      console.error("Erreur récupération pseudo", err);
+    }
+
     const baseUrl = "https://wa.me/message/IN7LA3KWGTZ7B1";
     const msg = reason === 'banni' 
-      ? `Bonjour Support, mon compte est banni. Numéro: ${userPhone}`
-      : `Bonjour Support, j'ai oublié mon mot de passe. Numéro: ${userPhone}`;
+      ? `Bonjour Support, mon compte (@${clientName}) est banni. Numéro: ${cleanPhone}`
+      : `Bonjour Support, je suis @${clientName}. J'ai oublié mon mot de passe pour mon compte lié au numéro: ${cleanPhone}. Merci de m'aider à le réinitialiser.`;
+    
+    setLoading(false);
     window.open(`${baseUrl}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -36,15 +63,11 @@ export default function Connexion() {
     const email = `${cleanPhone}@chifpam.ht`;
 
     try {
-      // 1. AUTHENTIFICATION PARALLÈLE (On lance la connexion)
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
       if (error) throw error;
 
       if (data?.user) {
-        // 2. VÉRIFICATION DE STATUT (Optimisée)
-        // On récupère uniquement le nécessaire pour gagner des millisecondes
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
           .from('profiles')
           .select('is_banned, ban_reason')
           .eq('id', data.user.id)
@@ -54,13 +77,11 @@ export default function Connexion() {
           await supabase.auth.signOut();
           setLoading(false);
           if (confirm(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des règles."}\nContacter le support ?`)) {
-            contactSupport('banni', cleanPhone);
+            handleSupportRequest('banni');
           }
           return;
         }
 
-        // 3. REDIRECTION IMMÉDIATE
-        // On utilise window.location.replace pour éviter que le client puisse revenir en arrière sur la page de login
         const targetPath = cleanPhone === '99999999' ? '/admin-chif-pam/dashboard' : '/client/home';
         window.location.replace(targetPath);
       }
@@ -83,8 +104,13 @@ export default function Connexion() {
           </button>
         </form>
 
-        <button onClick={() => { if(phone) contactSupport('pass', phone); else alert("Entrez votre numéro"); }} className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 uppercase font-bold">
-          <HelpCircle size={14} /><span>Mot de passe oublié ?</span>
+        <button 
+          onClick={() => handleSupportRequest('pass')} 
+          disabled={loading}
+          className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 uppercase font-bold disabled:opacity-50"
+        >
+          <HelpCircle size={14} />
+          <span>{loading ? "Recherche..." : "Mot de passe oublié ?"}</span>
         </button>
       </div>
     </main>
