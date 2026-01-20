@@ -1,15 +1,12 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, XCircle, Trophy, Play, Volume2, VolumeX } from 'lucide-react';
+import { ChevronLeft, XCircle, Trophy, Play, Volume2, VolumeX, AlertTriangle, Hammer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- TYPES ---
 interface Coords {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  x: number; y: number; w: number; h: number;
 }
 
 const CONFIG = {
@@ -27,7 +24,10 @@ const SOUNDS = {
 };
 
 export default function GlassEliteFinal() {
-  const [status, setStatus] = useState<'intro' | 'walking_in' | 'idle' | 'playing' | 'won' | 'lost' | 'loading'>('intro');
+  // AJOUT DU STATUT MAINTENANCE
+  const [status, setStatus] = useState<'intro' | 'walking_in' | 'idle' | 'playing' | 'won' | 'lost' | 'loading' | 'maintenance'>('intro');
+  const [maintenanceMsg, setMaintenanceMsg] = useState('SERVICE MOMENTANÉMENT INDISPONIBLE');
+  
   const [difficulty, setDifficulty] = useState<keyof typeof CONFIG>('intermediaire');
   const [bet, setBet] = useState(10);
   const [gameId, setGameId] = useState<string | null>(null);
@@ -43,12 +43,38 @@ export default function GlassEliteFinal() {
   const currentMult = 1 + (history.length * CONFIG[difficulty].step);
   const currentWin = Math.floor(bet * currentMult);
 
+  // --- LOGIQUE DE VÉRIFICATION MAINTENANCE ---
+  const checkMaintenance = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('game_settings')
+        .select('is_active, maintenance_msg')
+        .eq('game_id', 'glass')
+        .single();
+
+      if (data && !data.is_active) {
+        setMaintenanceMsg(data.maintenance_msg);
+        setStatus('maintenance');
+        return true;
+      }
+    } catch (e) {
+      console.error("Maintenance check failed", e);
+    }
+    return false;
+  };
+
   useEffect(() => {
     Object.entries(SOUNDS).forEach(([key, url]) => {
       audioRefs.current[key] = new Audio(url);
     });
-    const introTimer = setTimeout(() => setStatus('walking_in'), 2500);
-    return () => clearTimeout(introTimer);
+
+    // On vérifie la maintenance avant de lancer l'intro
+    checkMaintenance().then((isMaintained) => {
+      if (!isMaintained) {
+        const introTimer = setTimeout(() => setStatus('walking_in'), 2500);
+        return () => clearTimeout(introTimer);
+      }
+    });
   }, []);
 
   const playSound = (key: keyof typeof SOUNDS) => {
@@ -106,30 +132,22 @@ export default function GlassEliteFinal() {
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (status !== 'playing' || avatarPos.current.jumpT < 1) return;
-
     const rect = canvasRef.current!.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    
-    // Pour la partie difficile (3 colonnes), on compare le clic aux zones réelles des tuiles
     let detectedCol = -1;
     for (let c = 0; c < CONFIG[difficulty].cols; c++) {
       const coords = getCoords(history.length + 1, c);
-      // On donne une marge de clic un peu plus large que la tuile visuelle pour le confort (w * 1.2)
       if (clickX >= coords.x - (coords.w * 0.6) && clickX <= coords.x + (coords.w * 0.6)) {
         detectedCol = c;
         break;
       }
     }
-
-    if (detectedCol !== -1) {
-      handleJump(detectedCol);
-    }
+    if (detectedCol !== -1) handleJump(detectedCol);
   };
 
   const updateLogic = () => {
     const p = avatarPos.current;
     const cvs = canvasRef.current;
-
     if (status === 'walking_in' && cvs) {
         const startPos = getCoords(0, 0.5);
         if (p.walkY === 0) p.walkY = cvs.height + 50;
@@ -144,7 +162,6 @@ export default function GlassEliteFinal() {
             p.y = startPos.y;
         }
     }
-
     if (status === 'playing' && p.jumpT < 1) {
       p.jumpT += 0.05;
       if (p.jumpT > 1) p.jumpT = 1;
@@ -157,40 +174,25 @@ export default function GlassEliteFinal() {
     const cvs = canvasRef.current;
     const ctx = cvs?.getContext('2d');
     if (!cvs || !ctx) return;
-
     ctx.clearRect(0, 0, cvs.width, cvs.height);
-
-    if (status !== 'intro') {
+    if (status !== 'intro' && status !== 'maintenance') {
         for (let r = 0; r <= CONFIG[difficulty].rows; r++) {
             for (let c = 0; c < CONFIG[difficulty].cols; c++) {
                 const { x, y, w, h } = getCoords(r, c);
                 const isPassed = history.length > r - 1 && history[r - 1] === c && r > 0;
                 const isCurrent = history.length === r - 1 && status === 'playing' && r > 0;
-
                 ctx.fillStyle = isPassed ? '#10b981' : isCurrent ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)';
-                ctx.shadowBlur = isCurrent ? 15 : 0;
-                ctx.shadowColor = '#6366f1';
-                
                 ctx.beginPath();
                 if (ctx.roundRect) ctx.roundRect(x - w/2, y - h/2, w, h, 6);
                 else ctx.rect(x - w/2, y - h/2, w, h);
                 ctx.fill();
-                ctx.shadowBlur = 0;
-
-                if (isCurrent) {
-                    ctx.strokeStyle = '#6366f1';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
             }
         }
     }
-
     if (status === 'walking_in' || status === 'playing' || status === 'idle' || status === 'lost') {
       const { x, y, jumpT, walkCycle } = avatarPos.current;
       let drawY = y;
       let legOffset = 0;
-
       if (status === 'playing') {
           drawY = y - Math.sin(jumpT * Math.PI) * 45;
           legOffset = Math.sin(jumpT * Math.PI) * 10;
@@ -198,23 +200,10 @@ export default function GlassEliteFinal() {
           drawY = y + Math.abs(Math.sin(walkCycle)) * 5;
           legOffset = Math.sin(walkCycle) * 8;
       }
-
       ctx.save();
       ctx.translate(x, drawY);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.beginPath(); ctx.ellipse(0, 25, 10, 3, 0, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#0d9488';
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(-4, 0); ctx.lineTo(-4 - legOffset, 18);
-      ctx.moveTo(4, 0); ctx.lineTo(4 + legOffset, 18);
-      ctx.stroke();
       ctx.fillStyle = '#0d9488';
-      ctx.beginPath(); 
-      if (ctx.roundRect) ctx.roundRect(-8, -15, 16, 20, 4);
-      else ctx.rect(-8, -15, 16, 20);
-      ctx.fill();
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-8, -15, 16, 20, 4); else ctx.rect(-8, -15, 16, 20); ctx.fill();
       ctx.fillStyle = '#ffedd5';
       ctx.beginPath(); ctx.arc(0, -20, 7, 0, Math.PI*2); ctx.fill();
       ctx.restore();
@@ -228,9 +217,7 @@ export default function GlassEliteFinal() {
     avatarPos.current.targetX = target.x;
     avatarPos.current.targetY = target.y;
     avatarPos.current.jumpT = 0;
-
     const isCorrect = colIndex === path[nextRow];
-
     setTimeout(async () => {
       if (isCorrect) {
         const newHistory = [...history, colIndex];
@@ -246,6 +233,10 @@ export default function GlassEliteFinal() {
   };
 
   const startGame = async () => {
+    // Re-vérifier maintenance juste avant de miser
+    const isMaintained = await checkMaintenance();
+    if (isMaintained) return;
+
     playSound('doll');
     setStatus('loading');
     const sequence = Array.from({ length: CONFIG[difficulty].rows }, () => Math.floor(Math.random() * CONFIG[difficulty].cols));
@@ -277,9 +268,25 @@ export default function GlassEliteFinal() {
 
   return (
     <div className="flex flex-col h-dvh bg-[#020617] text-white font-black italic uppercase overflow-hidden">
+      {/* MAINTENANCE OVERLAY */}
+      <AnimatePresence>
+        {status === 'maintenance' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[300] bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
+            <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="w-24 h-24 bg-rose-500/10 rounded-full flex items-center justify-center border-2 border-rose-500 mb-6 shadow-[0_0_30px_rgba(244,63,94,0.3)]">
+              <Hammer className="text-rose-500" size={40} />
+            </motion.div>
+            <h1 className="text-4xl tracking-tighter mb-2">MODE <span className="text-rose-500">MAINTENANCE</span></h1>
+            <p className="text-sm text-white/40 font-bold max-w-xs">{maintenanceMsg}</p>
+            <button onClick={() => window.history.back()} className="mt-10 px-8 py-4 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-3 active:scale-95 transition-all">
+              <ChevronLeft size={20}/> RETOUR
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {status === 'intro' && (
-          <motion.div exit={{ opacity: 0 }} className="fixed inset-0 z-200 bg-black flex flex-col items-center justify-center">
+          <motion.div exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
             <motion.h1 initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-5xl text-rose-500 mb-4 tracking-tighter">ELITE #456</motion.h1>
             <div className="w-48 h-1 bg-white/10 overflow-hidden"><motion.div initial={{ x: -200 }} animate={{ x: 200 }} transition={{ repeat: Infinity, duration: 1 }} className="w-full h-full bg-rose-500" /></div>
           </motion.div>
@@ -325,7 +332,7 @@ export default function GlassEliteFinal() {
 
       <AnimatePresence>
         {(status === 'won' || status === 'lost') && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-100 bg-black/90 backdrop-blur-xl flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6">
                 <div className="space-y-6 text-center w-full max-w-sm">
                     <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto border-4 ${status === 'won' ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-rose-500 text-rose-500 bg-rose-500/10'}`}>
                         {status === 'won' ? <Trophy size={56} /> : <XCircle size={56} />}
@@ -340,3 +347,4 @@ export default function GlassEliteFinal() {
     </div>
   );
 }
+
