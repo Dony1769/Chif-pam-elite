@@ -19,19 +19,19 @@ export default function Connexion() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // --- NOUVELLE LOGIQUE DE SUPPORT AMÉLIORÉE ---
+  // --- NOUVELLE LOGIQUE SUPPORT AMÉLIORÉE ---
   const handleSupportRequest = async (reason: string) => {
     const cleanPhone = phone.trim();
     if (!cleanPhone) {
-      alert("Veuillez entrer votre numéro de téléphone d'abord.");
+      alert("Veuillez d'abord entrer votre numéro de téléphone.");
       return;
     }
 
     setLoading(true);
-    let clientName = "Client inconnu";
+    let clientName = "Inconnu";
 
     try {
-      // On cherche le pseudo associé au numéro dans la table profiles
+      // On cherche le pseudo dans la table profiles pour l'envoyer par WhatsApp
       const { data, error } = await supabase
         .from('profiles')
         .select('username')
@@ -41,17 +41,22 @@ export default function Connexion() {
       if (data?.username) {
         clientName = data.username;
       }
-    } catch (err) {
-      console.error("Erreur récupération pseudo", err);
-    }
 
-    const baseUrl = "https://wa.me/message/IN7LA3KWGTZ7B1";
-    const msg = reason === 'banni' 
-      ? `Bonjour Support, mon compte (@${clientName}) est banni. Numéro: ${cleanPhone}`
-      : `Bonjour Support, je suis @${clientName}. J'ai oublié mon mot de passe pour mon compte lié au numéro: ${cleanPhone}. Merci de m'aider à le réinitialiser.`;
-    
-    setLoading(false);
-    window.open(`${baseUrl}?text=${encodeURIComponent(msg)}`, '_blank');
+      const baseUrl = "https://wa.me/message/IN7LA3KWGTZ7B1";
+      const intent = reason === 'banni' ? "COMPTE BANNI" : "MOT DE PASSE OUBLIÉ";
+      
+      const msg = `Bonjour Support CHIF-PAM,\n\n` +
+                  `📌 ACTION : ${intent}\n` +
+                  `👤 NOM : ${clientName}\n` +
+                  `📞 NUMÉRO : ${cleanPhone}\n\n` +
+                  `Merci de m'aider à récupérer l'accès à mon compte.`;
+
+      window.open(`${baseUrl}?text=${encodeURIComponent(msg)}`, '_blank');
+    } catch (err) {
+      console.error("Erreur support:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -64,10 +69,11 @@ export default function Connexion() {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
       if (error) throw error;
 
       if (data?.user) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('is_banned, ban_reason')
           .eq('id', data.user.id)
@@ -104,15 +110,17 @@ export default function Connexion() {
           </button>
         </form>
 
+        {/* BOUTON MIS À JOUR */}
         <button 
+          type="button"
           onClick={() => handleSupportRequest('pass')} 
-          disabled={loading}
           className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 uppercase font-bold disabled:opacity-50"
+          disabled={loading}
         >
-          <HelpCircle size={14} />
-          <span>{loading ? "Recherche..." : "Mot de passe oublié ?"}</span>
+          <HelpCircle size={14} /><span>Mot de passe oublié ?</span>
         </button>
       </div>
     </main>
   );
 }
+
