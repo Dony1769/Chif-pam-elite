@@ -127,7 +127,7 @@ export default function LaserVault() {
       setMultiplier(1.0);
       setLaserY(0);
       setQuestionsSolved(0);
-      setBaseSpeed(0.5);
+      setBaseSpeed(1);
       setErrorPenalty(1.0);
       setInput("");
       generateProblem(1.0);
@@ -169,7 +169,7 @@ export default function LaserVault() {
       setInput("");
 
       if (nextSolvedCount % 2 === 0) {
-        setBaseSpeed(prev => prev + 0.5);
+        setBaseSpeed(prev => prev + 1);
         playSound('speedup');
       }
 
