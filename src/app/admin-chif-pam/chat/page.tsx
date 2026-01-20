@@ -19,8 +19,8 @@ export default function AdminChat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Audio stable
-  const notificationAudio = typeof window !== "undefined" ? new Audio("https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3") : null;
+  // MISE À JOUR : Utilisation du son local win.mp3
+  const notificationAudio = typeof window !== "undefined" ? new Audio("/sounds/win.mp3") : null;
 
   useEffect(() => {
     fetchConversations();
@@ -48,7 +48,12 @@ export default function AdminChat() {
     }
   }, [selectedUser]);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // AUTO-SCROLL : S'assure que la vue descend tout en bas lors d'un nouveau message
+  useEffect(() => { 
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" }); 
+    }
+  }, [messages]);
 
   const fetchConversations = async () => {
     const { data: pData } = await supabase.from("profiles").select("id, phone").neq("id", ADMIN_ID);
@@ -72,7 +77,6 @@ export default function AdminChat() {
     setMessages(data || []);
   };
 
-  // --- CORRECTION : Logique complète d'envoi d'image ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedUser) return;
@@ -98,7 +102,7 @@ export default function AdminChat() {
       alert("Erreur d'envoi"); 
     } finally { 
       setUploading(false); 
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset de l'input
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -112,6 +116,15 @@ export default function AdminChat() {
     if (insertedMsg) setMessages(prev => [...prev, insertedMsg]);
   };
 
+  // MISE À JOUR : Logique de tri pour mettre les non-lus en haut
+  const sortedProfiles = [...profiles].sort((a, b) => {
+    const unreadA = unreadCounts[a.id] || 0;
+    const unreadB = unreadCounts[b.id] || 0;
+    if (unreadA > 0 && unreadB === 0) return -1;
+    if (unreadA === 0 && unreadB > 0) return 1;
+    return 0;
+  });
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
@@ -123,14 +136,14 @@ export default function AdminChat() {
         </div>
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Utilise sortedProfiles */}
       <div className="w-80 bg-slate-900/40 rounded-[2rem] border border-white/5 flex flex-col backdrop-blur-xl shadow-xl">
         <div className="p-6 border-b border-white/5 flex justify-between items-center">
           <h3 className="text-xl font-black italic uppercase tracking-tighter">Messages</h3>
           <Volume2 size={16} className="text-emerald-500 opacity-50" />
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {profiles.map((p) => (
+          {sortedProfiles.map((p) => (
             <button key={p.id} onClick={() => setSelectedUser(p.id)} className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all ${selectedUser === p.id ? "bg-emerald-500/20 border-emerald-500/50 border shadow-lg shadow-emerald-500/5" : "hover:bg-white/5 border border-transparent"}`}>
               <div className="relative">
                 <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center font-black border border-white/10 text-emerald-500">{p.phone?.slice(-2)}</div>
@@ -204,3 +217,4 @@ export default function AdminChat() {
     </div>
   );
 }
+
