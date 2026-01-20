@@ -14,6 +14,10 @@ export default function MinesElite() {
   const [minePositions, setMinePositions] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
+  const { data: settings } = await supabase.from('game_settings').eq('game_id', 'mines').single();
+if (!settings.is_active) {
+  // Afficher le message de maintenance
+}
 
   useEffect(() => {
     const counts = { facile: 5, intermédiaire: 8, difficile: 11 };
