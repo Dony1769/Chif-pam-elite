@@ -22,7 +22,7 @@ export default function AdminMiniGames() {
   const [globalStats, setGlobalStats] = useState({ totalPlayers: 0, totalVolume: 0, totalProfit: 0 });
   const [games, setGames] = useState<{ [key: string]: GameStats }>({});
 
-    const fetchAllGamesData = async () => {
+  const fetchAllGamesData = async () => {
     try {
       setLoading(true);
       const { data: settings } = await supabase.from('game_settings').select('*');
@@ -50,37 +50,41 @@ export default function AdminMiniGames() {
           continue;
         }
 
-        const volume = data?.reduce((acc, curr) => acc + (Number(curr.bet_amount) || 0), 0) || 0;
-        
-        // --- LOGIQUE DE PROFIT CORRIGÉE ---
-        const totalPayout = data?.reduce((acc, curr) => {
-          // 1. Déterminer si c'est une victoire
-          const isWin = curr.is_won === true || curr.status === 'won' || curr.status === 'completed';
-          
-          // 2. Récupérer le multiplicateur (tente plusieurs noms de colonnes au cas où)
-          const multiplier = Number(curr.multiplier || curr.final_multiplier || 0);
-          
-          // 3. Calculer le gain reversé au joueur
-          const bet = Number(curr.bet_amount) || 0;
-          const payout = isWin ? (bet * multiplier) : 0;
-          
-          return acc + payout;
-        }, 0) || 0;
+        // --- CALCUL PROFESSIONNEL ---
+        let volumeTable = 0;
+        let payoutTable = 0;
 
-        // Profit = Ce qui est entré (Mises) - Ce qui est sorti (Gains)
-        const profit = volume - totalPayout;
+        data?.forEach((game) => {
+          const bet = Number(game.bet_amount) || 0;
+          const mult = Number(game.multiplier || game.final_multiplier || 0);
+          
+          volumeTable += bet;
+
+          // Détection universelle de la victoire :
+          // Soit le booléen is_won est vrai, soit le status est 'won' ou 'completed'
+          const isWin = game.is_won === true || 
+                        game.status === 'won' || 
+                        game.status === 'completed';
+
+          if (isWin) {
+            payoutTable += (bet * mult);
+          }
+        });
+
+        // Profit Réel = Argent encaissé (Mises) - Argent reversé (Gains)
+        const profitTable = volumeTable - payoutTable;
 
         const s = settings?.find(setting => setting.game_id === item.id);
 
         results[item.id] = {
-          volume,
-          profit,
+          volume: volumeTable,
+          profit: profitTable,
           count: data?.length || 0,
           isActive: s?.is_active ?? true
         };
 
-        totalV += volume;
-        totalP += profit;
+        totalV += volumeTable;
+        totalP += profitTable;
       }
 
       const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
@@ -98,7 +102,6 @@ export default function AdminMiniGames() {
       setLoading(false);
     }
   };
-
 
   useEffect(() => {
     fetchAllGamesData();
@@ -181,8 +184,8 @@ export default function AdminMiniGames() {
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-4xl">SYSTEM <span className="text-emerald-500">CONTROL</span></h1>
-            <p className="text-[10px] text-slate-500 font-bold tracking-[0.3em]">Master ID: 9e141172... (ADMIN)</p>
+            <h1 className="text-4xl font-black italic">CONTROL <span className="text-emerald-500">PANEL</span></h1>
+            <p className="text-[10px] text-slate-500 font-bold tracking-[0.3em]">ADMIN ROOT ACCESS</p>
           </div>
         </div>
         <button onClick={fetchAllGamesData} className="p-4 bg-white/5 rounded-2xl hover:bg-emerald-500 hover:text-slate-950 transition-all">
@@ -220,11 +223,10 @@ export default function AdminMiniGames() {
       <div className="mt-12 p-8 bg-slate-900/30 border border-white/5 rounded-[3rem] flex items-center justify-between opacity-50">
         <div className="flex items-center gap-4 uppercase text-[10px]">
           <ShieldAlert size={20} className="text-emerald-500" />
-          <span>Accès Root Sécurisé - SHA256 Encryption</span>
+          <span>Sécurité Elite - Synchro Temps Réel</span>
         </div>
         <span className="text-[10px]">{new Date().toLocaleDateString()}</span>
       </div>
     </div>
   );
 }
-
