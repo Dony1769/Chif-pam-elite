@@ -19,20 +19,20 @@ export default function Connexion() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // --- NOUVELLE LOGIQUE SUPPORT AMÉLIORÉE ---
+  // --- LOGIQUE SUPPORT CORRIGÉE ---
   const handleSupportRequest = async (reason: string) => {
     const cleanPhone = phone.trim();
     if (!cleanPhone) {
-      alert("Veuillez d'abord entrer votre numéro de téléphone.");
+      alert("Entrez votre numéro pour que le support puisse vous identifier.");
       return;
     }
 
     setLoading(true);
-    let clientName = "Inconnu";
+    let clientName = "Non identifié";
 
     try {
-      // On cherche le pseudo dans la table profiles pour l'envoyer par WhatsApp
-      const { data, error } = await supabase
+      // 1. Récupération du pseudo pour un message personnalisé
+      const { data } = await supabase
         .from('profiles')
         .select('username')
         .eq('phone', cleanPhone)
@@ -42,18 +42,23 @@ export default function Connexion() {
         clientName = data.username;
       }
 
-      const baseUrl = "https://wa.me/message/IN7LA3KWGTZ7B1";
-      const intent = reason === 'banni' ? "COMPTE BANNI" : "MOT DE PASSE OUBLIÉ";
+      // 2. CONFIGURATION DU MESSAGE
+      // Remplace 509XXXXXXXX par ton numéro WhatsApp réel
+      const ADMIN_PHONE = "50940451937"; 
+      const intent = reason === 'banni' ? "COMPTE BANNI 🚫" : "MOT DE PASSE OUBLIÉ 🔑";
       
-      const msg = `Bonjour Support CHIF-PAM,\n\n` +
-                  `📌 ACTION : ${intent}\n` +
-                  `👤 NOM : ${clientName}\n` +
-                  `📞 NUMÉRO : ${cleanPhone}\n\n` +
-                  `Merci de m'aider à récupérer l'accès à mon compte.`;
+      const messageText = `Bonjour Support CHIF-PAM,\n\n` +
+                          `J'ai un problème : ${intent}\n` +
+                          `👤 Pseudo: ${clientName}\n` +
+                          `📞 Numéro: ${cleanPhone}\n\n` +
+                          `Merci de m'aider à accéder à mon compte.`;
 
-      window.open(`${baseUrl}?text=${encodeURIComponent(msg)}`, '_blank');
+      // 3. ENCODAGE ET REDIRECTION (Format API Standard pour que le texte s'affiche)
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${ADMIN_PHONE}&text=${encodeURIComponent(messageText)}`;
+
+      window.open(whatsappUrl, '_blank');
     } catch (err) {
-      console.error("Erreur support:", err);
+      console.error("Erreur redirection support:", err);
     } finally {
       setLoading(false);
     }
@@ -69,11 +74,10 @@ export default function Connexion() {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
       if (error) throw error;
 
       if (data?.user) {
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile } = await supabase
           .from('profiles')
           .select('is_banned, ban_reason')
           .eq('id', data.user.id)
@@ -98,23 +102,40 @@ export default function Connexion() {
   };
 
   return (
-    <main className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-white">
-      <div className="w-full max-w-md bg-slate-900 border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl relative overflow-hidden">
-        <div className="mb-10"><LogoChifPam /><p className="text-slate-500 text-[10px] uppercase tracking-[0.3em] mt-2 font-bold">Accès Rapide</p></div>
+    <main className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-white font-sans">
+      <div className="w-full max-w-md bg-slate-900/50 border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl backdrop-blur-xl relative overflow-hidden">
+        <div className="mb-10"><LogoChifPam /><p className="text-slate-500 text-[10px] uppercase tracking-[0.3em] mt-2 font-bold">Accès Sécurisé</p></div>
         
         <form onSubmit={handleLogin} className="space-y-4 relative z-10">
-          <input type="tel" placeholder="Numéro de téléphone" value={phone} onChange={(e) => setPhone(e.target.value)} required className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-bold" />
-          <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-bold" />
-          <button type="submit" disabled={loading} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-5 rounded-2xl font-black transition-all flex items-center justify-center gap-3">
+          <input 
+            type="tel" 
+            placeholder="Numéro de téléphone" 
+            value={phone} 
+            onChange={(e) => setPhone(e.target.value)} 
+            required 
+            className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-bold placeholder:text-slate-700" 
+          />
+          <input 
+            type="password" 
+            placeholder="Mot de passe" 
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            required 
+            className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all font-bold placeholder:text-slate-700" 
+          />
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-5 rounded-2xl font-black transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+          >
             {loading ? <Loader2 className="animate-spin" /> : <><span className="italic">SE CONNECTER</span><ArrowRight size={18} /></>}
           </button>
         </form>
 
-        {/* BOUTON MIS À JOUR */}
         <button 
           type="button"
           onClick={() => handleSupportRequest('pass')} 
-          className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 uppercase font-bold disabled:opacity-50"
+          className="mt-8 flex items-center justify-center gap-2 mx-auto text-[10px] text-slate-500 hover:text-emerald-500 uppercase font-black tracking-widest transition-colors"
           disabled={loading}
         >
           <HelpCircle size={14} /><span>Mot de passe oublié ?</span>
@@ -123,4 +144,3 @@ export default function Connexion() {
     </main>
   );
 }
-
