@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Target, Sprout, TrendingUp, ShieldAlert, ArrowLeft, Loader2, 
-  Dna, Brain, Lock, Layers, Box, Activity, Zap, Power, PowerOff
+  Dna, Brain, Lock, Layers, Box, Activity, Zap, Power, AlertTriangle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -12,13 +12,17 @@ interface GameStats {
   volume: number;
   profit: number;
   count: number;
-  isActive: boolean; // Ajout de l'état
+}
+
+interface GameStatus {
+  is_active: boolean;
 }
 
 export default function AdminMiniGames() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
+  
   const [globalStats, setGlobalStats] = useState({
     totalPlayers: 0,
     totalVolume: 0,
@@ -26,32 +30,28 @@ export default function AdminMiniGames() {
   });
 
   const [games, setGames] = useState<{ [key: string]: GameStats }>({});
+  const [gameStates, setGameStates] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     fetchAllGamesData();
   }, []);
 
-  const calculateStats = (data: any[], type: 'status' | 'is_won', isActive: boolean) => {
+  const calculateStats = (data: any[], type: 'status' | 'is_won') => {
     const volume = data.reduce((acc, curr) => acc + (curr.bet_amount || 0), 0);
     const profit = data.reduce((acc, curr) => {
       const isWin = type === 'is_won' ? curr.is_won : curr.status === 'won';
       const payout = isWin ? (curr.bet_amount * (curr.multiplier || 0)) : 0;
       return acc + (curr.bet_amount - payout);
     }, 0);
-    return { volume, profit, count: data.length, isActive };
+    return { volume, profit, count: data.length };
   };
 
   const fetchAllGamesData = async () => {
     try {
       setLoading(true);
       
-      // 1. Récupérer les états (ON/OFF) des jeux
-      const { data: settings } = await supabase.from('game_settings').select('*');
-      const settingsMap = settings?.reduce((acc, curr) => ({ ...acc, [curr.game_id]: curr.is_active }), {}) || {};
-
-      // 2. Récupérer les données des tables
       const [
-        mines, crash, biometric, vault, quiz, plinko, glass, elevator, profiles
+        mines, crash, biometric, vault, quiz, plinko, glass, elevator, profiles, settings
       ] = await Promise.all([
         supabase.from('mines_games').select('bet_amount, is_won, multiplier'),
         supabase.from('crash_games').select('bet_amount, status, multiplier'),
@@ -61,94 +61,107 @@ export default function AdminMiniGames() {
         supabase.from('plinko_games').select('bet_amount, is_won, multiplier'),
         supabase.from('glass_games').select('bet_amount, is_won, multiplier'),
         supabase.from('elevator_games').select('bet_amount, is_won, multiplier'),
-        supabase.from('profiles').select('id', { count: 'exact' })
+        supabase.from('profiles').select('id', { count: 'exact' }),
+        supabase.from('game_settings').select('game_id, is_active')
       ]);
 
       const gamesMap: { [key: string]: GameStats } = {
-        mines: calculateStats(mines.data || [], 'is_won', settingsMap['mines'] ?? true),
-        crash: calculateStats(crash.data || [], 'status', settingsMap['crash'] ?? true),
-        biometric: calculateStats(biometric.data || [], 'is_won', settingsMap['biometric'] ?? true),
-        vault: calculateStats(vault.data || [], 'is_won', settingsMap['vault'] ?? true),
-        quiz: calculateStats(quiz.data || [], 'is_won', settingsMap['quiz'] ?? true),
-        plinko: calculateStats(plinko.data || [], 'is_won', settingsMap['plinko'] ?? true),
-        glass: calculateStats(glass.data || [], 'is_won', settingsMap['glass'] ?? true),
-        elevator: calculateStats(elevator.data || [], 'is_won', settingsMap['elevator'] ?? true),
+        mines: calculateStats(mines.data || [], 'is_won'),
+        crash: calculateStats(crash.data || [], 'status'),
+        biometric: calculateStats(biometric.data || [], 'is_won'),
+        vault: calculateStats(vault.data || [], 'is_won'),
+        quiz: calculateStats(quiz.data || [], 'is_won'),
+        plinko: calculateStats(plinko.data || [], 'is_won'),
+        glass: calculateStats(glass.data || [], 'is_won'),
+        elevator: calculateStats(elevator.data || [], 'is_won'),
       };
+
+      const statesMap: { [key: string]: boolean } = {};
+      settings.data?.forEach(s => { statesMap[s.game_id] = s.is_active; });
 
       const totalV = Object.values(gamesMap).reduce((acc, curr) => acc + curr.volume, 0);
       const totalP = Object.values(gamesMap).reduce((acc, curr) => acc + curr.profit, 0);
 
       setGames(gamesMap);
-      setGlobalStats({ totalPlayers: profiles.count || 0, totalVolume: totalV, totalProfit: totalP });
+      setGameStates(statesMap);
+      setGlobalStats({
+        totalPlayers: profiles.count || 0,
+        totalVolume: totalV,
+        totalProfit: totalP
+      });
+
     } catch (error) {
-      console.error("Erreur Audit:", error);
+      console.error("Audit Error:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- NOUVELLE FONCTION DE TOGGLE ---
-  const toggleGameStatus = async (gameId: string, currentStatus: boolean) => {
-    setActionLoading(gameId);
+  const toggleGame = async (gameId: string, currentState: boolean) => {
+    setUpdating(gameId);
     try {
       const { error } = await supabase
         .from('game_settings')
-        .update({ is_active: !currentStatus })
+        .update({ is_active: !currentState, updated_at: new Date() })
         .eq('game_id', gameId);
 
       if (error) throw error;
-
-      // Mise à jour locale pour l'UI
-      setGames(prev => ({
-        ...prev,
-        [gameId]: { ...prev[gameId], isActive: !currentStatus }
-      }));
+      setGameStates(prev => ({ ...prev, [gameId]: !currentState }));
     } catch (err) {
-      alert("Erreur lors de la modification du statut.");
+      alert("Erreur lors de la mise à jour du statut.");
     } finally {
-      setActionLoading(null);
+      setUpdating(null);
     }
   };
 
-  const GameCard = ({ id, title, stats, icon: Icon, color }: { id: string, title: string, stats: GameStats, icon: any, color: string }) => (
-    <div className={`relative bg-slate-900/40 border ${stats.isActive ? 'border-white/5' : 'border-rose-500/30 bg-rose-500/5'} p-6 rounded-[2rem] transition-all group overflow-hidden`}>
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-3 rounded-2xl bg-slate-950 border border-white/5 ${color}`}>
-          <Icon size={20} />
-        </div>
-        
-        {/* BOUTON PAUSE / PLAY */}
-        <button 
-          onClick={() => toggleGameStatus(id, stats.isActive)}
-          disabled={actionLoading === id}
-          className={`p-3 rounded-2xl transition-all active:scale-90 ${stats.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'}`}
-        >
-          {actionLoading === id ? <Loader2 className="animate-spin" size={18} /> : (stats.isActive ? <Power size={18} /> : <PowerOff size={18} />)}
-        </button>
-      </div>
+  const GameCard = ({ id, title, stats, icon: Icon, color }: { id: string, title: string, stats: GameStats, icon: any, color: string }) => {
+    const isActive = gameStates[id];
+    const isUpdating = updating === id;
 
-      <h4 className="text-lg font-black italic mb-4 uppercase flex items-center gap-2">
-        {title}
-        {!stats.isActive && <span className="text-[8px] bg-rose-500 text-white px-2 py-0.5 rounded-full not-italic">PAUSE</span>}
-      </h4>
-
-      <div className="flex justify-between items-center opacity-60 group-hover:opacity-100 transition-opacity">
-        <div>
-          <p className="text-[9px] text-slate-500 uppercase">Profit</p>
-          <p className={`text-sm font-bold ${stats.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {stats.profit.toLocaleString()}
-          </p>
+    return (
+      <div className={`relative overflow-hidden p-6 rounded-[2.5rem] border transition-all duration-500 ${isActive ? 'bg-slate-900/40 border-white/5 shadow-xl' : 'bg-rose-950/20 border-rose-500/20 grayscale-[0.5]'}`}>
+        <div className="flex justify-between items-start mb-4">
+          <div className={`p-3 rounded-2xl bg-slate-950 border border-white/5 ${isActive ? color : 'text-slate-500'}`}>
+            <Icon size={20} />
+          </div>
+          
+          <button 
+            onClick={() => toggleGame(id, !!isActive)}
+            disabled={!!isUpdating}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[8px] font-black transition-all active:scale-90 ${isActive ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white'}`}
+          >
+            {isUpdating ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
+            {isActive ? 'ACTIF' : 'COUPÉ'}
+          </button>
         </div>
-        <div className="text-right">
-          <p className="text-[9px] text-slate-500 uppercase">Volume</p>
-          <p className="text-sm font-bold">{stats.volume.toLocaleString()}</p>
+
+        <h4 className="text-lg font-black italic mb-4 uppercase flex items-center gap-2">
+          {title}
+          {!isActive && <AlertTriangle size={14} className="text-rose-500 animate-pulse" />}
+        </h4>
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-end">
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase font-bold">Volume</p>
+              <p className="text-sm font-black tracking-tight">{stats?.volume.toLocaleString()} HTG</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 uppercase font-bold">Profit</p>
+              <p className={`text-sm font-black ${stats?.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                {stats?.profit >= 0 ? '+' : ''}{stats?.profit.toLocaleString()}
+              </p>
+            </div>
+          </div>
+          
+          <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden flex">
+             <div className="h-full bg-emerald-500" style={{ width: '70%' }}></div>
+             <div className="h-full bg-rose-500" style={{ width: '30%' }}></div>
+          </div>
         </div>
       </div>
-      
-      {/* OVERLAY MAINTENANCE */}
-      {!stats.isActive && <div className="absolute inset-0 bg-rose-500/5 pointer-events-none border-2 border-rose-500/20 rounded-[2rem]"></div>}
-    </div>
-  );
+    );
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -161,43 +174,63 @@ export default function AdminMiniGames() {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
         <div className="flex items-center gap-6">
-          <button onClick={() => router.back()} className="p-4 bg-slate-900 rounded-3xl border border-white/5 hover:bg-emerald-500 transition-all shadow-xl">
+          <button onClick={() => router.back()} className="p-4 bg-slate-900 rounded-3xl border border-white/5 hover:text-emerald-500 transition-all shadow-xl">
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-4xl font-black">GAME <span className="text-emerald-500">CENTER</span></h1>
-            <p className="text-[10px] text-slate-500 tracking-[0.3em]">Master Administrator Panel</p>
+            <h1 className="text-4xl">Game <span className="text-emerald-500">Security</span></h1>
+            <p className="text-[10px] text-slate-500 tracking-[0.3em]">Master Control Panel v2.0</p>
           </div>
         </div>
-        <div className="flex gap-4">
-          <div className="px-6 py-3 bg-slate-900 border border-white/5 rounded-2xl text-center">
-            <p className="text-[8px] text-slate-500">Profit Global</p>
-            <p className="text-xl text-emerald-500">{globalStats.totalProfit.toLocaleString()} HTG</p>
-          </div>
-        </div>
-      </div>
-
-      {/* GAMES GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        <GameCard id="mines" title="Mines" stats={games.mines} icon={Target} color="text-rose-500" />
-        <GameCard id="crash" title="Crash" stats={games.crash} icon={Zap} color="text-emerald-500" />
-        <GameCard id="biometric" title="Biometric" stats={games.biometric} icon={Dna} color="text-blue-500" />
-        <GameCard id="vault" title="Vault" stats={games.vault} icon={Lock} color="text-amber-500" />
-        <GameCard id="quiz" title="Quiz" stats={games.quiz} icon={Brain} color="text-purple-500" />
-        <GameCard id="plinko" title="Plinko" stats={games.plinko} icon={Layers} color="text-orange-500" />
-        <GameCard id="glass" title="Glass" stats={games.glass} icon={Box} color="text-cyan-500" />
-        <GameCard id="elevator" title="Elevator" stats={games.elevator} icon={TrendingUp} color="text-indigo-500" />
-      </div>
-
-      {/* FOOTER INFO */}
-      <div className="bg-slate-900/30 border border-white/5 rounded-[3rem] p-8 backdrop-blur-md flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex items-center gap-4">
-          <ShieldAlert className="text-amber-500" size={24} />
-          <p className="text-xs">Système de bascule instantanée. En coupant un jeu, tous les nouveaux paris seront refusés.</p>
-        </div>
-        <button onClick={() => fetchAllGamesData()} className="px-8 py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black hover:scale-105 transition-all uppercase italic">
-          Rafraîchir les données
+        <button onClick={fetchAllGamesData} className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-2xl flex items-center gap-3 hover:bg-emerald-500 hover:text-slate-950 transition-all">
+          <Zap size={20} />
+          <span className="text-xs">Rafraîchir Audit</span>
         </button>
+      </div>
+
+      {/* STATS GLOBALES */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
+        <div className="lg:col-span-2 bg-gradient-to-br from-emerald-500 to-emerald-600 p-10 rounded-[3rem] text-slate-950 shadow-2xl shadow-emerald-500/10">
+          <p className="font-bold opacity-80 text-sm">Profit Net de la Plateforme</p>
+          <h2 className="text-6xl md:text-7xl font-black">{globalStats.totalProfit.toLocaleString()} HTG</h2>
+          <div className="mt-6 inline-flex items-center gap-2 bg-slate-950/10 px-4 py-2 rounded-xl text-xs font-bold">
+            <Activity size={14} /> Flux Global : {globalStats.totalVolume.toLocaleString()} HTG
+          </div>
+        </div>
+        <div className="bg-slate-900 border border-white/5 p-10 rounded-[3rem] flex flex-col justify-center">
+            <p className="text-slate-500 text-[10px] mb-2">Communauté</p>
+            <p className="text-5xl font-black">{globalStats.totalPlayers}</p>
+            <p className="text-emerald-500 text-[10px] mt-2 tracking-widest">Utilisateurs Enregistrés</p>
+        </div>
+      </div>
+
+      {/* GRILLE DES JEUX */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <GameCard id="mines" title="Mines" stats={games.mines} icon={Target} color="text-rose-500" />
+        <GameCard id="crash" title="Crash" stats={games.crash} icon={Zap} color="text-emerald-400" />
+        <GameCard id="biometric" title="Biometric" stats={games.biometric} icon={Dna} color="text-blue-400" />
+        <GameCard id="vault" title="Vault" stats={games.vault} icon={Lock} color="text-amber-500" />
+        <GameCard id="quiz" title="Quiz" stats={games.quiz} icon={Brain} color="text-purple-400" />
+        <GameCard id="plinko" title="Plinko" stats={games.plinko} icon={Layers} color="text-orange-500" />
+        <GameCard id="glass" title="Glass" stats={games.glass} icon={Box} color="text-cyan-400" />
+        <GameCard id="elevator" title="Elevator" stats={games.elevator} icon={TrendingUp} color="text-indigo-400" />
+      </div>
+
+      {/* MAINTENANCE GLOBALE */}
+      <div className="mt-12 bg-rose-500/5 border border-rose-500/20 p-10 rounded-[3rem] flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-rose-500/20">
+            <ShieldAlert size={32} />
+          </div>
+          <div>
+            <h3 className="text-xl">Protocole d'urgence</h3>
+            <p className="text-[10px] text-rose-500 font-bold opacity-70 uppercase">Coupure de sécurité immédiate</p>
+          </div>
+        </div>
+        <p className="text-[9px] text-slate-500 max-w-md italic">
+          Cette interface pilote directement la disponibilité des mini-jeux pour les clients. 
+          Lorsqu'un jeu est "Coupé", il devient inaccessible en temps réel.
+        </p>
       </div>
     </div>
   );
