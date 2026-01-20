@@ -3,9 +3,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, Info, X } from 'lucide-react';
+import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, Info, X, TriangleAlert, ServerOff } from 'lucide-react';
 
-// --- SYSTÈME AUDIO OPTIMISÉ ---
+// --- SYSTÈME AUDIO OPTIMISÉ (INCHANGÉ) ---
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost' | 'speedup') => {
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
   const osc = ctx.createOscillator();
@@ -45,6 +45,12 @@ const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }
 
 export default function LaserVault() {
   const router = useRouter();
+  
+  // --- ÉTATS SYSTÈME ---
+  const [maintenance, setMaintenance] = useState<{ active: boolean; msg: string } | null>(null);
+  const [loadingCheck, setLoadingCheck] = useState(true);
+
+  // --- ÉTATS DU JEU ---
   const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won'>('idle');
   const [showTutorial, setShowTutorial] = useState(false);
   const [bet, setBet] = useState(50);
@@ -57,16 +63,49 @@ export default function LaserVault() {
   
   // LOGIQUE DE DIFFICULTÉ
   const [questionsSolved, setQuestionsSolved] = useState(0);
-  const [baseSpeed, setBaseSpeed] = useState(4); // Vitesse qui augmente toutes les 2 questions
-  const [errorPenalty, setErrorPenalty] = useState(1.0); // Multiplicateur de vitesse en cas d'erreur
+  const [baseSpeed, setBaseSpeed] = useState(4);
+  const [errorPenalty, setErrorPenalty] = useState(1.0);
   
   const lastTickRef = useRef<number>(0);
 
-  // Vérifier si le tutoriel doit être affiché au montage
+  // --- 1. VÉRIFICATION MAINTENANCE (PRIORITAIRE) ---
   useEffect(() => {
-    const hasSeenTutorial = localStorage.getItem('hasSeenLaserTutorial');
-    if (!hasSeenTutorial) setShowTutorial(true);
+    const checkAccess = async () => {
+      try {
+        // On vérifie le statut du jeu 'vault' dans la table game_settings
+        const { data, error } = await supabase
+          .from('game_settings')
+          .select('is_active, maintenance_msg')
+          .eq('game_id', 'vault') // Correspond à l'ID inséré dans votre SQL
+          .single();
+
+        if (error) {
+            console.error('Erreur vérification maintenance:', error);
+            // En cas d'erreur technique, on laisse passer par défaut ou on bloque selon la politique de sécurité
+            setLoadingCheck(false);
+            return;
+        }
+
+        if (data && !data.is_active) {
+          setMaintenance({ active: true, msg: data.maintenance_msg || "Système en maintenance." });
+        }
+      } catch (err) {
+        console.error("Erreur critique:", err);
+      } finally {
+        setLoadingCheck(false);
+      }
+    };
+
+    checkAccess();
   }, []);
+
+  // --- 2. VÉRIFICATION TUTORIEL (APRÈS MAINTENANCE) ---
+  useEffect(() => {
+    if (!loadingCheck && !maintenance?.active) {
+      const hasSeenTutorial = localStorage.getItem('hasSeenLaserTutorial');
+      if (!hasSeenTutorial) setShowTutorial(true);
+    }
+  }, [loadingCheck, maintenance]);
 
   const generateProblem = useCallback((m: number) => {
     const difficultyLevel = Math.floor(m * 2);
@@ -104,12 +143,10 @@ export default function LaserVault() {
       const now = performance.now();
       const delta = now - lastTickRef.current;
       
-      // ANTI-CHEAT : Sanction si l'onglet est gelé
       if (delta > 350) setLaserY(prev => prev + 5);
 
       setLaserY(prev => {
         if (prev >= 85) { setStatus('lost'); playSound('lost'); return 85; }
-        // Vitesse = Base (qui augmente) * Pénalité Erreur * Scaling Multiplicateur
         return prev + (baseSpeed * errorPenalty * (1 + (multiplier - 1) * 0.15));
       });
       lastTickRef.current = now;
@@ -122,7 +159,6 @@ export default function LaserVault() {
     const newVal = input + num;
     setInput(newVal);
     
-    // CAS DU NOMBRE NÉGATIF : On ne valide que si le reste suit
     if (newVal === "-") return;
 
     if (parseInt(newVal) === problem.a) {
@@ -132,7 +168,6 @@ export default function LaserVault() {
       setLaserY(0);
       setInput("");
 
-      // TOUTES LES 2 QUESTIONS : Augmentation de la vitesse de base
       if (nextSolvedCount % 2 === 0) {
         setBaseSpeed(prev => prev + 0.3);
         playSound('speedup');
@@ -140,7 +175,6 @@ export default function LaserVault() {
 
       generateProblem(multiplier + 0.1);
     } else if (newVal.length >= problem.a.toString().length) {
-      // ERREUR : Le laser descend plus vite définitivement (+25% de vitesse)
       setErrorPenalty(p => p + 0.4);
       setInput("");
       playSound('error');
@@ -159,6 +193,51 @@ export default function LaserVault() {
     playSound('win');
   };
 
+  // --- RENDU : LOADING INITIAL ---
+  if (loadingCheck) {
+    return (
+      <div className="h-screen bg-[#050508] text-white flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" size={40} />
+      </div>
+    );
+  }
+
+  // --- RENDU : ÉCRAN DE MAINTENANCE (BLOCAGE TOTAL) ---
+  if (maintenance?.active) {
+    return (
+      <div className="h-screen bg-[#050508] text-white font-black italic uppercase overflow-hidden flex flex-col p-6">
+        <button onClick={() => router.back()} className="self-start p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all mb-10">
+          <ChevronLeft size={24}/>
+        </button>
+        
+        <div className="flex-1 flex flex-col items-center justify-center text-center animate-in zoom-in duration-500">
+          <div className="w-32 h-32 bg-rose-500/10 rounded-[3rem] border border-rose-500/20 flex items-center justify-center mb-8 relative">
+            <div className="absolute inset-0 bg-rose-500/20 blur-xl rounded-full animate-pulse"></div>
+            <ServerOff className="text-rose-500 relative z-10" size={64} />
+          </div>
+          
+          <h1 className="text-4xl md:text-5xl font-black tracking-tighter mb-4 text-rose-500">
+            ACCÈS REFUSÉ
+          </h1>
+          
+          <div className="bg-rose-900/10 border border-rose-500/20 p-6 rounded-2xl max-w-md w-full backdrop-blur-sm">
+            <div className="flex items-center justify-center gap-3 mb-2 text-rose-400">
+              <TriangleAlert size={20} />
+              <span className="text-sm font-bold tracking-widest">RAPPORT SYSTÈME</span>
+            </div>
+            <p className="text-lg text-white font-bold">{maintenance.msg}</p>
+            <p className="text-[10px] text-rose-500/50 mt-4 tracking-[0.2em] font-black">CODE: MAINTENANCE_MODE_V1</p>
+          </div>
+        </div>
+        
+        <div className="text-center text-[10px] text-zinc-600 font-bold tracking-[0.5em] pb-4">
+          CHIF-PAM SECURITY SYSTEMS
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDU : JEU NORMAL ---
   return (
     <div className="h-screen bg-[#050508] text-white font-black italic uppercase overflow-hidden select-none flex flex-col">
       {/* HEADER */}
@@ -239,7 +318,7 @@ export default function LaserVault() {
 
       {/* TUTORIEL MODAL */}
       <AnimatePresence>
-        {showTutorial && (
+        {showTutorial && !maintenance?.active && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-6 backdrop-blur-sm">
             <div className="bg-zinc-900 border-2 border-emerald-500/50 p-8 rounded-[3rem] max-w-xs relative shadow-[0_0_50px_rgba(16,185,129,0.2)]">
               <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
