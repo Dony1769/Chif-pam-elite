@@ -8,10 +8,10 @@ import {
   MessagesSquare, Home, Zap, Target, 
   Gamepad2, History, User as UserIcon, Lock, Trophy,
   Users, Activity, ChevronRight, Brain, Fingerprint,
-  Layers, Disc
+  Layers, Disc, Menu, X, Crown, ShieldCheck, Gift
 } from 'lucide-react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const LogoSmall = () => (
   <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -25,6 +25,8 @@ export default function ClientHome() {
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [topWinners, setTopWinners] = useState<any[]>([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // État pour le menu latéral
+  
   const router = useRouter();
   const pathname = usePathname();
 
@@ -51,11 +53,8 @@ export default function ClientHome() {
   };
 
   const fetchWeeklyTopWinners = async () => {
-    // 1. Récupérer les vrais gros gains de la semaine depuis la table transactions
-    // On suppose que type='gain' ou 'win' et que le montant est positif
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
     const { data: realWins } = await supabase
       .from('transactions')
       .select('profiles(username), amount')
@@ -69,31 +68,62 @@ export default function ClientHome() {
       amount: w.amount
     }));
 
-    // 2. Création de 2 gagnants fictifs "dynamiques" (basés sur le numéro de la semaine)
     const weekNumber = Math.ceil(new Date().getDate() / 7);
     const fictionalWinners = [
       { username: `Elite_Player${weekNumber}`, amount: 15250 + (weekNumber * 100) },
       { username: `Boss_Haiti`, amount: 12400 - (weekNumber * 50) }
     ];
 
-    // 3. Fusionner, trier par montant et garder le Top 5
-    const combined = [...formattedRealWins, ...fictionalWinners]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
-
+    const combined = [...formattedRealWins, ...fictionalWinners].sort((a, b) => b.amount - a.amount).slice(0, 5);
     setTopWinners(combined);
   };
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Activity className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32">
+    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
+      
+      {/* MENU LATÉRAL (DRAWER) */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+            />
+            <motion.div 
+              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 20 }}
+              className="fixed top-0 left-0 h-full w-[80%] bg-slate-950 z-[70] border-r border-white/5 p-6 shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-10">
+                <LogoSmall />
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
+              </div>
+
+              <div className="space-y-2">
+                <MenuLink href="/client/vip" icon={<Crown className="text-amber-500"/>} label="Abonnement VIP" />
+                <MenuLink href="/client/challenges" icon={<ShieldCheck className="text-emerald-500"/>} label="Mes Défis" />
+                <MenuLink href="/client/referral" icon={<Gift className="text-rose-500"/>} label="Parrainage" />
+                <MenuLink href="/client/rank" icon={<Trophy className="text-blue-500"/>} label="Classement Global" />
+                <div className="pt-10 border-t border-white/5 mt-10">
+                    <button onClick={() => supabase.auth.signOut().then(() => router.push('/'))} className="text-slate-500 text-[10px] tracking-widest">Se Déconnecter</button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       <div className="p-6 space-y-8">
         
         {/* HEADER */}
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <LogoSmall />
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsMenuOpen(true)} className="p-2 bg-white/5 rounded-xl border border-white/5 active:scale-90 transition-all">
+                <Menu size={24} className="text-emerald-500" />
+            </button>
             <h1 className="text-lg tracking-tighter">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
           <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5">
@@ -104,10 +134,15 @@ export default function ClientHome() {
 
         {/* SOLDE CARD */}
         <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl">
-          <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 uppercase">Solde Disponible</p>
-          <h2 className="text-5xl tracking-tighter">
-            {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70 font-black tracking-normal italic">HTG</span>
-          </h2>
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 uppercase">Solde Disponible</p>
+              <h2 className="text-5xl tracking-tighter">
+                {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70 font-black tracking-normal italic">HTG</span>
+              </h2>
+            </div>
+            {profile?.is_vip && <Crown className="text-amber-500 animate-bounce" size={24} />}
+          </div>
           <TrendingUp size={80} className="absolute -right-4 -bottom-4 opacity-10 text-emerald-500" />
         </div>
 
@@ -121,38 +156,13 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* TOP GAGNANTS DE LA SEMAINE */}
+        {/* LE RESTE RESTE IDENTIQUE MAIS AVEC LE NOM "DÉFIS" */}
         <div className="space-y-4">
-          <div className="flex items-center gap-2 px-2">
-            <Trophy size={16} className="text-amber-500"/>
-            <h3 className="text-[10px] text-slate-500 tracking-widest font-black uppercase">Top Gains de la Semaine</h3>
-          </div>
-          <div className="bg-slate-900/30 border border-white/5 rounded-4xl divide-y divide-white/5 overflow-hidden">
-            {topWinners.map((winner, idx) => (
-              <div key={idx} className="flex items-center justify-between p-4 bg-white/2">
-                <div className="flex items-center gap-3">
-                  <span className={`text-[10px] font-black ${idx === 0 ? 'text-amber-500' : 'text-slate-500'}`}>#0{idx + 1}</span>
-                  <p className="text-[11px] font-black tracking-tighter">@{winner.username}</p>
-                </div>
-                <p className="text-xs text-emerald-500">+{winner.amount.toLocaleString()} HTG</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* JEUX POPULAIRES */}
-        <div className="space-y-4">
-          <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black uppercase">Jeux Populaires</h3>
+          <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black uppercase">Défis à la une</h3>
           <div className="grid grid-cols-1 gap-3">
-            
-            <GameRow href="/client/crash" icon={<Zap className="text-amber-500"/>} title="CROISSANCE" desc="Anticipez la courbe" players="1,248" />
-            <GameRow href="/client/squidglass" icon={<Layers className="text-rose-500"/>} title="SQUID GLASS" desc="Le pont de la survie" players="942" />
-            <GameRow href="/client/plinko" icon={<Disc className="text-indigo-400"/>} title="PLINKO ELITE" desc="Multiplicateurs en cascade" players="1,105" />
-            <GameRow href="/client/mines" icon={<Target className="text-rose-500"/>} title="MINES" desc="Gestion du risque" players="856" />
-            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Agilité Visuelle" players="652" />
-            <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Connaissances" players="3,012" />
-            <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision" players="2,094" />
-
+            <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
+            <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
+            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
           </div>
         </div>
 
@@ -170,7 +180,17 @@ export default function ClientHome() {
   );
 }
 
-// COMPOSANT LIGNE DE JEU
+// Sous-composant pour les liens du menu latéral
+function MenuLink({ href, icon, label }: any) {
+    return (
+        <Link href={href} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
+            {icon}
+            <span className="text-xs font-black tracking-widest uppercase">{label}</span>
+            <ChevronRight size={14} className="ml-auto text-slate-700" />
+        </Link>
+    )
+}
+
 function GameRow({ href, icon, title, desc, players }: any) {
   return (
     <Link href={href} className="bg-slate-900 border border-white/5 p-4 rounded-2xl flex items-center justify-between active:scale-[0.98] transition-all">
