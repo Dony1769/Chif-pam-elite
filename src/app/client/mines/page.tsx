@@ -54,7 +54,7 @@ export default function MinesElite() {
 
   const getMultiplier = () => {
     if (revealed.length === 0) return 1.0;
-    const steps = { facile: 0.2, intermédiaire: 0.3, difficile: 0.5 };
+    const steps = { facile: 0.1, intermédiaire: 0.3, difficile: 0.5 };
     return parseFloat((1.0 + (revealed.length * steps[difficulty])).toFixed(2));
   };
 
