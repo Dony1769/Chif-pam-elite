@@ -252,14 +252,14 @@ export default function LaserVault() {
               {/* MODIFICATION ICI : Bouton désactivé si questionsSolved < 1 */}
               <button 
                 onClick={cashout} 
-                disabled={questionsSolved < 1}
+                disabled={questionsSolved < 2}
                 className={`w-full py-5 font-black rounded-2xl text-xl shadow-xl active:scale-95 border-b-4 mt-1 transition-all ${
-                  questionsSolved < 1 
+                  questionsSolved < 2 
                   ? "bg-zinc-800 text-zinc-500 border-zinc-900 cursor-not-allowed opacity-50" 
                   : "bg-emerald-600 text-black border-emerald-900"
                 }`}
               >
-                {questionsSolved < 1 ? "RÉSOUDRE 1 CALCUL..." : `ENCAISSER ${(bet * multiplier).toFixed(0)} HTG`}
+                {questionsSolved < 2 ? "RÉSOUDRE 1 CALCUL..." : `ENCAISSER ${(bet * multiplier).toFixed(0)} HTG`}
               </button>
             </div>
           </div>
