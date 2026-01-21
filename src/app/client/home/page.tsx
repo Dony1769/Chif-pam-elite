@@ -132,19 +132,56 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* SOLDE CARD */}
-        <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-white/10 relative overflow-hidden shadow-2xl">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 uppercase">Solde Disponible</p>
-              <h2 className="text-5xl tracking-tighter">
-                {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70 font-black tracking-normal italic">HTG</span>
-              </h2>
-            </div>
-            {profile?.is_vip && <Crown className="text-amber-500 animate-bounce" size={24} />}
-          </div>
-          <TrendingUp size={80} className="absolute -right-4 -bottom-4 opacity-10 text-emerald-500" />
+ {/* SOLDE CARD */}
+<div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-500 ${
+  profile?.vip_status !== 'free' 
+  ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/10' 
+  : 'bg-slate-900 border-white/10'
+}`}>
+  
+  {/* Effet de brillance animé pour les VIP */}
+  {profile?.vip_status !== 'free' && (
+    <motion.div 
+      initial={{ x: '-100%' }}
+      animate={{ x: '200%' }}
+      transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12"
+    />
+  )}
+
+  <div className="relative z-10 flex justify-between items-start">
+    <div>
+      <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 uppercase">Solde Disponible</p>
+      <h2 className="text-5xl tracking-tighter">
+        {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70 font-black tracking-normal italic">HTG</span>
+      </h2>
+      
+      {/* Badge de statut sous le solde */}
+      {profile?.vip_status !== 'free' && (
+        <div className="flex items-center gap-1 mt-2">
+          <Sparkles size={10} className="text-amber-500" />
+          <span className="text-[8px] text-amber-500 tracking-[0.2em] font-black">
+            MEMBRE ELITE {profile?.vip_status}
+          </span>
         </div>
+      )}
+    </div>
+
+    {/* Icône Crown Dynamique */}
+    {profile?.vip_status !== 'free' && (
+      <motion.div 
+        animate={{ y: [0, -5, 0] }}
+        transition={{ repeat: Infinity, duration: 2 }}
+        className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+      >
+        <Crown className="text-amber-500" size={24} />
+      </motion.div>
+    )}
+  </div>
+  
+  <TrendingUp size={80} className={`absolute -right-4 -bottom-4 opacity-10 ${profile?.vip_status !== 'free' ? 'text-amber-500' : 'text-emerald-500'}`} />
+</div>
+
 
         {/* ACTIONS RAPIDES */}
         <div className="grid grid-cols-2 gap-4">
