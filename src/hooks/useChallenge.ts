@@ -56,4 +56,3 @@ export const useChallenge = () => {
 
   return { startChallengeEntry, submitChallengeScore };
 };
-
