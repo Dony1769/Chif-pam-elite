@@ -1,8 +1,9 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useChallenge } from '@/hooks/useChallenge';
 
 const SETTINGS = {
   facile: { time: 10, step: 0.15 },
@@ -21,8 +22,13 @@ const CATEGORIES = [
   { id: 22, name: "Géo", icon: <MapPin size={18}/> },
 ];
 
-export default function QuizElite() {
+function QuizGameContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const challengeId = searchParams.get('challengeId');
+  const { startChallengeEntry, submitChallengeScore } = useChallenge();
+
+  const [profile, setProfile] = useState<any>(null);
   const [bet, setBet] = useState(10);
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [category, setCategory] = useState(9);
@@ -41,67 +47,61 @@ export default function QuizElite() {
   
   const timerRef = useRef<any>(null);
 
-  // --- VÉRIFICATION DE MAINTENANCE AU CHARGEMENT ---
   useEffect(() => {
-    checkMaintenance();
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        setProfile(prof);
+      }
+      checkMaintenance();
+    };
+    init();
   }, []);
 
   const checkMaintenance = async () => {
     try {
-      const { data, error } = await supabase
-        .from('game_settings')
-        .select('is_active, maintenance_msg')
-        .eq('game_id', 'quiz')
-        .single();
-
+      const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'quiz').single();
       if (data && !data.is_active) {
         setMaintenanceMsg(data.maintenance_msg);
         setStatus('maintenance');
       } else {
         setStatus('idle');
       }
-    } catch (e) {
-      setStatus('idle');
-    }
+    } catch (e) { setStatus('idle'); }
   };
 
   const translate = async (text: string) => {
     try {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fr&dt=t&q=${encodeURIComponent(text)}`, { signal: controller.signal });
-      clearTimeout(id);
+      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fr&dt=t&q=${encodeURIComponent(text)}`);
       const data = await res.json();
       return data[0][0][0];
     } catch { return text; }
   };
 
   const start = async () => {
-    if (bet < 10 || isProcessing) return;
-    
-    // Vérification de sécurité avant de débiter
-    const { data: check } = await supabase.from('game_settings').select('is_active').eq('game_id', 'quiz').single();
-    if (check && !check.is_active) {
-      setStatus('maintenance');
-      return;
-    }
-
+    if (isProcessing) return;
     setIsProcessing(true);
     setStatus('loading');
-    setQuestions([]);
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setShowCorrection(false);
-    setMultiplier(1.0);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/connexion');
+      if (challengeId) {
+        const { data: chall } = await supabase.from('challenges').select('entry_fee').eq('id', challengeId).single();
+        if (!chall) throw new Error("Défi introuvable");
+        
+        let finalFee = chall.entry_fee;
+        if (profile?.vip_status === 'monthly') finalFee *= 0.75;
+        else if (profile?.vip_status === 'weekly') finalFee *= 0.90;
+
+        const { error } = await startChallengeEntry(challengeId, profile.id, finalFee);
+        if (error) throw new Error(error);
+      } else {
+        const { data: paid, error: betError } = await supabase.rpc('process_bet', { amount: bet });
+        if (betError || !paid) throw new Error("Solde insuffisant.");
+      }
 
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
-      if (!raw.results || raw.results.length === 0) throw new Error("API Offline");
-
       const processed = await Promise.all(raw.results.map(async (q: any) => {
         const dQ = decodeURIComponent(q.question);
         const dC = decodeURIComponent(q.correct_answer);
@@ -110,35 +110,22 @@ export default function QuizElite() {
         return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
       }));
 
-      const { data: paid, error: betError } = await supabase.rpc('process_bet', { amount: bet });
-      if (betError || !paid) { 
-        alert("Solde insuffisant."); 
-        setStatus('idle');
-        setIsProcessing(false);
-        return; 
+      if (!challengeId) {
+        const { data: game } = await supabase.from('quiz_games').insert([{
+          user_id: profile.id, bet_amount: bet, difficulty, questions_data: processed, is_active: true
+        }]).select().single();
+        setGameId(game.id);
       }
 
-      const { data: game, error: insErr } = await supabase.from('quiz_games').insert([{
-        user_id: user.id,
-        bet_amount: bet,
-        difficulty,
-        questions_data: processed,
-        is_active: true
-      }]).select().single();
-
-      if (insErr) throw insErr;
-
-      setGameId(game.id);
       setQuestions(processed);
+      setCurrentIndex(0);
+      setMultiplier(1.0);
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
-
-    } catch (e) {
-      alert("Erreur de connexion. Réessayez.");
+    } catch (e: any) {
+      alert(e.message);
       setStatus('idle');
-    } finally {
-      setIsProcessing(false);
-    }
+    } finally { setIsProcessing(false); }
   };
 
   useEffect(() => {
@@ -151,27 +138,21 @@ export default function QuizElite() {
   }, [timeLeft, status, showCorrection]);
 
   const handleAnswer = (ans: string | null) => {
-    if (showCorrection || status !== 'playing' || isProcessing) return;
-    
+    if (showCorrection || status !== 'playing') return;
     clearInterval(timerRef.current);
     setSelectedAnswer(ans);
     setShowCorrection(true);
 
-    const currentQ = questions[currentIndex];
-    const isCorrect = ans === currentQ.correct;
-
-    if (isCorrect) {
+    if (ans === questions[currentIndex].correct) {
       const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
       setMultiplier(nextM);
       setTimeout(() => {
         if (currentIndex < 4) {
-          setCurrentIndex(prev => prev + 1);
+          setCurrentIndex(p => p + 1);
           setSelectedAnswer(null);
           setShowCorrection(false);
           setTimeLeft(SETTINGS[difficulty].time);
-        } else { 
-          cashout(nextM); 
-        }
+        } else { cashout(nextM); }
       }, 1500);
     } else {
       if (gameId) supabase.from('quiz_games').update({ is_active: false }).eq('id', gameId);
@@ -180,97 +161,67 @@ export default function QuizElite() {
   };
 
   const cashout = async (finalM: number) => {
-    if (!gameId || isProcessing) return;
     setIsProcessing(true);
     try {
-      const { data, error } = await supabase.rpc('claim_quiz_win', { 
-        p_game_id: gameId, 
-        p_final_multiplier: finalM 
-      });
-      if (error) throw error;
-      setStatus('ended');
-    } catch (e) {
-      alert("Erreur lors de l'encaissement.");
-    } finally {
-      setIsProcessing(false);
-    }
+      if (challengeId) {
+        await submitChallengeScore(challengeId, profile.id, (currentIndex + 1) * 10);
+        setStatus('ended');
+      } else {
+        await supabase.rpc('claim_quiz_win', { p_game_id: gameId, p_final_multiplier: finalM });
+        setStatus('ended');
+      }
+    } catch (e) { alert("Erreur."); } finally { setIsProcessing(false); }
   };
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black uppercase flex flex-col items-center select-none font-sans">
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => (status === 'playing' || status === 'maintenance') ? router.push('/client/home') : router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10">
-          <ChevronLeft/>
-        </button>
-        <h1 className="text-2xl text-emerald-500 italic">QUIZ ELITE</h1>
+        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ChevronLeft/></button>
+        <h1 className="text-2xl text-emerald-500 italic tracking-tighter">{challengeId ? "DÉFI QUIZ" : "QUIZ ELITE"}</h1>
         <div className="w-10"/>
       </div>
 
       <div className="w-full max-w-md space-y-4">
         {status === 'maintenance' ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in zoom-in duration-500">
-            <div className="w-24 h-24 bg-amber-500/10 rounded-full flex items-center justify-center border border-amber-500/20">
-              <Construction size={50} className="text-amber-500" />
-            </div>
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-black text-amber-500 tracking-tighter">SYSTÈME EN PAUSE</h2>
-              <p className="text-slate-400 text-xs italic lowercase font-bold px-10 leading-relaxed">
-                {maintenanceMsg}
-              </p>
-            </div>
-            <button onClick={() => router.push('/client/home')} className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] tracking-widest hover:bg-white/10 transition-all">
-              RETOUR AU MENU
-            </button>
+          <div className="flex flex-col items-center justify-center py-20 space-y-6">
+            <Construction size={50} className="text-amber-500" />
+            <h2 className="text-3xl text-amber-500">MAINTENANCE</h2>
+            <p className="text-slate-400 text-xs text-center">{maintenanceMsg}</p>
           </div>
         ) : status === 'idle' || status === 'loading' ? (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            {status === 'loading' && questions.length === 0 ? (
+          <div className="space-y-6">
+            {status === 'loading' ? (
                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-emerald-500" size={40}/></div>
             ) : (
               <>
                 <div className="grid grid-cols-4 gap-2">
                   {CATEGORIES.map(c => (
-                    <button key={c.id} onClick={() => setCategory(c.id)} className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${category === c.id ? 'bg-emerald-500 text-black border-emerald-500 shadow-lg' : 'bg-white/5 border-white/5 text-slate-400'}`}>
-                      {c.icon} <span className="text-[7px] font-bold">{c.name}</span>
+                    <button key={c.id} onClick={() => setCategory(c.id)} className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${category === c.id ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 border-white/5 text-slate-400'}`}>
+                      {c.icon} <span className="text-[7px]">{c.name}</span>
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
-                  {(['facile', 'intermédiaire', 'difficile'] as const).map(m => (
-                    <button key={m} onClick={() => setDifficulty(m)} className={`flex-1 py-3 rounded-xl text-[10px] transition-all ${difficulty === m ? 'bg-white text-black' : 'text-slate-500'}`}>
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-2xl">
-                  <div className="bg-black/40 p-5 rounded-2xl border border-white/10 flex justify-between items-center">
-                    <span className="text-emerald-500 text-xs">MISE (HTG)</span>
-                    <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-right outline-none w-24 text-2xl font-black"/>
+                {!challengeId && (
+                  <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4">
+                    <div className="bg-black/40 p-5 rounded-2xl border border-white/10 flex justify-between">
+                      <span className="text-emerald-500 text-xs">MISE (HTG)</span>
+                      <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-right outline-none w-24 text-2xl font-black"/>
+                    </div>
                   </div>
-                  <button onClick={start} disabled={status === 'loading'} className="w-full py-6 bg-emerald-500 text-black rounded-3xl text-xl shadow-lg active:scale-95 transition-all flex justify-center">
-                    {status === 'loading' ? <Loader2 className="animate-spin"/> : "JOUER (5 QUESTIONS)"}
-                  </button>
-                </div>
+                )}
+                <button onClick={start} className={`w-full py-6 rounded-3xl text-xl shadow-lg ${challengeId ? 'bg-amber-500' : 'bg-emerald-500'} text-black`}>
+                  {challengeId ? "LANCER LE DÉFI" : "JOUER (5 QUESTIONS)"}
+                </button>
               </>
             )}
           </div>
         ) : status === 'playing' ? (
           <div className="space-y-5 animate-in zoom-in duration-300">
-            <div className="flex justify-between gap-3 text-center">
-              <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <p className="text-[8px] text-slate-500 mb-1">COTE</p>
-                <p className="text-emerald-500 text-xl font-black">{multiplier.toFixed(2)}x</p>
-              </div>
-              <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <p className="text-[8px] text-slate-500 mb-1">POTENTIEL</p>
-                <p className="text-amber-500 text-xl font-black">{(bet * multiplier).toFixed(0)}</p>
-              </div>
-            </div>
             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
               <div className={`h-full transition-all duration-100 ease-linear ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
             <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex flex-col items-center justify-center shadow-2xl">
-              <span className="text-[9px] text-slate-400 mb-3 font-bold tracking-widest">QUESTION {currentIndex + 1} / 5</span>
+              <span className="text-[9px] text-slate-400 mb-3 tracking-widest">QUESTION {currentIndex + 1} / 5</span>
               <p className="text-lg leading-tight font-black">{questions[currentIndex]?.question}</p>
             </div>
             <div className="grid gap-3">
@@ -279,8 +230,8 @@ export default function QuizElite() {
                 const isSelected = a === selectedAnswer;
                 let style = "bg-white/5 border-white/10 text-white";
                 if (showCorrection) {
-                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] shadow-xl";
-                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-60";
+                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black";
+                  else if (isSelected) style = "bg-rose-500 border-rose-500 opacity-60";
                   else style = "opacity-20";
                 }
                 return (
@@ -290,26 +241,31 @@ export default function QuizElite() {
                 );
               })}
             </div>
-            {!showCorrection && multiplier > 1 && (
-              <button onClick={() => cashout(multiplier)} className="w-full py-4 bg-amber-500 text-black rounded-3xl font-black text-lg shadow-lg active:scale-95 transition-all">
-                SÉCURISER {(bet * multiplier).toFixed(0)} HTG
-              </button>
-            )}
           </div>
         ) : (
-          <div className="text-center py-12 space-y-6 animate-in zoom-in duration-500">
+          <div className="text-center py-12 space-y-6">
             <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center ${status === 'lost' ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`}>
                 {status === 'lost' ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
             </div>
-            <h2 className={`text-6xl font-black ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "GAGNÉ"}</h2>
+            <h2 className={`text-6xl font-black ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "BRAVO"}</h2>
             <div className="bg-white/5 p-8 rounded-[2rem] border border-white/5">
-                <p className="text-slate-500 text-[10px] mb-2 font-bold tracking-widest">RÉSULTAT</p>
-                <p className="text-5xl font-black text-white">{(status === 'lost' ? 0 : bet * multiplier).toFixed(0)} <span className="text-lg text-emerald-500">HTG</span></p>
+                <p className="text-5xl font-black text-white">{challengeId ? (status === 'lost' ? '0' : 'RANKED') : (status === 'lost' ? 0 : (bet * multiplier).toFixed(0))} <span className="text-lg text-emerald-500">HTG</span></p>
             </div>
-            <button onClick={() => setStatus('idle')} className="w-full py-6 bg-white text-black rounded-3xl font-black text-xl shadow-xl">REJOUER</button>
+            <button onClick={() => challengeId ? router.push('/client/challenges') : setStatus('idle')} className="w-full py-6 bg-white text-black rounded-3xl font-black text-xl">
+              {challengeId ? "VOIR CLASSEMENT" : "REJOUER"}
+            </button>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+export default function QuizElite() {
+  return (
+    <Suspense fallback={<div className="h-screen bg-[#050508] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
+      <QuizGameContent />
+    </Suspense>
+  );
+}
+
