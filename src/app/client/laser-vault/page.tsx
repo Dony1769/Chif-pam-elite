@@ -175,7 +175,7 @@ export default function LaserVault() {
 
       generateProblem(multiplier + 0.1);
     } else if (newVal.length >= problem.a.toString().length) {
-      setErrorPenalty(p => p + 0.4);
+      setErrorPenalty(p => p + 2);
       setInput("");
       playSound('error');
     }
