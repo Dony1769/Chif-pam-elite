@@ -76,14 +76,17 @@ export default function PlinkoElite() {
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('play_plinko', {
-        p_bet_amount: bet,
+        p_bet_amount: Number(bet),
         p_rows: ROWS,
         p_risk: 'high'
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Détail Erreur Supabase:", error);
+        alert(`Erreur: ${error.message}`);
+        return;
+      }
 
-      // Mise à jour visuelle immédiate du solde (Mise retirée)
       setBalance(prev => prev - bet);
 
       const cvs = canvasRef.current;
@@ -103,7 +106,8 @@ export default function PlinkoElite() {
       ballsRef.current.push(newBall);
 
     } catch (e: any) {
-      alert(e.message || "Erreur de connexion");
+      console.error("Erreur Catch:", e);
+      alert("Une erreur inattendue est survenue.");
       fetchBalance(); 
     } finally {
       setLoading(false);
@@ -120,13 +124,17 @@ export default function PlinkoElite() {
       if (ball.progress >= 1) {
         ball.currentRow++;
         ball.progress = 0;
-        if (popSound.current) { const s = popSound.current.cloneNode() as HTMLAudioElement; s.volume = 0.1; s.play().catch(() => {}); }
+        if (popSound.current) { 
+            const s = popSound.current.cloneNode() as HTMLAudioElement; 
+            s.volume = 0.1; 
+            s.play().catch(() => {}); 
+        }
 
         if (ball.currentRow >= ROWS) {
           ballsRef.current.splice(index, 1);
           setHistory(prev => [ball.multiplier, ...prev].slice(0, 8));
           if (ball.value > 0) {
-            setBalance(prev => prev + ball.value); // On rajoute le gain à la fin de l'animation
+            setBalance(prev => prev + ball.value);
             if (ball.multiplier >= 2 && winSound.current) winSound.current.play().catch(() => {});
           }
           return;
@@ -184,11 +192,11 @@ export default function PlinkoElite() {
     <div className="min-h-screen bg-[#0a0f1a] text-white flex flex-col font-black uppercase italic overflow-hidden relative">
       {isMaintenance && (
         <div className="absolute inset-0 z-[100] backdrop-blur-md bg-black/80 flex items-center justify-center p-6 text-center">
-            <div className="max-w-md p-8 bg-[#151c2c] border-2 border-amber-500/50 rounded-[2.5rem]">
+            <div className="max-w-md p-8 bg-[#151c2c] border-2 border-amber-500/50 rounded-[2.5rem] shadow-[0_0_50px_rgba(245,158,11,0.2)]">
                 <AlertTriangle size={40} className="text-amber-500 mx-auto mb-6 animate-pulse" />
-                <h2 className="text-2xl mb-2 text-amber-500">MAINTENANCE</h2>
-                <p className="text-sm text-slate-400 mb-8 lowercase">{maintenanceMsg || "Mise à jour en cours..."}</p>
-                <button onClick={() => router.push('/')} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl">RETOUR</button>
+                <h2 className="text-2xl mb-2 text-amber-500">INDISPONIBLE</h2>
+                <p className="text-sm text-slate-400 mb-8 lowercase">{maintenanceMsg || "Mise à jour technique en cours."}</p>
+                <button onClick={() => router.push('/')} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl">RETOUR AU SALON</button>
             </div>
         </div>
       )}
@@ -205,7 +213,7 @@ export default function PlinkoElite() {
       <div className="flex flex-1 flex-col lg:flex-row">
         <div className="lg:w-80 bg-[#151c2c] p-6 space-y-6 border-r border-white/5 shadow-2xl z-20">
           <div className="space-y-2">
-            <span className="text-[10px] text-slate-400">MONTANT MISE</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-tighter">MONTANT MISE</span>
             <div className="flex bg-[#0a0f1a] rounded-xl border border-white/10 overflow-hidden">
               <input type="number" value={bet} onChange={(e) => setBet(Number(e.target.value))} className="bg-transparent w-full p-4 outline-none text-emerald-500 font-bold" />
               <button onClick={() => setBet(b => Math.max(10, Math.floor(b/2)))} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">/2</button>
@@ -216,7 +224,7 @@ export default function PlinkoElite() {
           <button 
             onClick={dropBall}
             disabled={loading || isMaintenance || bet > balance}
-            className={`w-full py-5 rounded-2xl shadow-xl active:scale-95 transition-all text-xl font-black flex items-center justify-center gap-2 ${loading || isMaintenance ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'}`}
+            className={`w-full py-5 rounded-2xl shadow-xl transition-all text-xl font-black flex items-center justify-center gap-3 ${loading || isMaintenance ? 'bg-slate-700 text-slate-500' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'}`}
           >
             {loading ? <Loader2 className="animate-spin" /> : isMaintenance ? 'PAUSE' : 'MISER'}
           </button>
@@ -237,12 +245,9 @@ export default function PlinkoElite() {
 
         <div className="flex-1 relative flex items-center justify-center bg-[#0a0f1a] p-4">
             <canvas ref={canvasRef} width={700} height={600} className="w-full max-w-[700px] h-auto pointer-events-none drop-shadow-2xl" />
-            <div className="absolute bottom-10 left-10 flex flex-col opacity-20 hidden md:flex">
-                <span className="text-2xl font-black italic">PLINKO</span>
-                <span className="text-[10px] tracking-widest">ELITE SYSTEM V1.0</span>
-            </div>
         </div>
       </div>
     </div>
   );
 }
+
