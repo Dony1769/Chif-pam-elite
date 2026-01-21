@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction } from 'lucide-react';
+import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, DollarSign } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useChallenge } from '@/hooks/useChallenge';
 
@@ -44,6 +44,7 @@ function QuizGameContent() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCorrectAnswer, setIsCorrectAnswer] = useState(false); // État pour afficher le bouton encaisser
   
   const timerRef = useRef<any>(null);
 
@@ -146,14 +147,17 @@ function QuizGameContent() {
     if (ans === questions[currentIndex].correct) {
       const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
       setMultiplier(nextM);
+      setIsCorrectAnswer(true); // Active l'affichage du bouton encaisser
+
       setTimeout(() => {
         if (currentIndex < 4) {
           setCurrentIndex(p => p + 1);
           setSelectedAnswer(null);
           setShowCorrection(false);
+          setIsCorrectAnswer(false);
           setTimeLeft(SETTINGS[difficulty].time);
         } else { cashout(nextM); }
-      }, 1500);
+      }, 2500); // Délai rallongé à 2.5s pour laisser le temps de cliquer sur "Encaisser"
     } else {
       if (gameId) supabase.from('quiz_games').update({ is_active: false }).eq('id', gameId);
       setTimeout(() => setStatus('lost'), 2000);
@@ -161,6 +165,7 @@ function QuizGameContent() {
   };
 
   const cashout = async (finalM: number) => {
+    if (isProcessing) return;
     setIsProcessing(true);
     try {
       if (challengeId) {
@@ -217,10 +222,14 @@ function QuizGameContent() {
           </div>
         ) : status === 'playing' ? (
           <div className="space-y-5 animate-in zoom-in duration-300">
+            <div className="flex justify-between items-center px-2">
+                <span className="text-emerald-500 text-xs italic">COTE: x{multiplier.toFixed(2)}</span>
+                <span className="text-white text-xs">GAIN: {(bet * multiplier).toFixed(0)} HTG</span>
+            </div>
             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
               <div className={`h-full transition-all duration-100 ease-linear ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
-            <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex flex-col items-center justify-center shadow-2xl">
+            <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex flex-col items-center justify-center shadow-2xl relative">
               <span className="text-[9px] text-slate-400 mb-3 tracking-widest">QUESTION {currentIndex + 1} / 5</span>
               <p className="text-lg leading-tight font-black">{questions[currentIndex]?.question}</p>
             </div>
@@ -241,6 +250,16 @@ function QuizGameContent() {
                 );
               })}
             </div>
+            
+            {/* BOUTON ENCAISSER STRICTEMENT AJOUTÉ ICI */}
+            {isCorrectAnswer && !challengeId && (
+                <button 
+                  onClick={() => cashout(multiplier)}
+                  className="w-full py-5 bg-amber-500 text-black rounded-2xl font-black text-lg flex items-center justify-center gap-2 animate-bounce shadow-[0_0_20px_rgba(245,158,11,0.4)]"
+                >
+                   <DollarSign size={20}/> ENCAISSER {(bet * multiplier).toFixed(0)} HTG
+                </button>
+            )}
           </div>
         ) : (
           <div className="text-center py-12 space-y-6">
