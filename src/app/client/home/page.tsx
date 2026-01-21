@@ -8,7 +8,7 @@ import {
   MessagesSquare, Home, Zap, Target, 
   Gamepad2, History, User as UserIcon, Lock, Trophy,
   Users, Activity, ChevronRight, Brain, Fingerprint,
-  Layers, Disc, Menu, X, Crown, ShieldCheck, Gift
+  Layers, Disc, Menu, X, Crown, ShieldCheck, Gift, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
