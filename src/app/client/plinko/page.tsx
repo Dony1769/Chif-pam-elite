@@ -1,10 +1,9 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, History as HistoryIcon, Trophy, Settings, AlertTriangle, Loader2 } from 'lucide-react';
+import { ChevronLeft, History as HistoryIcon, Trophy, AlertTriangle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// CONFIGURATION DU JEU
 const ROWS = 16;
 const PIN_RADIUS = 3;
 const BALL_RADIUS = 6;
@@ -16,9 +15,9 @@ const COLORS = {
   ball: '#ff0055',
   multipliers: (index: number) => {
     const dist = Math.abs(index - ROWS / 2);
-    if (dist > 6) return '#ef4444'; 
-    if (dist > 3) return '#f97316'; 
-    return '#f59e0b';               
+    if (dist > 6) return '#ef4444';
+    if (dist > 3) return '#f97316';
+    return '#f59e0b';
   }
 };
 
@@ -40,7 +39,6 @@ export default function PlinkoElite() {
   const [balance, setBalance] = useState(0);
   const [history, setHistory] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
-  
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintenanceMsg, setMaintenanceMsg] = useState('');
 
@@ -54,27 +52,14 @@ export default function PlinkoElite() {
     fetchBalance();
     popSound.current = new Audio('/sounds/pop.mp3');
     winSound.current = new Audio('/sounds/win.mp3');
-
-    const animate = () => {
-      draw();
-      updateBalls();
-      requestRef.current = requestAnimationFrame(animate);
-    };
+    const animate = () => { draw(); updateBalls(); requestRef.current = requestAnimationFrame(animate); };
     requestRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
+    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, []);
 
   const checkMaintenance = async () => {
-    try {
-      const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'plinko').single();
-      if (data && !data.is_active) {
-          setIsMaintenance(true);
-          setMaintenanceMsg(data.maintenance_msg);
-      }
-    } catch (e) { console.error(e); }
+    const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'plinko').single();
+    if (data && !data.is_active) { setIsMaintenance(true); setMaintenanceMsg(data.maintenance_msg); }
   };
 
   const fetchBalance = async () => {
@@ -85,11 +70,10 @@ export default function PlinkoElite() {
     }
   };
 
-  // --- FONCTION DROPBALL OPTIMISÉE (VOTRE MISE À JOUR) ---
   const dropBall = async () => {
     if (bet > balance || loading || isMaintenance) return;
     
-    setLoading(true); // Bloque le bouton
+    setLoading(true);
     try {
       const { data, error } = await supabase.rpc('play_plinko', {
         p_bet_amount: bet,
@@ -99,7 +83,7 @@ export default function PlinkoElite() {
 
       if (error) throw error;
 
-      // Déduction immédiate visuelle
+      // Mise à jour visuelle immédiate du solde (Mise retirée)
       setBalance(prev => prev - bet);
 
       const cvs = canvasRef.current;
@@ -118,11 +102,11 @@ export default function PlinkoElite() {
 
       ballsRef.current.push(newBall);
 
-    } catch (e) {
-      console.error("Erreur de mise:", e);
-      fetchBalance(); // En cas d'erreur, on resynchronise le solde réel
+    } catch (e: any) {
+      alert(e.message || "Erreur de connexion");
+      fetchBalance(); 
     } finally {
-      setLoading(false); // Libère le bouton pour la prochaine bille
+      setLoading(false);
     }
   };
 
@@ -136,21 +120,14 @@ export default function PlinkoElite() {
       if (ball.progress >= 1) {
         ball.currentRow++;
         ball.progress = 0;
-        
-        if (popSound.current) {
-          const s = popSound.current.cloneNode() as HTMLAudioElement;
-          s.volume = 0.1;
-          s.play().catch(() => {});
-        }
+        if (popSound.current) { const s = popSound.current.cloneNode() as HTMLAudioElement; s.volume = 0.1; s.play().catch(() => {}); }
 
         if (ball.currentRow >= ROWS) {
           ballsRef.current.splice(index, 1);
           setHistory(prev => [ball.multiplier, ...prev].slice(0, 8));
           if (ball.value > 0) {
-            setBalance(prev => prev + ball.value);
-            if (ball.multiplier >= 2 && winSound.current) {
-              winSound.current.play().catch(() => {});
-            }
+            setBalance(prev => prev + ball.value); // On rajoute le gain à la fin de l'animation
+            if (ball.multiplier >= 2 && winSound.current) winSound.current.play().catch(() => {});
           }
           return;
         }
@@ -169,8 +146,9 @@ export default function PlinkoElite() {
 
   const draw = () => {
     const cvs = canvasRef.current;
-    if (!cvs || !cvs.getContext('2d')) return;
-    const ctx = cvs.getContext('2d')!;
+    if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+    if (!ctx) return;
     ctx.clearRect(0, 0, cvs.width, cvs.height);
     const rowSpacing = (cvs.height - 120) / ROWS;
 
@@ -179,9 +157,7 @@ export default function PlinkoElite() {
       for (let i = 0; i <= r; i++) {
         const x = cvs.width / 2 + (i - r / 2) * rowSpacing;
         const y = PYRAMID_TOP + r * rowSpacing;
-        ctx.beginPath();
-        ctx.arc(x, y, PIN_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, PIN_RADIUS, 0, Math.PI * 2); ctx.fill();
       }
     }
 
@@ -191,22 +167,16 @@ export default function PlinkoElite() {
       const w = rowSpacing - 4;
       ctx.fillStyle = COLORS.multipliers(i);
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(x - w/2, bucketY, w, 25, 4);
+      if (ctx.roundRect) ctx.roundRect(x - w/2, bucketY, w, 25, 4); else ctx.rect(x - w/2, bucketY, w, 25);
       ctx.fill();
-      ctx.fillStyle = "#000";
-      ctx.font = "bold 10px Arial";
-      ctx.textAlign = "center";
+      ctx.fillStyle = "#000"; ctx.font = "bold 10px Arial"; ctx.textAlign = "center";
       ctx.fillText(m < 1 ? m.toString() : m.toFixed(0), x, bucketY + 16);
     });
 
     ballsRef.current.forEach(b => {
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, BALL_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.ball;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = COLORS.ball;
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.arc(b.x, b.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.ball; ctx.shadowBlur = 15; ctx.shadowColor = COLORS.ball;
+      ctx.fill(); ctx.shadowBlur = 0;
     });
   };
 
@@ -214,19 +184,19 @@ export default function PlinkoElite() {
     <div className="min-h-screen bg-[#0a0f1a] text-white flex flex-col font-black uppercase italic overflow-hidden relative">
       {isMaintenance && (
         <div className="absolute inset-0 z-[100] backdrop-blur-md bg-black/80 flex items-center justify-center p-6 text-center">
-            <div className="max-w-md p-8 bg-[#151c2c] border-2 border-amber-500/50 rounded-[2.5rem] shadow-[0_0_50px_rgba(245,158,11,0.2)]">
-                <AlertTriangle size={40} className="text-amber-500 mx-auto mb-6" />
-                <h2 className="text-2xl mb-2 text-amber-500">INDISPONIBLE</h2>
-                <p className="text-sm text-slate-400 mb-8 lowercase">{maintenanceMsg}</p>
-                <button onClick={() => router.push('/')} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl">RETOUR AU SALON</button>
+            <div className="max-w-md p-8 bg-[#151c2c] border-2 border-amber-500/50 rounded-[2.5rem]">
+                <AlertTriangle size={40} className="text-amber-500 mx-auto mb-6 animate-pulse" />
+                <h2 className="text-2xl mb-2 text-amber-500">MAINTENANCE</h2>
+                <p className="text-sm text-slate-400 mb-8 lowercase">{maintenanceMsg || "Mise à jour en cours..."}</p>
+                <button onClick={() => router.push('/')} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl">RETOUR</button>
             </div>
         </div>
       )}
 
       <div className="p-4 flex justify-between items-center bg-[#151c2c] border-b border-white/5">
-        <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl"><ChevronLeft /></button>
+        <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all"><ChevronLeft /></button>
         <div className="flex flex-col items-center">
-            <span className="text-[10px] text-slate-500">SOLDE</span>
+            <span className="text-[10px] text-slate-500 tracking-widest">SOLDE</span>
             <span className="text-xl text-emerald-500">{Math.floor(balance).toLocaleString()} <span className="text-xs">HTG</span></span>
         </div>
         <div className="w-10" />
@@ -238,24 +208,28 @@ export default function PlinkoElite() {
             <span className="text-[10px] text-slate-400">MONTANT MISE</span>
             <div className="flex bg-[#0a0f1a] rounded-xl border border-white/10 overflow-hidden">
               <input type="number" value={bet} onChange={(e) => setBet(Number(e.target.value))} className="bg-transparent w-full p-4 outline-none text-emerald-500 font-bold" />
+              <button onClick={() => setBet(b => Math.max(10, Math.floor(b/2)))} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">/2</button>
+              <button onClick={() => setBet(b => b*2)} className="px-4 border-l border-white/5 hover:bg-white/5 text-xs">x2</button>
             </div>
           </div>
 
           <button 
             onClick={dropBall}
             disabled={loading || isMaintenance || bet > balance}
-            className={`w-full py-5 rounded-2xl shadow-xl transition-all text-xl font-black flex items-center justify-center gap-3 ${loading || isMaintenance ? 'bg-slate-700 text-slate-500' : 'bg-emerald-500 text-black'}`}
+            className={`w-full py-5 rounded-2xl shadow-xl active:scale-95 transition-all text-xl font-black flex items-center justify-center gap-2 ${loading || isMaintenance ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'}`}
           >
             {loading ? <Loader2 className="animate-spin" /> : isMaintenance ? 'PAUSE' : 'MISER'}
           </button>
 
           <div className="pt-6 border-t border-white/5">
-            <div className="flex items-center gap-2 mb-4 text-slate-500 text-[10px]">
-              <HistoryIcon size={14} /> HISTORIQUE
+            <div className="flex items-center gap-2 mb-4 text-slate-500 text-[10px] tracking-widest uppercase">
+              <HistoryIcon size={14} /> Historique
             </div>
             <div className="grid grid-cols-4 gap-2">
               {history.map((h, i) => (
-                <div key={i} className={`py-2 rounded-lg text-center text-[10px] font-bold border ${h >= 2 ? 'border-emerald-500/50 text-emerald-500' : 'border-white/10 text-slate-400'}`}>{h}x</div>
+                <div key={i} className={`py-2 rounded-lg text-center text-[10px] font-bold border ${h >= 2 ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500' : 'bg-white/5 border-white/10 text-slate-400'}`}>
+                  {h}x
+                </div>
               ))}
             </div>
           </div>
@@ -263,6 +237,10 @@ export default function PlinkoElite() {
 
         <div className="flex-1 relative flex items-center justify-center bg-[#0a0f1a] p-4">
             <canvas ref={canvasRef} width={700} height={600} className="w-full max-w-[700px] h-auto pointer-events-none drop-shadow-2xl" />
+            <div className="absolute bottom-10 left-10 flex flex-col opacity-20 hidden md:flex">
+                <span className="text-2xl font-black italic">PLINKO</span>
+                <span className="text-[10px] tracking-widest">ELITE SYSTEM V1.0</span>
+            </div>
         </div>
       </div>
     </div>
