@@ -8,38 +8,6 @@ import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, Info, X, TriangleAlert
 
 
 export const useChallenge = () => {
-  const startChallenge = async (challengeId: string, userId: string, fee: number) => {
-    // 1. Débiter l'utilisateur
-    const { data: profile } = await supabase.from('profiles').select('balance').eq('id', userId).single();
-    if (profile.balance < fee) return { error: "Solde insuffisant" };
-
-    await supabase.from('profiles').update({ balance: profile.balance - fee }).eq('id', userId);
-    
-    // 2. Créer ou incrémenter l'entrée
-    const { data: entry } = await supabase.from('challenge_entries')
-      .upsert({ challenge_id: challengeId, user_id: userId, last_attempt_at: new Date() })
-      .select().single();
-
-    return { entry, error: null };
-  };
-
-  const submitScore = async (challengeId: string, userId: string, newScore: number) => {
-    const { data: entry } = await supabase.from('challenge_entries')
-      .select('best_score')
-      .eq('challenge_id', challengeId)
-      .eq('user_id', userId)
-      .single();
-
-    if (newScore > (entry?.best_score || 0)) {
-      await supabase.from('challenge_entries')
-        .update({ best_score: newScore })
-        .eq('challenge_id', challengeId)
-        .eq('user_id', userId);
-    }
-  };
-
-  return { startChallenge, submitScore };
-};
 
 // --- SYSTÈME AUDIO OPTIMISÉ ---
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost' | 'speedup') => {
