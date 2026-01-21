@@ -51,7 +51,7 @@ export default function PlinkoElite() {
   const winSound = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    checkMaintenance(); // Vérification immédiate
+    checkMaintenance();
     fetchBalance();
     
     popSound.current = new Audio('/sounds/pop.mp3');
@@ -69,7 +69,6 @@ export default function PlinkoElite() {
     };
   }, []);
 
-  // --- FONCTION DE VÉRIFICATION DE MAINTENANCE ---
   const checkMaintenance = async () => {
     try {
       const { data, error } = await supabase
@@ -101,18 +100,11 @@ export default function PlinkoElite() {
     }
   };
 
+  // --- FONCTION DROPBALL MISE À JOUR ---
   const dropBall = async () => {
     if (bet > balance || loading || isMaintenance) return;
     
-    // Re-vérification de sécurité avant de lancer la bille
-    const { data: check } = await supabase.from('game_settings').select('is_active').eq('game_id', 'plinko').single();
-    if (check && !check.is_active) {
-        setIsMaintenance(true);
-        return;
-    }
-
-    setBalance(prev => prev - bet);
-
+    setLoading(true); 
     try {
       const { data, error } = await supabase.rpc('play_plinko', {
         p_bet_amount: bet,
@@ -121,6 +113,9 @@ export default function PlinkoElite() {
       });
 
       if (error) throw error;
+      
+      // Mise à jour immédiate du solde pour refléter la mise
+      setBalance(prev => prev - bet); 
 
       const cvs = canvasRef.current;
       if (!cvs) return;
@@ -140,7 +135,10 @@ export default function PlinkoElite() {
 
     } catch (e) {
       console.error("Erreur de mise:", e);
+      // En cas d'erreur, on rafraîchit le solde réel
       fetchBalance(); 
+    } finally {
+      setLoading(false); 
     }
   };
 
@@ -232,7 +230,6 @@ export default function PlinkoElite() {
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-white flex flex-col font-black uppercase italic overflow-hidden relative">
       
-      {/* --- OVERLAY DE MAINTENANCE ELITE --- */}
       {isMaintenance && (
         <div className="absolute inset-0 z-[100] backdrop-blur-md bg-black/80 flex items-center justify-center p-6 text-center">
             <div className="max-w-md p-8 bg-[#151c2c] border-2 border-amber-500/50 rounded-[2.5rem] shadow-[0_0_50px_rgba(245,158,11,0.2)] animate-in fade-in zoom-in duration-300">
@@ -264,7 +261,6 @@ export default function PlinkoElite() {
       </div>
 
       <div className="flex flex-1 flex-col lg:flex-row">
-        {/* Contrôles */}
         <div className="lg:w-80 bg-[#151c2c] p-6 space-y-6 border-r border-white/5 shadow-2xl z-20">
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] text-slate-400">
@@ -287,7 +283,7 @@ export default function PlinkoElite() {
             disabled={loading || isMaintenance}
             className={`w-full py-5 rounded-2xl shadow-xl active:scale-95 transition-all text-xl font-black ${isMaintenance ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'}`}
           >
-            {isMaintenance ? 'PAUSE' : 'MISER'}
+            {loading ? 'CHARGEMENT...' : isMaintenance ? 'PAUSE' : 'MISER'}
           </button>
 
           <div className="pt-6 border-t border-white/5">
@@ -305,7 +301,6 @@ export default function PlinkoElite() {
           </div>
         </div>
 
-        {/* Game Area */}
         <div className="flex-1 relative flex items-center justify-center bg-[#0a0f1a] p-4">
             <canvas 
                 ref={canvasRef}
@@ -313,16 +308,8 @@ export default function PlinkoElite() {
                 height={600}
                 className="w-full max-w-[700px] h-auto pointer-events-none drop-shadow-2xl"
             />
-            <div className="absolute bottom-10 left-10 flex items-center gap-2 opacity-20 hidden md:flex">
-                <Trophy size={40} />
-                <div className="flex flex-col text-left">
-                    <span className="text-2xl font-black italic">PLINKO</span>
-                    <span className="text-[10px] tracking-widest">ELITE SYSTEM V1.0</span>
-                </div>
-            </div>
         </div>
       </div>
     </div>
   );
 }
-
