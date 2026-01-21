@@ -16,9 +16,9 @@ const COLORS = {
   ball: '#ff0055',
   multipliers: (index: number) => {
     const dist = Math.abs(index - ROWS / 2);
-    if (dist > 6) return '#ef4444'; // Rouge (Extrémités)
-    if (dist > 3) return '#f97316'; // Orange
-    return '#f59e0b';               // Jaune (Centre)
+    if (dist > 6) return '#ef4444'; 
+    if (dist > 3) return '#f97316'; 
+    return '#f59e0b';               
   }
 };
 
@@ -41,7 +41,6 @@ export default function PlinkoElite() {
   const [history, setHistory] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // --- ÉTATS DE MAINTENANCE ---
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintenanceMsg, setMaintenanceMsg] = useState('');
 
@@ -51,7 +50,7 @@ export default function PlinkoElite() {
   const winSound = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    checkMaintenance(); // Vérification immédiate
+    checkMaintenance();
     fetchBalance();
     
     popSound.current = new Audio('/sounds/pop.mp3');
@@ -100,12 +99,15 @@ export default function PlinkoElite() {
     }
   };
 
-  // --- MISE À JOUR DE LA FONCTION DROPBALL ---
+  // --- FONCTION DROPBALL CORRIGÉE ---
   const dropBall = async () => {
+    // 1. Vérifications de sécurité de base
     if (bet > balance || loading || isMaintenance) return;
     
-    setLoading(true); // Bloque le bouton pendant l'appel API
+    setLoading(true);
+
     try {
+      // 2. Appel de ta fonction SQL play_plinko
       const { data, error } = await supabase.rpc('play_plinko', {
         p_bet_amount: bet,
         p_rows: ROWS,
@@ -113,32 +115,35 @@ export default function PlinkoElite() {
       });
 
       if (error) throw error;
-      
-      // Mise à jour immédiate du solde pour refléter la mise soustraite
+      if (!data) return;
+
+      // 3. Mise à jour immédiate du solde local (Soustraction de la mise)
+      // On soustrait la mise car le gain sera ajouté seulement à la fin de l'animation
       setBalance(prev => prev - bet); 
 
       const cvs = canvasRef.current;
       if (!cvs) return;
 
-      // Création de la bille avec les données du serveur
+      // 4. Création et injection de la bille dans le moteur d'animation
       const newBall: Ball = {
         id: Math.random().toString(),
         x: cvs.width / 2,
         y: PYRAMID_TOP - 20, 
-        path: data.path,
+        path: data.path,        // Tableau d'entiers venant du SQL
         currentRow: 0,
         progress: 0,
-        value: data.payout,
-        multiplier: data.multiplier
+        value: data.payout,     // Gain total calculé par le SQL
+        multiplier: data.multiplier // Multiplicateur appliqué
       };
 
       ballsRef.current.push(newBall);
 
     } catch (e) {
-      console.error("Erreur de mise:", e);
-      fetchBalance(); // En cas d'erreur, on resynchronise le solde réel
+      console.error("Erreur de transaction:", e);
+      // En cas d'erreur, on rafraîchit le solde pour être sûr
+      fetchBalance(); 
     } finally {
-      setLoading(false); // Libère le bouton
+      setLoading(false);
     }
   };
 
@@ -147,8 +152,10 @@ export default function PlinkoElite() {
     if (!cvs) return;
     const rowSpacing = (cvs.height - 120) / ROWS;
 
-    ballsRef.current.forEach((ball, index) => {
+    for (let i = ballsRef.current.length - 1; i >= 0; i--) {
+      const ball = ballsRef.current[i];
       ball.progress += 0.05;
+
       if (ball.progress >= 1) {
         ball.currentRow++;
         ball.progress = 0;
@@ -159,28 +166,35 @@ export default function PlinkoElite() {
           s.play().catch(() => {});
         }
 
+        // Arrivée en bas
         if (ball.currentRow >= ROWS) {
-          ballsRef.current.splice(index, 1);
-          setHistory(prev => [ball.multiplier, ...prev].slice(0, 8));
-          if (ball.value > 0) {
-            setBalance(prev => prev + ball.value);
-            if (ball.multiplier >= 2 && winSound.current) {
+          const finishedBall = ballsRef.current.splice(i, 1)[0];
+          setHistory(prev => [finishedBall.multiplier, ...prev].slice(0, 8));
+          
+          // Ajout visuel du gain sur le solde local (qui avait été amputé de la mise au début)
+          if (finishedBall.value > 0) {
+            setBalance(prev => prev + finishedBall.value);
+            if (finishedBall.multiplier >= 2 && winSound.current) {
               winSound.current.play().catch(() => {});
             }
           }
-          return;
+          continue;
         }
       }
+
+      // Calcul de la trajectoire fluide
       const pathSum = ball.path.slice(0, ball.currentRow).reduce((a, b) => a + b, 0);
       const startPinX = cvs.width / 2 + (pathSum - ball.currentRow / 2) * rowSpacing;
       const nextDir = ball.path[ball.currentRow];
       const targetPinX = cvs.width / 2 + ((pathSum + nextDir) - (ball.currentRow + 1) / 2) * rowSpacing;
+      
       const startPinY = PYRAMID_TOP + ball.currentRow * rowSpacing;
       const targetPinY = PYRAMID_TOP + (ball.currentRow + 1) * rowSpacing;
+      
       const t = ball.progress;
       ball.x = startPinX + (targetPinX - startPinX) * t;
       ball.y = startPinY + (targetPinY - startPinY) * t - Math.sin(t * Math.PI) * (rowSpacing * 0.25);
-    });
+    }
   };
 
   const draw = () => {
@@ -239,7 +253,7 @@ export default function PlinkoElite() {
                 </div>
                 <h2 className="text-2xl mb-2 tracking-tighter text-amber-500">INDISPONIBLE</h2>
                 <p className="text-sm text-slate-400 font-bold mb-8 leading-tight lowercase">
-                   {maintenanceMsg || "Ce jeu est actuellement en maintenance pour mise à jour technique."}
+                   {maintenanceMsg || "Ce jeu est actuellement en maintenance."}
                 </p>
                 <button 
                     onClick={() => router.push('/')}
@@ -251,6 +265,7 @@ export default function PlinkoElite() {
         </div>
       )}
 
+      {/* Header */}
       <div className="p-4 flex justify-between items-center bg-[#151c2c] border-b border-white/5">
         <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all"><ChevronLeft /></button>
         <div className="flex flex-col items-center">
@@ -261,6 +276,7 @@ export default function PlinkoElite() {
       </div>
 
       <div className="flex flex-1 flex-col lg:flex-row">
+        {/* Contrôles */}
         <div className="lg:w-80 bg-[#151c2c] p-6 space-y-6 border-r border-white/5 shadow-2xl z-20">
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] text-slate-400">
@@ -280,10 +296,12 @@ export default function PlinkoElite() {
 
           <button 
             onClick={dropBall}
-            disabled={loading || isMaintenance}
-            className={`w-full py-5 rounded-2xl shadow-xl active:scale-95 transition-all text-xl font-black ${isMaintenance || loading ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'}`}
+            disabled={loading || isMaintenance || bet > balance}
+            className={`w-full py-5 rounded-2xl shadow-xl active:scale-95 transition-all text-xl font-black ${
+                (loading || isMaintenance) ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
+            }`}
           >
-            {isMaintenance ? 'PAUSE' : loading ? 'ATTENTE...' : 'MISER'}
+            {loading ? 'CHARGEMENT...' : isMaintenance ? 'PAUSE' : 'MISER'}
           </button>
 
           <div className="pt-6 border-t border-white/5">
@@ -301,6 +319,7 @@ export default function PlinkoElite() {
           </div>
         </div>
 
+        {/* Game Area */}
         <div className="flex-1 relative flex items-center justify-center bg-[#0a0f1a] p-4">
             <canvas 
                 ref={canvasRef}
@@ -308,13 +327,6 @@ export default function PlinkoElite() {
                 height={600}
                 className="w-full max-w-[700px] h-auto pointer-events-none drop-shadow-2xl"
             />
-            <div className="absolute bottom-10 left-10 flex items-center gap-2 opacity-20 hidden md:flex">
-                <Trophy size={40} />
-                <div className="flex flex-col text-left">
-                    <span className="text-2xl font-black italic">PLINKO</span>
-                    <span className="text-[10px] tracking-widest">ELITE SYSTEM V1.0</span>
-                </div>
-            </div>
         </div>
       </div>
     </div>
