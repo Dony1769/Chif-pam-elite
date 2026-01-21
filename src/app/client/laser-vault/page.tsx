@@ -5,10 +5,6 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, Info, X, TriangleAlert, ServerOff } from 'lucide-react';
 
-
-
-export const useChallenge = () => {
-
 // --- SYSTÈME AUDIO OPTIMISÉ ---
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost' | 'speedup') => {
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
