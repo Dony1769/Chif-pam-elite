@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Info } from 'lucide-react';
+import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Info, Timer } from 'lucide-react';
 
 // --- AUDIO SYSTEM ---
 const playSound = (freq: number, duration: number, type: OscillatorType = 'sine') => {
@@ -30,6 +30,8 @@ export default function BiometricHack() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [displayTime, setDisplayTime] = useState(1000); 
+  // Nouveaux états pour le timer de session
+  const [sessionTimer, setSessionTimer] = useState(10);
 
   const generatePattern = useCallback((size: number) => {
     const cells = size * size;
@@ -41,6 +43,7 @@ export default function BiometricHack() {
     }
     setPattern(newPattern);
     setUserPattern([]);
+    setSessionTimer(10); // Reset du timer à chaque nouvelle session
     setStatus('showing');
   }, []);
   
@@ -50,6 +53,21 @@ export default function BiometricHack() {
         setStatus('input');
       }, displayTime);
       return () => clearTimeout(timer);
+    }
+
+    // Timer de 10 secondes pendant la phase d'input
+    if (status === 'input') {
+        const interval = setInterval(() => {
+            setSessionTimer(prev => {
+                if (prev <= 1) {
+                    setStatus('lost');
+                    playSound(110, 0.5, 'sawtooth');
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
     }
   }, [status, displayTime]);
 
@@ -93,9 +111,9 @@ export default function BiometricHack() {
     }
   };
 
-  // --- MISE À JOUR DE LA FONCTION CASHOUT ---
   const cashout = async () => {
-    if (!gameId || status !== 'input') return;
+    // Condition ajoutée : Multiplier doit être > 1.2 pour encaisser (après 2 sessions réussies)
+    if (!gameId || status !== 'input' || multiplier <= 1.2) return;
 
     setLoading(true);
     try {
@@ -145,8 +163,10 @@ export default function BiometricHack() {
           <div className="w-full max-w-sm flex flex-col items-center">
             <div className="w-full flex justify-between mb-8 px-4">
                 <div className="text-left">
-                    <p className="text-[7px] text-zinc-500">SÉCURITÉ</p>
-                    <p className="text-xl text-red-500">{displayTime}ms</p>
+                    <p className="text-[7px] text-zinc-500">TIMER SESSION</p>
+                    <p className={`text-xl flex items-center gap-1 ${sessionTimer < 4 ? 'text-red-500 animate-pulse' : 'text-emerald-500'}`}>
+                        <Timer size={14}/> {sessionTimer}S
+                    </p>
                 </div>
                 <div className="text-center">
                     <p className="text-[7px] text-emerald-500">COTE ACTUELLE</p>
@@ -182,10 +202,17 @@ export default function BiometricHack() {
 
             <button 
               onClick={cashout}
-              disabled={status === 'showing' || loading}
-              className="w-full mt-10 py-5 bg-emerald-600 text-black font-black rounded-2xl text-xl active:scale-95 disabled:opacity-50 flex justify-center items-center"
+              disabled={status === 'showing' || loading || multiplier <= 1.2}
+              className={`w-full mt-10 py-5 font-black rounded-2xl text-xl active:scale-95 transition-all flex flex-col justify-center items-center
+                ${multiplier <= 1.2 ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5' : 'bg-emerald-600 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)]'}
+              `}
             >
-              {loading ? <Loader2 className="animate-spin" /> : `ENCAISSER ${(bet * multiplier).toFixed(0)} HTG`}
+              {loading ? <Loader2 className="animate-spin" /> : (
+                <>
+                    <span>{multiplier <= 1.2 ? "HACK EN COURS..." : `ENCAISSER ${(bet * multiplier).toFixed(0)} HTG`}</span>
+                    {multiplier <= 1.2 && <span className="text-[8px] opacity-60 italic">TERMINEZ 2 SESSIONS POUR DÉVERROUILLER</span>}
+                </>
+              )}
             </button>
           </div>
         )}
@@ -198,8 +225,8 @@ export default function BiometricHack() {
               <h3 className="text-2xl text-emerald-500 mb-6 text-center">BIOMETRIC MANUAL</h3>
               <div className="space-y-6 text-[10px] text-zinc-400">
                 <p className="flex gap-3"><span className="text-emerald-500">1.</span> MÉMORISEZ LES CASES QUI S'ALLUMENT EN VERT.</p>
-                <p className="flex gap-3"><span className="text-emerald-500">2.</span> REPRODUISEZ LE PATTERN EXACT APRÈS L'EXTINCTION.</p>
-                <p className="flex gap-3"><span className="text-emerald-500">3.</span> PLUS LA COTE MONTE, PLUS LA GRILLE GRANDIT ET LE TEMPS DIMINUE.</p>
+                <p className="flex gap-3"><span className="text-emerald-500">2.</span> REPRODUISEZ LE PATTERN EXACT EN MOINS DE 10 SECONDES.</p>
+                <p className="flex gap-3"><span className="text-emerald-500">3.</span> L'ENCAISSEMENT SE DÉBLOQUE APRÈS 2 ÉTAPES RÉUSSIES.</p>
               </div>
               <button onClick={() => setShowTutorial(false)} className="w-full mt-10 py-4 bg-emerald-600 text-black rounded-xl font-black">START SYSTEM</button>
             </div>
@@ -223,3 +250,4 @@ export default function BiometricHack() {
     </div>
   );
 }
+
