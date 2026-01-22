@@ -304,10 +304,10 @@ function LaserVaultGame() {
               
               <button 
                 onClick={() => finalizeGame(true)} 
-                disabled={questionsSolved < 1} 
-                className={`w-full py-5 font-black rounded-[1.5rem] text-xl shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 italic tracking-tighter ${questionsSolved < 1 ? "bg-zinc-900 text-zinc-700 opacity-50" : "bg-white text-black hover:bg-emerald-500 hover:text-white"}`}
+                disabled={questionsSolved < 3} 
+                className={`w-full py-5 font-black rounded-[1.5rem] text-xl shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 italic tracking-tighter ${questionsSolved < 3 ? "bg-zinc-900 text-zinc-700 opacity-50" : "bg-white text-black hover:bg-emerald-500 hover:text-white"}`}
               >
-                {questionsSolved < 4 ? "INFILTRATION_LOCKED" : (challengeId ? <><Trophy size={20}/> VALID_UPLINK</> : <><Wallet size={20}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
+                {questionsSolved < 3 ? "INFILTRATION_LOCKED" : (challengeId ? <><Trophy size={20}/> VALID_UPLINK</> : <><Wallet size={20}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
               </button>
             </div>
           </div>
