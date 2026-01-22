@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw, ArrowRight, Gamepad2, ArrowLeft } from 'lucide-react';
+import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw, ArrowRight, Gamepad2, LayoutGrid } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,14 +17,15 @@ function RankContent() {
   const [currentUserRank, setCurrentUserRank] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState<string>("");
 
+  // 1. INITIALISATION & REALTIME SUBSCRIPTION
   useEffect(() => {
     initData();
-    
-    // REALTIME SUBSCRIPTION : Mise à jour instantanée si un score change
+
+    // ECOUTE EN TEMPS RÉEL : Si quelqu'un marque des points, on refresh
     const channel = supabase
       .channel('realtime_ranks')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenge_attempts' }, () => {
-        fetchLeaderboardOnly(); 
+        fetchRankingsOnly(); 
       })
       .subscribe();
 
@@ -36,24 +37,25 @@ function RankContent() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Liste des défis de l'utilisateur
+    // Récupérer les défis du client (Cumulés par ID)
     const { data: attempts } = await supabase
       .from('challenge_attempts')
       .select('challenge_id, challenges(*)')
       .eq('user_id', user.id);
 
-    const uniqueChallenges = Array.from(new Map(attempts?.map(item => [item.challenge_id, item.challenges])).values())
-      .filter(c => c !== null); // Sécurité si un défi est supprimé
+    const uniqueChallenges = Array.from(new Map(attempts?.filter(a => a.challenges).map(item => [item.challenge_id, item.challenges])).values());
     setMyChallenges(uniqueChallenges);
 
     if (challengeId) {
-      await fetchLeaderboardOnly();
+      await fetchRankingsOnly();
     }
     setLoading(false);
   };
 
-  const fetchLeaderboardOnly = async () => {
+  const fetchRankingsOnly = async () => {
+    if (!challengeId) return;
     const { data: { user } } = await supabase.auth.getUser();
+    
     const { data: chall } = await supabase.from('challenges').select('*').eq('id', challengeId).single();
     setActiveChallenge(chall);
 
@@ -67,6 +69,7 @@ function RankContent() {
     if (user) setCurrentUserRank(ranks?.find(r => r.user_id === user.id));
   };
 
+  // 2. COMPTE À REBOURS PRÉCIS
   useEffect(() => {
     const interval = setInterval(() => {
       if (activeChallenge?.ends_at) {
@@ -78,7 +81,7 @@ function RankContent() {
           const h = Math.floor(diff / (1000 * 60 * 60));
           const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
           const s = Math.floor((diff % (1000 * 60)) / 1000);
-          setTimeLeft(`${h}:${m}:${s}`);
+          setTimeLeft(`${h}H ${m}M ${s}S`);
         }
       }
     }, 1000);
@@ -91,133 +94,136 @@ function RankContent() {
     </div>
   );
 
-  // VUE 1 : LISTE DES DÉFIS AUXQUELS J'AI PARTICIPÉ
-  if (!challengeId || myChallenges.length === 0) {
+  // VUE : AUCUN DÉFI
+  if (myChallenges.length === 0) {
     return (
-      <div className="min-h-screen bg-[#020617] text-white p-6 uppercase italic font-black">
-        <div className="flex items-center gap-4 mb-8">
-           <button onClick={() => router.push('/client/challenges')} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ArrowLeft size={20}/></button>
-           <h1 className="text-3xl tracking-tighter text-emerald-500 underline decoration-1 underline-offset-8">MES_COMBATS</h1>
-        </div>
-
-        {myChallenges.length === 0 ? (
-          <div className="mt-20 text-center space-y-6">
-            <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20">
-               <Target className="text-emerald-500" size={32} />
-            </div>
-            <p className="text-slate-500 text-xs tracking-widest">AUCUNE DONNÉE DE COMBAT DÉTECTÉE</p>
-            <button onClick={() => router.push('/client/challenges')} className="w-full py-5 bg-emerald-500 text-black rounded-2xl shadow-2xl">ENTRER DANS L'ARÈNE</button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {myChallenges.map((ch) => (
-              <button 
-                key={ch.id} 
-                onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
-                className="p-6 bg-slate-900/50 border border-white/5 rounded-[2rem] flex justify-between items-center hover:border-emerald-500/50 transition-all group"
-              >
-                <div className="text-left">
-                  <p className="text-lg tracking-tighter">{ch.title}</p>
-                  <p className="text-[8px] text-emerald-500/50 tracking-widest">{ch.game_type} • LIVE_MODE</p>
-                </div>
-                <div className="bg-emerald-500/10 p-3 rounded-xl group-hover:bg-emerald-500 group-hover:text-black transition-all">
-                  <ArrowRight size={18} />
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="min-h-screen bg-[#020617] text-white flex flex-col items-center justify-center p-8 text-center uppercase italic">
+        <Gamepad2 size={60} className="text-emerald-500/20 mb-6" />
+        <h2 className="text-2xl font-black mb-2">ZONE_VIDE</h2>
+        <p className="text-slate-500 text-xs mb-8 tracking-widest">Tu n'as encore relevé aucun défi de l'arène.</p>
+        <button onClick={() => router.push('/client/challenges')} className="bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all">
+          ENTRER DANS L'ARÈNE
+        </button>
       </div>
     );
   }
 
-  // VUE 2 : CLASSEMENT DU DÉFI SÉLECTIONNÉ
+  // VUE : LISTE DES DÉFIS DU CLIENT (SÉLECTEUR)
+  if (!challengeId) {
+    return (
+      <div className="min-h-screen bg-[#020617] text-white p-6 uppercase italic font-black">
+        <div className="flex items-center gap-3 mb-8">
+            <LayoutGrid className="text-emerald-500" />
+            <h1 className="text-2xl tracking-tighter">HISTORIQUE_ARENA</h1>
+        </div>
+        <div className="grid gap-4">
+          {myChallenges.map((ch) => (
+            <button 
+              key={ch.id}
+              onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
+              className="p-6 bg-slate-900/50 border border-white/5 rounded-[2rem] flex items-center justify-between group active:border-emerald-500 transition-all"
+            >
+              <div className="text-left">
+                <p className="text-lg">{ch.title}</p>
+                <p className="text-[9px] text-emerald-500/50 tracking-[0.3em]">{ch.is_active ? 'EN COURS' : 'ARCHIVÉ'}</p>
+              </div>
+              <ArrowRight size={20} className="text-slate-700 group-hover:text-emerald-500 transition-colors" />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // VUE : LEADERBOARD DÉTAILLÉ (REALTIME)
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase italic select-none">
       <div className="max-w-md mx-auto flex justify-between items-center mb-6">
-        <button onClick={() => router.push('/client/rank')} className="p-4 bg-white/5 rounded-2xl border border-white/10 shadow-xl"><ChevronLeft /></button>
+        <button onClick={() => router.push('/client/rank')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:bg-white/20 transition-all">
+          <ChevronLeft />
+        </button>
         <div className="text-center">
-          <h1 className="text-xl tracking-tighter text-emerald-500 underline underline-offset-4">LIVE_LEADERBOARD</h1>
-          <p className="text-[7px] text-slate-500 tracking-[0.4em] mt-1 truncate max-w-[120px]">{activeChallenge?.title}</p>
+            <p className="text-[10px] text-emerald-500 animate-pulse">● LIVE_DATA</p>
+            <h2 className="text-sm truncate w-40">{activeChallenge?.title}</h2>
         </div>
-        <div className="w-12" />
+        <div className="w-10" />
       </div>
 
-      <div className="max-w-md mx-auto space-y-6 pb-32">
-        {/* TIMER CARD */}
-        <div className="bg-emerald-500 p-6 rounded-[2.5rem] flex items-center justify-between shadow-[0_20px_50px_rgba(16,185,129,0.3)] border-b-4 border-emerald-700">
-          <div>
-            <p className="text-black text-[9px] tracking-widest font-bold">STATUS: {timeLeft === "TERMINÉ" ? 'ARCHIVÉ' : 'ACTIVE_MISSION'}</p>
-            <p className="text-4xl text-black font-black tracking-tighter flex items-center gap-2 italic leading-none">{timeLeft}</p>
-          </div>
-          <div className="bg-black text-emerald-500 p-3 rounded-2xl animate-pulse"><Zap size={24} /></div>
+      <div className="max-w-md mx-auto space-y-4 pb-32">
+        {/* TIMER & REVENUE POOL */}
+        <div className="grid grid-cols-2 gap-3">
+            <div className="bg-emerald-500 p-5 rounded-[2rem] shadow-xl">
+                <p className="text-[8px] text-black/60 mb-1">CHRONO</p>
+                <p className="text-xl text-black flex items-center gap-2"><Timer size={16}/> {timeLeft}</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
+                <p className="text-[8px] text-slate-500 mb-1">CUMUL PERSONNEL</p>
+                <p className="text-xl text-emerald-500">{currentUserRank?.total_score || 0} PTS</p>
+            </div>
         </div>
 
-        {/* CARTE PERSONNELLE */}
+        {/* FOCUS PLAYER RANK */}
         {currentUserRank && (
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`p-6 rounded-[2.5rem] border-b-8 shadow-2xl relative overflow-hidden ${currentUserRank.rank <= 3 ? 'bg-gradient-to-br from-amber-400 to-yellow-600 text-black border-amber-900' : 'bg-white text-black border-emerald-500'}`}>
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-[9px] font-bold tracking-widest opacity-60">TA POSITION</p>
-                  <p className="text-5xl font-black italic tracking-tighter">#{currentUserRank.rank}</p>
-               </div>
-               {currentUserRank.rank <= 3 ? <Trophy size={48} className="text-amber-900 drop-shadow-lg" /> : <Medal size={48} className="text-emerald-500 opacity-20" />}
-            </div>
-            <div className="mt-4 flex justify-between items-end">
-                <p className="text-xl font-black underline underline-offset-4 decoration-2">{currentUserRank.username}</p>
-                <div className="text-right">
-                    <p className="text-[9px] font-bold opacity-60 uppercase">Total Score</p>
-                    <p className="text-3xl font-black italic leading-none">{currentUserRank.total_score} pts</p>
+            <motion.div 
+                initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+                className={`p-6 rounded-[2.5rem] flex items-center justify-between shadow-2xl ${
+                    currentUserRank.rank <= 3 ? 'bg-emerald-500 text-black' : 'bg-white text-black'
+                }`}
+            >
+                <div className="flex items-center gap-4">
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl border-4 ${currentUserRank.rank <= 3 ? 'bg-black text-emerald-500 border-black/10' : 'bg-emerald-500 text-black border-black/5'}`}>
+                        #{currentUserRank.rank}
+                    </div>
+                    <div>
+                        <p className="text-[9px] font-bold opacity-60">TA POSITION</p>
+                        <p className="text-lg leading-none">{currentUserRank.username}</p>
+                    </div>
                 </div>
-            </div>
-          </motion.div>
+                {currentUserRank.rank <= 3 && <Trophy className="animate-bounce" />}
+            </motion.div>
         )}
 
-        {/* LISTE DES JOUEURS */}
-        <div className="space-y-2">
-          <div className="flex justify-between px-4 mb-4 items-center">
-             <p className="text-[9px] text-slate-500 tracking-[0.5em] font-bold uppercase">Réseau des Gladiateurs</p>
-             <div className="flex gap-1">
-                <div className="w-1 h-1 bg-emerald-500 rounded-full animate-ping" />
-                <p className="text-[7px] text-emerald-500">REALTIME_ACTIVE</p>
-             </div>
-          </div>
-          
-          <AnimatePresence>
-            {leaderboard.map((entry, index) => {
-              const isMe = entry.user_id === currentUserRank?.user_id;
-              const isTop3 = entry.rank <= 3;
-              return (
-                <motion.div key={entry.user_id} initial={{ x: -10 }} animate={{ x: 0 }} className={`p-5 rounded-[2rem] border flex items-center justify-between transition-all ${isTop3 ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg' : 'bg-white/5 border-white/5'} ${isMe ? 'ring-2 ring-emerald-500' : ''}`}>
-                  <div className="flex items-center gap-4">
-                    <span className={`text-xl font-black ${isTop3 ? 'text-emerald-400' : 'text-slate-600'}`}>{entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}</span>
-                    <div>
-                      <p className="text-sm tracking-tighter group-active:text-emerald-500">{entry.username}</p>
-                      <p className="text-[7px] text-slate-500 tracking-widest">{entry.attempts_count} SESSIONS</p>
+        {/* FULL RANKINGS */}
+        <div className="space-y-2 mt-8">
+          <p className="text-[9px] text-slate-600 tracking-[0.5em] px-4 mb-4 font-bold">LÉGENDES DE L'ARÈNE</p>
+          {leaderboard.map((entry) => {
+            const isMe = entry.user_id === currentUserRank?.user_id;
+            const isTop3 = entry.rank <= 3;
+            return (
+              <div key={entry.user_id} className={`p-5 rounded-[1.8rem] border flex items-center justify-between transition-all ${isMe ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
+                <div className="flex items-center gap-4">
+                  <span className={`w-8 text-center italic font-black ${isTop3 ? 'text-emerald-500' : 'text-slate-600'}`}>
+                    {entry.rank === 1 ? '1ST' : entry.rank === 2 ? '2ND' : entry.rank === 3 ? '3RD' : `${entry.rank}`}
+                  </span>
+                  <p className="text-sm">{entry.username}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="text-right">
+                        <p className={`text-sm font-black ${isTop3 ? 'text-emerald-500' : 'text-white'}`}>{entry.total_score}</p>
+                        <p className="text-[7px] text-slate-500">{entry.attempts_count} SESSIONS</p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-xl font-black italic ${isTop3 ? 'text-emerald-400' : 'text-white'}`}>{entry.total_score}</p>
-                    <p className="text-[7px] text-slate-600">POINTS_GAINED</p>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                    {isTop3 && <Medal size={14} className="text-emerald-500" />}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* BOUTON DÉFIER À NOUVEAU */}
-      <div className="fixed bottom-6 left-0 w-full px-4 flex justify-center z-[100]">
+      {/* ACTION BAR : RETOUR ET REJOUER */}
+      <div className="fixed bottom-6 left-0 w-full px-4 flex flex-col gap-3 items-center z-50">
         <button 
           onClick={() => {
             const routes:any = {'quiz':'/client/games/quiz','biometric':'/client/games/biometric','vault':'/client/games/vault'};
             router.push(`${routes[activeChallenge.game_type] || '/client/games/quiz'}?challengeId=${activeChallenge.id}`);
           }}
           disabled={timeLeft === "TERMINÉ"}
-          className="w-full max-w-md py-6 bg-white text-black rounded-[2.5rem] font-black text-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] active:scale-90 transition-all flex items-center justify-center gap-4 disabled:grayscale disabled:opacity-40"
+          className="w-full max-w-md py-5 bg-white text-black rounded-2xl font-black text-lg shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
         >
-          <RefreshCcw size={28} className={timeLeft !== "TERMINÉ" ? "animate-spin-slow" : ""} /> {timeLeft === "TERMINÉ" ? "MISSION_EXPIRED" : "RE-TENTER"}
+          <RefreshCcw size={20} /> AUGMENTER MON SCORE
+        </button>
+        <button onClick={() => router.push('/client/challenges')} className="text-[10px] text-slate-500 hover:text-white transition-colors tracking-widest">
+            RETOUR AUX DÉFIS
         </button>
       </div>
     </div>
@@ -226,8 +232,9 @@ function RankContent() {
 
 export default function LeaderboardPage() {
   return (
-    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>}>
+    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
       <RankContent />
     </Suspense>
   );
 }
+
