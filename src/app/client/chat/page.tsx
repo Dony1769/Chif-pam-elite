@@ -19,14 +19,17 @@ export default function ClientChat() {
   
   const notificationAudio = typeof window !== "undefined" ? new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3") : null;
 
-  // FONCTION CLÉ : Marquer comme lu
-  const markAsRead = async (userId: string) => {
-    await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('receiver_id', userId)
-      .eq('is_read', false);
-  };
+  // Force la mise à jour de tous les messages REÇUS par le client
+const markAsRead = async (userId: string) => {
+  const { error } = await supabase
+    .from('messages')
+    .update({ is_read: true })
+    .eq('receiver_id', userId) // On cible les messages destinés au client
+    .eq('is_read', false);      // Uniquement ceux pas encore lus
+
+  if (error) console.error("Erreur sync lecture:", error);
+};
+
 
   useEffect(() => {
     const initChat = async () => {
