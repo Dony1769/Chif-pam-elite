@@ -31,7 +31,7 @@ export default function ClientHome() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Reset local immédiat si on est sur la page
+  // Reset local immédiat pour l'UI si on bascule sur le chat
   useEffect(() => {
     if (pathname === '/client/chat') {
       setUnreadChat(0);
@@ -41,29 +41,23 @@ export default function ClientHome() {
   useEffect(() => {
     fetchData();
     
-    // REALTIME SUBSCRIPTIONS 605% - SYNC TOTALE
-    const channel = supabase.channel('home_elite_sync')
-      // Écoute des nouveaux messages
+    // REALTIME 650% : Surveillance de la table de cache
+    const channel = supabase.channel('global_sync_elite')
+      // 1. Écoute la table de cache pour le badge Support
       .on('postgres_changes', { 
-        event: 'INSERT', 
+        event: '*', // INSERT ou UPDATE
         schema: 'public', 
-        table: 'messages' 
+        table: 'latest_message_per_conversation' 
       }, (payload) => {
-        if (pathname !== '/client/chat') {
-            setUnreadChat(prev => prev + 1);
+        // Si l'utilisateur est sur la page chat, on force le badge à 0 peu importe le changement
+        if (pathname === '/client/chat') {
+          setUnreadChat(0);
+        } else {
+          // On rafraîchit proprement le compteur depuis la table de cache
+          refreshChatCount();
         }
       })
-      // AJUSTEMENT CRUCIAL : Écoute quand les messages passent à "lus" (UPDATE)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'latest_message_per_conversation'
-      }, (payload) => {
-        // Si le message mis à jour appartient au client et est maintenant lu, on rafraîchit le compte
-        if (payload.new.is_read === true) {
-            refreshChatCount();
-        }
-      })
+      // 2. Écoute les notifications classiques
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
@@ -89,26 +83,25 @@ export default function ClientHome() {
         .eq('is_active', true);
       setActiveChallengesCount(ccount || 0);
 
+      // On lance le refresh du compteur chat
       refreshChatCount();
 
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
+  // MISE À JOUR CRUCIALE : Pointage sur la table de cache
   const refreshChatCount = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user || pathname === '/client/chat') return;
 
-    const { count } = await supabase.from('messages')
+    // On vérifie si le dernier message reçu par le client est marqué non lu
+    const { count } = await supabase
+      .from('latest_message_per_conversation')
       .select('*', { count: 'exact', head: true })
       .eq('receiver_id', user.id)
       .eq('is_read', false);
     
-    // On ne met à jour le badge que si l'utilisateur n'est pas déjà en train de lire
-    if (pathname !== '/client/chat') {
-        setUnreadChat(count || 0);
-    } else {
-        setUnreadChat(0);
-    }
+    setUnreadChat(count || 0);
   };
 
   const fetchNotificationCount = async () => {
@@ -124,6 +117,7 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
+      {/* DRAWER MENU */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -145,6 +139,7 @@ export default function ClientHome() {
       </AnimatePresence>
 
       <div className="p-6 space-y-8">
+        {/* HEADER */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5">
@@ -164,6 +159,7 @@ export default function ClientHome() {
           </Link>
         </div>
 
+        {/* BALANCE CARD PREMIUM */}
         <div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-700 ${
           profile?.vip_status !== 'free' 
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/20 scale-[1.02]' 
@@ -192,6 +188,7 @@ export default function ClientHome() {
           </div>
         </div>
 
+        {/* QUICK ACTIONS */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl">
             <Plus size={24} /><span className="text-[10px] font-black italic uppercase">Dépôt</span>
@@ -201,6 +198,7 @@ export default function ClientHome() {
           </Link>
         </div>
 
+        {/* GAMES SECTION */}
         <div className="space-y-4">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic">Défis à la une</h3>
           <div className="space-y-3">
@@ -211,15 +209,17 @@ export default function ClientHome() {
         </div>
       </div>
 
+      {/* BOTTOM NAV ELITE */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
         
+        {/* SUPPORT TAB AVEC SYNC CACHE */}
         <Link 
           href="/client/chat" 
           onClick={() => setUnreadChat(0)}
-          className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}
+          className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}
         >
           <div className="relative">
             <MessagesSquare 
@@ -244,6 +244,7 @@ export default function ClientHome() {
   );
 }
 
+// COMPONENTS
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all border border-transparent active:border-white/5">
@@ -283,4 +284,3 @@ function NavLink({ href, icon, label, active }: any) {
     </Link>
   );
 }
-
