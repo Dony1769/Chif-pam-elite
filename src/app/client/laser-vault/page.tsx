@@ -301,10 +301,10 @@ function LaserVaultGame() {
               
               <button 
                 onClick={() => finalizeGame(true)} 
-                disabled={questionsSolved < 1} 
+                disabled={questionsSolved < 4} 
                 className={`w-full py-7 font-black rounded-[2rem] text-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-95 transition-all flex items-center justify-center gap-3 italic tracking-tighter ${questionsSolved < 1 ? "bg-zinc-900 text-zinc-700 border border-white/5 opacity-50" : "bg-white text-black hover:bg-emerald-500 hover:text-white"}`}
               >
-                {questionsSolved < 1 ? "INFILTRATION_EN_COURS..." : (challengeId ? <><Trophy size={24}/> VALID_UPLINK</> : <><Wallet size={24}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
+                {questionsSolved < 4 ? "INFILTRATION_EN_COURS..." : (challengeId ? <><Trophy size={24}/> VALID_UPLINK</> : <><Wallet size={24}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
               </button>
             </div>
           </div>
@@ -333,7 +333,7 @@ function LaserVaultGame() {
                     </div>
 
                     <button 
-                        onClick={() => challengeId ? router.push('/client/challenges') : setStatus('idle')} 
+                        onClick={() => challengeId ? router.push('/client/home') : setStatus('idle')} 
                         className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl hover:bg-emerald-500 active:scale-95 transition-all shadow-[0_20px_60px_rgba(16,185,129,0.3)] italic"
                     >
                       {challengeId ? "VOIR CLASSEMENT" : "RE-SCAN_VAULT"}
