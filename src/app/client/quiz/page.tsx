@@ -26,7 +26,7 @@ function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
-  const { startChallengeEntry, submitChallengeScore } = useChallenge();
+  const { startChallengeEntry, submitChallengeScore, calculateFinalFee } = useChallenge();
 
   const [profile, setProfile] = useState<any>(null);
   const [bet, setBet] = useState(10);
@@ -86,13 +86,11 @@ function QuizGameContent() {
 
     try {
       if (challengeId) {
+        // Logique de frais dynamique (VIP vs Normal) via le Hook
         const { data: chall } = await supabase.from('challenges').select('entry_fee').eq('id', challengeId).single();
         if (!chall) throw new Error("Défi introuvable");
         
-        let finalFee = chall.entry_fee;
-        if (profile?.vip_status === 'monthly') finalFee *= 0.75;
-        else if (profile?.vip_status === 'weekly') finalFee *= 0.90;
-
+        const finalFee = calculateFinalFee(chall.entry_fee, profile?.vip_status);
         const { error } = await startChallengeEntry(challengeId, profile.id, finalFee);
         if (error) throw new Error(error);
       } else {
@@ -152,53 +150,68 @@ function QuizGameContent() {
           setSelectedAnswer(null);
           setShowCorrection(false);
           setTimeLeft(SETTINGS[difficulty].time);
-        } else { cashout(); }
+        } else { finalizeGame(true); }
       }, 1500);
     } else {
-      if (gameId) supabase.from('quiz_games').update({ is_active: false }).eq('id', gameId);
-      setTimeout(() => setStatus('lost'), 2000);
+      // Défaite : On enregistre quand même les points accumulés dans le défi
+      finalizeGame(false);
     }
   };
 
-  const cashout = async () => {
-    if (isProcessing) return;
+  const finalizeGame = async (isWin: boolean) => {
     setIsProcessing(true);
     try {
       if (challengeId) {
-        // En défi, le score est basé sur l'index de la question réussie
-        await submitChallengeScore(challengeId, profile.id, (currentIndex + (selectedAnswer === questions[currentIndex].correct ? 1 : 0)) * 10);
-        setStatus('ended');
+        // Points cumulés : 10 pts par bonne réponse
+        const sessionScore = currentIndex * 10 + (isWin ? 10 : 0);
+        await submitChallengeScore(challengeId, profile.id, sessionScore);
+        setStatus(isWin ? 'ended' : 'lost');
       } else {
-        await supabase.rpc('claim_quiz_win', { p_game_id: gameId, p_final_multiplier: multiplier });
-        setStatus('ended');
+        if (isWin) {
+          await supabase.rpc('claim_quiz_win', { p_game_id: gameId, p_final_multiplier: multiplier });
+          setStatus('ended');
+        } else {
+          if (gameId) await supabase.from('quiz_games').update({ is_active: false }).eq('id', gameId);
+          setStatus('lost');
+        }
       }
-    } catch (e) { alert("Erreur."); } finally { setIsProcessing(false); }
+    } catch (e) { 
+      console.error(e);
+    } finally { 
+      setIsProcessing(false); 
+      setShowCorrection(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black uppercase flex flex-col items-center select-none font-sans">
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10"><ChevronLeft/></button>
-        <h1 className="text-2xl text-emerald-500 italic tracking-tighter">{challengeId ? "DÉFI QUIZ" : "QUIZ ELITE"}</h1>
+        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all"><ChevronLeft/></button>
+        <h1 className="text-2xl text-emerald-500 italic tracking-tighter underline decoration-white/10 underline-offset-8">{challengeId ? "ARENA CHALLENGE" : "QUIZ ELITE"}</h1>
         <div className="w-10"/>
       </div>
 
       <div className="w-full max-w-md space-y-4">
         {status === 'maintenance' ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-6">
-            <Construction size={50} className="text-amber-500" />
-            <h2 className="text-3xl text-amber-500">MAINTENANCE</h2>
-            <p className="text-slate-400 text-xs text-center">{maintenanceMsg}</p>
+          <div className="flex flex-col items-center justify-center py-24 space-y-6 bg-white/5 rounded-[3rem] border border-white/5">
+            <Construction size={60} className="text-amber-500 animate-pulse" />
+            <div className="text-center">
+                <h2 className="text-3xl text-amber-500 tracking-tighter">SYSTÈME HORS LIGNE</h2>
+                <p className="text-slate-500 text-[10px] mt-2 px-10 leading-relaxed tracking-widest">{maintenanceMsg}</p>
+            </div>
           </div>
         ) : status === 'idle' || status === 'loading' ? (
           <div className="space-y-6">
             {status === 'loading' ? (
-               <div className="flex justify-center py-20"><Loader2 className="animate-spin text-emerald-500" size={40}/></div>
+               <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                    <Loader2 className="animate-spin text-emerald-500" size={40}/>
+                    <p className="text-[8px] text-emerald-500/50 tracking-[0.3em]">CHARGEMENT DU SERVEUR...</p>
+               </div>
             ) : (
               <>
                 <div className="grid grid-cols-4 gap-2">
                   {CATEGORIES.map(c => (
-                    <button key={c.id} onClick={() => setCategory(c.id)} className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${category === c.id ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 border-white/5 text-slate-400'}`}>
+                    <button key={c.id} onClick={() => setCategory(c.id)} className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${category === c.id ? 'bg-emerald-500 text-black border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-white/5 border-white/5 text-slate-500 hover:border-white/20'}`}>
                       {c.icon} <span className="text-[7px]">{c.name}</span>
                     </button>
                   ))}
@@ -206,22 +219,27 @@ function QuizGameContent() {
 
                 <div className="grid grid-cols-3 gap-2">
                   {Object.keys(SETTINGS).map((lv) => (
-                    <button key={lv} onClick={() => setDifficulty(lv as any)} className={`py-2 rounded-xl border text-[10px] transition-all ${difficulty === lv ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-slate-500'}`}>
+                    <button key={lv} onClick={() => setDifficulty(lv as any)} className={`py-2 rounded-xl border text-[10px] transition-all font-bold ${difficulty === lv ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-slate-500'}`}>
                       {lv}
                     </button>
                   ))}
                 </div>
 
                 {!challengeId && (
-                  <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4">
-                    <div className="bg-black/40 p-5 rounded-2xl border border-white/10 flex justify-between">
+                  <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-inner">
+                    <div className="bg-black/40 p-5 rounded-2xl border border-white/10 flex justify-between items-center group">
                       <span className="text-emerald-500 text-xs">MISE (HTG)</span>
-                      <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-right outline-none w-24 text-2xl font-black"/>
+                      <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-right outline-none w-24 text-2xl font-black text-white group-focus-within:text-emerald-500 transition-colors"/>
                     </div>
                   </div>
                 )}
-                <button onClick={start} className={`w-full py-6 rounded-3xl text-xl shadow-lg ${challengeId ? 'bg-amber-500' : 'bg-emerald-600'} text-black`}>
-                  {challengeId ? "LANCER LE DÉFI" : "JOUER (5 QUESTIONS)"}
+                
+                <button 
+                    onClick={start} 
+                    disabled={isProcessing}
+                    className={`w-full py-6 rounded-3xl text-xl shadow-2xl transition-all active:scale-95 ${challengeId ? 'bg-amber-500 text-black' : 'bg-emerald-600 text-white'} font-black`}
+                >
+                  {challengeId ? "LANCER LA TENTATIVE" : "JOUER (5 QUESTIONS)"}
                 </button>
               </>
             )}
@@ -230,28 +248,26 @@ function QuizGameContent() {
           <div className="space-y-5 animate-in zoom-in duration-300">
             <div className="flex justify-between items-end px-2">
                 <div className="text-left">
-                    <p className="text-[10px] text-slate-500">COTE</p>
-                    <p className="text-2xl text-emerald-500">x{multiplier.toFixed(2)}</p>
+                    <p className="text-[10px] text-slate-500 tracking-widest">MULTIPLICATEUR</p>
+                    <p className="text-2xl text-emerald-500 font-black">x{multiplier.toFixed(2)}</p>
                 </div>
-                {/* BOUTON ENCAISSER : Apparaît si on a déjà gagné au moins une fois (multiplier > 1) */}
-                {multiplier > 1.0 && (
+                {multiplier > 1.0 && !challengeId && (
                     <button 
-                        onClick={cashout}
-                        className="bg-emerald-500 text-black px-6 py-2 rounded-full text-xs font-black flex items-center gap-2 animate-bounce"
+                        onClick={() => finalizeGame(true)}
+                        className="bg-emerald-500 text-black px-6 py-2 rounded-full text-[10px] font-black flex items-center gap-2 animate-bounce shadow-lg shadow-emerald-500/20"
                     >
-                        <Wallet size={14}/> ENCAISSER {(bet * multiplier).toFixed(0)} HTG
+                        <Wallet size={12}/> ENCAISSER {(bet * multiplier).toFixed(0)} HTG
                     </button>
                 )}
             </div>
 
-            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
               <div className={`h-full transition-all duration-100 ease-linear ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
 
-            <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[160px] flex flex-col items-center justify-center shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 h-1 bg-black/5 w-full" />
-              <span className="text-[9px] text-slate-400 mb-3 tracking-widest">QUESTION {currentIndex + 1} / 5</span>
-              <p className="text-lg leading-tight font-black">{questions[currentIndex]?.question}</p>
+            <div className="bg-white text-black p-8 rounded-[2.5rem] text-center min-h-[180px] flex flex-col items-center justify-center shadow-2xl relative overflow-hidden">
+              <span className="text-[8px] text-slate-400 mb-4 tracking-[0.3em] font-bold uppercase">MISSION {currentIndex + 1} / 5</span>
+              <p className="text-lg leading-tight font-black uppercase italic">{questions[currentIndex]?.question}</p>
             </div>
 
             <div className="grid gap-3">
@@ -260,12 +276,12 @@ function QuizGameContent() {
                 const isSelected = a === selectedAnswer;
                 let style = "bg-white/5 border-white/10 text-white";
                 if (showCorrection) {
-                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] z-10 shadow-[0_0_20px_rgba(16,185,129,0.4)]";
+                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] z-10 shadow-[0_0_30px_rgba(16,185,129,0.4)]";
                   else if (isSelected) style = "bg-rose-500 border-rose-500 opacity-60";
                   else style = "opacity-20";
                 }
                 return (
-                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection} className={`p-5 border rounded-2xl text-left transition-all font-bold ${style}`}>
+                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection} className={`p-5 border rounded-2xl text-left transition-all font-black text-xs ${style}`}>
                     {a}
                   </button>
                 );
@@ -273,17 +289,29 @@ function QuizGameContent() {
             </div>
           </div>
         ) : (
-          <div className="text-center py-12 space-y-6">
+          <div className="text-center py-12 space-y-6 animate-in fade-in zoom-in duration-500">
             <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center ${status === 'lost' ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`}>
                 {status === 'lost' ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
             </div>
-            <h2 className={`text-6xl font-black ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "BRAVO"}</h2>
-            <div className="bg-white/5 p-8 rounded-[2rem] border border-white/5">
-                <p className="text-5xl font-black text-white">{challengeId ? (status === 'lost' ? '0' : 'RANKED') : (status === 'lost' ? 0 : (bet * multiplier).toFixed(0))} <span className="text-lg text-emerald-500">HTG</span></p>
-                {challengeId && status !== 'lost' && <p className="text-xs text-slate-500 mt-2">SCORE ENREGISTRÉ DANS LE DÉFI</p>}
+            <div>
+                <h2 className={`text-6xl font-black ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "BRAVO"}</h2>
+                <p className="text-[10px] text-slate-500 tracking-[0.4em] mt-2">SESSION TERMINÉE</p>
             </div>
-            <button onClick={() => challengeId ? router.push('/client/challenges') : setStatus('idle')} className="w-full py-6 bg-white text-black rounded-3xl font-black text-xl hover:bg-emerald-500 transition-colors">
-              {challengeId ? "VOIR LE CLASSEMENT" : "REJOUER"}
+            
+            <div className="bg-white/5 p-8 rounded-[2.5rem] border border-white/5 backdrop-blur-sm shadow-inner">
+                <p className="text-[10px] text-slate-500 mb-2">SCORE DE SESSION</p>
+                <p className="text-5xl font-black text-white">
+                    {challengeId ? (currentIndex * 10 + (status === 'ended' ? 10 : 0)) : (status === 'lost' ? 0 : (bet * multiplier).toFixed(0))} 
+                    <span className="text-lg text-emerald-500 ml-2">{challengeId ? 'PTS' : 'HTG'}</span>
+                </p>
+                {challengeId && <p className="text-[8px] text-emerald-500/60 mt-4 tracking-widest font-bold underline decoration-emerald-500/20 underline-offset-4">POINTS AJOUTÉS À TON CUMUL GLOBAL</p>}
+            </div>
+
+            <button 
+                onClick={() => challengeId ? router.push('/client/rank') : setStatus('idle')} 
+                className="w-full py-6 bg-white text-black rounded-[2rem] font-black text-xl active:scale-95 transition-all shadow-xl"
+            >
+              {challengeId ? "VOIR TON RANG" : "REJOUER"}
             </button>
           </div>
         )}
