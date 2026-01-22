@@ -56,18 +56,18 @@ const handleCreateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
     const formData = new FormData(e.currentTarget);
     let fileUrl = "";
     const file = formData.get('attachment') as File;
+if (file && file.size > 0) {
+  // IMPORTANT: On place le fichier dans un sous-dossier nommé par l'ID de l'user
+  // structure: /tickets/{user_id}/{uuid}-{filename}
+  const filePath = `${userData.user?.id}/${crypto.randomUUID()}-${file.name}`;
+  
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from('tickets')
+    .upload(filePath, file);
 
-    // Gestion de l'upload
-    if (file && file.size > 0) {
-      const fileName = `${user.id}/${crypto.randomUUID()}-${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('tickets')
-        .upload(fileName, file);
-      
-      if (uploadError) throw uploadError;
-      if (uploadData) fileUrl = uploadData.path;
-    }
-
+  if (uploadError) throw uploadError;
+  fileUrl = uploadData.path; // On stocke le chemin relatif
+}
     // Insertion du ticket
     const { data, error } = await supabase.from('support_tickets').insert({
       user_id: user.id,
