@@ -21,7 +21,7 @@ export default function ClientTicketPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatLogs]);
 
-  // WebSocket (Broadcast éphémère)
+  // WebSocket (Broadcast éphémère
   useEffect(() => {
     if (!ticket) return;
 
