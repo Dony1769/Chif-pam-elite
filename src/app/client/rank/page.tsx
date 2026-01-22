@@ -2,205 +2,196 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 import { 
-  Trophy, Medal, Target, ChevronLeft, 
-  Loader2, Award, Zap, Brain, Lock,
-  TrendingUp, Users, RefreshCw
+  Trophy, Medal, Target, Timer, 
+  ChevronLeft, Loader2, Star, 
+  ChevronRight, Hash, Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 
 export default function RankPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [myRankings, setMyRankings] = useState<any[]>([]);
+  const [userEntries, setUserEntries] = useState<any[]>([]);
+  const [selectedChallenge, setSelectedChallenge] = useState<any>(null);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    fetchInitialData();
+    initRanks();
     
-    // REALTIME: Écouter les mises à jour des scores pour rafraîchir le classement
+    // TEMPS RÉEL : Écoute les nouveaux scores pour mettre à jour le classement sans rafraîchir
     const channel = supabase
-      .channel('realtime_rankings')
+      .channel('realtime_ranks')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_entries' }, () => {
-        fetchInitialData();
+        initRanks();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const fetchInitialData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/auth/login');
+  const initRanks = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return router.push('/auth/login');
 
-      // 1. Profil du joueur
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(prof);
+    // 1. Récupérer le profil
+    const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    setProfile(prof);
 
-      // 2. Récupérer tous les défis auxquels l'utilisateur a participé
-      // On récupère le score de l'user ET le leaderboard global pour chaque défi
-      const { data: entries, error } = await supabase
-        .from('challenge_entries')
-        .select(`
-          score,
-          challenge_id,
-          challenges (
-            id,
-            title,
-            game_type,
-            prize_pool
-          )
-        `)
-        .eq('user_id', user.id);
+    // 2. Récupérer tous les défis où l'utilisateur a un score
+    const { data: entries } = await supabase
+      .from('challenge_entries')
+      .select(`
+        *,
+        challenges (
+          id, title, prize_pool, game_type
+        )
+      `)
+      .eq('user_id', user.id)
+      .order('completed_at', { ascending: false });
 
-      if (error) throw error;
-
-      // 3. Pour chaque défi, calculer la position (Rang)
-      const rankingsWithPosition = await Promise.all((entries || []).map(async (entry: any) => {
-        const { count } = await supabase
-          .from('challenge_entries')
-          .select('*', { count: 'exact', head: true })
-          .eq('challenge_id', entry.challenge_id)
-          .gt('score', entry.score);
-
-        const rank = (count || 0) + 1;
-
-        const { count: totalParticipants } = await supabase
-          .from('challenge_entries')
-          .select('*', { count: 'exact', head: true })
-          .eq('challenge_id', entry.challenge_id);
-
-        return {
-          ...entry,
-          rank,
-          total: totalParticipants
-        };
-      }));
-
-      setMyRankings(rankingsWithPosition);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+    setUserEntries(entries || []);
+    
+    if (entries && entries.length > 0 && !selectedChallenge) {
+      fetchLeaderboard(entries[0].challenges.id);
+      setSelectedChallenge(entries[0].challenges);
     }
+    setLoading(false);
   };
 
-  const getGameIcon = (type: string) => {
-    if (type === 'quiz') return <Brain className="text-blue-400" size={18} />;
-    if (type === 'biometric') return <Zap className="text-emerald-400" size={18} />;
-    return <Lock className="text-amber-400" size={18} />;
+  const fetchLeaderboard = async (challengeId: string) => {
+    // Calcul du rang global pour ce défi spécifique
+    const { data: board } = await supabase
+      .from('challenge_entries')
+      .select(`
+        score,
+        completed_at,
+        user_id,
+        profiles ( username, avatar_url, vip_status )
+      `)
+      .eq('challenge_id', challengeId)
+      .order('score', { ascending: false })
+      .order('completed_at', { ascending: true })
+      .limit(50);
+
+    setLeaderboard(board || []);
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#050508] flex flex-col items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500 mb-4" size={40} />
-      <p className="text-[10px] text-white/30 tracking-[0.4em] uppercase font-black italic">Calcul des positions...</p>
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center">
+      <Loader2 className="animate-spin text-amber-500" size={40} />
+      <p className="text-[10px] text-amber-500/50 tracking-[0.3em] mt-4 font-black italic uppercase">Calcul des hiérarchies...</p>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-6 pb-32 font-black italic uppercase overflow-x-hidden">
-      {/* HEADER SECTION */}
-      <div className="flex items-center justify-between mb-10">
-        <button 
-          onClick={() => router.push('/client/home')} 
-          className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all"
-        >
+      {/* HEADER */}
+      <div className="flex items-center justify-between mb-8">
+        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10">
           <ChevronLeft size={20} />
         </button>
         <div className="text-right">
-          <h1 className="text-2xl tracking-tighter leading-none">HALL OF <span className="text-emerald-500">FAME</span></h1>
-          <p className="text-[8px] text-white/40 tracking-[0.2em] mt-1">TES PERFORMANCES LIVE</p>
+          <h1 className="text-2xl tracking-tighter text-amber-500">CLASSEMENT <span className="text-white text-xs block opacity-50">HALL OF FAME</span></h1>
         </div>
       </div>
 
-      {/* USER STATS CARD */}
-      <div className="bg-emerald-600 rounded-[2.5rem] p-6 mb-10 shadow-[0_20px_40px_rgba(16,185,129,0.2)] flex items-center justify-between relative overflow-hidden">
-        <div className="relative z-10">
-          <p className="text-[10px] text-black/60 mb-1 tracking-widest">AGENT ACTIF</p>
-          <h2 className="text-2xl text-black truncate w-40 leading-none">{profile?.username || 'GHOST_USER'}</h2>
-        </div>
-        <div className="h-16 w-16 bg-black/20 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 relative z-10">
-          <Trophy size={30} className="text-black" />
-        </div>
-        {/* Background Decorative Pattern */}
-        <div className="absolute top-0 right-0 opacity-10 pointer-events-none">
-          <RefreshCw size={120} className="rotate-12 translate-x-10 -translate-y-10" />
-        </div>
-      </div>
-
-      {/* CLASSEMENTS LIST */}
-      <div className="space-y-6">
-        <h3 className="text-[10px] text-white/40 ml-2 tracking-[0.3em]">MES DÉFIS ACTIFS</h3>
-        
-        <AnimatePresence>
-          {myRankings.length > 0 ? (
-            myRankings.map((rank, idx) => (
-              <motion.div 
-                key={rank.challenge_id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="bg-zinc-900/50 border border-white/5 rounded-[2rem] p-5 flex items-center justify-between relative"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10">
-                    {getGameIcon(rank.challenges.game_type)}
-                  </div>
-                  <div>
-                    <h4 className="text-xs tracking-tight mb-1">{rank.challenges.title}</h4>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[8px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded">SCORE: {rank.score}</span>
-                        <span className="text-[8px] text-white/30 flex items-center gap-1"><Users size={8}/> {rank.total}</span>
-                    </div>
-                  </div>
+      {/* MES PARTICIPATIONS (Horizontales) */}
+      <div className="mb-10">
+        <p className="text-[8px] text-slate-500 mb-4 tracking-widest">TES DÉFIS ACTIFS</p>
+        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+          {userEntries.length > 0 ? userEntries.map((entry) => (
+            <motion.div 
+              key={entry.id}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setSelectedChallenge(entry.challenges);
+                fetchLeaderboard(entry.challenges.id);
+              }}
+              className={`flex-shrink-0 w-48 p-5 rounded-[2rem] border transition-all ${selectedChallenge?.id === entry.challenges.id ? 'bg-amber-500 border-amber-400 text-black shadow-[0_10px_20px_rgba(245,158,11,0.2)]' : 'bg-white/5 border-white/10 text-white'}`}
+            >
+              <p className="text-[7px] opacity-60 mb-1">{entry.challenges.game_type}</p>
+              <h3 className="text-xs truncate mb-3">{entry.challenges.title}</h3>
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-[7px] opacity-60">TON SCORE</p>
+                  <p className="text-lg">{entry.score}</p>
                 </div>
-
-                <div className="flex flex-col items-end">
-                  <div className={`text-2xl flex items-center gap-2 ${rank.rank === 1 ? 'text-amber-400' : 'text-white'}`}>
-                    <span className="text-[10px] text-white/30 uppercase">Rang</span>
-                    #{rank.rank}
-                  </div>
-                  <p className="text-[7px] text-emerald-500/60 mt-1">POUR {rank.challenges.prize_pool} HTG</p>
-                </div>
-
-                {/* Badge Médaille pour le Top 3 */}
-                {rank.rank <= 3 && (
-                  <div className="absolute -top-2 -right-2">
-                    <Medal size={24} className={rank.rank === 1 ? 'text-amber-400' : rank.rank === 2 ? 'text-slate-400' : 'text-amber-700'} />
-                  </div>
-                )}
-              </motion.div>
-            ))
-          ) : (
-            <div className="py-20 flex flex-col items-center justify-center bg-white/5 rounded-[2.5rem] border border-white/5 border-dashed">
-              <Award size={40} className="text-white/10 mb-4" />
-              <p className="text-[10px] text-white/20 text-center px-10">AUCUNE PARTICIPATION ENREGISTRÉE DANS LES DÉFIS.</p>
-              <button 
-                onClick={() => router.push('/client/challenges')}
-                className="mt-6 text-[10px] text-emerald-500 border-b border-emerald-500 pb-1"
-              >
-                REJOINDRE LA COMPÉTITION
-              </button>
+                <Star size={16} className={selectedChallenge?.id === entry.challenges.id ? 'text-black' : 'text-amber-500'} />
+              </div>
+            </motion.div>
+          )) : (
+            <div className="w-full py-10 bg-white/5 rounded-[2rem] border border-dashed border-white/10 text-center">
+                <p className="text-[10px] text-slate-500">AUCUNE PARTICIPATION</p>
             </div>
           )}
-        </AnimatePresence>
-      </div>
-
-      {/* BOTTOM INFO */}
-      <div className="mt-12 p-6 bg-blue-500/5 border border-blue-500/10 rounded-3xl">
-        <div className="flex items-start gap-4">
-            <TrendingUp className="text-blue-500 shrink-0" size={20} />
-            <div>
-                <p className="text-[9px] text-blue-500 mb-1">SYSTÈME ANTI-TRICHE</p>
-                <p className="text-[8px] text-white/40 normal-case italic font-medium leading-relaxed">
-                    Les rangs sont calculés en temps réel sur nos serveurs sécurisés. Toute tentative de manipulation des scores entraînera un bannissement définitif.
-                </p>
-            </div>
         </div>
       </div>
+
+      {/* LEADERBOARD GLOBAL POUR LE DÉFI SÉLECTIONNÉ */}
+      <AnimatePresence mode="wait">
+        {selectedChallenge && (
+          <motion.div 
+            key={selectedChallenge.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+          >
+            <div className="flex justify-between items-center px-2">
+                <h2 className="text-sm tracking-widest flex items-center gap-2">
+                    <Trophy size={14} className="text-amber-500"/> TOP 50 - {selectedChallenge.title}
+                </h2>
+                <div className="bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
+                    <p className="text-[8px] text-amber-500">{selectedChallenge.prize_pool} HTG EN JEU</p>
+                </div>
+            </div>
+
+            <div className="bg-white/5 rounded-[2.5rem] border border-white/5 overflow-hidden">
+              {leaderboard.map((item, index) => {
+                const isMe = item.user_id === profile?.id;
+                const rank = index + 1;
+                
+                return (
+                  <motion.div 
+                    key={index}
+                    className={`flex items-center justify-between p-5 border-b border-white/5 ${isMe ? 'bg-amber-500/10' : ''}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 text-center font-black italic">
+                        {rank === 1 ? <Medal className="text-amber-400 mx-auto" /> : 
+                         rank === 2 ? <Medal className="text-slate-400 mx-auto" /> : 
+                         rank === 3 ? <Medal className="text-amber-700 mx-auto" /> : 
+                         <span className="text-xs text-slate-500">#{rank}</span>}
+                      </div>
+                      
+                      <div className="flex flex-col">
+                        <span className={`text-[11px] ${isMe ? 'text-amber-500' : 'text-white'}`}>
+                            {item.profiles?.username || 'Anonyme'} {isMe && "(TOI)"}
+                        </span>
+                        <span className="text-[7px] text-slate-500 flex items-center gap-1">
+                            {item.profiles?.vip_status === 'monthly' && <Crown size={8} className="text-amber-500"/>}
+                            {new Date(item.completed_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                        <p className="text-xs font-black">{item.score}</p>
+                        <p className="text-[6px] text-slate-500">POINTS</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+const Crown = ({ size, className }: { size: number, className: string }) => (
+    <Award size={size} className={className} />
+);
