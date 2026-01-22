@@ -57,7 +57,7 @@ export default function ClientHome() {
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'messages'
+        table: 'latest_message_per_conversation'
       }, (payload) => {
         // Si le message mis à jour appartient au client et est maintenant lu, on rafraîchit le compte
         if (payload.new.is_read === true) {
