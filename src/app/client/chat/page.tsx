@@ -17,29 +17,18 @@ export default function ClientChat() {
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
   const notificationAudio = typeof window !== "undefined" ? new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3") : null;
 
-  // FONCTION 650% PERFECTION : Nettoyage atomique des deux tables
-  const markAdminMessagesAsRead = async (userId: string) => {
+  // PERFECTION 650% : Une seule source de vérité (la table messages)
+  const markAsRead = async (userId: string) => {
     try {
-      // 1. On nettoie la table principale
-      const updateMessages = supabase
+      await supabase
         .from('messages')
         .update({ is_read: true })
         .eq('receiver_id', userId)
         .eq('sender_id', ADMIN_ID)
         .eq('is_read', false);
-
-      // 2. On nettoie la table de cache (latest_message_per_conversation)
-      const updateCache = supabase
-        .from('latest_message_per_conversation')
-        .update({ is_read: true })
-        .eq('receiver_id', userId)
-        .eq('sender_id', ADMIN_ID);
-
-      // Exécution parallèle pour ne pas ralentir l'interface
-      await Promise.all([updateMessages, updateCache]);
+      // La VUE latest_message_per_conversation se mettra à jour instantanément côté SQL
     } catch (error) {
       console.error("Sync Error:", error);
     }
@@ -51,30 +40,33 @@ export default function ClientChat() {
       if (!authUser) return;
       setUser(authUser);
       
-      // Nettoyage immédiat à l'ouverture
-      await markAdminMessagesAsRead(authUser.id);
+      await markAsRead(authUser.id);
 
-      // Chargement historique
       const { data } = await supabase.from('messages')
         .select('*')
         .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
         .order('created_at', { ascending: true });
       setMessages(data || []);
 
-      // Realtime intelligent
-      const channel = supabase.channel(`chat-ultra-sync-${authUser.id}`)
+      const channel = supabase.channel(`chat-sync-${authUser.id}`)
         .on('postgres_changes', { 
-          event: 'INSERT', 
+          event: '*', // INSERT pour les nouveaux messages, UPDATE pour les vus (CheckCheck)
           schema: 'public', 
           table: 'messages'
         }, async (payload) => {
-          // Si le message vient de l'admin vers moi
-          if (payload.new.sender_id === ADMIN_ID && payload.new.receiver_id === authUser.id) {
-            notificationAudio?.play().catch(() => {});
-            // On re-nettoie les deux tables pour être sûr que Home reste à zéro
-            await markAdminMessagesAsRead(authUser.id);
+          if (payload.eventType === 'INSERT') {
+            const msg = payload.new;
+            if (msg.sender_id === ADMIN_ID && msg.receiver_id === authUser.id) {
+              notificationAudio?.play().catch(() => {});
+              await markAsRead(authUser.id); // On marque comme lu immédiatement si on est sur la page
+            }
+            setMessages((prev) => [...prev, msg]);
+          } 
+          
+          if (payload.eventType === 'UPDATE') {
+            // Pour mettre à jour les icônes de lecture (CheckCheck) en temps réel
+            setMessages((prev) => prev.map(m => m.id === payload.new.id ? payload.new : m));
           }
-          setMessages((prev) => [...prev, payload.new]);
         })
         .subscribe();
 
@@ -111,15 +103,14 @@ export default function ClientChat() {
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(filePath);
 
-      const { data: insertedMsg } = await supabase.from('messages').insert([{
+      await supabase.from('messages').insert([{
         content: "📷 Photo",
         image_url: publicUrl,
         sender_id: user.id,
         receiver_id: ADMIN_ID,
         is_admin: false,
         is_read: false
-      }]).select().single();
-      if (insertedMsg) setMessages(prev => [...prev, insertedMsg]);
+      }]);
     } catch (err) { alert("Erreur d'envoi"); } finally { setUploading(false); }
   };
 
@@ -128,7 +119,7 @@ export default function ClientChat() {
       {/* Zoom Image */}
       {fullscreenImage && (
         <div className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setFullscreenImage(null)}>
-          <img src={fullscreenImage} className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl shadow-emerald-500/10" />
+          <img src={fullscreenImage} className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl shadow-emerald-500/10" alt="fullscreen" />
         </div>
       )}
 
@@ -149,18 +140,18 @@ export default function ClientChat() {
         </div>
       </div>
 
-      {/* Zone Messages avec texture */}
+      {/* Zone Messages */}
       <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.is_admin ? 'justify-start' : 'justify-end'} animate-in slide-in-from-bottom-2 duration-300`}>
             <div className={`max-w-[85%] space-y-1`}>
                 <div className={`p-4 rounded-[1.5rem] shadow-xl ${m.is_admin ? 'bg-slate-800 rounded-tl-none border border-white/5' : 'bg-emerald-600 rounded-tr-none shadow-emerald-900/20'}`}>
-                {m.image_url && <img src={m.image_url} onClick={() => setFullscreenImage(m.image_url)} className="rounded-xl mb-3 cursor-zoom-in hover:brightness-110 transition-all" alt="attachment" />}
-                <p className="text-xs font-bold leading-relaxed lowercase not-italic tracking-tight">{m.content}</p>
+                  {m.image_url && <img src={m.image_url} onClick={() => setFullscreenImage(m.image_url)} className="rounded-xl mb-3 cursor-zoom-in hover:brightness-110 transition-all" alt="attachment" />}
+                  <p className="text-xs font-bold leading-relaxed lowercase not-italic tracking-tight">{m.content}</p>
                 </div>
                 <div className={`flex items-center gap-2 px-1 ${m.is_admin ? 'justify-start' : 'justify-end'}`}>
                     <span className="text-[7px] opacity-30 tracking-widest">{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                    {!m.is_admin && <CheckCheck size={10} className={m.is_read ? "text-blue-400" : "text-white/20"} />}
+                    {!m.is_admin && <CheckCheck size={10} className={m.is_read ? "text-emerald-400" : "text-white/20"} />}
                 </div>
             </div>
           </div>
@@ -171,13 +162,9 @@ export default function ClientChat() {
       {/* Input Premium */}
       <div className="p-6 bg-slate-950 border-t border-white/5 flex gap-3 items-center">
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
-        <button 
-          onClick={() => fileInputRef.current?.click()} 
-          className="p-4 text-emerald-500 bg-white/5 rounded-[1.2rem] hover:bg-white/10 transition-all active:scale-90"
-        >
+        <button onClick={() => fileInputRef.current?.click()} className="p-4 text-emerald-500 bg-white/5 rounded-[1.2rem]">
           {uploading ? <Loader2 className="animate-spin" /> : <ImageIcon size={22} />}
         </button>
-        
         <input 
           value={newMessage} 
           onChange={(e) => setNewMessage(e.target.value)} 
@@ -185,15 +172,10 @@ export default function ClientChat() {
           placeholder="Écrivez ici..." 
           className="flex-1 bg-slate-900 rounded-[1.2rem] px-6 py-4 text-xs font-bold outline-none border border-white/5 focus:border-emerald-500/30 transition-all" 
         />
-        
-        <button 
-          onClick={sendMessage} 
-          className="p-4 bg-emerald-500 text-slate-950 rounded-[1.2rem] shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
-        >
+        <button onClick={sendMessage} className="p-4 bg-emerald-500 text-slate-950 rounded-[1.2rem]">
           <Send size={22} />
         </button>
       </div>
     </div>
   );
 }
-
