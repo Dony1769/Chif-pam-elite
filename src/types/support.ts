@@ -4,6 +4,7 @@ export type TicketCategory = 'paiement' | 'technique' | 'autre';
 export type TicketPriority = 'normal' | 'important' | 'critique';
 export type TicketStatus = 'ouvert' | 'en_cours' | 'ferme';
 
+
 export interface TicketMessage {
   text: string;
   sender: 'user' | 'admin';
