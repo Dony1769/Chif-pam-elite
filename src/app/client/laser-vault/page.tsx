@@ -58,7 +58,7 @@ function LaserVaultGame() {
   const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won' | 'maintenance'>('idle');
   
   const [bet, setBet] = useState(50);
-  const [paidFee, setPaidFee] = useState(0); // Tracking du prix payé pour le défi
+  const [paidFee, setPaidFee] = useState(0); 
   const [laserY, setLaserY] = useState(0);
   const [problem, setProblem] = useState({ q: "", a: 0 });
   const [input, setInput] = useState("");
@@ -69,6 +69,15 @@ function LaserVaultGame() {
   const [baseSpeed, setBaseSpeed] = useState(2);
   const [errorPenalty, setErrorPenalty] = useState(1.0);
   const lastTickRef = useRef<number>(0);
+
+  // --- NAVIGATION LOGIC ---
+  const handleBack = () => {
+    if (challengeId) {
+      router.push('/client/challenges');
+    } else {
+      router.push('/client/home');
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -132,7 +141,6 @@ function LaserVaultGame() {
   useEffect(() => {
     if (status !== 'playing') return;
     const timer = setInterval(() => {
-      const now = performance.now();
       setLaserY(prev => {
         if (prev >= 88) { 
             finalizeGame(false); 
@@ -140,7 +148,6 @@ function LaserVaultGame() {
         }
         return prev + (baseSpeed * errorPenalty * (1 + (multiplier - 1) * 0.15));
       });
-      lastTickRef.current = now;
     }, 100);
     return () => clearInterval(timer);
   }, [status, multiplier, baseSpeed, errorPenalty]);
@@ -172,10 +179,8 @@ function LaserVaultGame() {
 
   const finalizeGame = async (isManualCashout: boolean) => {
     if (status !== 'playing') return;
-    
     try {
       if (challengeId) {
-        // Enregistre la tentative cumulative
         await recordAttempt(challengeId, profile.id, questionsSolved, paidFee);
         setStatus(isManualCashout ? 'won' : 'lost');
       } else {
@@ -188,20 +193,20 @@ function LaserVaultGame() {
         });
         setStatus(isManualCashout ? 'won' : 'lost');
       }
-      
       if (isManualCashout) playSound('win');
       else playSound('lost');
-
     } catch (e) { console.error(e); }
   };
 
   if (loadingCheck) return <div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
 
   return (
-    <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden select-none flex flex-col">
+    <div className="fixed inset-0 bg-[#020617] text-white font-black italic uppercase overflow-hidden select-none flex flex-col">
       {/* HEADER ELITE */}
-      <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50 backdrop-blur-xl">
-        <button onClick={() => router.push('/client/challenges')} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all shadow-xl"><ChevronLeft size={20}/></button>
+      <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50 backdrop-blur-xl shrink-0">
+        <button onClick={handleBack} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all shadow-xl">
+          <ChevronLeft size={20}/>
+        </button>
         <div className="text-center">
             <h1 className="text-xs text-emerald-500 tracking-[0.3em] leading-none mb-1 underline decoration-white/10 underline-offset-4">{challengeId ? "ARENA_VAULT" : "LASER_VAULT"}</h1>
             <p className="text-[7px] text-slate-500 tracking-widest">ENCRYPTION_LVL_7</p>
@@ -209,7 +214,7 @@ function LaserVaultGame() {
         <div className="w-10" />
       </div>
 
-      <div className="flex-1 flex flex-col p-4 items-center justify-between overflow-hidden">
+      <div className="flex-1 flex flex-col p-4 items-center justify-between overflow-hidden relative">
         {status === 'maintenance' ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
             <ServerOff className="text-amber-500 mb-6 animate-pulse" size={64} />
@@ -217,28 +222,28 @@ function LaserVaultGame() {
             <p className="text-[10px] text-slate-500 leading-relaxed border border-white/5 bg-white/5 p-4 rounded-2xl uppercase">{maintenance?.msg}</p>
           </div>
         ) : status === 'idle' ? (
-          <div className="mt-10 w-full max-w-xs space-y-6">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-slate-900/40 p-10 rounded-[3.5rem] border border-white/10 text-center shadow-[0_30px_100px_rgba(0,0,0,0.5)] backdrop-blur-md">
-              <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-8 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
-                {challengeId ? <Trophy className="text-amber-500" size={32} /> : <Lock className="text-emerald-500" size={32} />}
+          <div className="flex-1 flex items-center justify-center w-full max-w-xs">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-slate-900/40 p-8 rounded-[3.5rem] border border-white/10 text-center shadow-[0_30px_100px_rgba(0,0,0,0.5)] backdrop-blur-md w-full">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
+                {challengeId ? <Trophy className="text-amber-500" size={28} /> : <Lock className="text-emerald-500" size={28} />}
               </div>
               
               {!challengeId ? (
-                <div className="space-y-1 mb-10 italic">
+                <div className="space-y-1 mb-8 italic">
                     <p className="text-[8px] text-slate-500 tracking-widest uppercase">MONTANT_HACK (HTG)</p>
-                    <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-5xl font-black text-center w-full outline-none text-white focus:text-emerald-500 transition-colors tracking-tighter" />
+                    <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} className="bg-transparent text-4xl font-black text-center w-full outline-none text-white focus:text-emerald-500 transition-colors tracking-tighter" />
                 </div>
               ) : (
-                <div className="mb-10 bg-black/40 p-6 rounded-3xl border border-white/5 italic">
+                <div className="mb-8 bg-black/40 p-5 rounded-3xl border border-white/5 italic">
                     <p className="text-[8px] text-slate-500 tracking-widest mb-1 uppercase">ARENA_OBJECTIVE</p>
-                    <p className="text-2xl text-white tracking-tighter font-black">CUMUL_CODES_SCAN</p>
+                    <p className="text-xl text-white tracking-tighter font-black">CUMUL_CODES_SCAN</p>
                 </div>
               )}
 
               <button 
                 onClick={startGame} 
                 disabled={loading}
-                className={`w-full py-6 rounded-[2rem] text-xl font-black active:scale-95 transition-all shadow-2xl ${challengeId ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
+                className={`w-full py-5 rounded-[2rem] text-lg font-black active:scale-95 transition-all shadow-2xl ${challengeId ? 'bg-amber-500 text-black' : 'bg-emerald-600 text-white'}`}
               >
                 {loading ? <Loader2 className="animate-spin mx-auto"/> : (challengeId ? "INIT_INFILTRATION" : "DÉCRYPTAGE_LIVE")}
               </button>
@@ -246,99 +251,96 @@ function LaserVaultGame() {
           </div>
         ) : (
           <div className="w-full max-w-sm flex flex-col h-full animate-in fade-in duration-700">
-            {/* ZONE DE JEU (VAULT) */}
-            <div className="relative h-[40vh] bg-black rounded-[3rem] border-2 border-white/10 overflow-hidden shadow-[inset_0_0_60px_rgba(0,0,0,0.9)] mb-6">
+            {/* ZONE DE JEU - ADJUSTED FOR VIEWPORT */}
+            <div className="relative flex-1 max-h-[42vh] bg-black rounded-[2.5rem] border-2 border-white/10 overflow-hidden shadow-[inset_0_0_60px_rgba(0,0,0,0.9)] mb-4 shrink-0">
               <div className="absolute inset-0 bg-emerald-500/5 pointer-events-none" />
-              
-              {/* Le Laser */}
               <motion.div style={{ top: `${laserY}%` }} className="absolute left-0 right-0 h-1 bg-rose-600 shadow-[0_0_40px_#f43f5e] z-30">
                  <div className="absolute top-0 left-0 w-full h-full animate-pulse bg-rose-400" />
               </motion.div>
 
-              <div className="absolute top-8 left-8 right-8 flex justify-between items-start z-10">
-                 <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-xl italic">
-                    <p className="text-[7px] text-zinc-500 tracking-widest">CODES_SOLVED</p>
-                    <p className="text-lg text-white font-black">{questionsSolved}</p>
+              <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-10">
+                 <div className="bg-black/60 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 italic">
+                    <p className="text-[6px] text-zinc-500 tracking-widest">CODES</p>
+                    <p className="text-sm text-white font-black">{questionsSolved}</p>
                  </div>
-                 <h2 className="text-5xl text-emerald-500 font-black italic drop-shadow-[0_0_20px_rgba(16,185,129,0.5)] tracking-tighter">x{multiplier.toFixed(1)}</h2>
-                 <div className="bg-black/60 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-xl text-right italic">
-                    <p className="text-[7px] text-zinc-500 tracking-widest text-right uppercase">ALERT_LVL</p>
-                    <p className="text-lg text-rose-500 font-black">{(baseSpeed * 10).toFixed(0)}%</p>
+                 <h2 className="text-4xl text-emerald-500 font-black italic drop-shadow-[0_0_20px_rgba(16,185,129,0.5)] tracking-tighter">x{multiplier.toFixed(1)}</h2>
+                 <div className="bg-black/60 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 text-right italic">
+                    <p className="text-[6px] text-zinc-500 tracking-widest uppercase">SPEED</p>
+                    <p className="text-sm text-rose-500 font-black">{(baseSpeed * 10).toFixed(0)}%</p>
                  </div>
               </div>
 
-              <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
+              <div className="absolute inset-0 flex flex-col items-center justify-center pt-6">
                  <AnimatePresence mode="wait">
-                    <motion.div key={problem.q} initial={{ opacity: 0, scale: 0.8, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 1.2 }} className="text-center">
-                        <p className="text-7xl font-black mb-6 text-white tracking-tighter italic drop-shadow-2xl">{problem.q}</p>
-                        <div className="h-16 text-5xl text-emerald-500 border-b-4 border-emerald-500/40 px-12 min-w-[180px] bg-emerald-500/5 rounded-t-[2rem] flex items-center justify-center font-black italic">
+                    <motion.div key={problem.q} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
+                        <p className="text-6xl font-black mb-4 text-white tracking-tighter italic drop-shadow-2xl">{problem.q}</p>
+                        <div className="h-12 text-4xl text-emerald-500 border-b-2 border-emerald-500/40 px-8 min-w-[140px] bg-emerald-500/5 rounded-t-xl flex items-center justify-center font-black italic">
                             {input || "?"}
                         </div>
                     </motion.div>
                  </AnimatePresence>
               </div>
               
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 scale-75">
                 <EliteAvatar status={status} isScared={laserY > 50} />
               </div>
             </div>
 
-            {/* CLAVIER NUMÉRIQUE PREMIUM */}
-            <div className="flex-1 flex flex-col justify-end gap-3 pb-8">
-              <div className="grid grid-cols-3 gap-3">
+            {/* KEYPAD - COMPACTED FOR NO SCROLL */}
+            <div className="flex flex-col justify-end gap-2 pb-4 shrink-0">
+              <div className="grid grid-cols-3 gap-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, "-", 0].map(n => (
                   <motion.button 
                     key={n} 
                     whileTap={{ scale: 0.9 }} 
                     onClick={() => handleKey(n.toString())} 
-                    className="h-16 bg-white/5 border border-white/10 rounded-[1.5rem] text-3xl font-black active:bg-emerald-600 active:text-white transition-all shadow-xl backdrop-blur-md"
+                    className="h-12 bg-white/5 border border-white/10 rounded-2xl text-2xl font-black active:bg-emerald-600 transition-all shadow-xl backdrop-blur-md"
                   >
                     {n}
                   </motion.button>
                 ))}
-                <button onClick={() => setInput("")} className="bg-rose-600/10 text-rose-500 rounded-[1.5rem] font-black text-[10px] border border-rose-500/20 active:bg-rose-500 active:text-white transition-all uppercase tracking-widest italic">CLR</button>
+                <button onClick={() => setInput("")} className="bg-rose-600/10 text-rose-500 rounded-2xl font-black text-[9px] border border-rose-500/20 uppercase tracking-widest italic">CLR</button>
               </div>
               
               <button 
                 onClick={() => finalizeGame(true)} 
-                disabled={questionsSolved < 4} 
-                className={`w-full py-7 font-black rounded-[2rem] text-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-95 transition-all flex items-center justify-center gap-3 italic tracking-tighter ${questionsSolved < 1 ? "bg-zinc-900 text-zinc-700 border border-white/5 opacity-50" : "bg-white text-black hover:bg-emerald-500 hover:text-white"}`}
+                disabled={questionsSolved < 1} 
+                className={`w-full py-5 font-black rounded-[1.5rem] text-xl shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 italic tracking-tighter ${questionsSolved < 1 ? "bg-zinc-900 text-zinc-700 opacity-50" : "bg-white text-black hover:bg-emerald-500 hover:text-white"}`}
               >
-                {questionsSolved < 4 ? "INFILTRATION_EN_COURS..." : (challengeId ? <><Trophy size={24}/> VALID_UPLINK</> : <><Wallet size={24}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
+                {questionsSolved < 1 ? "INFILTRATION_LOCKED" : (challengeId ? <><Trophy size={20}/> VALID_UPLINK</> : <><Wallet size={20}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* RESULT MODAL PREMIUM */}
+      {/* RESULT MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
-                <motion.div initial={{ y: 50, scale: 0.9 }} animate={{ y: 0, scale: 1 }} className="w-full max-w-sm">
-                    <div className="relative mb-8">
-                        <div className={`absolute inset-0 blur-[80px] opacity-20 ${status === 'lost' ? 'bg-rose-600' : 'bg-emerald-500'}`} />
-                        <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto relative ${status === 'lost' ? 'bg-rose-600/20 border-rose-500/40' : 'bg-emerald-500/20 border-emerald-500/40'} border-2 shadow-2xl`}>
-                            {status === 'lost' ? <ShieldAlert size={56} className="text-rose-500" /> : <Unlock size={56} className="text-emerald-500" />}
+                <div className="w-full max-w-sm">
+                    <div className="relative mb-6">
+                        <div className={`absolute inset-0 blur-[60px] opacity-20 ${status === 'lost' ? 'bg-rose-600' : 'bg-emerald-500'}`} />
+                        <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto relative ${status === 'lost' ? 'bg-rose-600/20 border-rose-500/40' : 'bg-emerald-500/20 border-emerald-500/40'} border-2 shadow-2xl`}>
+                            {status === 'lost' ? <ShieldAlert size={48} className="text-rose-500" /> : <Unlock size={48} className="text-emerald-500" />}
                         </div>
                     </div>
                     
-                    <h2 className="text-6xl font-black italic tracking-tighter mb-2 italic underline decoration-white/5 underline-offset-8">{status === 'lost' ? 'DETECTION!' : 'HACK_SUCCESS'}</h2>
-                    <p className="text-[10px] text-slate-500 tracking-[0.6em] mb-12 italic uppercase">OPERATIONAL_DATA_REPORT</p>
+                    <h2 className="text-5xl font-black italic tracking-tighter mb-2 italic underline decoration-white/5 underline-offset-8 uppercase">{status === 'lost' ? 'DETECTION!' : 'HACK_SUCCESS'}</h2>
+                    <p className="text-[9px] text-slate-500 tracking-[0.5em] mb-10 italic uppercase">OPERATIONAL_DATA_REPORT</p>
 
-                    <div className="bg-white/5 p-10 rounded-[3.5rem] w-full mb-12 border border-white/10 shadow-inner relative overflow-hidden backdrop-blur-md">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                        <p className="text-[10px] text-slate-500 mb-4 uppercase tracking-[0.3em] italic font-bold">{challengeId ? 'SESSION_RANK_SCORE' : 'VAULT_LOOT_TOTAL'}</p>
-                        <p className="text-7xl text-white font-black tracking-tighter italic">{challengeId ? questionsSolved : (status === 'lost' ? '0' : (bet * multiplier).toFixed(0))} <span className="text-xl text-emerald-500 ml-1">{challengeId ? 'PTS' : 'HTG'}</span></p>
+                    <div className="bg-white/5 p-8 rounded-[3rem] w-full mb-10 border border-white/10 shadow-inner backdrop-blur-md">
+                        <p className="text-[9px] text-slate-500 mb-3 uppercase tracking-[0.3em] italic font-bold">{challengeId ? 'SESSION_SCORE' : 'VAULT_LOOT'}</p>
+                        <p className="text-6xl text-white font-black tracking-tighter italic">{challengeId ? questionsSolved : (status === 'lost' ? '0' : (bet * multiplier).toFixed(0))} <span className="text-lg text-emerald-500 ml-1">{challengeId ? 'PTS' : 'HTG'}</span></p>
                     </div>
 
                     <button 
-                        onClick={() => challengeId ? router.push('/client/home') : setStatus('idle')} 
-                        className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl hover:bg-emerald-500 active:scale-95 transition-all shadow-[0_20px_60px_rgba(16,185,129,0.3)] italic"
+                        onClick={handleBack} 
+                        className="w-full py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-xl active:scale-95 transition-all shadow-xl italic"
                     >
-                      {challengeId ? "VOIR CLASSEMENT" : "RE-SCAN_VAULT"}
+                      {challengeId ? "RETOUR ARENA" : "RETOUR HOME"}
                     </button>
-                </motion.div>
+                </div>
             </motion.div>
         )}
       </AnimatePresence>
@@ -353,4 +355,3 @@ export default function LaserVaultPage() {
     </Suspense>
   );
 }
-
