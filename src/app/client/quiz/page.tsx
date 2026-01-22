@@ -1,9 +1,8 @@
 "use client";
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet } from 'lucide-react';
+import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Zap } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useChallenge } from '@/hooks/useChallenge';
 
 const SETTINGS = {
   facile: { time: 10, step: 0.15 },
@@ -26,10 +25,10 @@ function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
-  const { startChallengeEntry, submitChallengeScore, calculateFinalFee } = useChallenge();
 
   const [profile, setProfile] = useState<any>(null);
   const [bet, setBet] = useState(10);
+  const [actualPaidFee, setActualPaidFee] = useState(0); // Tracking du paiement réel
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [category, setCategory] = useState(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
@@ -79,25 +78,40 @@ function QuizGameContent() {
     } catch { return text; }
   };
 
+  // --- LOGIQUE DE PAIEMENT IMPARABLE ---
+  const calculateFinalFee = (base: number, vip: string) => {
+    if (vip === 'monthly') return base * 0.70;
+    if (vip === 'weekly') return base * 0.85;
+    return base;
+  };
+
   const start = async () => {
     if (isProcessing) return;
     setIsProcessing(true);
     setStatus('loading');
 
     try {
+      let finalFee = bet;
+
       if (challengeId) {
-        // Logique de frais dynamique (VIP vs Normal) via le Hook
-        const { data: chall } = await supabase.from('challenges').select('entry_fee').eq('id', challengeId).single();
+        const { data: chall } = await supabase.from('challenges').select('entry_fee_base').eq('id', challengeId).single();
         if (!chall) throw new Error("Défi introuvable");
         
-        const finalFee = calculateFinalFee(chall.entry_fee, profile?.vip_status);
-        const { error } = await startChallengeEntry(challengeId, profile.id, finalFee);
-        if (error) throw new Error(error);
+        finalFee = calculateFinalFee(chall.entry_fee_base, profile?.vip_status);
+        
+        // Déduction immédiate du solde
+        const { data: success, error: payError } = await supabase.rpc('process_challenge_payment', { 
+            amount_to_deduct: finalFee 
+        });
+
+        if (payError || !success) throw new Error("Solde insuffisant pour ce défi.");
+        setActualPaidFee(finalFee);
       } else {
         const { data: paid, error: betError } = await supabase.rpc('process_bet', { amount: bet });
         if (betError || !paid) throw new Error("Solde insuffisant.");
       }
 
+      // Fetch questions
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
       const processed = await Promise.all(raw.results.map(async (q: any) => {
@@ -153,18 +167,27 @@ function QuizGameContent() {
         } else { finalizeGame(true); }
       }, 1500);
     } else {
-      // Défaite : On enregistre quand même les points accumulés dans le défi
       finalizeGame(false);
     }
   };
 
+  // --- FINALISATION ET INSERTION challenge_attempts ---
   const finalizeGame = async (isWin: boolean) => {
     setIsProcessing(true);
     try {
       if (challengeId) {
-        // Points cumulés : 10 pts par bonne réponse
+        // Points : 10 par bonne réponse. Si perdu à la 3ème question, currentIndex est 2.
         const sessionScore = currentIndex * 10 + (isWin ? 10 : 0);
-        await submitChallengeScore(challengeId, profile.id, sessionScore);
+        
+        // INSERTION CRUCIALE DANS challenge_attempts
+        const { error: attemptError } = await supabase.from('challenge_attempts').insert([{
+            challenge_id: challengeId,
+            user_id: profile.id,
+            score_gained: sessionScore,
+            amount_paid: actualPaidFee
+        }]);
+
+        if (attemptError) throw attemptError;
         setStatus(isWin ? 'ended' : 'lost');
       } else {
         if (isWin) {
@@ -176,7 +199,7 @@ function QuizGameContent() {
         }
       }
     } catch (e) { 
-      console.error(e);
+      console.error("Erreur de finalisation:", e);
     } finally { 
       setIsProcessing(false); 
       setShowCorrection(false);
@@ -185,6 +208,7 @@ function QuizGameContent() {
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black uppercase flex flex-col items-center select-none font-sans">
+      {/* Header, Maintenance et Idle States (Identiques au tien pour préserver ton design) */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all"><ChevronLeft/></button>
         <h1 className="text-2xl text-emerald-500 italic tracking-tighter underline decoration-white/10 underline-offset-8">{challengeId ? "ARENA CHALLENGE" : "QUIZ ELITE"}</h1>
@@ -304,14 +328,19 @@ function QuizGameContent() {
                     {challengeId ? (currentIndex * 10 + (status === 'ended' ? 10 : 0)) : (status === 'lost' ? 0 : (bet * multiplier).toFixed(0))} 
                     <span className="text-lg text-emerald-500 ml-2">{challengeId ? 'PTS' : 'HTG'}</span>
                 </p>
-                {challengeId && <p className="text-[8px] text-emerald-500/60 mt-4 tracking-widest font-bold underline decoration-emerald-500/20 underline-offset-4">POINTS AJOUTÉS À TON CUMUL GLOBAL</p>}
+                {challengeId && (
+                    <div className="mt-4 space-y-2">
+                        <p className="text-[8px] text-emerald-500/60 tracking-widest font-bold underline decoration-emerald-500/20 underline-offset-4">POINTS AJOUTÉS À TON CUMUL GLOBAL</p>
+                        <p className="text-[7px] text-slate-500 italic">INVESTISSEMENT : {actualPaidFee} HTG</p>
+                    </div>
+                )}
             </div>
 
             <button 
-                onClick={() => challengeId ? router.push('/client/rank') : setStatus('idle')} 
+                onClick={() => challengeId ? router.push('/client/challenges') : setStatus('idle')} 
                 className="w-full py-6 bg-white text-black rounded-[2rem] font-black text-xl active:scale-95 transition-all shadow-xl"
             >
-              {challengeId ? "VOIR TON RANG" : "REJOUER"}
+              {challengeId ? "RETOURNER À L'ARÈNE" : "REJOUER"}
             </button>
           </div>
         )}
