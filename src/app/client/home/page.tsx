@@ -212,8 +212,8 @@ export default function ClientHome() {
           <h3 className="text-[10px] text-slate-500 tracking-widest px-2 font-black uppercase italic">Défis à la une</h3>
           <div className="grid grid-cols-1 gap-3">
             <GameRow href="/client/games/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
-            <GameRow href="/client/games/vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
-            <GameRow href="/client/games/biometric" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
+            <GameRow href="/client/games/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
+            <GameRow href="/client/games/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
           </div>
         </div>
 
