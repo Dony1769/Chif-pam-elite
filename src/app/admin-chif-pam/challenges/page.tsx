@@ -9,9 +9,23 @@ export default function AdminArena() {
   const [challenges, setChallenges] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ title: '', game_type: 'quiz', entry_fee_base: 50, prize_pool: 500, max_participants: 100, ends_at: '' });
+  const [form, setForm] = useState({ 
+    title: '', 
+    game_type: 'quiz', 
+    entry_fee_base: 50, 
+    prize_pool: 0, // Sera calculé
+    max_participants: 100, 
+    ends_at: '' 
+  });
 
   useEffect(() => { fetchChallenges(); }, []);
+
+  // Calcul automatique de la cagnotte (70% du total, 30% pour la maison)
+  useEffect(() => {
+    const totalBrut = form.entry_fee_base * form.max_participants;
+    const netPrize = Math.floor(totalBrut * 0.70); // Tu prends 30% de commission
+    setForm(prev => ({ ...prev, prize_pool: netPrize }));
+  }, [form.entry_fee_base, form.max_participants]);
 
   const fetchChallenges = async () => {
     const { data } = await supabase.from('challenges').select('*, challenge_attempts(user_id)').order('created_at', { ascending: false });
@@ -94,7 +108,6 @@ export default function AdminArena() {
         })}
       </div>
 
-      {/* MODAL CONFIGURATION PREMIUM */}
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-2xl">
@@ -124,17 +137,19 @@ export default function AdminArena() {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1">
                     <p className="text-[7px] text-slate-500 ml-2 uppercase tracking-widest">TICKET BASE</p>
-                    <input required type="number" className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none" onChange={e => setForm({...form, entry_fee_base: Number(e.target.value)})} />
+                    <input required type="number" value={form.entry_fee_base} className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none" onChange={e => setForm({...form, entry_fee_base: Number(e.target.value)})} />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[7px] text-slate-500 ml-2 uppercase tracking-widest">CAGNOTTE TOTAL</p>
-                    <input required type="number" className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none text-emerald-500" onChange={e => setForm({...form, prize_pool: Number(e.target.value)})} />
+                    <p className="text-[7px] text-amber-500 ml-2 uppercase tracking-widest">CAGNOTTE (-30%)</p>
+                    <input disabled type="number" value={form.prize_pool} className="w-full bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl outline-none text-emerald-500 font-bold" />
                   </div>
                   <div className="space-y-1">
                     <p className="text-[7px] text-slate-500 ml-2 uppercase tracking-widest">LIMITE JOUEURS</p>
-                    <input required type="number" className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none" onChange={e => setForm({...form, max_participants: Number(e.target.value)})} />
+                    <input required type="number" value={form.max_participants} className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none" onChange={e => setForm({...form, max_participants: Number(e.target.value)})} />
                   </div>
                 </div>
+                
+                <p className="text-[8px] text-center text-slate-500 tracking-tighter">BÉNÉFICE MAISON ESTIMÉ : <span className="text-white">{(form.entry_fee_base * form.max_participants) - form.prize_pool} HTG</span></p>
               </div>
 
               <button type="submit" className="w-full py-6 bg-emerald-600 text-black rounded-3xl font-black text-xl shadow-2xl hover:bg-emerald-400 hover:scale-[1.02] transition-all uppercase tracking-tighter">
