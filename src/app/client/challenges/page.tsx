@@ -43,10 +43,11 @@ export default function ChallengesPage() {
     return <Lock className={`${iconClass} text-amber-400`} />;
   };
 
+  // --- CORRECTION DU LIEN PHYSIQUE ---
   const getGameRoute = (type: string) => {
-    if (type === 'quiz') return 'quiz-elite';
-    if (type === 'biometric') return 'biometric-hack';
-    return 'laser-vault';
+    if (type === 'quiz') return 'quiz'; // Redirige vers /client/quiz/page.tsx
+    if (type === 'biometric') return 'biometric-hack'; // /client/biometric-hack/page.tsx
+    return 'laser-vault'; // /client/laser-vault/page.tsx
   };
 
   const calculateEntryFee = (baseFee: number) => {
@@ -64,10 +65,10 @@ export default function ChallengesPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-6 pb-32 font-black italic uppercase">
-      {/* HEADER PREMIUM */}
+      {/* HEADER PREMIUM - CORRECTION REDIRECTION RETOUR */}
       <div className="flex items-center justify-between mb-10">
         <button 
-          onClick={() => router.back()} 
+          onClick={() => router.push('/client/home')} // Redirige vers /client/home
           className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all active:scale-90"
         >
           <ChevronLeft size={20} />
@@ -106,7 +107,6 @@ export default function ChallengesPage() {
                   transition={{ delay: index * 0.1 }}
                   className="group bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 relative overflow-hidden backdrop-blur-sm"
                 >
-                  {/* Effet visuel de fond */}
                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/10 transition-all" />
 
                   <div className="flex justify-between items-start mb-6">
@@ -156,7 +156,7 @@ export default function ChallengesPage() {
                     onClick={() => router.push(`/client/${getGameRoute(challenge.game_type)}?challengeId=${challenge.id}`)}
                     className="w-full py-5 bg-white text-slate-950 rounded-[1.8rem] text-[11px] font-black flex items-center justify-center gap-2 hover:bg-emerald-500 transition-colors shadow-2xl active:scale-95"
                   >
-                    HACKER LE SYSTÈME <ChevronRight size={16} />
+                    REJOINDRE LE DÉFI <ChevronRight size={16} />
                   </button>
                 </motion.div>
               );
@@ -172,4 +172,3 @@ export default function ChallengesPage() {
     </div>
   );
 }
-
