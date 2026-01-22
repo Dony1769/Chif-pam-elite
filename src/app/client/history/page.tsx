@@ -40,7 +40,7 @@ export default function ClientHistory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Récupération parallèle pour la performance
+      // 1. Récupération parallèle pour la performace
       const [misesRes, minesRes, crashRes, transRes] = await Promise.all([
         supabase.from('mises').select('*, tirages(moment)').eq('user_id', user.id),
         supabase.from('mines_games').select('*').eq('user_id', user.id),
