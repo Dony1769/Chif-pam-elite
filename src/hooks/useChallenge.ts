@@ -1,58 +1,52 @@
-// hooks/useChallenge.ts
 import { supabase } from '@/lib/supabase';
 
 export const useChallenge = () => {
-  const startChallengeEntry = async (challengeId: string, userId: string, fee: number) => {
-    // 1. Vérification et débit
-    const { data: profile } = await supabase.from('profiles').select('balance').eq('id', userId).single();
-    if (!profile || profile.balance < fee) return { error: "Solde insuffisant" };
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ balance: profile.balance - fee })
-      .eq('id', userId);
-
-    if (updateError) return { error: "Erreur lors du paiement" };
-
-    // 2. Inscription au défi (Upsert pour permettre plusieurs essais si l'admin l'autorise)
-    const { data: entry, error: entryError } = await supabase
-      .from('challenge_entries')
-      .upsert({ 
-        challenge_id: challengeId, 
-        user_id: userId, 
-        last_attempt_at: new Date().toISOString() 
-      }, { onConflict: 'challenge_id,user_id' })
-      .select().single();
-
-    if (entryError) return { error: "Erreur d'inscription" };
-
-    // 3. Log de transaction pour ton suivi
-    await supabase.from('transactions').insert({
-      user_id: userId,
-      amount: -fee,
-      type: 'challenge_fee',
-      description: `Entrée défi: ${challengeId}`
-    });
-
-    return { entry, error: null };
+  const calculateFinalFee = (baseFee: number, vipStatus: string) => {
+    if (vipStatus === 'monthly') return baseFee * 0.75;
+    if (vipStatus === 'weekly') return baseFee * 0.90;
+    return baseFee;
   };
 
-  const submitChallengeScore = async (challengeId: string, userId: string, score: number) => {
-    const { data: entry } = await supabase
+  const startChallengeEntry = async (challengeId: string, userId: string, fee: number) => {
+    // 1. Déduire le solde via RPC (process_bet existant)
+    const { data: paid, error: payError } = await supabase.rpc('process_bet', { amount: fee });
+    
+    if (payError || !paid) return { error: "Solde insuffisant" };
+
+    // 2. Enregistrer le paiement
+    await supabase.from('challenge_payments').insert([{
+      user_id: userId,
+      challenge_id: challengeId,
+      amount_paid: fee
+    }]);
+
+    return { success: true };
+  };
+
+  const submitChallengeScore = async (challengeId: string, userId: string, newScore: number) => {
+    // Utilisation de upsert pour cumuler le score
+    const { data: existing } = await supabase
       .from('challenge_entries')
-      .select('best_score')
+      .select('total_score, attempts_count')
       .eq('challenge_id', challengeId)
       .eq('user_id', userId)
       .single();
 
-    if (score > (entry?.best_score || 0)) {
-      await supabase
-        .from('challenge_entries')
-        .update({ best_score: score })
-        .eq('challenge_id', challengeId)
-        .eq('user_id', userId);
-    }
+    const updatedScore = (existing?.total_score || 0) + newScore;
+    const updatedAttempts = (existing?.attempts_count || 0) + 1;
+
+    const { error } = await supabase
+      .from('challenge_entries')
+      .upsert({
+        challenge_id: challengeId,
+        user_id: userId,
+        total_score: updatedScore,
+        attempts_count: updatedAttempts,
+        last_played_at: new Date().toISOString()
+      }, { onConflict: 'challenge_id,user_id' });
+
+    return { error, updatedScore };
   };
 
-  return { startChallengeEntry, submitChallengeScore };
+  return { startChallengeEntry, submitChallengeScore, calculateFinalFee };
 };
