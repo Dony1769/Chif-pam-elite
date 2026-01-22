@@ -66,7 +66,7 @@ function LaserVaultGame() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsSolved, setQuestionsSolved] = useState(0);
-  const [baseSpeed, setBaseSpeed] = useState(5);
+  const [baseSpeed, setBaseSpeed] = useState(2);
   const [errorPenalty, setErrorPenalty] = useState(1.0);
   const lastTickRef = useRef<number>(0);
 
@@ -121,7 +121,7 @@ function LaserVaultGame() {
         setGameId(id);
       }
       
-      setMultiplier(1.0); setLaserY(0); setQuestionsSolved(0); setBaseSpeed(5); setErrorPenalty(1.0); setInput("");
+      setMultiplier(1.0); setLaserY(0); setQuestionsSolved(0); setBaseSpeed(2); setErrorPenalty(1.0); setInput("");
       generateProblem(1.0); setStatus('playing');
       lastTickRef.current = performance.now(); playSound('beep');
     } catch (e: any) { 
