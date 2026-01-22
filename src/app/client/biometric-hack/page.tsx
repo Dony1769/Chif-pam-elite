@@ -182,7 +182,14 @@ function BiometricGameContent() {
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col">
       {/* HEADER */}
       <div className="p-6 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={() => router.push('/client/challenges')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all shadow-xl"><ChevronLeft size={20}/></button>
+        {/* MISE À JOUR LOGIQUE REDIRECTION */}
+        <button 
+          onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} 
+          className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 transition-all shadow-xl"
+        >
+          <ChevronLeft size={20}/>
+        </button>
+        
         <div className="text-center">
           <h1 className="text-xl text-emerald-500 tracking-[0.2em] italic underline decoration-white/10 underline-offset-8">
             {challengeId ? "ARENA_PROTOCOL" : "BIOMETRIC_HACK"}
@@ -333,3 +340,4 @@ export default function BiometricHack() {
     </Suspense>
   );
 }
+
