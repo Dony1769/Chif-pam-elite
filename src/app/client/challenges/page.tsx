@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Trophy, Zap, Brain, Lock, Loader2, ChevronRight, Crown, Wallet, Users, Timer } from 'lucide-react';
+import { Trophy, Zap, Brain, Lock, Loader2, ChevronRight, Crown, Wallet, Users, Timer, ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function ArenaPage() {
@@ -45,6 +45,17 @@ export default function ArenaPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-24">
+      {/* Back Button & Header */}
+      <div className="flex items-center gap-4 mb-8">
+        <button 
+          onClick={() => router.push('/client/home')} 
+          className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all shadow-xl"
+        >
+          <ChevronLeft size={24} />
+        </button>
+        <h1 className="text-4xl tracking-tighter italic">ACTIVE <span className="text-emerald-500">MISSIONS</span></h1>
+      </div>
+
       {/* Premium Header Status */}
       <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-[2rem] border border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-4">
@@ -64,8 +75,6 @@ export default function ArenaPage() {
           </p>
         </div>
       </div>
-
-      <h1 className="text-4xl tracking-tighter mb-8 italic">ACTIVE <span className="text-emerald-500">MISSIONS</span></h1>
 
       <div className="space-y-6">
         {challenges.map((ch) => {
