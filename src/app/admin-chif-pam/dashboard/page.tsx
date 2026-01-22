@@ -142,7 +142,7 @@ export default function AdminDashboard() {
           </div>
           <nav className="space-y-2">
             <SidebarLink href="/admin-chif-pam/dashboard" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname.includes('dashboard')} />
-            <SidebarLink href="/admin-chif-pam/loterie" icon={<Dices size={20}/>} label="Gestion Loterie" active={pathname.includes('loterie')} />
+            <SidebarLink href="/admin-chif-pam/challenges" icon={<Dices size={20}/>} label="Gestion Défi" active={pathname.includes('challenges')} />
             <SidebarLink href="/admin-chif-pam/coupon" icon={<Ticket size={20}/>} label="Gestion Coupons" active={pathname.includes('coupon')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
