@@ -35,12 +35,6 @@ export default function AdminTicketPage() {
     };
     fetchTickets();
   }, [supabase]);
-  
-const { data } = supabase.storage
-  .from('tickets')
-  .getPublicUrl(activeTicket.attachment_url);
-
-const imageUrl = data.publicUrl;
 
   // Écoute des messages en temps réel
   useEffect(() => {
@@ -54,9 +48,7 @@ const imageUrl = data.publicUrl;
       .on('broadcast', { event: 'new_msg' }, ({ payload }: { payload: TicketMessage }) => {
         setChatLogs((prev) => [...prev, payload]);
       })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') console.log("Connecté au ticket:", activeTicket.id);
-      });
+      .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [activeTicket, supabase]);
@@ -66,8 +58,6 @@ const imageUrl = data.publicUrl;
 
     try {
       const channel = supabase.channel(`ticket_${activeTicket.id}`);
-      
-      // Envoi du message via Broadcast
       await channel.send({
         type: 'broadcast',
         event: 'new_msg',
@@ -78,7 +68,6 @@ const imageUrl = data.publicUrl;
         } as TicketMessage
       });
 
-      // Log système pour garder une trace de l'activité
       await supabase.from('support_logs').insert({
         ticket_id: activeTicket.id,
         action: 'Réponse admin',
@@ -103,6 +92,12 @@ const imageUrl = data.publicUrl;
       setActiveTicket(null);
       setTickets(prev => prev.filter(t => t.id !== id));
     }
+  };
+
+  // Fonction pour obtenir l'URL de l'image en toute sécurité
+  const getImageUrl = (path: string) => {
+    const { data } = supabase.storage.from('tickets').getPublicUrl(path);
+    return data.publicUrl;
   };
 
   return (
@@ -141,7 +136,7 @@ const imageUrl = data.publicUrl;
             <div className="p-4 border-b bg-white flex justify-between items-center">
               <div>
                 <h2 className="font-bold text-gray-800">Chat Support</h2>
-                <p className="text-xs text-gray-400 truncate max-w-xs">Client: {activeTicket.user_id}</p>
+                <p className="text-xs text-gray-400 truncate max-w-xs">Client ID: {activeTicket.user_id}</p>
               </div>
               <button 
                 onClick={() => closeTicket(activeTicket.id)}
@@ -152,17 +147,17 @@ const imageUrl = data.publicUrl;
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50 space-y-4">
-              {/* Image jointe */}
+              {/* Image jointe corrigée avec vérification de présence */}
               {activeTicket.attachment_url && (
                 <div className="bg-white p-3 rounded-2xl border shadow-sm max-w-sm mb-6">
                   <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-tighter">Preuve de paiement</p>
                   <a 
-                    href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tickets/${activeTicket.attachment_url}`} 
+                    href={getImageUrl(activeTicket.attachment_url)} 
                     target="_blank" 
                     rel="noreferrer"
                   >
                     <img 
-                      src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tickets/${activeTicket.attachment_url}`} 
+                      src={getImageUrl(activeTicket.attachment_url)} 
                       className="rounded-lg w-full h-auto object-cover border hover:opacity-90 transition-opacity"
                       alt="Capture d'écran"
                     />
@@ -171,12 +166,6 @@ const imageUrl = data.publicUrl;
                 </div>
               )}
               
-              {chatLogs.length === 0 && (
-                <div className="text-center py-10 text-gray-400 text-sm italic">
-                  En attente du premier message...
-                </div>
-              )}
-
               {chatLogs.map((m, i) => (
                 <div key={i} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[75%] p-3 rounded-2xl text-sm shadow-sm ${m.sender === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none'}`}>
@@ -195,26 +184,21 @@ const imageUrl = data.publicUrl;
                 value={adminMsg} 
                 onChange={(e) => setAdminMsg(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendResponse()}
-                placeholder="Écrivez votre réponse au client..."
-                className="flex-1 p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                placeholder="Répondre..."
+                className="flex-1 p-3 border border-gray-200 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button 
                 onClick={sendResponse} 
                 disabled={!adminMsg.trim()}
-                className="bg-blue-600 disabled:bg-gray-300 text-white px-8 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-100"
+                className="bg-blue-600 disabled:bg-gray-300 text-white px-8 rounded-xl font-bold"
               >
-                Répondre
+                Envoyer
               </button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-300 gap-4 bg-gray-50/30">
-             <div className="p-6 bg-white rounded-full shadow-inner">
-                <svg className="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-                </svg>
-             </div>
-            <p className="text-gray-500 font-medium">Sélectionnez une demande en attente</p>
+          <div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50/30 font-medium">
+            Sélectionnez une demande pour commencer
           </div>
         )}
       </div>
