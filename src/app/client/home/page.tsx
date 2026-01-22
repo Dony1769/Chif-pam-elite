@@ -39,7 +39,7 @@ export default function ClientHome() {
     // REALTIME SUBSCRIPTIONS
     const notifChannel = supabase.channel('home_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchChatCount())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'latest_message_per_conversation'}, () => fetchChatCount())
       .subscribe();
 
     return () => { supabase.removeChannel(notifChannel); };
