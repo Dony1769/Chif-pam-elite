@@ -26,7 +26,7 @@ function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
-  const { calculateFinalFee } = useChallenge(); // Utilisation du hook centralisé
+  const { calculateFinalFee } = useChallenge();
 
   const [profile, setProfile] = useState<any>(null);
   const [bet, setBet] = useState(10);
@@ -47,6 +47,15 @@ function QuizGameContent() {
   const [isProcessing, setIsProcessing] = useState(false);
   
   const timerRef = useRef<any>(null);
+
+  // Logique de redirection dynamique
+  const handleBack = () => {
+    if (challengeId) {
+      router.push('/client/challenges');
+    } else {
+      router.push('/client/home');
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -94,9 +103,8 @@ function QuizGameContent() {
         
         finalFee = calculateFinalFee(chall.entry_fee_base, profile?.vip_status);
         
-        // --- MISE À JOUR : RPC IMPARABLE ---
         const { data: success, error: payError } = await supabase.rpc('process_challenge_payment', { 
-            p_challenge_id: challengeId, // Adapté au nouveau nom de paramètre
+            p_challenge_id: challengeId,
             p_amount: finalFee 
         });
 
@@ -170,7 +178,6 @@ function QuizGameContent() {
     setIsProcessing(true);
     try {
       if (challengeId) {
-        // --- MISE À JOUR : CALCUL ET INSERTION CUMULATIVE ---
         const sessionScore = currentIndex * 10 + (isWin ? 10 : 0);
         
         const { error: attemptError } = await supabase.from('challenge_attempts').insert([{
@@ -202,8 +209,12 @@ function QuizGameContent() {
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase flex flex-col items-center select-none font-sans">
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.push('/client/challenges')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all shadow-xl"><ChevronLeft/></button>
-        <h1 className="text-2xl text-emerald-500 italic tracking-tighter underline decoration-white/10 underline-offset-8 uppercase">{challengeId ? "ARENA_QUIZ" : "QUIZ_ELITE"}</h1>
+        <button onClick={handleBack} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all shadow-xl">
+          <ChevronLeft/>
+        </button>
+        <h1 className="text-2xl text-emerald-500 italic tracking-tighter underline decoration-white/10 underline-offset-8 uppercase">
+          {challengeId ? "ARENA_QUIZ" : "QUIZ_ELITE"}
+        </h1>
         <div className="w-10"/>
       </div>
 
@@ -337,7 +348,7 @@ function QuizGameContent() {
             </div>
 
             <button 
-                onClick={() => challengeId ? router.push('/client/challenges') : setStatus('idle')} 
+                onClick={handleBack} 
                 className="w-full py-7 bg-white text-black rounded-[2.5rem] font-black text-2xl active:scale-95 transition-all shadow-2xl italic"
             >
               {challengeId ? "VOIR LE CLASSEMENT" : "RECO-SYNC"}
@@ -356,3 +367,4 @@ export default function QuizElite() {
     </Suspense>
   );
 }
+
