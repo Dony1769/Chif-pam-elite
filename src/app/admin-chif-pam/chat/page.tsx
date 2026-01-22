@@ -35,6 +35,12 @@ export default function AdminTicketPage() {
     };
     fetchTickets();
   }, [supabase]);
+  
+const { data } = supabase.storage
+  .from('tickets')
+  .getPublicUrl(activeTicket.attachment_url);
+
+const imageUrl = data.publicUrl;
 
   // Écoute des messages en temps réel
   useEffect(() => {
