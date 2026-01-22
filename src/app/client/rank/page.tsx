@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw } from 'lucide-react';
+import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw, AlertTriangle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,33 +11,58 @@ function RankContent() {
   const challengeId = searchParams.get('challengeId');
 
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<any>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [currentUserRank, setCurrentUserRank] = useState<any>(null);
-  const [timeLeft, setTimeLeft] = useState<string>("");
+  const [timeLeft, setTimeLeft] = useState<string>("CALCUL...");
 
   useEffect(() => {
-    if (!challengeId) return;
+    if (!challengeId) {
+        setError("ID du challenge manquant");
+        setLoading(false);
+        return;
+    }
     fetchRankings();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, [challengeId]);
 
   const fetchRankings = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    // 1. Fetch Challenge Info
-    const { data: chall } = await supabase.from('challenges').select('*').eq('id', challengeId).single();
-    setChallenge(chall);
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        // 1. Fetch Challenge Info
+        const { data: chall, error: challErr } = await supabase
+            .from('challenges')
+            .select('*')
+            .eq('id', challengeId)
+            .single();
+        
+        if (challErr) throw challErr;
+        setChallenge(chall);
 
-    // 2. Fetch Leaderboard from View
-    const { data: ranks } = await supabase.from('challenge_leaderboards').select('*').eq('challenge_id', challengeId).order('rank', { ascending: true });
-    
-    setLeaderboard(ranks || []);
-    if (user) {
-        setCurrentUserRank(ranks?.find(r => r.user_id === user.id));
+        // 2. Fetch Leaderboard (Directement depuis la vue SQL)
+        const { data: ranks, error: rankErr } = await supabase
+            .from('challenge_leaderboards')
+            .select('*')
+            .eq('challenge_id', challengeId)
+            .order('rank', { ascending: true });
+        
+        if (rankErr) throw rankErr;
+
+        setLeaderboard(ranks || []);
+        
+        if (user) {
+            const myPos = ranks?.find(r => r.user_id === user.id);
+            setCurrentUserRank(myPos || null);
+        }
+    } catch (err: any) {
+        console.error("Erreur Rank:", err);
+        setError(err.message);
+    } finally {
+        setLoading(false);
     }
-    setLoading(false);
   };
 
   const updateCountdown = () => {
@@ -47,7 +72,7 @@ function RankContent() {
     const diff = end - now;
 
     if (diff <= 0) {
-      setTimeLeft("TERMINÉ");
+      setTimeLeft("MISSION TERMINÉE");
       return;
     }
 
@@ -59,131 +84,140 @@ function RankContent() {
 
   const handleRetry = () => {
     if (!challenge) return;
-    
-    // Redirection dynamique selon le type de jeu configuré dans le défi
     const gameRoutes: Record<string, string> = {
       'quiz': '/client/games/quiz',
       'biometric': '/client/games/biometric',
       'vault': '/client/games/vault'
     };
-
     const route = gameRoutes[challenge.game_type] || '/client/games/quiz';
     router.push(`${route}?challengeId=${challenge.id}`);
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="animate-spin text-emerald-500" size={48} />
+      <p className="text-emerald-500/50 text-[10px] tracking-[0.3em]">INITIALISATION_ARENA</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-6 text-center">
+      <AlertTriangle className="text-red-500 mb-4" size={48} />
+      <h2 className="text-xl font-black text-white mb-2">ERREUR DE CONNEXION</h2>
+      <p className="text-slate-400 text-sm mb-6 uppercase tracking-tighter">{error}</p>
+      <button onClick={() => window.location.reload()} className="px-8 py-3 bg-white text-black font-black rounded-full">REESSAYER</button>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase italic select-none">
-      {/* HEADER SÉCURISÉ */}
-      <div className="max-w-md mx-auto flex justify-between items-center mb-8">
-        <button onClick={() => router.push('/client/challenges')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all shadow-xl">
+    <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase italic select-none pb-32">
+      {/* HEADER */}
+      <div className="max-w-md mx-auto flex justify-between items-center mb-8 pt-4">
+        <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
           <ChevronLeft />
         </button>
         <div className="text-center">
-          <h1 className="text-xl tracking-tighter text-emerald-500">ARENA_LEADERBOARD</h1>
-          <p className="text-[8px] text-slate-500 tracking-[0.3em]">{challenge?.title}</p>
+          <h1 className="text-xl tracking-tighter text-emerald-500">ARENA_RANK</h1>
+          <p className="text-[8px] text-slate-500 tracking-[0.3em] font-bold">MODE: {challenge?.game_type}</p>
         </div>
         <div className="w-10" />
       </div>
 
-      <div className="max-w-md mx-auto space-y-6 pb-24">
-        {/* TIMER CARD PREMIUM */}
-        <div className="bg-emerald-500 p-6 rounded-[2.5rem] flex items-center justify-between shadow-[0_20px_50px_rgba(16,185,129,0.2)]">
-          <div>
-            <p className="text-black text-[10px] tracking-widest font-bold">TEMPS RESTANT</p>
+      <div className="max-w-md mx-auto space-y-6">
+        {/* TIMER CARD */}
+        <div className="bg-emerald-500 p-6 rounded-[2.5rem] flex items-center justify-between shadow-[0_20px_60px_rgba(16,185,129,0.3)] relative overflow-hidden">
+          <div className="relative z-10">
+            <p className="text-black text-[10px] tracking-widest font-bold opacity-70">DATE LIMITE D'OPÉRATION</p>
             <p className="text-3xl text-black font-black tracking-tighter flex items-center gap-2">
               <Timer size={24} /> {timeLeft}
             </p>
           </div>
-          <div className="bg-black/10 p-3 rounded-2xl border border-black/10">
-            <Zap size={24} className="text-black animate-pulse" />
-          </div>
+          <Zap size={60} className="absolute -right-4 -bottom-2 text-black/10 rotate-12" />
         </div>
 
-        {/* TON RANG (STICKY TOP) */}
-        {currentUserRank && (
-          <motion.div 
-            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-            className="bg-white p-6 rounded-[2.5rem] flex items-center justify-between border-b-4 border-emerald-500 shadow-xl"
+        {/* CURRENT USER STATUS */}
+        {currentUserRank ? (
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="bg-white p-6 rounded-[2.5rem] flex items-center justify-between shadow-[0_15px_40px_rgba(255,255,255,0.1)]"
           >
             <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center text-emerald-500 text-xl font-black">
+                <div className="w-14 h-14 bg-black rounded-full flex items-center justify-center text-emerald-500 text-2xl font-black border-4 border-emerald-500/20">
                     #{currentUserRank.rank}
                 </div>
                 <div>
-                    <p className="text-slate-500 text-[8px] tracking-widest uppercase">TA POSITION ACTUELLE</p>
-                    <p className="text-black text-lg">{currentUserRank.username}</p>
+                    <p className="text-slate-400 text-[9px] tracking-widest">RANKING_ACTUEL</p>
+                    <p className="text-black text-xl leading-none">{currentUserRank.username}</p>
                 </div>
             </div>
-            <div className="text-right">
-                <p className="text-emerald-600 text-2xl font-black italic">{currentUserRank.total_score} PTS</p>
+            <div className="text-right border-l pl-4 border-slate-100">
+                <p className="text-emerald-600 text-3xl font-black italic leading-none">{currentUserRank.total_score}</p>
+                <p className="text-[8px] text-slate-400">TOTAL_PTS</p>
             </div>
           </motion.div>
+        ) : (
+            <div className="bg-white/5 border border-dashed border-white/10 p-6 rounded-[2.5rem] text-center">
+                <p className="text-slate-500 text-[10px]">JOUE UNE PARTIE POUR APPARAÎTRE ICI</p>
+            </div>
         )}
 
-        {/* LISTE DES GLADIATEURS */}
+        {/* LEADERBOARD LIST */}
         <div className="space-y-3">
-          <p className="text-[10px] text-slate-500 tracking-[0.4em] px-4 mb-4 font-bold">CLASSEMENT GLOBAL</p>
+          <div className="flex justify-between px-4 text-[10px] text-slate-500 tracking-[0.3em]">
+            <span>TOP_GLADIATEURS</span>
+            <span>SCORE_TOTAL</span>
+          </div>
           
-          <AnimatePresence>
-            {leaderboard.map((entry, index) => {
-              const isTop3 = entry.rank <= 3;
-              const isMe = entry.user_id === currentUserRank?.user_id;
-
-              return (
-                <motion.div 
-                  key={entry.user_id}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: index * 0.05 }}
-                  className={`p-5 rounded-[2rem] border flex items-center justify-between transition-all ${
-                    isTop3 ? 'bg-slate-900 border-emerald-500/30' : 'bg-white/5 border-white/5'
-                  } ${isMe ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-[#020617]' : ''}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <span className={`text-xl italic ${isTop3 ? 'text-emerald-500' : 'text-slate-600'}`}>
-                        {entry.rank === 1 ? <Trophy size={20} /> : entry.rank === 2 ? <Medal size={20} /> : entry.rank === 3 ? <Medal size={20} className="text-amber-700" /> : `#${entry.rank}`}
-                    </span>
-                    <div>
-                        <p className={`text-sm tracking-tighter ${isTop3 ? 'text-white' : 'text-slate-400'}`}>
-                            {entry.username} {isMe && <span className="text-[8px] bg-emerald-500 text-black px-2 rounded-full ml-1 font-bold">MOI</span>}
-                        </p>
-                        <p className="text-[8px] text-slate-600 italic tracking-widest">{entry.attempts_count} TENTATIVES</p>
-                    </div>
+          <div className="space-y-2">
+            {leaderboard.map((entry, index) => (
+              <motion.div 
+                key={entry.user_id}
+                initial={{ x: -10, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: index * 0.05 }}
+                className={`p-4 rounded-[1.8rem] border flex items-center justify-between ${
+                  entry.rank <= 3 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-white/5 border-white/5'
+                } ${entry.user_id === currentUserRank?.user_id ? 'border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : ''}`}
+              >
+                <div className="flex items-center gap-4">
+                  <span className={`text-lg w-8 italic font-black ${entry.rank === 1 ? 'text-yellow-500' : entry.rank === 2 ? 'text-slate-300' : entry.rank === 3 ? 'text-amber-600' : 'text-slate-600'}`}>
+                    {entry.rank === 1 ? '01' : entry.rank === 2 ? '02' : entry.rank === 3 ? '03' : entry.rank}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold tracking-tight flex items-center gap-2 text-white">
+                        {entry.username}
+                        {entry.user_id === currentUserRank?.user_id && <span className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse" />}
+                    </p>
+                    <p className="text-[8px] text-slate-500 tracking-tighter italic">{entry.attempts_count} SESSIONS COMPLÉTÉES</p>
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <p className={`text-lg font-black italic ${isTop3 ? 'text-emerald-500' : 'text-white'}`}>{entry.total_score}</p>
-                    <Target size={12} className="text-slate-700" />
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                </div>
+                <p className={`text-xl font-black italic ${entry.rank <= 3 ? 'text-emerald-500' : 'text-white'}`}>
+                    {entry.total_score}
+                </p>
+              </motion.div>
+            ))}
+          </div>
 
-          {leaderboard.length === 0 && (
-            <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
-                <Loader2 size={30} className="mx-auto text-slate-800 mb-4 animate-spin" />
-                <p className="text-[10px] text-slate-600 tracking-widest uppercase">AUCUNE DONNÉE DÉPLOYÉE</p>
+          {leaderboard.length === 0 && !loading && (
+            <div className="py-20 text-center opacity-20 italic">
+                <Target className="mx-auto mb-2" />
+                <p className="text-xs uppercase tracking-[0.5em]">ARENA_VIDE</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* BOUTON DÉFIER À NOUVEAU - FIXED BOTTOM */}
-      <div className="fixed bottom-6 left-0 w-full px-4 flex justify-center">
-        <button 
-          onClick={handleRetry}
-          disabled={timeLeft === "TERMINÉ"}
-          className="w-full max-w-md py-6 bg-white text-black rounded-[2.5rem] font-black text-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
-        >
-          <RefreshCcw size={24} /> {timeLeft === "TERMINÉ" ? "MISSION TERMINÉE" : "DÉFIER À NOUVEAU"}
-        </button>
+      {/* FOOTER CTA */}
+      <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-[#020617] via-[#020617] to-transparent">
+        <div className="max-w-md mx-auto">
+            <button 
+                onClick={handleRetry}
+                disabled={timeLeft === "MISSION TERMINÉE"}
+                className="w-full py-5 bg-white text-black rounded-3xl font-black text-lg shadow-[0_20px_40px_rgba(0,0,0,0.4)] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
+            >
+                <RefreshCcw size={20} className={timeLeft !== "MISSION TERMINÉE" ? "animate-spin-slow" : ""} />
+                {timeLeft === "MISSION TERMINÉE" ? "SESSION EXPIRÉE" : "RENFORCER MON SCORE"}
+            </button>
+        </div>
       </div>
     </div>
   );
@@ -196,3 +230,4 @@ export default function LeaderboardPage() {
     </Suspense>
   );
 }
+
