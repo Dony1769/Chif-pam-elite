@@ -66,7 +66,7 @@ function LaserVaultGame() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsSolved, setQuestionsSolved] = useState(0);
-  const [baseSpeed, setBaseSpeed] = useState(2);
+  const [baseSpeed, setBaseSpeed] = useState(1);
   const [errorPenalty, setErrorPenalty] = useState(1.0);
   const lastTickRef = useRef<number>(0);
 
@@ -130,7 +130,7 @@ function LaserVaultGame() {
         setGameId(id);
       }
       
-      setMultiplier(1.0); setLaserY(0); setQuestionsSolved(0); setBaseSpeed(2); setErrorPenalty(1.0); setInput("");
+      setMultiplier(1.0); setLaserY(0); setQuestionsSolved(0); setBaseSpeed(1); setErrorPenalty(1.0); setInput("");
       generateProblem(1.0); setStatus('playing');
       lastTickRef.current = performance.now(); playSound('beep');
     } catch (e: any) { 
@@ -166,7 +166,7 @@ function LaserVaultGame() {
       setInput("");
       setErrorPenalty(1.0); 
       if ((questionsSolved + 1) % 3 === 0) { 
-          setBaseSpeed(s => s + 1); 
+          setBaseSpeed(s => s + 2); 
           playSound('speedup'); 
       }
       generateProblem(multiplier + 0.1);
@@ -307,7 +307,7 @@ function LaserVaultGame() {
                 disabled={questionsSolved < 1} 
                 className={`w-full py-5 font-black rounded-[1.5rem] text-xl shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 italic tracking-tighter ${questionsSolved < 1 ? "bg-zinc-900 text-zinc-700 opacity-50" : "bg-white text-black hover:bg-emerald-500 hover:text-white"}`}
               >
-                {questionsSolved < 1 ? "INFILTRATION_LOCKED" : (challengeId ? <><Trophy size={20}/> VALID_UPLINK</> : <><Wallet size={20}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
+                {questionsSolved < 4 ? "INFILTRATION_LOCKED" : (challengeId ? <><Trophy size={20}/> VALID_UPLINK</> : <><Wallet size={20}/> CASH_OUT {(bet * multiplier).toFixed(0)} HTG</>)}
               </button>
             </div>
           </div>
