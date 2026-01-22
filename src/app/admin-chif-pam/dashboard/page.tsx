@@ -231,7 +231,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
-               <ActionCard href="/admin-chif-pam/loterie" label="Pilotage Tirages" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
+               <ActionCard href="/admin-chif-pam/challenges" label="Gestion des défis" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
                <ActionCard href="/admin-chif-pam/mini-jeux" label="Audit Mini-Jeux" icon={<Target size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
                <ActionCard href="/admin-chif-pam/coupon" label="Coupons & Promos" icon={<Ticket size={24}/>} color="bg-indigo-600" textColor="text-white" />
             </div>
