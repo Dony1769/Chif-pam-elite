@@ -8,7 +8,7 @@ export const useChallenge = () => {
   };
 
   const startChallengePayment = async (challengeId: string, fee: number) => {
-    // Utilisation de la nouvelle fonction RPC sécurisée
+    // Utilisation de la nouvelle fonction RPC sécurisé
     const { data, error } = await supabase.rpc('process_challenge_payment', { 
       p_challenge_id: challengeId, 
       p_amount: fee 
