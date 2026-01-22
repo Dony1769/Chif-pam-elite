@@ -278,7 +278,7 @@ function BiometricGameContent() {
             </div>
 
             {/* CASHOUT PREMIUM */}
-            {!challengeId && multiplier > 1.0 && (
+            {!challengeId && multiplier > 1.5 && (
                 <button 
                   onClick={cashout}
                   disabled={loading}
