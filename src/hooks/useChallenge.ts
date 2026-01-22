@@ -2,51 +2,35 @@ import { supabase } from '@/lib/supabase';
 
 export const useChallenge = () => {
   const calculateFinalFee = (baseFee: number, vipStatus: string) => {
-    if (vipStatus === 'monthly') return baseFee * 0.75;
-    if (vipStatus === 'weekly') return baseFee * 0.90;
+    if (vipStatus === 'monthly') return baseFee * 0.70; // -30% (Premium)
+    if (vipStatus === 'weekly') return baseFee * 0.85;  // -15%
     return baseFee;
   };
 
-  const startChallengeEntry = async (challengeId: string, userId: string, fee: number) => {
-    // 1. Déduire le solde via RPC (process_bet existant)
-    const { data: paid, error: payError } = await supabase.rpc('process_bet', { amount: fee });
+  const startChallengePayment = async (challengeId: string, fee: number) => {
+    // Utilisation de la nouvelle fonction RPC sécurisée
+    const { data, error } = await supabase.rpc('process_challenge_payment', { 
+      p_challenge_id: challengeId, 
+      p_amount: fee 
+    });
     
-    if (payError || !paid) return { error: "Solde insuffisant" };
-
-    // 2. Enregistrer le paiement
-    await supabase.from('challenge_payments').insert([{
-      user_id: userId,
-      challenge_id: challengeId,
-      amount_paid: fee
-    }]);
-
+    if (error) return { error: error.message };
     return { success: true };
   };
 
-  const submitChallengeScore = async (challengeId: string, userId: string, newScore: number) => {
-    // Utilisation de upsert pour cumuler le score
-    const { data: existing } = await supabase
-      .from('challenge_entries')
-      .select('total_score, attempts_count')
-      .eq('challenge_id', challengeId)
-      .eq('user_id', userId)
-      .single();
-
-    const updatedScore = (existing?.total_score || 0) + newScore;
-    const updatedAttempts = (existing?.attempts_count || 0) + 1;
-
+  const recordAttempt = async (challengeId: string, userId: string, score: number, feePaid: number) => {
+    // On insère une tentative unique. Le score global est géré par SUM() en SQL.
     const { error } = await supabase
-      .from('challenge_entries')
-      .upsert({
+      .from('challenge_attempts')
+      .insert([{
         challenge_id: challengeId,
         user_id: userId,
-        total_score: updatedScore,
-        attempts_count: updatedAttempts,
-        last_played_at: new Date().toISOString()
-      }, { onConflict: 'challenge_id,user_id' });
+        score_gained: score,
+        amount_paid: feePaid
+      }]);
 
-    return { error, updatedScore };
+    return { error };
   };
 
-  return { startChallengeEntry, submitChallengeScore, calculateFinalFee };
+  return { startChallengePayment, recordAttempt, calculateFinalFee };
 };
