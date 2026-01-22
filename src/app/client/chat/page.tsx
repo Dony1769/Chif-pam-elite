@@ -39,35 +39,54 @@ export default function ClientTicketPage() {
       supabase.removeChannel(channel);
     };
   }, [ticket, supabase]);
-
-  const handleCreateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
+// Remplacez votre fonction handleCreateTicket par celle-ci :
+const handleCreateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  setLoading(true);
+  
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
     
+    if (!user) {
+      alert("Vous devez être connecté pour créer un ticket");
+      setLoading(false);
+      return;
+    }
+
+    const formData = new FormData(e.currentTarget);
     let fileUrl = "";
     const file = formData.get('attachment') as File;
 
+    // Gestion de l'upload
     if (file && file.size > 0) {
-      const fileName = `${crypto.randomUUID()}-${file.name}`;
-      const { data: uploadData } = await supabase.storage
+      const fileName = `${user.id}/${crypto.randomUUID()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('tickets')
         .upload(fileName, file);
+      
+      if (uploadError) throw uploadError;
       if (uploadData) fileUrl = uploadData.path;
     }
 
-    const { data: userData } = await supabase.auth.getUser();
-
+    // Insertion du ticket
     const { data, error } = await supabase.from('support_tickets').insert({
-      user_id: userData.user?.id,
+      user_id: user.id,
       category: formData.get('category') as string,
       attachment_url: fileUrl,
       status: 'ouvert'
     }).select().single();
 
+    if (error) throw error;
     if (data) setTicket(data as SupportTicket);
+
+  } catch (err) {
+    console.error("Erreur détaillée:", err);
+    alert("Erreur lors de la création du ticket. Vérifiez la console.");
+  } finally {
     setLoading(false);
-  };
+  }
+};
+
 
   const sendLiveMessage = async () => {
     if (!message.trim() || !ticket) return;
