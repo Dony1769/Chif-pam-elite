@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
 import { Send, User as UserIcon, Loader2, Image as ImageIcon, CheckCheck, X, Volume2 } from "lucide-react";
 
 const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
