@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Send, ChevronLeft, Image as ImageIcon, X, Loader2, CheckCheck } from 'lucide-react';
+import { Send, ChevronLeft, Image as ImageIcon, X, Loader2, CheckCheck, AnimatePresence } from 'lucide-react';
 
 export default function ClientChat() {
   const router = useRouter();
