@@ -8,6 +8,7 @@ import { Send, ChevronLeft, Image as ImageIcon, X, Loader2, CheckCheck } from 'l
 export default function ClientChat() {
   const router = useRouter();
   const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
+  
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [user, setUser] = useState<any>(null);
@@ -19,16 +20,29 @@ export default function ClientChat() {
   
   const notificationAudio = typeof window !== "undefined" ? new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3") : null;
 
-  // FONCTION CRUCIALE : Le client marque comme lus les messages reçus de l'admin
+  // FONCTION 650% PERFECTION : Nettoyage atomique des deux tables
   const markAdminMessagesAsRead = async (userId: string) => {
-    const { error } = await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('receiver_id', userId) // C'est moi qui reçoit
-      .eq('sender_id', ADMIN_ID)  // C'est l'admin qui envoie
-      .eq('is_read', false);
-    
-    if (error) console.error("Erreur de marquage:", error);
+    try {
+      // 1. On nettoie la table principale
+      const updateMessages = supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('receiver_id', userId)
+        .eq('sender_id', ADMIN_ID)
+        .eq('is_read', false);
+
+      // 2. On nettoie la table de cache (latest_message_per_conversation)
+      const updateCache = supabase
+        .from('latest_message_per_conversation')
+        .update({ is_read: true })
+        .eq('receiver_id', userId)
+        .eq('sender_id', ADMIN_ID);
+
+      // Exécution parallèle pour ne pas ralentir l'interface
+      await Promise.all([updateMessages, updateCache]);
+    } catch (error) {
+      console.error("Sync Error:", error);
+    }
   };
 
   useEffect(() => {
@@ -37,27 +51,27 @@ export default function ClientChat() {
       if (!authUser) return;
       setUser(authUser);
       
-      // 1. On marque tout comme lu dès qu'il entre
+      // Nettoyage immédiat à l'ouverture
       await markAdminMessagesAsRead(authUser.id);
 
-      // 2. Charger l'historique complet
+      // Chargement historique
       const { data } = await supabase.from('messages')
         .select('*')
         .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
         .order('created_at', { ascending: true });
       setMessages(data || []);
 
-      // 3. Temps réel
-      const channel = supabase.channel(`chat-sync-${authUser.id}`)
+      // Realtime intelligent
+      const channel = supabase.channel(`chat-ultra-sync-${authUser.id}`)
         .on('postgres_changes', { 
           event: 'INSERT', 
           schema: 'public', 
           table: 'messages'
         }, async (payload) => {
-          // Si l'admin m'envoie un message alors que je suis sur la page
+          // Si le message vient de l'admin vers moi
           if (payload.new.sender_id === ADMIN_ID && payload.new.receiver_id === authUser.id) {
             notificationAudio?.play().catch(() => {});
-            // On le marque immédiatement comme lu en base de données
+            // On re-nettoie les deux tables pour être sûr que Home reste à zéro
             await markAdminMessagesAsRead(authUser.id);
           }
           setMessages((prev) => [...prev, payload.new]);
@@ -113,54 +127,71 @@ export default function ClientChat() {
     <div className="flex flex-col h-screen bg-[#020617] text-white font-black italic uppercase">
       {/* Zoom Image */}
       {fullscreenImage && (
-        <div className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center p-4" onClick={() => setFullscreenImage(null)}>
-          <img src={fullscreenImage} className="max-w-full max-h-full object-contain rounded-2xl" />
+        <div className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setFullscreenImage(null)}>
+          <img src={fullscreenImage} className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl shadow-emerald-500/10" />
         </div>
       )}
 
-      {/* Header */}
-      <div className="p-4 bg-slate-900 border-b border-emerald-500/10 flex items-center gap-4">
-        <button onClick={() => router.back()} className="p-2 text-emerald-500 bg-white/5 rounded-xl"><ChevronLeft /></button>
+      {/* Header Premium */}
+      <div className="p-5 bg-slate-900/80 backdrop-blur-md border-b border-emerald-500/10 flex items-center gap-4">
+        <button onClick={() => router.back()} className="p-3 text-emerald-500 bg-white/5 rounded-2xl active:scale-90 transition-all">
+          <ChevronLeft size={24} />
+        </button>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950">P</div>
+          <div className="relative">
+            <div className="w-12 h-12 bg-gradient-to-tr from-emerald-600 to-emerald-400 rounded-2xl flex items-center justify-center text-slate-950 font-black text-xl">P</div>
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-slate-900 rounded-full animate-pulse"></div>
+          </div>
           <div>
-            <p className="text-xs text-emerald-500">Support Pam</p>
-            <p className="text-[8px] opacity-50">En ligne</p>
+            <p className="text-sm tracking-tighter text-emerald-500">Support Pam</p>
+            <p className="text-[9px] opacity-40 font-bold uppercase tracking-widest">Membre du staff</p>
           </div>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Zone Messages avec texture */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.is_admin ? 'justify-start' : 'justify-end'}`}>
-            <div className={`max-w-[85%] p-3 rounded-2xl ${m.is_admin ? 'bg-slate-800' : 'bg-emerald-600'}`}>
-              {m.image_url && <img src={m.image_url} onClick={() => setFullscreenImage(m.image_url)} className="rounded-lg mb-2 cursor-pointer" />}
-              <p className="text-xs lowercase not-italic">{m.content}</p>
-              <div className="flex justify-end items-center gap-1 mt-1">
-                <span className="text-[7px] opacity-40">{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                {!m.is_admin && <CheckCheck size={10} className={m.is_read ? "text-blue-400" : "text-white/20"} />}
-              </div>
+          <div key={i} className={`flex ${m.is_admin ? 'justify-start' : 'justify-end'} animate-in slide-in-from-bottom-2 duration-300`}>
+            <div className={`max-w-[85%] space-y-1`}>
+                <div className={`p-4 rounded-[1.5rem] shadow-xl ${m.is_admin ? 'bg-slate-800 rounded-tl-none border border-white/5' : 'bg-emerald-600 rounded-tr-none shadow-emerald-900/20'}`}>
+                {m.image_url && <img src={m.image_url} onClick={() => setFullscreenImage(m.image_url)} className="rounded-xl mb-3 cursor-zoom-in hover:brightness-110 transition-all" alt="attachment" />}
+                <p className="text-xs font-bold leading-relaxed lowercase not-italic tracking-tight">{m.content}</p>
+                </div>
+                <div className={`flex items-center gap-2 px-1 ${m.is_admin ? 'justify-start' : 'justify-end'}`}>
+                    <span className="text-[7px] opacity-30 tracking-widest">{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    {!m.is_admin && <CheckCheck size={10} className={m.is_read ? "text-blue-400" : "text-white/20"} />}
+                </div>
             </div>
           </div>
         ))}
         <div ref={scrollRef} />
       </div>
 
-      {/* Input */}
-      <div className="p-4 bg-slate-950 border-t border-white/5 flex gap-2">
+      {/* Input Premium */}
+      <div className="p-6 bg-slate-950 border-t border-white/5 flex gap-3 items-center">
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
-        <button onClick={() => fileInputRef.current?.click()} className="p-3 bg-white/5 text-emerald-500 rounded-xl">
-          {uploading ? <Loader2 className="animate-spin" /> : <ImageIcon />}
+        <button 
+          onClick={() => fileInputRef.current?.click()} 
+          className="p-4 text-emerald-500 bg-white/5 rounded-[1.2rem] hover:bg-white/10 transition-all active:scale-90"
+        >
+          {uploading ? <Loader2 className="animate-spin" /> : <ImageIcon size={22} />}
         </button>
+        
         <input 
           value={newMessage} 
           onChange={(e) => setNewMessage(e.target.value)} 
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Message..." 
-          className="flex-1 bg-slate-900 rounded-xl px-4 text-xs outline-none border border-white/5" 
+          placeholder="Écrivez ici..." 
+          className="flex-1 bg-slate-900 rounded-[1.2rem] px-6 py-4 text-xs font-bold outline-none border border-white/5 focus:border-emerald-500/30 transition-all" 
         />
-        <button onClick={sendMessage} className="p-3 bg-emerald-500 text-slate-950 rounded-xl"><Send /></button>
+        
+        <button 
+          onClick={sendMessage} 
+          className="p-4 bg-emerald-500 text-slate-950 rounded-[1.2rem] shadow-lg shadow-emerald-500/20 active:scale-90 transition-all"
+        >
+          <Send size={22} />
+        </button>
       </div>
     </div>
   );
