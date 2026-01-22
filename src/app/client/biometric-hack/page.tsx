@@ -158,7 +158,7 @@ function BiometricGameContent() {
   };
 
   const cashout = async () => {
-    if (loading || sessionsSolved < 1) return;
+    if (loading || sessionsSolved < 4) return;
     setLoading(true);
     try {
       if (challengeId) {
