@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw, ArrowRight, Gamepad2, LayoutGrid, Star, TrendingUp } from 'lucide-react';
+import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw, ArrowRight, Gamepad2, LayoutGrid, Star, TrendingUp, Crown } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
