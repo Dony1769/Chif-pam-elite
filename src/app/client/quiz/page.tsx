@@ -279,7 +279,7 @@ function QuizGameContent() {
                     <p className="text-[10px] text-slate-500 tracking-widest italic font-bold">MULT_X</p>
                     <p className="text-3xl text-emerald-500 font-black italic tracking-tighter">{multiplier.toFixed(2)}</p>
                 </div>
-                {multiplier > 1.0 && !challengeId && (
+                {multiplier > 1.5 && !challengeId && (
                     <button 
                         onClick={() => finalizeGame(true)}
                         className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 animate-bounce shadow-2xl"
