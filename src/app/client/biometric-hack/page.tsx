@@ -119,7 +119,7 @@ function BiometricGameContent() {
       }
 
       setMultiplier(1.0);
-      setGridSize(3);
+      setGridSize(4);
       setSessionsSolved(0);
       setDisplayTime(1000);
       generatePattern(3);
@@ -143,13 +143,13 @@ function BiometricGameContent() {
     if (nextUserPattern.length === pattern.length) {
       const nextSolvedCount = sessionsSolved + 1;
       setSessionsSolved(nextSolvedCount);
-      const nextMultiplier = parseFloat((multiplier + 0.2).toFixed(1));
+      const nextMultiplier = parseFloat((multiplier + 0.1).toFixed(1));
       setMultiplier(nextMultiplier);
       
       // Augmentation de difficulté
       let nextGrid = gridSize;
-      if (nextSolvedCount >= 3 && gridSize === 3) nextGrid = 4;
-      if (nextSolvedCount >= 6 && gridSize === 4) nextGrid = 5;
+      if (nextSolvedCount >= 3 && gridSize === 4) nextGrid = 6;
+      if (nextSolvedCount >= 6 && gridSize === 6) nextGrid = 8;
       setGridSize(nextGrid);
       
       setDisplayTime(prev => Math.max(300, prev - 100));
