@@ -1,91 +1,127 @@
-"use client"
+'use client'
 import { useEffect, useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase' // Changement ii : import de l'instance directe
+import { supabase } from '@/lib/supabase' // Ton fichier importé
+import { useRouter } from 'next/navigation'
 
-export default function ClientChat() {
-  const [messages, setMessages] = useState<any[]>([])
-  const [content, setContent] = useState('')
-  const scrollRef = useRef<HTMLDivElement>(null)
+type Message = {
+  id: string
+  content: string
+  is_admin_message: boolean
+  created_at: string
+}
+
+export default function ClientChatPage() {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
 
   useEffect(() => {
-    const fetchMessages = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const { data } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: true })
-        if (data) setMessages(data)
+    // 1. Récupérer l'utilisateur courant
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push('/login') // Rediriger si pas connecté
+        return
+      }
+      setUserId(session.user.id)
+      fetchMessages(session.user.id)
+      subscribeToMessages(session.user.id)
     }
-    fetchMessages()
-
-    const channel = supabase.channel('client_realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        setMessages((prev) => [...prev, payload.new])
-      }).subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+    getUser()
   }, [])
 
+  // Scroll automatique vers le bas
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const fetchMessages = async (uid: string) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: true })
+    
+    if (data) setMessages(data)
+  }
+
+  const subscribeToMessages = (uid: string) => {
+    const channel = supabase
+      .channel('client-chat')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${uid}` },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as Message])
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!content.trim()) return
+    if (!newMessage.trim() || !userId) return
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        content: newMessage,
+        user_id: userId,
+        is_admin_message: false // C'est le client qui parle
+      })
 
-    const { error } = await supabase.from('messages').insert([{ 
-        user_id: user.id, 
-        content, 
-        sender_type: 'client' 
-    }])
-    
-    if (!error) setContent('')
+    if (!error) setNewMessage('')
   }
 
   return (
-    <div className="flex flex-col h-screen bg-black text-white font-sans">
-      <header className="p-4 bg-emerald-900/20 backdrop-blur-md border-b border-emerald-500/30 flex items-center sticky top-0 z-10">
-        <button onClick={() => window.history.back()} className="mr-4 text-emerald-400 hover:text-white transition text-xl">
-          ←
-        </button>
-        <h1 className="font-bold text-emerald-400">Support ChifPam</h1>
-      </header>
+    <div className="flex flex-col h-screen max-w-2xl mx-auto bg-gray-50 border-x">
+      <div className="p-4 bg-white border-b shadow-sm">
+        <h1 className="text-xl font-bold text-gray-800">Support Chif Pam</h1>
+        <p className="text-sm text-gray-500">Posez vos questions, un admin vous répondra.</p>
+      </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
-        {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-3 rounded-2xl shadow-lg ${
-                m.sender_type === 'client' 
-                ? 'bg-emerald-600 text-white rounded-br-none' 
-                : 'bg-zinc-800 border border-zinc-700 text-white rounded-bl-none'
-            }`}>
-              <p className="text-sm">{m.content}</p>
+      {/* Zone des messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex ${msg.is_admin_message ? 'justify-start' : 'justify-end'}`}
+          >
+            <div
+              className={`max-w-[70%] p-3 rounded-lg text-sm ${
+                msg.is_admin_message
+                  ? 'bg-gray-200 text-gray-800 rounded-bl-none'
+                  : 'bg-green-600 text-white rounded-br-none'
+              }`}
+            >
+              {msg.content}
             </div>
           </div>
         ))}
-        <div ref={scrollRef} />
+        <div ref={messagesEndRef} />
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-black/80 backdrop-blur-xl border-t border-emerald-500/20">
-        <form onSubmit={sendMessage} className="max-w-4xl mx-auto flex gap-2 items-center">
-          <input 
-            value={content} 
-            onChange={(e) => setContent(e.target.value)}
-            className="flex-1 bg-zinc-900 border border-emerald-500/30 rounded-full px-5 py-3 focus:outline-none focus:border-emerald-500 transition text-sm"
-            placeholder="Écrivez un message..."
-          />
-          <button type="submit" className="bg-emerald-500 p-3 rounded-full hover:scale-105 active:scale-95 transition shadow-lg shadow-emerald-500/20">
-             <svg viewBox="0 0 24 24" className="w-6 h-6 fill-black"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-        </form>
-      </div>
+      {/* Input */}
+      <form onSubmit={sendMessage} className="p-4 bg-white border-t flex gap-2">
+        <input
+          type="text"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Écrivez votre message..."
+          className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+        <button
+          type="submit"
+          disabled={!newMessage.trim()}
+          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+        >
+          Envoyer
+        </button>
+      </form>
     </div>
   )
 }
