@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase' // Changement ici : import de l'instance directe
+import { supabase } from '@/lib/supabase' // Changement ii : import de l'instance directe
 
 export default function ClientChat() {
   const [messages, setMessages] = useState<any[]>([])
