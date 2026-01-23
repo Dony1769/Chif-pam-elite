@@ -1,172 +1,103 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Search, User, MessageSquare } from 'lucide-react'
 
-type Profile = {
-  id: string
-  email: string
-  username: string | null
-  role: string
-}
+export default function AdminChat() {
+  const [users, setUsers] = useState<any[]>([])
+  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [messages, setMessages] = useState<any[]>([])
+  const [reply, setReply] = useState('')
 
-type Message = {
-  id: string
-  content: string
-  is_admin_message: boolean
-  user_id: string
-  created_at: string
-}
-
-export default function AdminChatPage() {
-  const [users, setUsers] = useState<Profile[]>([])
-  const [selectedUser, setSelectedUser] = useState<Profile | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [newMessage, setNewMessage] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  // 1. Charger la liste des utilisateurs (Clients seulement)
+  // Charger les utilisateurs
   useEffect(() => {
     const fetchUsers = async () => {
-      // Tu peux optimiser ceci pour ne charger que les utilisateurs qui ont envoyé des messages
-      // Pour l'instant, on charge tous les profils 'client'
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, email, username, role')
-        .neq('role', 'admin') // Exclure les autres admins
-        .limit(50) 
-      
+      const { data } = await supabase.from('profiles').select('*').neq('role', 'admin').limit(20)
       if (data) setUsers(data)
     }
     fetchUsers()
   }, [])
 
-  // 2. Charger les messages quand on clique sur un utilisateur
+  // Temps réel pour les messages de l'utilisateur sélectionné
   useEffect(() => {
     if (!selectedUser) return
-
-    const fetchMessages = async () => {
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('user_id', selectedUser.id)
-        .order('created_at', { ascending: true })
-      
-      if (data) setMessages(data)
+    
+    const fetchMsgs = async () => {
+      const { data } = await supabase.from('messages').select('*').eq('user_id', selectedUser.id).order('created_at', { ascending: false })
+      setMessages(data || [])
     }
+    fetchMsgs()
 
-    fetchMessages()
-
-    // Realtime pour l'admin (écouter la conversation active)
-    const channel = supabase
-      .channel(`admin-chat-${selectedUser.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${selectedUser.id}` },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message])
-        }
-      )
+    const sub = supabase.channel(`admin:${selectedUser.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${selectedUser.id}` }, 
+      (p) => setMessages(prev => [p.new, ...prev]))
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { supabase.removeChannel(sub) }
   }, [selectedUser])
 
-  // Scroll en bas
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const sendMessage = async (e: React.FormEvent) => {
+  const sendReply = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim() || !selectedUser) return
-
-    const { error } = await supabase
-      .from('messages')
-      .insert({
-        content: newMessage,
-        user_id: selectedUser.id, // IMPORTANT: On lie le message à l'ID du client
-        is_admin_message: true   // C'est l'admin qui parle
-      })
-
-    if (!error) setNewMessage('')
+    if (!reply.trim() || !selectedUser) return
+    const txt = reply; setReply('')
+    await supabase.from('messages').insert({ content: txt, user_id: selectedUser.id, is_admin_message: true })
   }
 
   return (
-    <div className="flex h-screen bg-white">
-      {/* Sidebar : Liste des utilisateurs */}
-      <div className="w-1/4 border-r bg-gray-50 overflow-y-auto">
-        <div className="p-4 border-b font-bold text-lg">Clients</div>
-        {users.map((user) => (
-          <div
-            key={user.id}
-            onClick={() => setSelectedUser(user)}
-            className={`p-3 cursor-pointer hover:bg-gray-200 border-b ${
-              selectedUser?.id === user.id ? 'bg-blue-100 border-l-4 border-l-blue-500' : ''
-            }`}
-          >
-            <p className="font-medium text-sm">{user.username || 'Sans nom'}</p>
-            <p className="text-xs text-gray-500 truncate">{user.email}</p>
-          </div>
-        ))}
+    <main className="min-h-screen bg-[#020617] text-white flex p-6 gap-6">
+      {/* Liste des Clients */}
+      <div className="w-80 bg-slate-900/50 border border-white/10 rounded-[2.5rem] backdrop-blur-xl overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-white/5">
+          <h1 className="text-xl font-black italic uppercase tracking-tighter text-emerald-500">MESSAGES</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {users.map(u => (
+            <button key={u.id} onClick={() => setSelectedUser(u)} className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-all ${selectedUser?.id === u.id ? 'bg-emerald-500 text-slate-950' : 'hover:bg-white/5 text-slate-400'}`}>
+              <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-white/10"><User size={18}/></div>
+              <div className="text-left overflow-hidden">
+                <p className="font-black text-xs uppercase truncate">{u.username || u.phone}</p>
+                <p className="text-[10px] opacity-70 italic tracking-tighter">Client actif</p>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Zone de Chat */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 bg-slate-900/30 border border-white/5 rounded-[3rem] flex flex-col relative overflow-hidden">
         {selectedUser ? (
           <>
-            {/* Header Chat */}
-            <div className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
-              <h2 className="font-bold">Chat avec {selectedUser.username || selectedUser.email}</h2>
-              <span className="text-xs bg-gray-100 px-2 py-1 rounded">ID: {selectedUser.id.slice(0,8)}...</span>
+            <div className="p-6 bg-slate-900/80 border-b border-white/5 backdrop-blur-md">
+              <h2 className="font-black uppercase italic tracking-widest text-emerald-500 underline decoration-2 underline-offset-8">Chat : {selectedUser.username}</h2>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-              {messages.length === 0 && (
-                <p className="text-center text-gray-400 mt-10">Aucun message pour l'instant.</p>
-              )}
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.is_admin_message ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[70%] p-3 rounded-lg text-sm shadow-sm ${
-                      msg.is_admin_message
-                        ? 'bg-blue-600 text-white rounded-br-none' // Admin en bleu
-                        : 'bg-white text-gray-800 border rounded-bl-none' // Client en blanc/gris
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-4 flex flex-col">
+              {/* Input en haut car les messages descendent (plus intuitif pour admin) */}
+              <form onSubmit={sendReply} className="mb-8">
+                <input 
+                  value={reply} onChange={(e) => setReply(e.target.value)}
+                  placeholder={`Répondre à ${selectedUser.username}...`}
+                  className="w-full bg-[#020617] border border-emerald-500/20 p-5 rounded-3xl outline-none focus:border-emerald-500 transition-all font-bold"
+                />
+              </form>
+
+              {messages.map(m => (
+                <div key={m.id} className={`flex ${m.is_admin_message ? 'justify-end' : 'justify-start'}`}>
+                   <div className={`p-4 rounded-2xl max-w-md text-sm font-bold ${m.is_admin_message ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-white'}`}>
+                      {m.content}
+                   </div>
                 </div>
               ))}
-              <div ref={messagesEndRef} />
             </div>
-
-            {/* Input Admin */}
-            <form onSubmit={sendMessage} className="p-4 bg-white border-t flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Répondre au client..."
-                className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium"
-              >
-                Envoyer
-              </button>
-            </form>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            Sélectionnez un client à gauche pour commencer le chat.
+          <div className="flex-1 flex flex-col items-center justify-center opacity-20">
+            <MessageSquare size={64} className="mb-4 text-emerald-500" />
+            <p className="font-black italic uppercase tracking-[0.5em]">Sélectionne un client</p>
           </div>
         )}
       </div>
-    </div>
+    </main>
   )
 }
+
