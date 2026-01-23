@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 
-export default function SimpleChat() {
+export default function GuestChat() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -17,92 +17,95 @@ export default function SimpleChat() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
 
-  // Connexion au chat une fois le ticket créé
+  // Écoute en temps réel
   useEffect(() => {
     if (!ticket) return;
-    const channel = supabase.channel(`chat_${ticket.id}`)
+    const channel = supabase.channel(`t_${ticket.id}`)
       .on('broadcast', { event: 'msg' }, ({ payload }) => {
         setChat((prev) => [...prev, payload]);
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [ticket]);
 
-  const startChat = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleStart = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
 
-    // On récupère l'user s'il existe, sinon on continue en "Invité"
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id || null;
-
     const formData = new FormData(e.currentTarget);
-    const file = formData.get('pic') as File;
-    let path = "";
+    const file = formData.get('img') as File;
+    let imgPath = "";
 
+    // Upload simple
     if (file && file.size > 0) {
-      const name = `${Date.now()}-${file.name}`;
+      const name = `${Math.random().toString(36).slice(2)}-${file.name}`;
       const { data } = await supabase.storage.from('tickets').upload(name, file);
-      if (data) path = data.path;
+      if (data) imgPath = data.path;
     }
 
+    // Création du ticket (On ne demande plus d'USER ID)
     const { data, error } = await supabase.from('support_tickets').insert({
-      user_id: userId,
       category: formData.get('cat'),
-      attachment_url: path,
+      attachment_url: imgPath,
       status: 'ouvert'
     }).select().single();
 
     if (data) setTicket(data);
+    else alert("Erreur réseau. Réessayez.");
     setLoading(false);
   };
 
   const send = async () => {
     if (!msg.trim()) return;
     const payload = { text: msg, sender: 'user', time: new Date() };
-    await supabase.channel(`chat_${ticket.id}`).send({
-      type: 'broadcast',
-      event: 'msg',
-      payload
-    });
+    await supabase.channel(`t_${ticket.id}`).send({ type: 'broadcast', event: 'msg', payload });
     setChat(prev => [...prev, payload]);
     setMsg("");
   };
 
   if (!ticket) return (
-    <div className="max-w-md mx-auto m-10 p-6 bg-white rounded-2xl shadow-lg border">
-      <h2 className="text-xl font-bold mb-4">Besoin d'aide ?</h2>
-      <form onSubmit={startChat} className="space-y-4">
-        <select name="cat" className="w-full p-3 border rounded-xl bg-gray-50">
-          <option value="paiement">Problème Paiement</option>
-          <option value="technique">Problème Technique</option>
+    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-3xl shadow-2xl border border-gray-100 text-center">
+      <h2 className="text-2xl font-black text-gray-800 mb-2">Besoin d'aide ?</h2>
+      <p className="text-gray-500 text-sm mb-6">Chat direct avec nos agents</p>
+      <form onSubmit={handleStart} className="space-y-4 text-left">
+        <select name="cat" className="w-full p-4 border rounded-2xl bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
+          <option value="paiement">💰 Problème de Paiement</option>
+          <option value="technique">⚙️ Problème Technique</option>
+          <option value="autre">📝 Autre demande</option>
         </select>
-        <input type="file" name="pic" accept="image/*" className="w-full text-sm" />
-        <button disabled={loading} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold">
-          {loading ? "Connexion..." : "Lancer le Chat Direct"}
+        <div className="p-4 border-2 border-dashed rounded-2xl text-center">
+          <input type="file" name="img" accept="image/*" className="text-xs" />
+        </div>
+        <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-2xl font-black transition-all transform active:scale-95 shadow-lg shadow-blue-200">
+          {loading ? "Lancement du chat..." : "Démarrer maintenant"}
         </button>
       </form>
     </div>
   );
 
   return (
-    <div className="max-w-lg mx-auto h-[80vh] flex flex-col border rounded-2xl overflow-hidden mt-5 shadow-2xl">
-      <div className="bg-blue-600 p-4 text-white font-bold flex justify-between">
-        <span>Support Direct</span>
-        <span className="text-xs opacity-50">#{ticket.id.slice(0,5)}</span>
+    <div className="max-w-md mx-auto h-[90vh] flex flex-col bg-white shadow-2xl rounded-3xl overflow-hidden mt-4 border border-gray-100">
+      <div className="bg-blue-600 p-5 text-white flex justify-between items-center">
+        <div>
+          <h3 className="font-black text-lg">Support Actif</h3>
+          <p className="text-[10px] opacity-75 uppercase tracking-widest">ID: {ticket.id.slice(0,8)}</p>
+        </div>
+        <div className="h-3 w-3 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_#4ade80]"></div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-3">
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
         {chat.map((m, i) => (
           <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`p-3 rounded-2xl max-w-[80%] text-sm ${m.sender === 'user' ? 'bg-blue-500 text-white' : 'bg-white border'}`}>
+            <div className={`p-4 rounded-3xl max-w-[85%] text-sm shadow-sm font-medium ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border rounded-tl-none'}`}>
               {m.text}
             </div>
           </div>
         ))}
         <div ref={scrollRef} />
       </div>
+
       <div className="p-4 bg-white border-t flex gap-2">
-        <input value={msg} onChange={e => setMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message..." className="flex-1 p-2 border rounded-lg outline-none"/>
-        <button onClick={send} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">OK</button>
+        <input value={msg} onChange={e => setMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Tapez votre message..." className="flex-1 p-4 border rounded-2xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"/>
+        <button onClick={send} className="bg-blue-600 text-white px-6 rounded-2xl font-bold shadow-md transform active:scale-90 transition-transform">Envoyer</button>
       </div>
     </div>
   );
