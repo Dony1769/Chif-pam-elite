@@ -2,132 +2,167 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ChatMessage, Conversation } from '@/types/chat';
 
-export default function AdminChat() {
+export default function AdminChatPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const [conversations, setConversations] = useState<(Conversation & { profiles: any })[]>([]);
-  const [activeConv, setActiveConv] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [reply, setReply] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [activeConv, setActiveConv] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [replyText, setReplyText] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Charger les conversation
+  // 1. Charger la liste des conversations (triées par mise à jour)
+  const fetchConversations = async () => {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*, profiles(username, email)')
+      .order('updated_at', { ascending: false });
+
+    if (error) console.error("Erreur convs:", error.message);
+    else setConversations(data || []);
+  };
+
   useEffect(() => {
-    const fetchConvs = async () => {
-      // On join avec la table profiles pour avoir le nom/email
-      const { data } = await supabase
-        .from('conversations')
-        .select('*, profiles(email, username)') // Assure-toi que ces colonnes existent dans profiles
-        .order('updated_at', { ascending: false });
-      
-      if (data) setConversations(data as any);
-    };
-    fetchConvs();
-
-    // Realtime pour remonter les conversations actives
-    const channel = supabase.channel('admin_convs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConvs)
+    fetchConversations();
+    
+    // Realtime pour remonter les convs en haut de liste quand un message arrive
+    const channel = supabase.channel('admin_list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConversations)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Charger les messages quand on clique sur une conv
+  // 2. Charger les messages d'une conversation sélectionnée
   useEffect(() => {
     if (!activeConv) return;
 
     const fetchMessages = async () => {
-      // ICI PAS DE FILTRE DE TEMPS (Admin voit tout)
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('chat_messages')
         .select('*')
-        .eq('conversation_id', activeConv)
+        .eq('conversation_id', activeConv.id)
         .order('created_at', { ascending: true });
-      if (data) setMessages(data as ChatMessage[]);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView(), 100);
+
+      if (error) console.error("Erreur msgs:", error.message);
+      else setMessages(data || []);
+      setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'instant' }), 50);
     };
+
     fetchMessages();
 
-    const channel = supabase.channel(`admin_chat_${activeConv}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${activeConv}` }, 
-      (payload) => {
-        setMessages(prev => [...prev, payload.new as ChatMessage]);
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-      })
-      .subscribe();
+    // Realtime pour les nouveaux messages dans cette conv
+    const channel = supabase.channel(`admin_conv_${activeConv.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'chat_messages', 
+        filter: `conversation_id=eq.${activeConv.id}` 
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new]);
+        setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      }).subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [activeConv]);
 
-  const sendAdminReply = async () => {
-    if (!activeConv || !reply.trim()) return;
-    await supabase.from('chat_messages').insert({
-      conversation_id: activeConv,
+  // 3. Envoyer une réponse (Texte seulement pour l'admin ici)
+  const sendReply = async () => {
+    if (!replyText.trim() || !activeConv) return;
+
+    const { error } = await supabase.from('chat_messages').insert({
+      conversation_id: activeConv.id,
       sender_type: 'admin',
-      type: 'text',
-      content: reply
+      content: replyText,
+      type: 'text'
     });
-    setReply("");
+
+    if (error) {
+      alert("Erreur d'envoi");
+    } else {
+      setReplyText("");
+      // Mettre à jour le timestamp de la conv
+      await supabase.from('conversations').update({ updated_at: new Date() }).eq('id', activeConv.id);
+    }
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar Liste */}
-      <div className="w-80 bg-white border-r overflow-y-auto">
-        <div className="p-4 bg-gray-50 font-bold border-b">Discussions</div>
-        {conversations.map(c => (
-          <div 
-            key={c.id} 
-            onClick={() => setActiveConv(c.id)}
-            className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${activeConv === c.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
-          >
-            <div className="font-bold text-sm">{c.profiles?.username || c.profiles?.email || 'Utilisateur'}</div>
-            <div className="text-xs text-gray-400 mt-1">
-              {new Date(c.updated_at).toLocaleDateString()}
+    <div className="flex h-screen bg-gray-100 text-gray-800">
+      {/* Sidebar : Liste des clients */}
+      <div className="w-1/3 bg-white border-r flex flex-col">
+        <div className="p-4 bg-gray-800 text-white font-bold">Messages Clients</div>
+        <div className="flex-1 overflow-y-auto">
+          {conversations.length === 0 && <p className="p-4 text-gray-400">Aucune discussion.</p>}
+          {conversations.map((c) => (
+            <div 
+              key={c.id} 
+              onClick={() => setActiveConv(c)}
+              className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${activeConv?.id === c.id ? 'bg-blue-50 border-r-4 border-blue-500' : ''}`}
+            >
+              <p className="font-bold text-sm">{c.profiles?.username || c.profiles?.email || "Utilisateur inconnu"}</p>
+              <p className="text-[10px] text-gray-400 uppercase tracking-tighter">Dernière activité : {new Date(c.updated_at).toLocaleString()}</p>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Zone de Chat */}
-      <div className="flex-1 flex flex-col">
+      {/* Main : Fenêtre de Chat */}
+      <div className="flex-1 flex flex-col bg-[#e5ddd5]">
         {activeConv ? (
           <>
-            <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-[#e5ddd5]">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[60%] p-3 rounded-lg shadow text-sm ${msg.sender_type === 'admin' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
-                    {msg.type === 'text' && <p>{msg.content}</p>}
-                    {msg.type === 'image' && <img src={msg.content} className="rounded max-w-xs" />}
-                    {msg.type === 'audio' && <audio controls src={msg.content} />}
-                    <div className="text-[10px] text-right text-gray-500 mt-1">
-                       {new Date(msg.created_at).toLocaleString()}
-                    </div>
+            {/* Header Chat */}
+            <div className="p-4 bg-white border-b shadow-sm flex justify-between items-center">
+               <span className="font-bold">Discussion avec {activeConv.profiles?.username || 'Client'}</span>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {messages.map((m) => (
+                <div key={m.id} className={`flex ${m.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] p-3 rounded-xl shadow-sm ${m.sender_type === 'admin' ? 'bg-[#dcf8c6] text-gray-800' : 'bg-white text-gray-800'}`}>
+                    
+                    {/* Types de contenu */}
+                    {m.type === 'text' && <p className="text-sm">{m.content}</p>}
+                    {m.type === 'image' && (
+                      <img src={m.content} className="rounded-lg max-w-full h-auto border" alt="media" />
+                    )}
+                    {m.type === 'audio' && (
+                      <audio controls src={m.content} className="w-48 h-10" />
+                    )}
+
+                    <p className="text-[9px] text-gray-400 text-right mt-1">
+                      {new Date(m.created_at).toLocaleTimeString()}
+                    </p>
                   </div>
                 </div>
               ))}
-              <div ref={messagesEndRef} />
+              <div ref={scrollRef} />
             </div>
-            
+
+            {/* Input Admin */}
             <div className="p-4 bg-white border-t flex gap-2">
               <input 
-                value={reply} 
-                onChange={e => setReply(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && sendAdminReply()}
-                className="flex-1 p-3 border rounded-lg" 
-                placeholder="Réponse admin..." 
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendReply()}
+                placeholder="Répondre..."
+                className="flex-1 p-3 border rounded-xl outline-none focus:ring-1 focus:ring-blue-500"
               />
-              <button onClick={sendAdminReply} className="bg-blue-600 text-white px-6 rounded-lg font-bold">Envoyer</button>
+              <button 
+                onClick={sendReply}
+                className="bg-blue-600 text-white px-6 rounded-xl font-bold hover:bg-blue-700"
+              >
+                ENVOYER
+              </button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            Sélectionnez une conversation
+          <div className="flex-1 flex items-center justify-center text-gray-400 italic">
+            Sélectionnez une conversation à gauche
           </div>
         )}
       </div>
