@@ -13,195 +13,131 @@ export default function SimpleChat() {
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [myId, setMyId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. Initialisation et récupération de l'utilisateur
+  // 1. Chargement et Realtime
   useEffect(() => {
-    const initChat = async () => {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error("Utilisateur non connecté :", authError);
-        return;
-      }
+    const init = async () => {
+      // On récupère l'user mais on ne bloque pas l'affichage
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
 
-      setMyId(user.id);
-      console.log("Connecté en tant que :", user.id);
+      if (userId) {
+        // Charger messages
+        const { data } = await supabase.from('messages')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true });
+        if (data) setMessages(data);
 
-      // Charger les messages existants
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('user_id', user.id) // On filtre par user_id pour la sécurité
-        .order('created_at', { ascending: true });
-
-      if (error) console.error("Erreur chargement messages:", error);
-      if (data) setMessages(data);
-      
-      // Ecoute en temps réel (uniquement pour cet utilisateur)
-      const channel = supabase.channel(`realtime_chat_${user.id}`)
-        .on('postgres_changes', { 
+        // Ecoute Realtime
+        supabase.channel(`chat_${userId}`)
+          .on('postgres_changes', { 
             event: 'INSERT', 
             schema: 'public', 
             table: 'messages', 
-            filter: `user_id=eq.${user.id}` 
-        }, (payload) => {
-            setMessages(prev => [...prev, payload.new]);
-        }).subscribe();
-
-      return () => { supabase.removeChannel(channel); };
+            filter: `user_id=eq.${userId}` 
+          }, (p) => setMessages(prev => [...prev, p.new]))
+          .subscribe();
+      }
     };
-
-    initChat();
+    init();
   }, [supabase]);
 
-  // Scroll automatique
-  useEffect(() => { 
-    if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: 'smooth' }); 
-    }
-  }, [messages]);
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // 2. Fonction d'envoi principale
-  const handleSend = async (content: string, imageUrl: string | null = null) => {
-    if (!myId) {
-        alert("Erreur : Vous n'êtes pas identifié. Reconnectez-vous.");
-        return;
-    }
-    if (!content.trim() && !imageUrl) return;
-
+  // 2. Fonction d'envoi simplifiée (SANS ALERTES BLOQUANTES)
+  const send = async (content: string, url: string | null = null) => {
+    if (!content.trim() && !url) return;
+    
     setLoading(true);
-    console.log("Tentative d'envoi...");
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Insertion directe
+      await supabase.from('messages').insert({
+        user_id: user.id,
+        sender_type: 'client',
+        content: content.trim(),
+        image_url: url
+      });
 
-    try {
-      // Étape A : Insérer dans 'messages'
-      const { error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          user_id: myId,
-          sender_type: 'client',
-          content: content.trim(),
-          image_url: imageUrl,
-          created_at: new Date().toISOString()
-        });
-
-      if (insertError) throw insertError;
-
-      // Étape B : Mettre à jour 'latest_message_per_conversation' pour l'admin
-      const { error: upsertError } = await supabase
-        .from('latest_message_per_conversation')
-        .upsert({
-          user_id: myId,
-          last_message: content.trim() || "📷 Image",
-          last_sender_type: 'client',
-          last_created_at: new Date().toISOString()
-        });
-
-      if (upsertError) console.warn("Erreur mise à jour liste admin (non bloquant):", upsertError);
-
-      setText(""); // Vider le champ
-      console.log("Message envoyé avec succès !");
-    } catch (error: any) {
-      console.error("ERREUR D'ENVOI :", error.message);
-      alert(`Erreur : ${error.message}`);
-    } finally {
-      setLoading(false);
+      // Update liste admin
+      await supabase.from('latest_message_per_conversation').upsert({
+        user_id: user.id,
+        last_message: content.trim() || "📷 Image",
+        last_sender_type: 'client',
+        last_created_at: new Date().toISOString()
+      });
     }
+    
+    setText("");
+    setLoading(false);
   };
 
-  // 3. Gestion des images
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !myId) return;
+    if (!file) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     setLoading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `chat/${myId}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('chat-media')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-media')
-        .getPublicUrl(filePath);
-
-      await handleSend("", publicUrl);
-    } catch (error: any) {
-      alert("Erreur upload image : " + error.message);
-    } finally {
+    const path = `chat/${user.id}/${Date.now()}_${file.name}`;
+    const { data } = await supabase.storage.from('chat-media').upload(path, file);
+    if (data) {
+      const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(path);
+      send("", publicUrl);
+    } else {
       setLoading(false);
     }
   };
 
   return (
     <main className="min-h-screen bg-[#020617] text-white flex flex-col font-sans">
-      {/* Header */}
-      <header className="p-4 bg-slate-900/80 backdrop-blur-md border-b border-white/5 flex items-center justify-between sticky top-0 z-50">
-        <Link href="/client/home" className="p-2 hover:bg-white/5 rounded-full text-slate-400">
-          <ArrowLeft size={24} />
-        </Link>
-        <div className="flex flex-col items-center">
-            <h1 className="text-xl font-black italic tracking-tighter">CHIF-<span className="text-emerald-500">PAM</span></h1>
-            <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Assistance</span>
+      <header className="p-4 bg-slate-900/80 border-b border-white/5 flex items-center justify-between sticky top-0 z-50">
+        <Link href="/client/home" className="text-slate-400 hover:text-white"><ArrowLeft size={24} /></Link>
+        <div className="text-center">
+            <h1 className="text-xl font-black italic">CHIF-<span className="text-emerald-500">PAM</span></h1>
+            <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">Assistance</p>
         </div>
         <div className="w-10"></div>
       </header>
 
-      {/* Zone de chat */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-slate-900 to-[#020617]">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && !loading && (
-            <div className="text-center py-20 opacity-20">
-                <p className="text-sm font-bold uppercase tracking-widest">Aucun message. Commencez la discussion.</p>
-            </div>
+          <div className="text-center py-20 opacity-30 text-xs font-bold uppercase tracking-widest">
+            Aucun message. Commencez la discussion.
+          </div>
         )}
-
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-3 rounded-2xl shadow-2xl ${
-                m.sender_type === 'client' 
-                ? 'bg-emerald-600 text-white rounded-tr-none' 
-                : 'bg-slate-800 text-slate-100 border border-white/10 rounded-tl-none'
+            <div className={`max-w-[85%] p-3 rounded-2xl shadow-lg ${
+              m.sender_type === 'client' ? 'bg-emerald-600 rounded-tr-none' : 'bg-slate-800 border border-white/10 rounded-tl-none'
             }`}>
-              {m.image_url && (
-                <img src={m.image_url} alt="Preuve" className="max-w-full rounded-xl mb-2 border border-black/20" />
-              )}
-              {m.content && <p className="text-sm font-medium leading-relaxed">{m.content}</p>}
-              <span className="text-[8px] opacity-40 block text-right mt-1">
-                {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </span>
+              {m.image_url && <img src={m.image_url} className="rounded-xl mb-2 max-h-60" />}
+              <p className="text-sm font-medium">{m.content}</p>
             </div>
           </div>
         ))}
-        <div ref={scrollRef} className="h-2" />
+        <div ref={scrollRef} />
       </div>
 
-      {/* Barre d'envoi */}
-      <footer className="p-4 bg-slate-900/90 border-t border-white/5 backdrop-blur-lg">
-        <div className="max-w-3xl mx-auto flex items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-white/5 shadow-inner">
-          <label className="p-2 text-slate-500 hover:text-emerald-500 cursor-pointer transition-colors">
+      <footer className="p-4 bg-slate-900/90 border-t border-white/5">
+        <div className="max-w-2xl mx-auto flex items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-white/5">
+          <label className="p-2 text-slate-500 hover:text-emerald-500 cursor-pointer">
             <ImageIcon size={22} />
-            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+            <input type="file" className="hidden" accept="image/*" onChange={upload} />
           </label>
-          
           <input 
             value={text} 
-            onChange={(e) => setText(e.target.value)} 
-            onKeyDown={(e) => e.key === 'Enter' && !loading && handleSend(text)} 
-            className="flex-1 bg-transparent p-2 outline-none text-sm font-medium placeholder:text-slate-700" 
-            placeholder="Écrivez votre message..." 
-            disabled={loading}
+            onChange={e => setText(e.target.value)} 
+            onKeyDown={e => e.key === 'Enter' && send(text)}
+            className="flex-1 bg-transparent p-2 outline-none text-sm font-bold" 
+            placeholder="Écrivez ici..." 
           />
-          
           <button 
-            onClick={() => handleSend(text)} 
-            disabled={loading || (!text.trim() && !loading)}
-            className="bg-emerald-500 text-slate-950 p-3 rounded-xl font-black hover:bg-emerald-400 transition-all active:scale-90 disabled:opacity-20 disabled:grayscale"
+            onClick={() => send(text)} 
+            className="bg-emerald-500 text-slate-950 p-3 rounded-xl hover:bg-emerald-400 active:scale-95 transition-all"
           >
             {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
           </button>
@@ -210,3 +146,4 @@ export default function SimpleChat() {
     </main>
   );
 }
+
