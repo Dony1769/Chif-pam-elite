@@ -2,111 +2,200 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import { ChatMessage } from '@/types/chat';
 
-export default function GuestChat() {
+export default function ClientChat() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const [ticket, setTicket] = useState<any>(null);
-  const [msg, setMsg] = useState("");
-  const [chat, setChat] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
-
-  // Écoute en temps réel
+  // 1. Initialisation : Récupérer ou créer la conversation
   useEffect(() => {
-    if (!ticket) return;
-    const channel = supabase.channel(`t_${ticket.id}`)
-      .on('broadcast', { event: 'msg' }, ({ payload }) => {
-        setChat((prev) => [...prev, payload]);
-      }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [ticket]);
+    const initChat = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return window.location.href = '/login'; // Redirection douce
 
-  const handleStart = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
+      // Chercher conversation existante
+      let { data: conv } = await supabase.from('conversations')
+        .select('id').eq('user_id', user.id).single();
 
-    const formData = new FormData(e.currentTarget);
-    const file = formData.get('img') as File;
-    let imgPath = "";
+      // Si pas de conversation, on en crée une
+      if (!conv) {
+        const { data: newConv } = await supabase.from('conversations')
+          .insert({ user_id: user.id }).select().single();
+        conv = newConv;
+      }
+      
+      if (conv) {
+        setConversationId(conv.id);
+        loadMessages(conv.id);
+        subscribeToMessages(conv.id);
+      }
+    };
+    initChat();
+  }, []);
 
-    // Upload simple
-    if (file && file.size > 0) {
-      const name = `${Math.random().toString(36).slice(2)}-${file.name}`;
-      const { data } = await supabase.storage.from('tickets').upload(name, file);
-      if (data) imgPath = data.path;
+  // 2. Chargement des messages (FILTRE 24H)
+  const loadMessages = async (convId: string) => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('conversation_id', convId)
+      .gt('created_at', yesterday) // SEULEMENT LES DERNIERES 24H
+      .order('created_at', { ascending: true });
+
+    if (data) setMessages(data as ChatMessage[]);
+  };
+
+  // 3. Temps réel
+  const subscribeToMessages = (convId: string) => {
+    supabase.channel(`conv_${convId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${convId}` }, 
+      (payload) => {
+        setMessages(prev => [...prev, payload.new as ChatMessage]);
+        // Scroll en bas
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      })
+      .subscribe();
+  };
+
+  // 4. Envoi de message (Générique)
+  const sendMessage = async (type: 'text' | 'image' | 'audio', content: string) => {
+    if (!conversationId) return;
+    await supabase.from('chat_messages').insert({
+      conversation_id: conversationId,
+      sender_type: 'user',
+      type,
+      content
+    });
+    // Update timestamp conversation pour l'admin
+    await supabase.from('conversations').update({ updated_at: new Date() }).eq('id', conversationId);
+  };
+
+  // --- GESTION AUDIO ---
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        uploadFile(audioBlob, 'audio');
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (e) {
+      alert("Microphone non autorisé");
     }
-
-    // Création du ticket (On ne demande plus d'USER ID)
-    const { data, error } = await supabase.from('support_tickets').insert({
-      category: formData.get('cat'),
-      attachment_url: imgPath,
-      status: 'ouvert'
-    }).select().single();
-
-    if (data) setTicket(data);
-    else alert("Erreur réseau. Réessayez.");
-    setLoading(false);
   };
 
-  const send = async () => {
-    if (!msg.trim()) return;
-    const payload = { text: msg, sender: 'user', time: new Date() };
-    await supabase.channel(`t_${ticket.id}`).send({ type: 'broadcast', event: 'msg', payload });
-    setChat(prev => [...prev, payload]);
-    setMsg("");
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
   };
 
-  if (!ticket) return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-3xl shadow-2xl border border-gray-100 text-center">
-      <h2 className="text-2xl font-black text-gray-800 mb-2">Besoin d'aide ?</h2>
-      <p className="text-gray-500 text-sm mb-6">Chat direct avec nos agents</p>
-      <form onSubmit={handleStart} className="space-y-4 text-left">
-        <select name="cat" className="w-full p-4 border rounded-2xl bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
-          <option value="paiement">💰 Problème de Paiement</option>
-          <option value="technique">⚙️ Problème Technique</option>
-          <option value="autre">📝 Autre demande</option>
-        </select>
-        <div className="p-4 border-2 border-dashed rounded-2xl text-center">
-          <input type="file" name="img" accept="image/*" className="text-xs" />
-        </div>
-        <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-2xl font-black transition-all transform active:scale-95 shadow-lg shadow-blue-200">
-          {loading ? "Lancement du chat..." : "Démarrer maintenant"}
-        </button>
-      </form>
-    </div>
-  );
+  // --- GESTION FICHIERS (Image/Audio) ---
+  const uploadFile = async (file: Blob | File, type: 'image' | 'audio') => {
+    setUploading(true);
+    const ext = type === 'audio' ? 'webm' : file.name.split('.').pop();
+    const fileName = `${Date.now()}.${ext}`;
+    
+    const { data, error } = await supabase.storage.from('chat-media').upload(fileName, file);
+    
+    if (data) {
+      const publicUrl = supabase.storage.from('chat-media').getPublicUrl(fileName).data.publicUrl;
+      await sendMessage(type, publicUrl);
+    }
+    setUploading(false);
+  };
 
   return (
-    <div className="max-w-md mx-auto h-[90vh] flex flex-col bg-white shadow-2xl rounded-3xl overflow-hidden mt-4 border border-gray-100">
-      <div className="bg-blue-600 p-5 text-white flex justify-between items-center">
-        <div>
-          <h3 className="font-black text-lg">Support Actif</h3>
-          <p className="text-[10px] opacity-75 uppercase tracking-widest">ID: {ticket.id.slice(0,8)}</p>
-        </div>
-        <div className="h-3 w-3 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_#4ade80]"></div>
+    <div className="flex flex-col h-[90vh] bg-[#e5ddd5]"> {/* Couleur WhatsApp */}
+      {/* Header */}
+      <div className="bg-[#075e54] p-4 text-white font-bold flex items-center shadow-md">
+        <span>Support Client</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
-        {chat.map((m, i) => (
-          <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`p-4 rounded-3xl max-w-[85%] text-sm shadow-sm font-medium ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-gray-800 border rounded-tl-none'}`}>
-              {m.text}
+      {/* Liste des messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[75%] p-2 rounded-lg shadow-sm text-sm ${msg.sender_type === 'user' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
+              
+              {/* Contenu selon le type */}
+              {msg.type === 'text' && <p>{msg.content}</p>}
+              {msg.type === 'image' && (
+                <img src={msg.content} alt="envoi" className="rounded-lg max-w-full cursor-pointer" onClick={() => window.open(msg.content)} />
+              )}
+              {msg.type === 'audio' && (
+                <audio controls src={msg.content} className="h-8 w-48" />
+              )}
+              
+              <span className="text-[10px] text-gray-500 float-right mt-1 ml-2">
+                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              </span>
             </div>
           </div>
         ))}
-        <div ref={scrollRef} />
+        <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-white border-t flex gap-2">
-        <input value={msg} onChange={e => setMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Tapez votre message..." className="flex-1 p-4 border rounded-2xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"/>
-        <button onClick={send} className="bg-blue-600 text-white px-6 rounded-2xl font-bold shadow-md transform active:scale-90 transition-transform">Envoyer</button>
+      {/* Barre d'input */}
+      <div className="bg-white p-2 flex items-center gap-2 border-t">
+        {/* Bouton Image */}
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0], 'image')} />
+        <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
+          📸
+        </button>
+
+        {/* Input Texte */}
+        <input 
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (sendMessage('text', inputText), setInputText(''))}
+          placeholder="Message..."
+          className="flex-1 p-2 border rounded-full outline-none focus:ring-1 focus:ring-[#075e54]"
+        />
+
+        {/* Bouton Envoyer ou Micro */}
+        {inputText.trim() ? (
+          <button onClick={() => { sendMessage('text', inputText); setInputText(''); }} className="p-2 bg-[#075e54] text-white rounded-full">
+            ➤
+          </button>
+        ) : (
+          <button 
+            onMouseDown={startRecording} 
+            onMouseUp={stopRecording} 
+            onTouchStart={startRecording}
+            onTouchEnd={stopRecording}
+            className={`p-2 rounded-full text-white transition-all ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-[#075e54]'}`}
+          >
+            🎤
+          </button>
+        )}
       </div>
+      {uploading && <div className="absolute top-0 w-full h-1 bg-blue-500 animate-pulse" />}
     </div>
   );
 }
