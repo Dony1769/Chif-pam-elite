@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState, useRef } from 'react'
-import { createClient } from '@/utils/supabase/client' // Ton chemin supabase ssr
+import { createClient } from '@/lib/supabase/client' // Ton chemin supabase ssr
 
 export default function ClientChat() {
   const supabase = createClient()
