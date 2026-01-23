@@ -4,11 +4,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell, TrendingUp, Plus, ArrowDownCircle, 
-  MessagesSquare, Home, Zap, Target, 
-  Gamepad2, History, User as UserIcon, Lock, Trophy,
-  Users, Activity, ChevronRight, Brain, Fingerprint,
-  Layers, Disc, Menu, X, Crown, ShieldCheck, Gift, Sparkles
+  Bell, Plus, ArrowDownCircle, 
+  MessagesSquare, Home, Gamepad2, History, 
+  User as UserIcon, Lock, Trophy,
+  Activity, ChevronRight, Brain, Fingerprint,
+  Menu, X, Crown, ShieldCheck, Gift, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -41,38 +41,32 @@ export default function ClientHome() {
   useEffect(() => {
     fetchData();
     
-    // --- REALTIME ULTRA INSTANTANÉ ---
-    // On écoute les INSERTIONS de messages pour l'utilisateur
-    const setupRealtime = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+    // REALTIME ULTRA INSTANTANÉ
+    const channel = supabase.channel('client_home_realtime')
+      // On écoute les nouveaux messages pour mettre à jour le badge support
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages' 
+      }, () => {
+        refreshChatCount();
+      })
+      // On écoute aussi les mises à jour (si un message est marqué lu ailleurs)
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'messages' 
+      }, () => {
+        refreshChatCount();
+      })
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'notifications' 
+      }, () => fetchNotificationCount())
+      .subscribe();
 
-        const channel = supabase.channel('client_global_sync')
-          .on('postgres_changes', { 
-            event: '*', 
-            schema: 'public', 
-            table: 'messages',
-            filter: `user_id=eq.${user.id}` // Filtre sur l'ID utilisateur
-          }, (payload) => {
-            // Si on reçoit un message de l'admin et qu'on n'est pas déjà sur le chat
-            if (payload.new.is_admin_message && pathname !== '/client/chat') {
-                refreshChatCount(user.id);
-            }
-          })
-          .on('postgres_changes', { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'notifications' 
-          }, () => fetchNotificationCount(user.id))
-          .subscribe();
-
-        return channel;
-    };
-
-    let chatChannel: any;
-    setupRealtime().then(ch => chatChannel = ch);
-
-    return () => { if (chatChannel) supabase.removeChannel(chatChannel); };
+    return () => { supabase.removeChannel(channel); };
   }, [pathname]);
 
   const fetchData = async () => {
@@ -83,36 +77,39 @@ export default function ClientHome() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
 
-      fetchNotificationCount(user.id);
+      fetchNotificationCount();
       
       const { count: ccount } = await supabase.from('challenges')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
       setActiveChallengesCount(ccount || 0);
 
-      refreshChatCount(user.id);
+      refreshChatCount();
 
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
-  const refreshChatCount = async (userId: string) => {
-    // Si on est déjà dans le chat, inutile d'afficher un badge
+  const refreshChatCount = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Si on est déjà sur la page chat, on reset visuellement
     if (pathname === '/client/chat') {
         setUnreadChat(0);
         return;
     }
 
-    // On compte les messages admin qui ne sont pas encore lus par le client
+    // Requête précise sur les messages non lus par le client venant de l'admin
     const { count } = await supabase
       .from('messages')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .eq('is_admin_message', true)
       .eq('is_read_by_client', false);
     
     const newCount = count || 0;
 
-    // Son uniquement si nouveau message (passage de 0 -> n)
+    // Sonnerie seulement lors d'un nouveau message (0 -> 1+)
     if (prevUnreadChat.current === 0 && newCount > 0) {
         playPing();
     }
@@ -121,10 +118,11 @@ export default function ClientHome() {
     setUnreadChat(newCount);
   };
 
-  const fetchNotificationCount = async (userId: string) => {
+  const fetchNotificationCount = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
     const { count } = await supabase.from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId).eq('is_read', false);
+      .eq('user_id', user?.id).eq('is_read', false);
     setUnreadCount(count || 0);
   };
 
@@ -133,7 +131,7 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
-      {/* Menu Latéral Mobile */}
+      {/* Menu Latéral (Inchangé) */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -146,7 +144,7 @@ export default function ClientHome() {
                 <MenuLink href="/client/referral" icon={<Gift className="text-rose-500"/>} label="Parrainage" />
                 <MenuLink href="/client/rank" icon={<Trophy className="text-blue-500"/>} label="Classement Global" />
                 <div className="pt-10 border-t border-white/5 mt-10">
-                    <button onClick={() => supabase.auth.signOut().then(() => router.push('/'))} className="text-slate-500 text-[10px] tracking-widest uppercase">Déconnexion</button>
+                    <button onClick={() => supabase.auth.signOut().then(() => router.push('/'))} className="text-slate-500 text-[10px] tracking-widest uppercase font-black">Déconnexion</button>
                 </div>
               </div>
             </motion.div>
@@ -155,17 +153,16 @@ export default function ClientHome() {
       </AnimatePresence>
 
       <div className="p-6 space-y-8">
-        {/* Header Section */}
+        {/* Header */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5">
+            <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all">
                 <Menu size={24} className="text-emerald-500" />
-                {activeChallengesCount > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#020617] animate-bounce"></span>}
             </button>
             <h1 className="text-lg tracking-tighter italic">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
           <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
-            <Bell size={20} className={unreadCount > 0 ? "text-emerald-500 animate-pulse" : "text-slate-500"} />
+            <Bell size={20} className={unreadCount > 0 ? "text-emerald-500" : "text-slate-500"} />
             {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -175,7 +172,7 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* Balance Card Section */}
+        {/* Balance Card Premium */}
         <div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-700 ${
           profile?.vip_status !== 'free' 
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/20 scale-[1.02]' 
@@ -186,33 +183,33 @@ export default function ClientHome() {
           )}
           <div className="relative z-10 flex justify-between items-start">
             <div>
-              <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2">Solde Disponible</p>
+              <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 font-black">Solde Disponible</p>
               <h2 className="text-5xl tracking-tighter font-black italic uppercase">
-                {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70 font-black">HTG</span>
+                {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70">HTG</span>
               </h2>
             </div>
             {profile?.vip_status !== 'free' && (
-              <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ repeat: Infinity, duration: 5 }} className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-amber-500">
+              <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
                 <Crown size={24} />
-              </motion.div>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Actions Rapides */}
+        {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl">
-            <Plus size={24} /><span className="text-[10px] font-black italic uppercase">Dépôt</span>
+          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
+            <Plus size={24} /><span className="text-[10px] font-black italic uppercase tracking-widest">Dépôt</span>
           </Link>
-          <Link href="/client/finance" className="bg-slate-900 p-6 rounded-[2rem] border border-white/5 flex flex-col items-center gap-2 active:scale-95 transition-all">
-            <ArrowDownCircle size={24} className="text-rose-500" /><span className="text-[10px] font-black italic uppercase">Retrait</span>
+          <Link href="/client/finance" className="bg-slate-900/50 p-6 rounded-[2rem] border border-white/10 flex flex-col items-center gap-2 active:scale-95 transition-all">
+            <ArrowDownCircle size={24} className="text-rose-500" /><span className="text-[10px] font-black italic uppercase tracking-widest">Retrait</span>
           </Link>
         </div>
 
-        {/* Featured Challenges */}
+        {/* Featured Games */}
         <div className="space-y-4">
-          <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic">Défis à la une</h3>
-          <div className="space-y-3">
+          <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
+          <div className="space-y-3 pb-10">
             <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
             <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
             <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
@@ -220,33 +217,32 @@ export default function ClientHome() {
         </div>
       </div>
 
-      {/* --- BARRE DE NAVIGATION FIXE --- */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
+      {/* Navigation Fixe Premium avec BADGE SUPPORT */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-15px_40px_rgba(0,0,0,0.6)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
         
-        {/* Support Client avec Badge Dynamique */}
+        {/* Support Link Dynamique */}
         <Link 
           href="/client/chat" 
-          onClick={() => setUnreadChat(0)}
           className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}
         >
           <div className="relative">
             <MessagesSquare 
                 size={22} 
-                className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1.5s_infinite] text-emerald-500" : ""} 
+                className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1s_infinite] text-emerald-500" : ""} 
             />
             <AnimatePresence>
               {unreadChat > 0 && pathname !== '/client/chat' && (
                 <motion.span 
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
                   className="absolute -top-2 -right-2 flex h-4 w-4"
                 >
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 items-center justify-center text-[8px] font-black text-black">
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 items-center justify-center text-[8px] font-black text-slate-950">
                         {unreadChat}
                     </span>
                 </motion.span>
@@ -262,10 +258,10 @@ export default function ClientHome() {
   );
 }
 
-// Helpers Components
+// Composants internes (Inchangés mais stylés)
 function MenuLink({ href, icon, label, badge }: any) {
     return (
-        <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all border border-transparent active:border-white/5">
+        <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all active:bg-white/5">
             {icon}
             <span className="text-[10px] font-black tracking-widest uppercase italic">{label}</span>
             {badge > 0 && <span className="ml-2 bg-emerald-500 text-black text-[8px] px-2 py-0.5 rounded-md font-black">{badge}</span>}
@@ -276,7 +272,7 @@ function MenuLink({ href, icon, label, badge }: any) {
 
 function GameRow({ href, icon, title, desc, players }: any) {
   return (
-    <Link href={href} className="bg-slate-900 border border-white/5 p-5 rounded-[1.8rem] flex items-center justify-between active:scale-[0.97] transition-all group shadow-sm">
+    <Link href={href} className="bg-slate-900 border border-white/5 p-5 rounded-[1.8rem] flex items-center justify-between active:scale-[0.97] transition-all group">
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded-2xl bg-black border border-white/5 flex items-center justify-center group-hover:border-emerald-500/30 transition-colors">{icon}</div>
         <div>
@@ -285,9 +281,9 @@ function GameRow({ href, icon, title, desc, players }: any) {
         </div>
       </div>
       <div className="flex flex-col items-end gap-1.5">
-        <div className="flex items-center gap-1.5 bg-emerald-500/5 px-2 py-1 rounded-lg">
+        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1 rounded-lg">
            <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse"></span>
-           <span className="text-[9px] text-emerald-500 font-black">{players}</span>
+           <span className="text-[9px] text-emerald-500 font-black tracking-tighter">{players}</span>
         </div>
       </div>
     </Link>
@@ -296,9 +292,10 @@ function GameRow({ href, icon, title, desc, players }: any) {
 
 function NavLink({ href, icon, label, active }: any) {
   return (
-    <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600 active:scale-90'}`}>
+    <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
       {icon}
       <span className="text-[8px] font-black uppercase italic tracking-tighter">{label}</span>
     </Link>
   );
 }
+
