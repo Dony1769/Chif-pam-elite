@@ -4,10 +4,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell, Plus, ArrowDownCircle, 
-  MessagesSquare, Home, Gamepad2, History, User as UserIcon, Lock, Trophy,
-  Activity, ChevronRight, Brain, Fingerprint,
-  Menu, X, Crown, ShieldCheck, Gift, Sparkles
+  Bell, TrendingUp, Plus, ArrowDownCircle, 
+  MessagesSquare, Home, Zap, Target, 
+  Gamepad2, History, User as UserIcon, Lock, Trophy,
+  Users, Activity, ChevronRight, Brain, Fingerprint,
+  Layers, Disc, Menu, X, Crown, ShieldCheck, Gift, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -40,23 +41,38 @@ export default function ClientHome() {
   useEffect(() => {
     fetchData();
     
-    // REALTIME ULTRA SYNC : On écoute tout changement sur 'messages'
-    const channel = supabase.channel('client_global_sync')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'messages' 
-      }, () => {
-        refreshChatCount();
-      })
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'notifications' 
-      }, () => fetchNotificationCount())
-      .subscribe();
+    // --- REALTIME ULTRA INSTANTANÉ ---
+    // On écoute les INSERTIONS de messages pour l'utilisateur
+    const setupRealtime = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-    return () => { supabase.removeChannel(channel); };
+        const channel = supabase.channel('client_global_sync')
+          .on('postgres_changes', { 
+            event: '*', 
+            schema: 'public', 
+            table: 'messages',
+            filter: `user_id=eq.${user.id}` // Filtre sur l'ID utilisateur
+          }, (payload) => {
+            // Si on reçoit un message de l'admin et qu'on n'est pas déjà sur le chat
+            if (payload.new.is_admin_message && pathname !== '/client/chat') {
+                refreshChatCount(user.id);
+            }
+          })
+          .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'notifications' 
+          }, () => fetchNotificationCount(user.id))
+          .subscribe();
+
+        return channel;
+    };
+
+    let chatChannel: any;
+    setupRealtime().then(ch => chatChannel = ch);
+
+    return () => { if (chatChannel) supabase.removeChannel(chatChannel); };
   }, [pathname]);
 
   const fetchData = async () => {
@@ -67,37 +83,36 @@ export default function ClientHome() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
 
-      fetchNotificationCount();
+      fetchNotificationCount(user.id);
       
       const { count: ccount } = await supabase.from('challenges')
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
       setActiveChallengesCount(ccount || 0);
 
-      refreshChatCount();
+      refreshChatCount(user.id);
 
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
-  const refreshChatCount = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    // Si on est déjà sur le chat, on ne montre pas de badge "non lu"
-    if (!user || pathname === '/client/chat') {
+  const refreshChatCount = async (userId: string) => {
+    // Si on est déjà dans le chat, inutile d'afficher un badge
+    if (pathname === '/client/chat') {
         setUnreadChat(0);
         return;
     }
 
-    // LOGIQUE MISE À JOUR : Compter les messages admin non lus par ce client
+    // On compte les messages admin qui ne sont pas encore lus par le client
     const { count } = await supabase
       .from('messages')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_admin_message', true) // C'est l'admin qui a écrit
-      .eq('is_read_by_client', false); // Le client ne l'a pas encore vu
+      .eq('user_id', userId)
+      .eq('is_admin_message', true)
+      .eq('is_read_by_client', false);
     
     const newCount = count || 0;
 
-    // SON DE NOTIFICATION : Si un nouveau message arrive alors qu'on était à 0
+    // Son uniquement si nouveau message (passage de 0 -> n)
     if (prevUnreadChat.current === 0 && newCount > 0) {
         playPing();
     }
@@ -106,11 +121,10 @@ export default function ClientHome() {
     setUnreadChat(newCount);
   };
 
-  const fetchNotificationCount = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+  const fetchNotificationCount = async (userId: string) => {
     const { count } = await supabase.from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user?.id).eq('is_read', false);
+      .eq('user_id', userId).eq('is_read', false);
     setUnreadCount(count || 0);
   };
 
@@ -119,6 +133,7 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
+      {/* Menu Latéral Mobile */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -140,7 +155,7 @@ export default function ClientHome() {
       </AnimatePresence>
 
       <div className="p-6 space-y-8">
-        {/* Top Header */}
+        {/* Header Section */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5">
@@ -160,7 +175,7 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* Balance Card Premium */}
+        {/* Balance Card Section */}
         <div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-700 ${
           profile?.vip_status !== 'free' 
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/20 scale-[1.02]' 
@@ -184,7 +199,7 @@ export default function ClientHome() {
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Actions Rapides */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl">
             <Plus size={24} /><span className="text-[10px] font-black italic uppercase">Dépôt</span>
@@ -194,34 +209,36 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* Featured Games */}
+        {/* Featured Challenges */}
         <div className="space-y-4">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic">Défis à la une</h3>
           <div className="space-y-3">
             <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
             <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
+            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
           </div>
         </div>
       </div>
 
-      {/* Navigation Fixe Premium */}
+      {/* --- BARRE DE NAVIGATION FIXE --- */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
         
-        {/* Support avec Badge animé et Son */}
+        {/* Support Client avec Badge Dynamique */}
         <Link 
           href="/client/chat" 
+          onClick={() => setUnreadChat(0)}
           className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}
         >
           <div className="relative">
             <MessagesSquare 
                 size={22} 
-                className={unreadChat > 0 ? "animate-bounce text-emerald-500" : ""} 
+                className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1.5s_infinite] text-emerald-500" : ""} 
             />
             <AnimatePresence>
-              {unreadChat > 0 && (
+              {unreadChat > 0 && pathname !== '/client/chat' && (
                 <motion.span 
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -245,7 +262,7 @@ export default function ClientHome() {
   );
 }
 
-// Composants internes
+// Helpers Components
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all border border-transparent active:border-white/5">
