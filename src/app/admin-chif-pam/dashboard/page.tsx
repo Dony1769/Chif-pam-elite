@@ -10,7 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, Ticket, ClipboardList,
-  Activity, AlertCircle, ChevronRight, Target, SidebarLink
+  Activity, AlertCircle, ChevronRight, Target
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -215,4 +215,74 @@ export default function AdminDashboard() {
   );
 }
 
+// --- COMPOSANTS UI CHIF-PAM (À mettre en bas du fichier ou dans un dossier components) ---
+
+function SidebarLink({ href, icon, label, active = false }: any) {
+  return (
+    <Link 
+      href={href} 
+      className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
+        active 
+          ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-[1.02]' 
+          : 'hover:bg-white/5 text-slate-500 hover:text-emerald-500/50'
+      }`}
+    >
+      {icon} 
+      <span className="text-[10px] font-black tracking-[0.2em] uppercase italic">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
+function StatCard({ title, value, icon, color }: any) {
+  const colors: any = {
+    emerald: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-emerald-500/5",
+    blue: "text-blue-500 bg-blue-500/10 border-blue-500/20 shadow-blue-500/5",
+    amber: "text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-amber-500/5",
+    rose: "text-rose-500 bg-rose-500/10 border-rose-500/20 shadow-rose-500/5",
+  };
+  
+  return (
+    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden shadow-2xl backdrop-blur-sm group`}>
+      <div className="relative z-10">
+        <p className="text-[9px] uppercase font-black tracking-widest opacity-60 mb-2 italic">
+          {title}
+        </p>
+        <p className="text-3xl font-black italic tracking-tighter">
+          {value}
+        </p>
+      </div>
+      <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
+        {React.cloneElement(icon, { size: 100 })}
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({ href, label, count, icon, color, textColor = "text-slate-950", border="border-transparent" }: any) {
+  return (
+    <Link 
+      href={href} 
+      className={`flex items-center justify-between p-6 ${color} ${border} border rounded-[2.5rem] hover:scale-[1.03] active:scale-95 transition-all shadow-xl group`}
+    >
+      <div className="flex items-center gap-5">
+        <div className="p-4 bg-black/10 rounded-2xl group-hover:rotate-6 transition-transform">
+          {icon}
+        </div>
+        <div className={textColor}>
+          <p className="text-[10px] opacity-60 font-black uppercase tracking-widest">Accès Rapide</p>
+          <p className="text-sm font-black uppercase italic tracking-tighter">{label}</p>
+        </div>
+      </div>
+      
+      {/* Badge de notification style Chif-Pam */}
+      {count !== undefined && count !== 0 && (
+        <div className={`px-4 py-2 bg-black/20 rounded-full text-[10px] ${textColor} font-black animate-pulse border border-black/5`}>
+          {count}
+        </div>
+      )}
+    </Link>
+  );
+}
 // ... Les composants SidebarLink, StatCard et ActionCard restent identiques
