@@ -1,22 +1,27 @@
 "use client"
 import { useEffect, useState, useRef } from 'react'
-import { createClient } from '@/lib/supabase' // Ton chemin supabase ssr
+import { supabase } from '@/lib/supabase' // Changement ici : import de l'instance directe
 
 export default function ClientChat() {
-  const supabase = createClient()
   const [messages, setMessages] = useState<any[]>([])
   const [content, setContent] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // 1. Charger les messages et écouter en temps réel
   useEffect(() => {
     const fetchMessages = async () => {
-        const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true })
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const { data } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: true })
         if (data) setMessages(data)
     }
     fetchMessages()
 
-    const channel = supabase.channel('realtime_messages')
+    const channel = supabase.channel('client_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         setMessages((prev) => [...prev, payload.new])
       }).subscribe()
@@ -24,45 +29,63 @@ export default function ClientChat() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!content.trim()) return
+
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('messages').insert([{ user_id: user?.id, content, sender_type: 'client' }])
-    setContent('')
+    if (!user) return
+
+    const { error } = await supabase.from('messages').insert([{ 
+        user_id: user.id, 
+        content, 
+        sender_type: 'client' 
+    }])
+    
+    if (!error) setContent('')
   }
 
   return (
-    <div className="flex flex-col h-screen bg-black text-white">
-      {/* Header avec bouton retour */}
-      <header className="p-4 bg-emerald-900/20 backdrop-blur-md border-b border-emerald-500/30 flex items-center">
-        <button onClick={() => window.history.back()} className="mr-4">← Retour</button>
+    <div className="flex flex-col h-screen bg-black text-white font-sans">
+      <header className="p-4 bg-emerald-900/20 backdrop-blur-md border-b border-emerald-500/30 flex items-center sticky top-0 z-10">
+        <button onClick={() => window.history.back()} className="mr-4 text-emerald-400 hover:text-white transition text-xl">
+          ←
+        </button>
         <h1 className="font-bold text-emerald-400">Support ChifPam</h1>
       </header>
 
-      {/* Messages avec scroll auto */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3 rounded-2xl ${m.sender_type === 'client' ? 'bg-emerald-600' : 'bg-gray-800 border border-gray-700'}`}>
-              {m.content}
+            <div className={`max-w-[85%] p-3 rounded-2xl shadow-lg ${
+                m.sender_type === 'client' 
+                ? 'bg-emerald-600 text-white rounded-br-none' 
+                : 'bg-zinc-800 border border-zinc-700 text-white rounded-bl-none'
+            }`}>
+              <p className="text-sm">{m.content}</p>
             </div>
           </div>
         ))}
         <div ref={scrollRef} />
       </div>
 
-      {/* Input fixé en bas */}
-      <form onSubmit={sendMessage} className="p-4 bg-black/50 backdrop-blur-xl border-t border-emerald-500/20">
-        <div className="flex gap-2">
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-black/80 backdrop-blur-xl border-t border-emerald-500/20">
+        <form onSubmit={sendMessage} className="max-w-4xl mx-auto flex gap-2 items-center">
           <input 
             value={content} 
             onChange={(e) => setContent(e.target.value)}
-            className="flex-1 bg-gray-900 border border-emerald-500/30 rounded-full px-4 py-2 focus:outline-none focus:border-emerald-500"
-            placeholder="Écrivez votre message..."
+            className="flex-1 bg-zinc-900 border border-emerald-500/30 rounded-full px-5 py-3 focus:outline-none focus:border-emerald-500 transition text-sm"
+            placeholder="Écrivez un message..."
           />
-          <button type="submit" className="bg-emerald-500 p-2 rounded-full px-6 hover:bg-emerald-400 transition">Envoyer</button>
-        </div>
-      </form>
+          <button type="submit" className="bg-emerald-500 p-3 rounded-full hover:scale-105 active:scale-95 transition shadow-lg shadow-emerald-500/20">
+             <svg viewBox="0 0 24 24" className="w-6 h-6 fill-black"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
