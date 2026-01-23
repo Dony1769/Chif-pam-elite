@@ -16,7 +16,7 @@ export default function AdminChat() {
   const [reply, setReply] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Charger les conversations
+  // Charger les conversation
   useEffect(() => {
     const fetchConvs = async () => {
       // On join avec la table profiles pour avoir le nom/email
