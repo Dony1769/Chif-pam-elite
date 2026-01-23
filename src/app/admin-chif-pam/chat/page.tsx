@@ -1,158 +1,128 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Send, User, Clock, Search, Bell } from 'lucide-react'; // Ajout Bell
+import { Send, User, Clock, Search, Bell } from 'lucide-react';
 
 export default function AdminSide() {
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
   const [list, setList] = useState<any[]>([]);
-  const [active, setActive] = useState<string | null>(null);
+  const [activeConv, setActiveConv] = useState<any | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [reply, setReply] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  
-  // Audio pour l'alerte
   const audioPlayer = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Création de l'objet audio au chargement
     audioPlayer.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
   }, []);
 
   const loadList = async () => {
+    // Jointure avec la table profiles pour avoir le pseudo et le téléphone
     const { data } = await supabase
       .from('latest_message_per_conversation')
-      .select('*')
-      .order('last_created_at', { ascending: false }); // GARANTIT LA REMONTÉE EN HAUT
+      .select(`*, profiles:user_id(username, phone)`)
+      .order('last_created_at', { ascending: false });
     if (data) setList(data);
   };
 
   useEffect(() => {
     loadList();
-    
-    // Écoute des changements sur la liste globale
-    const channel = supabase.channel('list_global')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'latest_message_per_conversation' 
-      }, (payload) => {
-        // ALERTE : Si c'est un nouveau message d'un client
+    const channel = supabase.channel('admin_list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'latest_message_per_conversation' }, (payload) => {
         if (payload.new && (payload.new as any).last_sender_type === 'client') {
-          audioPlayer.current?.play().catch(e => console.log("Audio bloqué par le navigateur"));
+          audioPlayer.current?.play().catch(() => {});
         }
-        loadList(); // Rafraîchit et remonte en haut
-      })
-      .subscribe();
-
+        loadList();
+      }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [supabase]);
 
-  // Chargement des messages (Inchangé)
   useEffect(() => {
-    if (!active) return;
-    supabase.from('messages').select('*').eq('conversation_key', active).order('created_at', { ascending: true }).then(({data}) => data && setMessages(data));
-    const sub = supabase.channel(`admin_${active}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_key=eq.${active}` }, (p) => setMessages(v => [...v, p.new])).subscribe();
+    if (!activeConv) return;
+    supabase.from('messages')
+        .select('*')
+        .eq('user_id', activeConv.user_id)
+        .order('created_at', { ascending: true })
+        .then(({data}) => data && setMessages(data));
+
+    const sub = supabase.channel(`admin_chat_${activeConv.user_id}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${activeConv.user_id}` }, 
+        (p) => setMessages(v => [...v, p.new]))
+        .subscribe();
     return () => { supabase.removeChannel(sub); };
-  }, [active, supabase]);
+  }, [activeConv, supabase]);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-
-  const send = async () => {
-    if (!reply.trim() || !active) return;
+  const sendReply = async () => {
+    if (!reply.trim() || !activeConv) return;
     const txt = reply;
     setReply("");
-    await supabase.from('messages').insert({ conversation_key: active, sender_type: 'admin', content: txt });
-    await supabase.from('latest_message_per_conversation').upsert({ conversation_key: active, last_message: txt, last_sender_type: 'admin', last_created_at: new Date().toISOString() });
+    
+    // Insertion avec l'user_id du client sélectionné
+    await supabase.from('messages').insert({ 
+        user_id: activeConv.user_id, 
+        conversation_key: activeConv.user_id,
+        sender_type: 'admin', 
+        content: txt 
+    });
+    
+    await supabase.from('latest_message_per_conversation').upsert({ 
+        user_id: activeConv.user_id,
+        conversation_key: activeConv.user_id,
+        last_message: txt, 
+        last_sender_type: 'admin', 
+        last_created_at: new Date().toISOString() 
+    });
   };
 
   return (
     <div className="flex h-screen bg-[#020617] text-slate-200">
+      {/* SIDEBAR */}
       <div className="w-1/3 border-r border-white/5 flex flex-col bg-slate-900/50">
         <div className="p-6">
-          <h2 className="text-2xl font-black italic uppercase text-emerald-500 mb-4 flex items-center gap-2">
-            Support Hub <Bell size={20} className="animate-bounce" />
-          </h2>
-          <div className="relative">
-            <Search className="absolute left-3 top-3 text-slate-600" size={16} />
-            <input className="w-full bg-slate-950 border border-white/5 rounded-xl p-2.5 pl-10 text-xs outline-none focus:border-emerald-500/50" placeholder="Rechercher un client..." />
-          </div>
+          <h2 className="text-2xl font-black italic uppercase text-emerald-500 mb-4 flex items-center gap-2">Support Hub <Bell size={20}/></h2>
         </div>
-        
         <div className="flex-1 overflow-y-auto">
           {list.map(c => (
-            <div key={c.conversation_key} onClick={() => setActive(c.conversation_key)} 
-              className={`p-4 border-b border-white/5 cursor-pointer transition-all hover:bg-white/5 ${active === c.conversation_key ? 'bg-emerald-500/10 border-r-4 border-emerald-500' : ''}`}>
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
-                  <User size={10}/> {c.conversation_key.substring(0,8)}
-                  {/* Point vert si dernier message vient du client */}
-                  {c.last_sender_type === 'client' && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse ml-2" />}
+            <div key={c.user_id} onClick={() => setActiveConv(c)} 
+              className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 ${activeConv?.user_id === c.user_id ? 'bg-emerald-500/10 border-r-4 border-emerald-500' : ''}`}>
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-bold text-slate-300">
+                    {c.profiles?.username || c.profiles?.phone || "Inconnu"}
+                    {c.last_sender_type === 'client' && <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block ml-2 animate-pulse"/>}
                 </span>
-                <span className="text-[9px] text-slate-600 flex items-center gap-1"><Clock size={10}/> {new Date(c.last_created_at).toLocaleTimeString()}</span>
+                <span className="text-[9px] text-slate-500">{new Date(c.last_created_at).toLocaleTimeString()}</span>
               </div>
-              <p className={`text-sm truncate font-medium ${active === c.conversation_key ? 'text-emerald-400' : 'text-slate-300'}`}>
-                {c.last_sender_type === 'admin' ? 'Vous: ' : ''}{c.last_message}
-              </p>
+              <p className="text-xs truncate text-slate-500 mt-1">{c.last_message}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Reste du code (Chat Droite) identique ... */}
-      <div className="flex-1 flex flex-col relative">
-          {/* ... Copie ici ton code de la partie droite ... */}
-          {active ? (
-            <>
-               <div className="p-4 bg-slate-900/30 border-b border-white/5 flex items-center gap-4">
-                <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 font-bold">
-                  {active.substring(0,2).toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-sm font-bold">Client #{active.substring(0,8)}</p>
-                  <p className="text-[10px] text-emerald-500 animate-pulse uppercase font-black">Session Active</p>
-                </div>
-              </div>
-
-              <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-3 rounded-2xl max-w-md shadow-xl ${
-                      m.sender_type === 'admin' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5'
-                    }`}>
-                      {m.image_url && <img src={m.image_url} className="max-h-64 rounded-xl mb-2" alt="" />}
-                      <p className="text-sm font-medium leading-relaxed">{m.content}</p>
-                    </div>
-                  </div>
-                ))}
-                <div ref={scrollRef} />
-              </div>
-
-              <div className="p-4 bg-slate-900 border-t border-white/5">
-                <div className="flex gap-3 max-w-4xl mx-auto">
-                  <input 
-                    value={reply} 
-                    onChange={e => setReply(e.target.value)} 
-                    onKeyDown={e => e.key === 'Enter' && send()} 
-                    className="flex-1 bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500" 
-                    placeholder="Écrire une réponse..." 
-                  />
-                  <button onClick={send} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-8 rounded-2xl font-black transition-all flex items-center gap-2">
-                    <span>ENVOYER</span> <Send size={18} />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="m-auto text-center">
-              <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5 text-slate-700">
-                 <User size={40} />
-              </div>
-              <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Aucune conversation sélectionnée</p>
+      {/* CHAT AREA */}
+      <div className="flex-1 flex flex-col">
+        {activeConv ? (
+          <>
+            <div className="p-4 bg-slate-900/30 border-b border-white/5">
+                <p className="font-bold text-emerald-500 uppercase italic">{activeConv.profiles?.username || "Client"}</p>
+                <p className="text-[10px] text-slate-500">{activeConv.profiles?.phone}</p>
             </div>
-          )}
+            <div className="flex-1 p-6 overflow-y-auto space-y-4">
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`p-3 rounded-2xl max-w-md ${m.sender_type === 'admin' ? 'bg-emerald-600' : 'bg-slate-800'}`}>
+                    <p className="text-sm">{m.content}</p>
+                  </div>
+                </div>
+              ))}
+              <div ref={scrollRef} />
+            </div>
+            <div className="p-4 border-t border-white/5 flex gap-3">
+              <input value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendReply()} className="flex-1 bg-slate-950 p-4 rounded-2xl outline-none" placeholder="Répondre..." />
+              <button onClick={sendReply} className="bg-emerald-500 text-slate-950 px-8 rounded-2xl font-black">ENVOYER</button>
+            </div>
+          </>
+        ) : <div className="m-auto text-slate-500 uppercase font-black tracking-widest">Choisir une discussion</div>}
       </div>
     </div>
   );
 }
-
