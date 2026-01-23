@@ -1,4 +1,4 @@
-// types/support.ts
+// types/support.t
 
 export type TicketCategory = 'paiement' | 'technique' | 'autre';
 export type TicketPriority = 'normal' | 'important' | 'critique';
