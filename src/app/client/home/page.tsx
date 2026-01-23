@@ -4,11 +4,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell, TrendingUp, Plus, ArrowDownCircle, 
-  MessagesSquare, Home, Zap, Target, 
-  Gamepad2, History, User as UserIcon, Lock, Trophy,
-  Users, Activity, ChevronRight, Brain, Fingerprint,
-  Layers, Disc, Menu, X, Crown, ShieldCheck, Gift, Sparkles
+  Bell, Plus, ArrowDownCircle, 
+  MessagesSquare, Home, Gamepad2, History, User as UserIcon, Lock, Trophy,
+  Activity, ChevronRight, Brain, Fingerprint,
+  Menu, X, Crown, ShieldCheck, Gift, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,12 +27,10 @@ export default function ClientHome() {
   const [activeChallengesCount, setActiveChallengesCount] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
-  // Ref pour suivre l'ancien compte et ne sonner que de 0 -> 1
   const prevUnreadChat = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Son de notification discret (Blip premium)
   const playPing = () => {
     const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
     audio.volume = 0.4;
@@ -43,8 +40,8 @@ export default function ClientHome() {
   useEffect(() => {
     fetchData();
     
-    // REALTIME 600% - On écoute la table messages qui pilote la VUE
-    const channel = supabase.channel('home_global_sync')
+    // REALTIME ULTRA SYNC : On écoute tout changement sur 'messages'
+    const channel = supabase.channel('client_global_sync')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -84,21 +81,23 @@ export default function ClientHome() {
 
   const refreshChatCount = async () => {
     const { data: { user } } = await supabase.auth.getUser();
+    // Si on est déjà sur le chat, on ne montre pas de badge "non lu"
     if (!user || pathname === '/client/chat') {
         setUnreadChat(0);
         return;
     }
 
-    // On interroge la VUE pour la performance et la précision
+    // LOGIQUE MISE À JOUR : Compter les messages admin non lus par ce client
     const { count } = await supabase
-      .from('latest_message_per_conversation')
+      .from('messages')
       .select('*', { count: 'exact', head: true })
-      .eq('receiver_id', user.id)
-      .eq('is_read', false);
+      .eq('user_id', user.id)
+      .eq('is_admin_message', true) // C'est l'admin qui a écrit
+      .eq('is_read_by_client', false); // Le client ne l'a pas encore vu
     
     const newCount = count || 0;
 
-    // LOGIQUE SONORE : Uniquement si on passe de 0 messages à 1 ou plus
+    // SON DE NOTIFICATION : Si un nouveau message arrive alors qu'on était à 0
     if (prevUnreadChat.current === 0 && newCount > 0) {
         playPing();
     }
@@ -176,11 +175,6 @@ export default function ClientHome() {
               <h2 className="text-5xl tracking-tighter font-black italic uppercase">
                 {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70 font-black">HTG</span>
               </h2>
-              {profile?.vip_status !== 'free' && (
-                <div className="flex items-center gap-1 mt-2 text-amber-500">
-                  <Sparkles size={10} /><span className="text-[8px] tracking-[0.2em] font-black italic">MEMBRE ELITE {profile?.vip_status}</span>
-                </div>
-              )}
             </div>
             {profile?.vip_status !== 'free' && (
               <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ repeat: Infinity, duration: 5 }} className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-amber-500">
@@ -206,7 +200,6 @@ export default function ClientHome() {
           <div className="space-y-3">
             <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
             <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
-            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
           </div>
         </div>
       </div>
@@ -220,16 +213,15 @@ export default function ClientHome() {
         {/* Support avec Badge animé et Son */}
         <Link 
           href="/client/chat" 
-          onClick={() => setUnreadChat(0)}
           className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}
         >
           <div className="relative">
             <MessagesSquare 
                 size={22} 
-                className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1.5s_infinite] text-emerald-500" : ""} 
+                className={unreadChat > 0 ? "animate-bounce text-emerald-500" : ""} 
             />
             <AnimatePresence>
-              {unreadChat > 0 && pathname !== '/client/chat' && (
+              {unreadChat > 0 && (
                 <motion.span 
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -253,7 +245,7 @@ export default function ClientHome() {
   );
 }
 
-// Composants internes pour garder le code propre
+// Composants internes
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all border border-transparent active:border-white/5">
@@ -293,4 +285,3 @@ function NavLink({ href, icon, label, active }: any) {
     </Link>
   );
 }
-
