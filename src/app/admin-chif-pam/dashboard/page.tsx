@@ -10,7 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, LogOut, Ticket, ClipboardList,
-  Activity, AlertCircle, ChevronRight, Target
+  Activity, AlertCircle, ChevronRight, Target, SidebarLink
 } from 'lucide-react';
 import Link from 'next/link';
 
