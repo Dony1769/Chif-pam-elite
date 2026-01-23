@@ -16,7 +16,7 @@ export default function AdminTicketPage() {
   const [adminMsg, setAdminMsg] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll automatique vers le ba
+  // Scroll automatique vers le b
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatLogs]);
