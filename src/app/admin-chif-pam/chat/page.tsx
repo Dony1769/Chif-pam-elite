@@ -1,125 +1,173 @@
-"use client";
-import { useState, useEffect, useRef } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
-import { Send, User, Clock, Search, Bell, ShieldCheck } from 'lucide-react';
+"use client"
+import { useEffect, useState, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
-export default function AdminSide() {
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-  const [list, setList] = useState<any[]>([]);
-  const [activeUser, setActiveUser] = useState<any>(null); // Stocke l'objet profil entier
-  const [messages, setMessages] = useState<any[]>([]);
-  const [reply, setReply] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const audioPlayer = useRef<HTMLAudioElement | null>(null);
+// Types pour TypeScript
+interface Conversation {
+  user_id: string;
+  last_message: string;
+  last_created_at: string;
+  profiles: { username: string; email: string };
+}
 
+export default function AdminChat() {
+  const supabase = createClient()
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<any[]>([])
+  const [content, setContent] = useState('')
+  const [search, setSearch] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 1. Charger la liste des conversations (Sidebar)
   useEffect(() => {
-    audioPlayer.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
-  }, []);
+    const fetchConversations = async () => {
+      const { data } = await supabase
+        .from('latest_message_per_conversation')
+        .select(`*, profiles:user_id(username, email)`)
+        .order('last_created_at', { ascending: false })
+      if (data) setConversations(data as any)
+    }
 
-  // Charge la liste avec jointure sur Profiles
-  const loadList = async () => {
-    const { data } = await supabase
-      .from('latest_message_per_conversation')
-      .select(`*, profiles(username, phone)`) // Jointure !
-      .order('last_created_at', { ascending: false });
-    if (data) setList(data);
-  };
+    fetchConversations()
 
+    // Realtime pour la sidebar (nouveaux messages qui font remonter une conv)
+    const convChannel = supabase.channel('sidebar_updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'latest_message_per_conversation' }, () => {
+        fetchConversations()
+      }).subscribe()
+
+    return () => { supabase.removeChannel(convChannel) }
+  }, [])
+
+  // 2. Charger les messages quand un client est sélectionné
   useEffect(() => {
-    loadList();
-    const chan = supabase.channel('admin_global').on('postgres_changes', { event: '*', schema: 'public', table: 'latest_message_per_conversation' }, (p) => {
-        if (p.new && (p.new as any).last_sender_type === 'client') audioPlayer.current?.play();
-        loadList();
-    }).subscribe();
-    return () => { supabase.removeChannel(chan); };
-  }, []);
+    if (!selectedUserId) return
 
-  // Charger messages d'une discussion
+    const fetchMessages = async () => {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('user_id', selectedUserId)
+        .order('created_at', { ascending: true })
+      if (data) setMessages(data)
+    }
+    fetchMessages()
+
+    const msgChannel = supabase.channel(`chat_${selectedUserId}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `user_id=eq.${selectedUserId}` 
+      }, (payload) => {
+        setMessages((prev) => [...prev, payload.new])
+      }).subscribe()
+
+    return () => { supabase.removeChannel(msgChannel) }
+  }, [selectedUserId])
+
+  // Scroll auto en bas
   useEffect(() => {
-    if (!activeUser) return;
-    supabase.from('messages').select('*').eq('user_id', activeUser.user_id).order('created_at', { ascending: true }).then(({data}) => setMessages(data || []));
-    
-    const sub = supabase.channel(`sub_${activeUser.user_id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${activeUser.user_id}` }, (p) => {
-        setMessages(v => [...v, p.new]);
-    }).subscribe();
-    return () => { supabase.removeChannel(sub); };
-  }, [activeUser]);
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!content.trim() || !selectedUserId) return
 
-  const sendResponse = async () => {
-    if (!reply.trim() || !activeUser) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    const txt = reply; setReply("");
+    await supabase.from('messages').insert([{ 
+      user_id: selectedUserId, 
+      content, 
+      sender_type: 'admin' 
+    }])
+    setContent('')
+  }
 
-    await supabase.from('messages').insert({ user_id: activeUser.user_id, sender_type: 'admin', content: txt });
-    await supabase.from('latest_message_per_conversation').upsert({
-      user_id: activeUser.user_id,
-      last_message: txt,
-      last_sender_type: 'admin',
-      last_created_at: new Date().toISOString()
-    });
-  };
+  // Filtrage pour la recherche
+  const filteredConversations = conversations.filter(c => 
+    c.profiles?.username?.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
-    <div className="flex h-screen bg-[#020617] text-slate-200">
-      {/* SIDEBAR */}
-      <div className="w-1/3 border-r border-white/5 flex flex-col bg-slate-900/40">
-        <div className="p-6 border-b border-white/5">
-          <h2 className="text-xl font-black text-emerald-500 flex items-center gap-2 italic uppercase">
-            <ShieldCheck /> Support Admin
-          </h2>
+    <div className="flex h-screen bg-[#050505] text-white overflow-hidden">
+      
+      {/* --- SIDEBAR GAUCHE --- */}
+      <div className="w-1/3 border-r border-emerald-500/10 flex flex-col bg-black/40 backdrop-blur-md">
+        <div className="p-4 border-b border-emerald-500/20">
+          <h2 className="text-xl font-bold text-emerald-500 mb-4">Messages</h2>
+          <input 
+            type="text"
+            placeholder="Rechercher un client..."
+            className="w-full bg-emerald-900/10 border border-emerald-500/20 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-500/50 transition"
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+
         <div className="flex-1 overflow-y-auto">
-          {list.map(c => (
-            <div key={c.user_id} onClick={() => setActiveUser(c)} 
-              className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-all ${activeUser?.user_id === c.user_id ? 'bg-emerald-500/10 border-r-4 border-emerald-500' : ''}`}>
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-white uppercase text-xs">{c.profiles?.username || "Anonyme"}</span>
-                <span className="text-[10px] text-slate-500">{new Date(c.last_created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-              </div>
-              <p className="text-sm truncate text-slate-400 italic">
-                {c.last_sender_type === 'client' && <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-pulse" />}
-                {c.last_message}
-              </p>
+          {filteredConversations.map((conv) => (
+            <div 
+              key={conv.user_id}
+              onClick={() => setSelectedUserId(conv.user_id)}
+              className={`p-4 cursor-pointer border-b border-white/5 transition hover:bg-emerald-500/5 ${selectedUserId === conv.user_id ? 'bg-emerald-500/10 border-r-4 border-r-emerald-500' : ''}`}
+            >
+              <p className="font-semibold text-emerald-400">{conv.profiles?.username || 'Utilisateur'}</p>
+              <p className="text-sm text-gray-400 truncate">{conv.last_message}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ZONE CHAT */}
-      <div className="flex-1 flex flex-col">
-        {activeUser ? (
+      {/* --- ZONE DE CHAT DROITE --- */}
+      <div className="flex-1 flex flex-col relative">
+        {selectedUserId ? (
           <>
-            <div className="p-4 bg-slate-900/50 border-b border-white/5 flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-emerald-400 uppercase italic">{activeUser.profiles?.username}</h3>
-                <p className="text-[10px] text-slate-500 tracking-widest">{activeUser.profiles?.phone}</p>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`p-3 rounded-2xl max-w-md ${m.sender_type === 'admin' ? 'bg-emerald-600 text-white' : 'bg-slate-800 border border-white/10'}`}>
-                    {m.image_url && <img src={m.image_url} className="rounded-lg mb-2 max-h-80" alt="Preuve" />}
-                    <p className="text-sm font-medium leading-relaxed">{m.content}</p>
+            {/* Header du Chat */}
+            <header className="p-4 bg-emerald-900/5 backdrop-blur-xl border-b border-emerald-500/10 shadow-lg">
+               <span className="text-emerald-500 font-medium">Conversation avec</span>
+               <p className="font-bold">{conversations.find(c => c.user_id === selectedUserId)?.profiles.username}</p>
+            </header>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+              {messages.map((m) => (
+                <div key={m.id} className={`flex ${m.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] p-3 rounded-2xl shadow-xl transition-all ${
+                    m.sender_type === 'admin' 
+                    ? 'bg-emerald-600 text-white rounded-br-none' 
+                    : 'bg-white/5 backdrop-blur-md border border-white/10 rounded-bl-none'
+                  }`}>
+                    <p className="text-sm">{m.content}</p>
+                    <span className="text-[10px] opacity-50 block mt-1 text-right">
+                        {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </span>
                   </div>
                 </div>
               ))}
               <div ref={scrollRef} />
             </div>
-            <div className="p-4 bg-slate-900 border-t border-white/10 flex gap-2">
-              <input value={reply} onChange={e => setReply(e.target.value)} onKeyDown={e=>e.key==='Enter' && sendResponse()} className="flex-1 bg-slate-950 border border-white/10 p-3 rounded-xl outline-none" placeholder="Répondre..." />
-              <button onClick={sendResponse} className="bg-emerald-500 text-slate-950 px-6 rounded-xl font-black">ENVOYER</button>
-            </div>
+
+            {/* Input bar - Fixée en bas sans scroll */}
+            <form onSubmit={sendMessage} className="p-4 bg-black border-t border-emerald-500/10">
+              <div className="flex items-center gap-3 bg-white/5 p-2 rounded-2xl border border-white/10">
+                <input 
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Répondre au client..."
+                  className="flex-1 bg-transparent px-4 py-2 focus:outline-none"
+                />
+                <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-2 px-6 rounded-xl transition">
+                  Envoyer
+                </button>
+              </div>
+            </form>
           </>
         ) : (
-          <div className="m-auto opacity-20 flex flex-col items-center">
-            <User size={80} />
-            <p className="font-black uppercase tracking-widest mt-4 italic">Sélectionner un client</p>
+          <div className="flex-1 flex items-center justify-center text-gray-500 italic">
+            Sélectionnez une discussion pour commencer à répondre
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }
