@@ -41,53 +41,60 @@ export default function ClientTicketPage() {
   }, [ticket, supabase]);
 
   const handleCreateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    try {
-      // 1. Récupération de l'utilisateur (on utilise 'user')
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        alert("Vous devez être connecté");
-        setLoading(false);
-        return;
-      }
+  e.preventDefault();
+  setLoading(true);
+  
+  // 1. Récupérer la session de manière simple
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
+  
+  if (!user) {
+    alert("Erreur : Votre session a expiré. Veuillez vous reconnecter.");
+    setLoading(false);
+    return;
+  }
 
-      const formData = new FormData(e.currentTarget);
-      let fileUrl = "";
-      const file = formData.get('attachment') as File;
+  try {
+    const formData = new FormData(e.currentTarget);
+    const file = formData.get('attachment') as File;
+    let fileUrl = "";
 
-      // 2. Upload de l'image (Correction de la variable userData -> user)
-      if (file && file.size > 0) {
-        const filePath = `${user.id}/${crypto.randomUUID()}-${file.name}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('tickets')
-          .upload(filePath, file);
+    // 2. Upload simplifié : On utilise directement l'ID utilisateur pour le dossier
+    if (file && file.size > 0) {
+      const filePath = `${user.id}/${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('tickets')
+        .upload(filePath, file);
 
-        if (uploadError) throw uploadError;
-        fileUrl = uploadData.path;
-      }
-
-      // 3. Insertion en base de données
-      const { data, error } = await supabase.from('support_tickets').insert({
-        user_id: user.id,
-        category: formData.get('category') as string,
-        attachment_url: fileUrl,
-        status: 'ouvert'
-      }).select().single();
-
-      if (error) throw error;
-      if (data) setTicket(data as SupportTicket);
-
-    } catch (err) {
-      console.error("Erreur:", err);
-      alert("Erreur lors de la création.");
-    } finally {
-      setLoading(false);
+      if (uploadErr) throw uploadErr;
+      fileUrl = uploadData.path;
     }
-  };
+
+    // 3. Insertion directe
+    const { data: newTicket, error: insertErr } = await supabase
+      .from('support_tickets')
+      .insert({
+        user_id: user.id,
+        category: formData.get('category'),
+        attachment_url: fileUrl,
+        status: 'ouvert',
+        priority: 'normal'
+      })
+      .select()
+      .single();
+
+    if (insertErr) throw insertErr;
+
+    // 4. On active le chat
+    setTicket(newTicket);
+
+  } catch (err: any) {
+    alert("Erreur : " + (err.message || "Problème technique"));
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const sendLiveMessage = async () => {
     if (!message.trim() || !ticket) return;
