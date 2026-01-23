@@ -2,121 +2,133 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import { ChatMessage, Conversation } from '@/types/chat';
 
-export default function AdminChatPage() {
+export default function AdminChat() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const [tickets, setTickets] = useState<any[]>([]);
-  const [activeTicket, setActiveTicket] = useState<any>(null);
-  const [chat, setChat] = useState<any[]>([]);
-  const [adminMsg, setAdminMsg] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [conversations, setConversations] = useState<(Conversation & { profiles: any })[]>([]);
+  const [activeConv, setActiveConv] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [reply, setReply] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
-
-  // 1. Charger les tickets ouverts
+  // Charger les conversations
   useEffect(() => {
-    const loadTickets = async () => {
+    const fetchConvs = async () => {
+      // On join avec la table profiles pour avoir le nom/email
       const { data } = await supabase
-        .from('support_tickets')
-        .select('*')
-        .neq('status', 'ferme')
-        .order('created_at', { ascending: false });
-      if (data) setTickets(data);
+        .from('conversations')
+        .select('*, profiles(email, username)') // Assure-toi que ces colonnes existent dans profiles
+        .order('updated_at', { ascending: false });
+      
+      if (data) setConversations(data as any);
     };
-    loadTickets();
+    fetchConvs();
+
+    // Realtime pour remonter les conversations actives
+    const channel = supabase.channel('admin_convs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConvs)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // 2. Écouter le chat du ticket sélectionné
+  // Charger les messages quand on clique sur une conv
   useEffect(() => {
-    if (!activeTicket) return;
-    const channel = supabase.channel(`chat_${activeTicket.id}`)
-      .on('broadcast', { event: 'msg' }, ({ payload }) => {
-        setChat((prev) => [...prev, payload]);
-      }).subscribe();
+    if (!activeConv) return;
+
+    const fetchMessages = async () => {
+      // ICI PAS DE FILTRE DE TEMPS (Admin voit tout)
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', activeConv)
+        .order('created_at', { ascending: true });
+      if (data) setMessages(data as ChatMessage[]);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView(), 100);
+    };
+    fetchMessages();
+
+    const channel = supabase.channel(`admin_chat_${activeConv}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${activeConv}` }, 
+      (payload) => {
+        setMessages(prev => [...prev, payload.new as ChatMessage]);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      })
+      .subscribe();
+
     return () => { supabase.removeChannel(channel); };
-  }, [activeTicket]);
+  }, [activeConv]);
 
-  const sendResponse = async () => {
-    if (!adminMsg.trim() || !activeTicket) return;
-    const payload = { text: adminMsg, sender: 'admin', time: new Date() };
-    
-    await supabase.channel(`chat_${activeTicket.id}`).send({
-      type: 'broadcast',
-      event: 'msg',
-      payload
+  const sendAdminReply = async () => {
+    if (!activeConv || !reply.trim()) return;
+    await supabase.from('chat_messages').insert({
+      conversation_id: activeConv,
+      sender_type: 'admin',
+      type: 'text',
+      content: reply
     });
-
-    setChat(prev => [...prev, payload]);
-    setAdminMsg("");
-  };
-
-  const closeTicket = async (id: string) => {
-    await supabase.from('support_tickets').update({ status: 'ferme' }).eq('id', id);
-    setActiveTicket(null);
-    setTickets(prev => prev.filter(t => t.id !== id));
+    setReply("");
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 p-4 gap-4 text-gray-800">
-      {/* Liste des tickets */}
-      <div className="w-1/3 bg-white rounded-2xl shadow overflow-y-auto border">
-        <div className="p-4 border-b font-bold bg-gray-50 rounded-t-2xl">Tickets en attente</div>
-        {tickets.map(t => (
+    <div className="flex h-screen bg-gray-100">
+      {/* Sidebar Liste */}
+      <div className="w-80 bg-white border-r overflow-y-auto">
+        <div className="p-4 bg-gray-50 font-bold border-b">Discussions</div>
+        {conversations.map(c => (
           <div 
-            key={t.id} 
-            onClick={() => { setActiveTicket(t); setChat([]); }}
-            className={`p-4 border-b cursor-pointer hover:bg-blue-50 ${activeTicket?.id === t.id ? 'bg-blue-100' : ''}`}
+            key={c.id} 
+            onClick={() => setActiveConv(c.id)}
+            className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${activeConv === c.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
           >
-            <div className="text-xs font-mono text-gray-400">ID: {t.id.slice(0,8)}</div>
-            <div className="font-bold capitalize">{t.category}</div>
-            <div className="text-[10px] text-gray-500">{new Date(t.created_at).toLocaleString()}</div>
+            <div className="font-bold text-sm">{c.profiles?.username || c.profiles?.email || 'Utilisateur'}</div>
+            <div className="text-xs text-gray-400 mt-1">
+              {new Date(c.updated_at).toLocaleDateString()}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Fenêtre de Chat */}
-      <div className="flex-1 bg-white rounded-2xl shadow flex flex-col border overflow-hidden">
-        {activeTicket ? (
+      {/* Zone de Chat */}
+      <div className="flex-1 flex flex-col">
+        {activeConv ? (
           <>
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-              <span className="font-bold">Chat avec {activeTicket.user_id ? 'Client' : 'Invité'}</span>
-              <button onClick={() => closeTicket(activeTicket.id)} className="text-xs bg-red-500 text-white px-3 py-1 rounded-lg">Fermer</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-              {/* Affichage de l'image si elle existe */}
-              {activeTicket.attachment_url && (
-                <div className="mb-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Preuve jointe :</p>
-                  <img 
-                    src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tickets/${activeTicket.attachment_url}`} 
-                    className="max-w-xs rounded-lg border shadow-sm mt-1"
-                    alt="Preuve"
-                  />
-                </div>
-              )}
-
-              {chat.map((m, i) => (
-                <div key={i} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`p-3 rounded-2xl max-w-[70%] text-sm ${m.sender === 'admin' ? 'bg-gray-800 text-white' : 'bg-white border'}`}>
-                    {m.text}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3 bg-[#e5ddd5]">
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex ${msg.sender_type === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[60%] p-3 rounded-lg shadow text-sm ${msg.sender_type === 'admin' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
+                    {msg.type === 'text' && <p>{msg.content}</p>}
+                    {msg.type === 'image' && <img src={msg.content} className="rounded max-w-xs" />}
+                    {msg.type === 'audio' && <audio controls src={msg.content} />}
+                    <div className="text-[10px] text-right text-gray-500 mt-1">
+                       {new Date(msg.created_at).toLocaleString()}
+                    </div>
                   </div>
                 </div>
               ))}
-              <div ref={scrollRef} />
+              <div ref={messagesEndRef} />
             </div>
-
-            <div className="p-4 border-t flex gap-2">
-              <input value={adminMsg} onChange={e => setAdminMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendResponse()} placeholder="Répondre au client..." className="flex-1 p-2 border rounded-lg outline-none"/>
-              <button onClick={sendResponse} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">Envoyer</button>
+            
+            <div className="p-4 bg-white border-t flex gap-2">
+              <input 
+                value={reply} 
+                onChange={e => setReply(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && sendAdminReply()}
+                className="flex-1 p-3 border rounded-lg" 
+                placeholder="Réponse admin..." 
+              />
+              <button onClick={sendAdminReply} className="bg-blue-600 text-white px-6 rounded-lg font-bold">Envoyer</button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">Sélectionnez un ticket pour répondre</div>
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            Sélectionnez une conversation
+          </div>
         )}
       </div>
     </div>
