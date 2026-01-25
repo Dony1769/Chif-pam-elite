@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Zap, Shield, Cpu, Filter } from 'lucide-react';
+import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Zap, Shield, Cpu, Filter, Flame } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,31 +11,41 @@ type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [liveChallenges, setLiveChallenges] = useState<any[]>([]); // Nouvel état pour les défis
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('TOUT');
   const router = useRouter();
 
   useEffect(() => { 
-    fetchNotifications();
+    fetchAllData();
 
-    const channel = supabase.channel('notif_realtime_550')
+    // ECOUTEUR GLOBAL 600% PERF
+    const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         setNotifications(prev => [payload.new, ...prev]);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
+        // Un nouveau défi apparaît !
+        setLiveChallenges(prev => [payload.new, ...prev]);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const fetchNotifications = async () => {
+  const fetchAllData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
-      const { data } = await supabase.from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      setNotifications(data || []);
+
+      // Récupérer notifications ET défis en parallèle
+      const [notifsRes, challengesRes] = await Promise.all([
+        supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('challenges').select('*').eq('is_active', true).order('created_at', { ascending: false })
+      ]);
+
+      setNotifications(notifsRes.data || []);
+      setLiveChallenges(challengesRes.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -43,24 +53,41 @@ export default function ClientNotifications() {
     }
   };
 
-  // LOGIQUE DE FILTRAGE INTELLIGENTE (Memoized pour 550% de perf)
-  const filteredNotifications = useMemo(() => {
-    return notifications.filter(n => {
+  // FUSION DES FLUX (Notifications + Défis convertis)
+  const allAlerts = useMemo(() => {
+    // On transforme les défis pour qu'ils ressemblent à des notifications
+    const mappedChallenges = liveChallenges.map(c => ({
+      id: `challenge-${c.id}`,
+      title: `NOUVEAU DÉFI : ${c.title}`,
+      content: `Récompense : ${c.prize_pool} HTG. Frais d'entrée : ${c.entry_fee_base} HTG. Bonne chance !`,
+      created_at: c.created_at,
+      is_read: false, // Toujours "nouveau" tant qu'il est actif
+      is_challenge: true,
+      link: '/client/challenges' // Redirection vers les défis
+    }));
+
+    return [...mappedChallenges, ...notifications].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [notifications, liveChallenges]);
+
+  // FILTRAGE INTELLIGENT ÉTENDU
+  const filteredAlerts = useMemo(() => {
+    return allAlerts.filter(n => {
       if (activeFilter === 'TOUT') return true;
       if (activeFilter === 'VICTOIRES') return n.title.includes('VIC') || n.title.includes('GAGNÉ');
-      if (activeFilter === 'DÉFIS') return n.title.includes('DÉFI') || n.title.includes('MISSION');
-      if (activeFilter === 'SYSTÈME') return !n.title.includes('VIC') && !n.title.includes('DÉFI');
+      if (activeFilter === 'DÉFIS') return n.is_challenge || n.title.includes('DÉFI') || n.title.includes('MISSION');
+      if (activeFilter === 'SYSTÈME') return !n.is_challenge && !n.title.includes('VIC') && !n.title.includes('DÉFI');
       return true;
     });
-  }, [notifications, activeFilter]);
+  }, [allAlerts, activeFilter]);
 
-  // COMPTEURS POUR LES BADGES DE FILTRE
   const counts = useMemo(() => ({
-    TOUT: notifications.filter(n => !n.is_read).length,
-    VICTOIRES: notifications.filter(n => !n.is_read && (n.title.includes('VIC') || n.title.includes('GAGNÉ'))).length,
-    DÉFIS: notifications.filter(n => !n.is_read && (n.title.includes('DÉFI') || n.title.includes('MISSION'))).length,
-    SYSTÈME: notifications.filter(n => !n.is_read && (!n.title.includes('VIC') && !n.title.includes('DÉFI'))).length,
-  }), [notifications]);
+    TOUT: allAlerts.filter(n => !n.is_read).length,
+    VICTOIRES: allAlerts.filter(n => !n.is_read && (n.title.includes('VIC') || n.title.includes('GAGNÉ'))).length,
+    DÉFIS: allAlerts.filter(n => !n.is_read && (n.is_challenge || n.title.includes('DÉFI'))).length,
+    SYSTÈME: allAlerts.filter(n => !n.is_read && (!n.is_challenge && !n.title.includes('VIC') && !n.title.includes('DÉFI'))).length,
+  }), [allAlerts]);
 
   const markAllAsRead = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -78,7 +105,7 @@ export default function ClientNotifications() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-20">
       
-      {/* HEADER FIXE ÉVOLUÉ */}
+      {/* HEADER */}
       <div className="p-6 sticky top-0 bg-[#020617]/95 backdrop-blur-2xl z-20 border-b border-emerald-500/10 space-y-6">
         <div className="flex items-center justify-between">
           <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
@@ -86,14 +113,14 @@ export default function ClientNotifications() {
           </button>
           <div className="text-center">
             <h1 className="text-xl tracking-tighter">CENTRE_D_ALERTES</h1>
-            <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">FLUX_SYNCHRONISÉ</p>
+            <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">RADAR_ACTIF_SYNCHRONISÉ</p>
           </div>
           <button onClick={markAllAsRead} className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-500">
             <CheckCheck size={20} />
           </button>
         </div>
 
-        {/* SYSTÈME DE FILTRES (SEGMENTED CONTROL) */}
+        {/* FILTRES */}
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {(['TOUT', 'VICTOIRES', 'DÉFIS', 'SYSTÈME'] as FilterType[]).map((filter) => (
             <button
@@ -116,35 +143,29 @@ export default function ClientNotifications() {
         </div>
       </div>
 
-      {/* LISTE DES NOTIFICATIONS FILTRÉE */}
+      {/* LISTE DES ALERTES */}
       <div className="p-6 space-y-4">
         <AnimatePresence mode="popLayout">
-          {filteredNotifications.length === 0 ? (
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="flex flex-col items-center py-40 text-slate-700"
-            >
-              <div className="relative">
-                <Inbox size={60} strokeWidth={1} className="opacity-20 mb-4" />
-                <Filter size={20} className="absolute -bottom-2 -right-2 text-emerald-500/20" />
-              </div>
+          {filteredAlerts.length === 0 ? (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center py-40 text-slate-700">
+              <Inbox size={60} strokeWidth={1} className="opacity-20 mb-4" />
               <p className="text-[10px] tracking-[0.5em]">AUCUNE ALERTE {activeFilter}</p>
             </motion.div>
           ) : (
-            filteredNotifications.map((n, index) => (
+            filteredAlerts.map((n) => (
               <motion.div 
                 key={n.id}
                 layout
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: 20, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className={`relative p-6 rounded-[2rem] border overflow-hidden transition-all ${
-                  n.is_read 
-                  ? 'bg-white/2 border-white/5 opacity-40' 
-                  : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30 shadow-[0_10px_30px_rgba(0,0,0,0.5)]'
+                onClick={() => n.link && router.push(n.link)}
+                className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer ${
+                  n.is_challenge 
+                  ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50 shadow-[0_10px_30px_rgba(59,130,246,0.2)]' 
+                  : n.is_read 
+                    ? 'bg-white/2 border-white/5 opacity-40' 
+                    : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30'
                 }`}
               >
                 {!n.is_read && (
@@ -158,32 +179,33 @@ export default function ClientNotifications() {
                 
                 <div className="flex gap-4 items-start">
                   <div className={`p-3 rounded-xl ${
-                    n.title.includes('VIC') ? 'bg-amber-500/10 text-amber-500' : 
-                    n.title.includes('DÉFI') ? 'bg-blue-500/10 text-blue-500' : 
-                    'bg-emerald-500/10 text-emerald-500'
+                    n.is_challenge ? 'bg-blue-500 text-white animate-pulse' :
+                    n.title.includes('VIC') ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'
                   }`}>
-                    {n.title.includes('VIC') ? <Trophy size={20}/> : 
-                     n.title.includes('DÉFI') ? <Cpu size={20}/> : 
-                     <Shield size={20}/>}
+                    {n.is_challenge ? <Flame size={20}/> : 
+                     n.title.includes('VIC') ? <Trophy size={20}/> : <Shield size={20}/>}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-sm tracking-tighter leading-none mb-1 pr-6">{n.title}</h3>
+                    <h3 className={`text-sm tracking-tighter leading-none mb-1 pr-6 ${n.is_challenge ? 'text-blue-400 font-black' : ''}`}>
+                        {n.title}
+                    </h3>
                     <p className="text-[11px] lowercase not-italic text-slate-400 leading-relaxed">{n.content}</p>
                     <div className="flex justify-between items-center mt-3">
                         <p className="text-[7px] text-slate-600 tracking-widest">
                             {new Date(n.created_at).toLocaleTimeString()}
                         </p>
-                        <div className="h-[1px] flex-1 mx-4 bg-white/5"></div>
-                        <p className="text-[7px] text-emerald-500/40 tracking-widest">SÉCURISÉ</p>
+                        <p className="text-[7px] text-emerald-500/40 tracking-widest">
+                            {n.is_challenge ? 'VOIR_DÉFI_MANTENANT' : 'SÉCURISÉ'}
+                        </p>
                     </div>
                   </div>
                 </div>
 
-                {!n.is_read && (
+                {n.is_challenge && (
                     <motion.div 
-                        animate={{ x: ['-100%', '200%'] }}
-                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12"
+                        animate={{ opacity: [0.2, 0.5, 0.2] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="absolute inset-0 bg-blue-500/5 pointer-events-none"
                     />
                 )}
               </motion.div>
