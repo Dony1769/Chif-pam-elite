@@ -23,7 +23,7 @@ const LogoSmall = () => (
 export default function ClientHome() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNotifs, setUnreadNotifs] = useState(0); // Notifications pures
   const [unreadChat, setUnreadChat] = useState(0); 
   const [activeChallengesCount, setActiveChallengesCount] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -31,6 +31,9 @@ export default function ClientHome() {
   const prevUnreadChat = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
+
+  // CALCUL DU COMPTEUR GLOBAL (Notifs + Défis)
+  const globalNotificationCount = unreadNotifs + activeChallengesCount;
 
   const playPing = () => {
     const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
@@ -41,11 +44,10 @@ export default function ClientHome() {
   useEffect(() => {
     fetchData();
     
-    const channel = supabase.channel('client_home_realtime')
+    const channel = supabase.channel('client_home_ultra_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => refreshChatCount())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => refreshChatCount())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchNotificationCount())
-      // ECOUTEUR POUR LES DÉFIS (Pour que le point vert sur le menu soit instantané)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges' }, () => fetchChallengesCount())
       .subscribe();
 
@@ -60,9 +62,12 @@ export default function ClientHome() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
 
-      fetchNotificationCount();
-      fetchChallengesCount();
-      refreshChatCount();
+      // On lance tout en parallèle pour la vitesse
+      await Promise.all([
+        fetchNotificationCount(),
+        fetchChallengesCount(),
+        refreshChatCount()
+      ]);
 
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
@@ -94,10 +99,12 @@ export default function ClientHome() {
 
   const fetchNotificationCount = async () => {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
     const { count } = await supabase.from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user?.id).eq('is_read', false);
-    setUnreadCount(count || 0);
+      .eq('user_id', user.id)
+      .eq('is_read', false);
+    setUnreadNotifs(count || 0);
   };
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Activity className="animate-spin text-emerald-500" /></div>;
@@ -105,6 +112,7 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
+      {/* Menu Latéral */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -126,7 +134,7 @@ export default function ClientHome() {
       </AnimatePresence>
 
       <div className="p-6 space-y-8">
-        {/* Header avec Notification sur le Menu (Trois barres) */}
+        {/* Header avec Notification Intelligente */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button 
@@ -134,7 +142,6 @@ export default function ClientHome() {
               className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all"
             >
                 <Menu size={24} className="text-emerald-500" />
-                {/* POINT DE NOTIFICATION SUR LE MENU */}
                 {activeChallengesCount > 0 && (
                   <span className="absolute -top-1 -right-1 flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -144,18 +151,22 @@ export default function ClientHome() {
             </button>
             <h1 className="text-lg tracking-tighter italic">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
+
+          {/* Cloche de Notification (Somme des Notifs + Défis) */}
           <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
-            <Bell size={20} className={unreadCount > 0 ? "text-emerald-500" : "text-slate-500"} />
-            {unreadCount > 0 && (
+            <Bell size={20} className={globalNotificationCount > 0 ? "text-emerald-500" : "text-slate-500"} />
+            {globalNotificationCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 items-center justify-center text-[8px] font-black">{unreadCount}</span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 items-center justify-center text-[8px] font-black">
+                      {globalNotificationCount}
+                    </span>
                 </span>
             )}
           </Link>
         </div>
 
-        {/* ... (Reste du code Balance Card et Games identique) ... */}
+        {/* Balance Card */}
         <div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-700 ${
           profile?.vip_status !== 'free' 
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/20 scale-[1.02]' 
@@ -179,6 +190,7 @@ export default function ClientHome() {
           </div>
         </div>
 
+        {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
             <Plus size={24} /><span className="text-[10px] font-black italic uppercase tracking-widest">Dépôt</span>
@@ -188,6 +200,7 @@ export default function ClientHome() {
           </Link>
         </div>
 
+        {/* Jeux / Défis à la une */}
         <div className="space-y-4">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
           <div className="space-y-3 pb-10">
@@ -198,6 +211,7 @@ export default function ClientHome() {
         </div>
       </div>
 
+      {/* Barre de Navigation avec Support Badge */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-15px_40px_rgba(0,0,0,0.6)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
@@ -227,7 +241,6 @@ export default function ClientHome() {
   );
 }
 
-// ... (Sous-composants identiques)
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all active:bg-white/5">
