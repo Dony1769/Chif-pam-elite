@@ -41,29 +41,12 @@ export default function ClientHome() {
   useEffect(() => {
     fetchData();
     
-    // REALTIME ULTRA INSTANTANÉ
     const channel = supabase.channel('client_home_realtime')
-      // On écoute les nouveaux messages pour mettre à jour le badge support
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages' 
-      }, () => {
-        refreshChatCount();
-      })
-      // On écoute aussi les mises à jour (si un message est marqué lu ailleurs)
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'messages' 
-      }, () => {
-        refreshChatCount();
-      })
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'notifications' 
-      }, () => fetchNotificationCount())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => refreshChatCount())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => refreshChatCount())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchNotificationCount())
+      // ECOUTEUR POUR LES DÉFIS (Pour que le point vert sur le menu soit instantané)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges' }, () => fetchChallengesCount())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -78,28 +61,24 @@ export default function ClientHome() {
       setProfile(prof);
 
       fetchNotificationCount();
-      
-      const { count: ccount } = await supabase.from('challenges')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      setActiveChallengesCount(ccount || 0);
-
+      fetchChallengesCount();
       refreshChatCount();
 
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
+  const fetchChallengesCount = async () => {
+    const { count } = await supabase.from('challenges')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+    setActiveChallengesCount(count || 0);
+  };
+
   const refreshChatCount = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    if (pathname === '/client/chat') { setUnreadChat(0); return; }
 
-    // Si on est déjà sur la page chat, on reset visuellement
-    if (pathname === '/client/chat') {
-        setUnreadChat(0);
-        return;
-    }
-
-    // Requête précise sur les messages non lus par le client venant de l'admin
     const { count } = await supabase
       .from('messages')
       .select('*', { count: 'exact', head: true })
@@ -108,12 +87,7 @@ export default function ClientHome() {
       .eq('is_read_by_client', false);
     
     const newCount = count || 0;
-
-    // Sonnerie seulement lors d'un nouveau message (0 -> 1+)
-    if (prevUnreadChat.current === 0 && newCount > 0) {
-        playPing();
-    }
-    
+    if (prevUnreadChat.current === 0 && newCount > 0) playPing();
     prevUnreadChat.current = newCount;
     setUnreadChat(newCount);
   };
@@ -131,7 +105,6 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
-      {/* Menu Latéral (Inchangé) */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -153,11 +126,21 @@ export default function ClientHome() {
       </AnimatePresence>
 
       <div className="p-6 space-y-8">
-        {/* Header */}
+        {/* Header avec Notification sur le Menu (Trois barres) */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all">
+            <button 
+              onClick={() => setIsMenuOpen(true)} 
+              className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all"
+            >
                 <Menu size={24} className="text-emerald-500" />
+                {/* POINT DE NOTIFICATION SUR LE MENU */}
+                {activeChallengesCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                )}
             </button>
             <h1 className="text-lg tracking-tighter italic">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
@@ -172,7 +155,7 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* Balance Card Premium */}
+        {/* ... (Reste du code Balance Card et Games identique) ... */}
         <div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-700 ${
           profile?.vip_status !== 'free' 
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/20 scale-[1.02]' 
@@ -196,7 +179,6 @@ export default function ClientHome() {
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
             <Plus size={24} /><span className="text-[10px] font-black italic uppercase tracking-widest">Dépôt</span>
@@ -206,7 +188,6 @@ export default function ClientHome() {
           </Link>
         </div>
 
-        {/* Featured Games */}
         <div className="space-y-4">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
           <div className="space-y-3 pb-10">
@@ -217,34 +198,22 @@ export default function ClientHome() {
         </div>
       </div>
 
-      {/* Navigation Fixe Premium avec BADGE SUPPORT */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-15px_40px_rgba(0,0,0,0.6)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
         
-        {/* Support Link Dynamique */}
         <Link 
           href="/client/chat" 
           className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}
         >
           <div className="relative">
-            <MessagesSquare 
-                size={22} 
-                className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1s_infinite] text-emerald-500" : ""} 
-            />
+            <MessagesSquare size={22} className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1s_infinite] text-emerald-500" : ""} />
             <AnimatePresence>
               {unreadChat > 0 && pathname !== '/client/chat' && (
-                <motion.span 
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="absolute -top-2 -right-2 flex h-4 w-4"
-                >
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -top-2 -right-2 flex h-4 w-4">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 items-center justify-center text-[8px] font-black text-slate-950">
-                        {unreadChat}
-                    </span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 items-center justify-center text-[8px] font-black text-slate-950">{unreadChat}</span>
                 </motion.span>
               )}
             </AnimatePresence>
@@ -258,7 +227,7 @@ export default function ClientHome() {
   );
 }
 
-// Composants internes (Inchangés mais stylés)
+// ... (Sous-composants identiques)
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all active:bg-white/5">
