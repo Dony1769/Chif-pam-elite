@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
-// REMPLACE par ta nouvelle clé publique VAPID générée précédemment
+// REMPLACE par ta clé publique VAPID certifiée P-256
 const VAPID_PUBLIC_KEY = "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
 
 export default function ClientNotifications() {
@@ -20,17 +20,19 @@ export default function ClientNotifications() {
   const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
-  // --- FONCTION POUR DÉCLENCHER LE PUSH LOCAL ---
+  // --- FONCTION POUR DÉCLENCHER LE PUSH LOCAL (CORRIGÉE POUR TYPESCRIPT) ---
   const triggerLocalNotification = (title: string, body: string) => {
     if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then(registration => {
-        registration.showNotification(title, {
+        // On utilise "as any" pour éviter l'erreur sur "vibrate" lors du build
+        const options: any = {
           body: body,
-          icon: '/icons/icon-192.png', // Assure-toi que ce fichier existe
+          icon: '/icons/icon-192.png',
           badge: '/icons/icon-192.png',
           vibrate: [200, 100, 200],
           data: { url: '/client/notifications' }
-        });
+        };
+        registration.showNotification(title, options);
       });
     }
   };
@@ -45,14 +47,14 @@ export default function ClientNotifications() {
         const newNotif = payload.new;
         setNotifications(prev => [newNotif, ...prev]);
         
-        // On active le push visuel sur le téléphone dès que la ligne est insérée
+        // Alerte instantanée sur le téléphone
         triggerLocalNotification(newNotif.title || "CHIF PAM ⚡", newNotif.content);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
         const newChallenge = payload.new;
         setLiveChallenges(prev => [newChallenge, ...prev]);
         
-        // Push local pour les nouveaux défis
+        // Alerte instantanée pour les défis
         triggerLocalNotification("NOUVEAU DÉFI 🔥", newChallenge.title);
       })
       .subscribe();
@@ -79,7 +81,7 @@ export default function ClientNotifications() {
     }
   };
 
-  // --- LOGIQUE WEB PUSH (ABONNEMENT) ---
+  // --- LOGIQUE WEB PUSH ---
   const checkPushSubscription = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       const registration = await navigator.serviceWorker.ready;
@@ -124,7 +126,7 @@ export default function ClientNotifications() {
           subscription: subscription.toJSON()
         });
         
-        triggerLocalNotification("CHIF PAM ⚡", "Notifications activées avec succès !");
+        triggerLocalNotification("CHIF PAM ⚡", "Notifications activées ! ✅");
         setPushEnabled(true);
       }
     } catch (err) {
@@ -134,7 +136,7 @@ export default function ClientNotifications() {
     }
   };
 
-  // --- CALCULS DES COMPTEURS ET FILTRES ---
+  // --- CALCULS ---
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
@@ -182,7 +184,6 @@ export default function ClientNotifications() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-20">
-      {/* Header & Filtres */}
       <div className="p-6 sticky top-0 bg-[#020617]/95 backdrop-blur-2xl z-20 border-b border-emerald-500/10 space-y-6">
         <div className="flex items-center justify-between">
           <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
@@ -203,9 +204,7 @@ export default function ClientNotifications() {
               key={filter}
               onClick={() => setActiveFilter(filter)}
               className={`relative px-6 py-3 rounded-2xl text-[9px] tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border ${
-                activeFilter === filter 
-                ? 'bg-emerald-500 text-black border-emerald-500' 
-                : 'bg-white/5 text-slate-500 border-white/5'
+                activeFilter === filter ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 text-slate-500 border-white/5'
               }`}
             >
               {filter}
@@ -219,7 +218,6 @@ export default function ClientNotifications() {
         </div>
       </div>
 
-      {/* Liste des notifications */}
       <div className="p-6 space-y-4">
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
@@ -235,11 +233,8 @@ export default function ClientNotifications() {
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer ${
-                  n.is_challenge 
-                  ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50' 
-                  : n.is_read 
-                    ? 'bg-white/2 border-white/5 opacity-40' 
-                    : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30'
+                  n.is_challenge ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50' : 
+                  n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30'
                 }`}
                 onClick={() => n.link && router.push(n.link)}
               >
@@ -257,8 +252,7 @@ export default function ClientNotifications() {
                     n.is_challenge ? 'bg-blue-500 text-white animate-pulse' :
                     n.title.includes('VIC') ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'
                   }`}>
-                    {n.is_challenge ? <Flame size={20}/> : 
-                     n.title.includes('VIC') ? <Trophy size={20}/> : <Shield size={20}/>}
+                    {n.is_challenge ? <Flame size={20}/> : n.title.includes('VIC') ? <Trophy size={20}/> : <Shield size={20}/>}
                   </div>
                   <div className="flex-1">
                     <h3 className={`text-sm tracking-tighter leading-none mb-1 pr-6 ${n.is_challenge ? 'text-blue-400 font-black' : ''}`}>
@@ -266,9 +260,7 @@ export default function ClientNotifications() {
                     </h3>
                     <p className="text-[11px] lowercase not-italic text-slate-400 leading-relaxed">{n.content}</p>
                     <div className="flex justify-between items-center mt-3">
-                        <p className="text-[7px] text-slate-600 tracking-widest">
-                            {new Date(n.created_at).toLocaleTimeString()}
-                        </p>
+                        <p className="text-[7px] text-slate-600 tracking-widest">{new Date(n.created_at).toLocaleTimeString()}</p>
                     </div>
                   </div>
                 </div>
@@ -278,24 +270,15 @@ export default function ClientNotifications() {
         </AnimatePresence>
       </div>
 
-      {/* Bouton de contrôle flottant */}
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
           <button 
             onClick={togglePush}
             disabled={isRegistering}
             className={`pointer-events-auto px-8 py-4 rounded-2xl font-black text-[10px] tracking-widest flex items-center gap-3 active:scale-95 transition-all shadow-2xl ${
-              pushEnabled 
-              ? 'bg-slate-800 text-emerald-500 border border-emerald-500/20' 
-              : 'bg-emerald-500 text-black shadow-emerald-500/40'
+              pushEnabled ? 'bg-slate-800 text-emerald-500 border border-emerald-500/20' : 'bg-emerald-500 text-black shadow-emerald-500/40'
             }`}
           >
-              {isRegistering ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : pushEnabled ? (
-                <Bell size={16} />
-              ) : (
-                <BellOff size={16} />
-              )}
+              {isRegistering ? <Loader2 size={16} className="animate-spin" /> : pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
               {isRegistering ? 'CONFIGURATION...' : pushEnabled ? 'PUSH_ACTIF' : 'ACTIVER_PUSH'}
           </button>
       </div>
