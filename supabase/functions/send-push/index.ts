@@ -1,5 +1,6 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
+// @ts-ignore: Deno types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+// @ts-ignore: Deno types
 import webpush from "https://esm.sh/web-push@3.6.6"
 
 const corsHeaders = {
@@ -7,8 +8,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
-  // Gestion du CORS pour les appels depuis le navigateur
+Deno.serve(async (req) => {
+  // Gestion du CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -16,20 +17,18 @@ serve(async (req) => {
   try {
     const { user_id, title, body, url } = await req.json()
 
-    // Configuration des clés VAPID (Variables d'environnement Supabase)
+    // Configuration des clés VAPID
     webpush.setVapidDetails(
       "mailto:jeanguidonyguillaume1@gmail.com",
       Deno.env.get("NEXT_PUBLIC_VAPID_PUBLIC_KEY")!,
       Deno.env.get("VAPID_PRIVATE_KEY")!
     )
 
-    // Initialisation du client admin pour lire les abonnements
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // 1. Récupérer le token de l'utilisateur
     const { data: pushData, error: dbError } = await supabaseAdmin
       .from('push_subscriptions')
       .select('subscription')
@@ -37,10 +36,12 @@ serve(async (req) => {
       .single()
 
     if (dbError || !pushData) {
-      throw new Error("Abonnement push introuvable pour cet utilisateur")
+      return new Response(JSON.stringify({ error: "No subscription found" }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
-    // 2. Envoyer la notification
     const payload = JSON.stringify({
       title: title || "Chif Pam",
       body: body || "Nouvelle mise à jour !",
@@ -49,7 +50,7 @@ serve(async (req) => {
 
     await webpush.sendNotification(pushData.subscription, payload)
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ sent: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
