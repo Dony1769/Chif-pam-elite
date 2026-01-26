@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import webpush from 'web-push';
 
 // Configuration de WebPush avec tes clés VAPID
+// On utilise les variables d'environnement de Vercel
 webpush.setVapidDetails(
   'mailto:jeanguidonyguillaume1@gmail.com',
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
@@ -11,52 +12,57 @@ webpush.setVapidDetails(
 
 export async function POST(req: Request) {
   try {
-    // Initialisation du client Admin (nécessaire pour lire la table push_subscriptions)
+    // Initialisation du client Admin
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY! 
     );
 
-    // 1. Récupération et extraction intelligente des données
+    // 1. Récupération des données du corps de la requête
     const body = await req.json();
     
-    // Si body.record existe, c'est que ça vient d'un Webhook Supabase
-    // Sinon, on prend le corps du message directement (appel manuel)
+    // Détection auto : Webhook Supabase (body.record) ou Appel manuel (body)
     const payloadData = body.record ? body.record : body;
 
-    // On extrait les champs nécessaires (assure-toi que ta table 'notifications' a bien ces noms de colonnes)
+    // Extraction des champs de la table 'notifications'
     const { user_id, title, content } = payloadData;
 
-    // 2. Recherche des abonnements dans la base de données
+    console.log(`Tentative d'envoi pour user_id: ${user_id || 'Tous'}`);
+
+    // 2. Recherche des abonnements
     let query = supabaseAdmin.from('push_subscriptions').select('subscription');
     
-    // Si un user_id est présent, on cible uniquement cet utilisateur
-    // Utile pour les notifications de victoires ou messages personnels
     if (user_id) {
       query = query.eq('user_id', user_id);
     }
 
     const { data: subs, error: dbError } = await query;
 
-    // Si erreur ou aucun abonné, on arrête proprement
     if (dbError || !subs || subs.length === 0) {
-      console.log("Info: Aucun abonnement trouvé pour l'envoi.");
+      console.log("Info: Aucun abonnement trouvé dans la base de données.");
       return NextResponse.json({ success: false, error: "Aucun abonné trouvé" });
     }
 
-    // 3. Préparation du message à envoyer au téléphone
+    // 3. Préparation du message
     const pushPayload = JSON.stringify({
       title: title || "CHIF PAM ⚡",
       body: content || "Nouvelle mise à jour disponible !",
-      url: "/client/notifications" // URL vers laquelle l'utilisateur est redirigé au clic
+      url: "/client/notifications"
     });
 
-    // 4. Envoi des notifications en parallèle
+    // 4. Envoi des notifications avec logs détaillés pour le debug
     const pushPromises = subs.map((item: any) => 
       webpush.sendNotification(item.subscription, pushPayload)
+        .then(() => {
+          console.log("✅ Notification envoyée avec succès");
+        })
         .catch((err: any) => {
-          // Si le token est expiré (410) ou invalide (403), on log l'erreur
-          console.error(`Échec d'envoi pour un appareil: ${err.statusCode}`);
+          // LOG CRUCIAL : C'est ici qu'on verra pourquoi le 403 arrive
+          console.error(`❌ ERREUR PUSH ${err.statusCode}:`);
+          console.error("Détails du serveur de push:", err.body);
+          
+          // Note : Si c'est un 410 (Gone), l'utilisateur a désinstallé/bloqué, 
+          // il faudrait idéalement supprimer cet abonnement de ta DB.
         })
     );
 
@@ -69,7 +75,7 @@ export async function POST(req: Request) {
     });
 
   } catch (err: any) {
-    console.error("Erreur critique dans l'API Push:", err.message);
+    console.error("🔥 Erreur critique API Route:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
