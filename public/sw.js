@@ -1,7 +1,7 @@
 self.addEventListener("push", (event) => {
   let data = { 
-    title: "Chif Pam", 
-    body: "Nouveau message ou défi disponible !", 
+    title: "CHIF PAM ⚡", 
+    body: "Nouveau message disponible !", 
     url: "/client/notifications" 
   };
 
@@ -19,15 +19,13 @@ self.addEventListener("push", (event) => {
     icon: "/icons/icon-192.png", 
     badge: "/icons/icon-192.png",
     vibrate: [300, 100, 300],
-    tag: "chif-pam-notif", // Empêche d'empiler 50 notifs identiques
+    tag: "chif-pam-notif",
     renotify: true,
     data: { url: data.url },
-    actions: [{ action: "open", title: "Ouvrir l'application" }]
+    actions: [{ action: "open", title: "VOIR" }]
   };
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
+  event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -36,14 +34,11 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      // Si l'appli est déjà ouverte, on focus et on navigue
       for (const client of clientList) {
-        if ("focus" in client) {
-          client.navigate(targetUrl);
+        if (client.url.includes(targetUrl) && "focus" in client) {
           return client.focus();
         }
       }
-      // Sinon on ouvre une nouvelle fenêtre
       if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
