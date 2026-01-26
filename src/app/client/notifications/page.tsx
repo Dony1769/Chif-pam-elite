@@ -55,7 +55,7 @@ export default function ClientNotifications() {
     }
   };
 
-  // --- LOGIQUE WEB PUSH ---
+  // --- LOGIQUE WEB PUS ---
   
   const checkPushSubscription = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
