@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
-// Ta clé publique VAPID
+// REMPLACE par ta nouvelle clé publique VAPID générée précédemment
 const VAPID_PUBLIC_KEY = "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
 
 export default function ClientNotifications() {
@@ -20,16 +20,40 @@ export default function ClientNotifications() {
   const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
+  // --- FONCTION POUR DÉCLENCHER LE PUSH LOCAL ---
+  const triggerLocalNotification = (title: string, body: string) => {
+    if ('serviceWorker' in navigator && Notification.permission === 'granted') {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.showNotification(title, {
+          body: body,
+          icon: '/icons/icon-192.png', // Assure-toi que ce fichier existe
+          badge: '/icons/icon-192.png',
+          vibrate: [200, 100, 200],
+          data: { url: '/client/notifications' }
+        });
+      });
+    }
+  };
+
   useEffect(() => { 
     fetchAllData();
     checkPushSubscription();
 
+    // --- SYNCHRONISATION TEMPS RÉEL + PUSH LOCAL ---
     const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-        setNotifications(prev => [payload.new, ...prev]);
+        const newNotif = payload.new;
+        setNotifications(prev => [newNotif, ...prev]);
+        
+        // On active le push visuel sur le téléphone dès que la ligne est insérée
+        triggerLocalNotification(newNotif.title || "CHIF PAM ⚡", newNotif.content);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
-        setLiveChallenges(prev => [payload.new, ...prev]);
+        const newChallenge = payload.new;
+        setLiveChallenges(prev => [newChallenge, ...prev]);
+        
+        // Push local pour les nouveaux défis
+        triggerLocalNotification("NOUVEAU DÉFI 🔥", newChallenge.title);
       })
       .subscribe();
 
@@ -55,8 +79,7 @@ export default function ClientNotifications() {
     }
   };
 
-  // --- LOGIQUE WEB PUS ---
-  
+  // --- LOGIQUE WEB PUSH (ABONNEMENT) ---
   const checkPushSubscription = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       const registration = await navigator.serviceWorker.ready;
@@ -79,7 +102,6 @@ export default function ClientNotifications() {
       if (!user) return;
 
       if (pushEnabled) {
-        // Désactivation
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) {
@@ -88,9 +110,8 @@ export default function ClientNotifications() {
           setPushEnabled(false);
         }
       } else {
-        // Activation
         const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return alert("Permission refusée");
+        if (permission !== 'granted') return alert("Veuillez autoriser les notifications");
 
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.subscribe({
@@ -102,6 +123,8 @@ export default function ClientNotifications() {
           user_id: user.id,
           subscription: subscription.toJSON()
         });
+        
+        triggerLocalNotification("CHIF PAM ⚡", "Notifications activées avec succès !");
         setPushEnabled(true);
       }
     } catch (err) {
@@ -111,13 +134,12 @@ export default function ClientNotifications() {
     }
   };
 
-  // --- FIN LOGIQUE WEB PUSH ---
-
+  // --- CALCULS DES COMPTEURS ET FILTRES ---
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
       title: `NOUVEAU DÉFI : ${c.title}`,
-      content: `Récompense : ${c.prize_pool} HTG. Frais d'entrée : ${c.entry_fee_base} HTG. Bonne chance !`,
+      content: `Récompense : ${c.prize_pool} HTG. Bonne chance !`,
       created_at: c.created_at,
       is_read: false,
       is_challenge: true,
@@ -132,7 +154,7 @@ export default function ClientNotifications() {
     return allAlerts.filter(n => {
       if (activeFilter === 'TOUT') return true;
       if (activeFilter === 'VICTOIRES') return n.title.includes('VIC') || n.title.includes('GAGNÉ');
-      if (activeFilter === 'DÉFIS') return n.is_challenge || n.title.includes('DÉFI') || n.title.includes('MISSION');
+      if (activeFilter === 'DÉFIS') return n.is_challenge || n.title.includes('DÉFI');
       if (activeFilter === 'SYSTÈME') return !n.is_challenge && !n.title.includes('VIC') && !n.title.includes('DÉFI');
       return true;
     });
@@ -160,6 +182,7 @@ export default function ClientNotifications() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-20">
+      {/* Header & Filtres */}
       <div className="p-6 sticky top-0 bg-[#020617]/95 backdrop-blur-2xl z-20 border-b border-emerald-500/10 space-y-6">
         <div className="flex items-center justify-between">
           <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
@@ -196,13 +219,14 @@ export default function ClientNotifications() {
         </div>
       </div>
 
+      {/* Liste des notifications */}
       <div className="p-6 space-y-4">
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center py-40 text-slate-700">
+            <div className="flex flex-col items-center py-40 text-slate-700">
               <Inbox size={60} strokeWidth={1} className="opacity-20 mb-4" />
               <p className="text-[10px] tracking-[0.5em]">AUCUNE ALERTE {activeFilter}</p>
-            </motion.div>
+            </div>
           ) : (
             filteredAlerts.map((n) => (
               <motion.div 
@@ -210,15 +234,14 @@ export default function ClientNotifications() {
                 layout
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 20, opacity: 0 }}
-                onClick={() => n.link && router.push(n.link)}
                 className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer ${
                   n.is_challenge 
-                  ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50 shadow-[0_10px_30px_rgba(59,130,246,0.2)]' 
+                  ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50' 
                   : n.is_read 
                     ? 'bg-white/2 border-white/5 opacity-40' 
                     : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30'
                 }`}
+                onClick={() => n.link && router.push(n.link)}
               >
                 {!n.is_read && (
                     <div className="absolute top-4 right-4">
@@ -246,22 +269,16 @@ export default function ClientNotifications() {
                         <p className="text-[7px] text-slate-600 tracking-widest">
                             {new Date(n.created_at).toLocaleTimeString()}
                         </p>
-                        <p className="text-[7px] text-emerald-500/40 tracking-widest">
-                            {n.is_challenge ? 'VOIR_DÉFI_MANTENANT' : 'SÉCURISÉ'}
-                        </p>
                     </div>
                   </div>
                 </div>
-
-                {n.is_challenge && (
-                    <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 2, repeat: Infinity }} className="absolute inset-0 bg-blue-500/5 pointer-events-none" />
-                )}
               </motion.div>
             ))
           )}
         </AnimatePresence>
       </div>
 
+      {/* Bouton de contrôle flottant */}
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
           <button 
             onClick={togglePush}
@@ -285,3 +302,4 @@ export default function ClientNotifications() {
     </div>
   );
 }
+
