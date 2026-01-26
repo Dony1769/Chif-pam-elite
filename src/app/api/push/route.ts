@@ -1,60 +1,56 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js'; // Plus simple que SSR pour une API Route
 import { NextResponse } from 'next/server';
-// @ts-ignore
 import webpush from 'web-push';
 
+// Configuration WebPush
 webpush.setVapidDetails(
   'mailto:jeanguidonyguillaume1@gmail.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '',
-  process.env.VAPID_PRIVATE_KEY || ''
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
 );
 
 export async function POST(req: Request) {
   try {
-    // Correction : On passe la fonction asynchrone directement dans la configuration
-    const supabase = createServerClient(
+    // Utilisation du client Service Role pour contourner les RLS
+    const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          async get(name: string) {
-            const cookieStore = await cookies();
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { title, message } = await req.json();
+    const { title, message, url } = await req.json();
 
-    const { data: subs, error } = await supabase
+    // Récupérer TOUS les abonnements
+    const { data: subs, error } = await supabaseAdmin
       .from('push_subscriptions')
       .select('subscription');
 
-    if (error || !subs || subs.length === 0) {
-      return NextResponse.json({ success: true, message: "Aucun abonné" });
+    if (error) throw error;
+
+    if (!subs || subs.length === 0) {
+      return NextResponse.json({ success: false, error: "Aucun abonné trouvé" });
     }
 
-    const pushPromises = subs.map((item: any) => {
-      if (!item.subscription || !item.subscription.endpoint) return Promise.resolve();
+    // Envoi groupé
+    const results = await Promise.allSettled(
+      subs.map((item: any) => {
+        return webpush.sendNotification(
+          item.subscription,
+          JSON.stringify({
+            title: title || "Chif Pam",
+            body: message || "Nouveau message !",
+            url: url || "/client/notifications"
+          })
+        );
+      })
+    );
 
-      return webpush.sendNotification(
-        item.subscription,
-        JSON.stringify({
-          title: title.toUpperCase(),
-          body: message,
-          url: "/client/notifications"
-        })
-      ).catch((err: any) => {
-        console.error("Erreur WebPush sur un abonné:", err.statusCode);
-      });
+    return NextResponse.json({ 
+      success: true, 
+      details: `Envoyé à ${results.length} appareils` 
     });
 
-    await Promise.all(pushPromises);
-    return NextResponse.json({ success: true });
-
   } catch (err: any) {
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    console.error("Erreur API Push:", err.message);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
