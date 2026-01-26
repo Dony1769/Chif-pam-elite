@@ -3,29 +3,32 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Zap, Shield, Cpu, Filter, Flame } from 'lucide-react';
-import Link from 'next/link';
+import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Zap, Shield, Cpu, Filter, Flame, BellOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
+// Ta clé publique VAPID
+const VAPID_PUBLIC_KEY = "BNvlX2mjPKNieRRXyc6m447DSaOGizKiihBBZdwPJHD66OZ1LnOtNCzzZ08Yi-eIhTyzcLaFkD8oPWioWIE8aI0";
+
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [liveChallenges, setLiveChallenges] = useState<any[]>([]); // Nouvel état pour les défis
+  const [liveChallenges, setLiveChallenges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('TOUT');
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
   useEffect(() => { 
     fetchAllData();
+    checkPushSubscription();
 
-    // ECOUTEUR GLOBAL 600% PERF
     const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         setNotifications(prev => [payload.new, ...prev]);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
-        // Un nouveau défi apparaît !
         setLiveChallenges(prev => [payload.new, ...prev]);
       })
       .subscribe();
@@ -38,7 +41,6 @@ export default function ClientNotifications() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
 
-      // Récupérer notifications ET défis en parallèle
       const [notifsRes, challengesRes] = await Promise.all([
         supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('challenges').select('*').eq('is_active', true).order('created_at', { ascending: false })
@@ -53,25 +55,79 @@ export default function ClientNotifications() {
     }
   };
 
-  // FUSION DES FLUX (Notifications + Défis convertis)
+  // --- LOGIQUE WEB PUSH ---
+  
+  const checkPushSubscription = async () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      setPushEnabled(!!subscription);
+    }
+  };
+
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  };
+
+  const togglePush = async () => {
+    try {
+      setIsRegistering(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (pushEnabled) {
+        // Désactivation
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await subscription.unsubscribe();
+          await supabase.from('push_subscriptions').delete().eq('user_id', user.id);
+          setPushEnabled(false);
+        }
+      } else {
+        // Activation
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return alert("Permission refusée");
+
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+
+        await supabase.from('push_subscriptions').upsert({
+          user_id: user.id,
+          subscription: subscription.toJSON()
+        });
+        setPushEnabled(true);
+      }
+    } catch (err) {
+      console.error("Erreur Push:", err);
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // --- FIN LOGIQUE WEB PUSH ---
+
   const allAlerts = useMemo(() => {
-    // On transforme les défis pour qu'ils ressemblent à des notifications
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
       title: `NOUVEAU DÉFI : ${c.title}`,
       content: `Récompense : ${c.prize_pool} HTG. Frais d'entrée : ${c.entry_fee_base} HTG. Bonne chance !`,
       created_at: c.created_at,
-      is_read: false, // Toujours "nouveau" tant qu'il est actif
+      is_read: false,
       is_challenge: true,
-      link: '/client/challenges' // Redirection vers les défis
+      link: '/client/challenges'
     }));
-
     return [...mappedChallenges, ...notifications].sort((a, b) => 
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [notifications, liveChallenges]);
 
-  // FILTRAGE INTELLIGENT ÉTENDU
   const filteredAlerts = useMemo(() => {
     return allAlerts.filter(n => {
       if (activeFilter === 'TOUT') return true;
@@ -104,8 +160,6 @@ export default function ClientNotifications() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-20">
-      
-      {/* HEADER */}
       <div className="p-6 sticky top-0 bg-[#020617]/95 backdrop-blur-2xl z-20 border-b border-emerald-500/10 space-y-6">
         <div className="flex items-center justify-between">
           <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
@@ -120,7 +174,6 @@ export default function ClientNotifications() {
           </button>
         </div>
 
-        {/* FILTRES */}
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {(['TOUT', 'VICTOIRES', 'DÉFIS', 'SYSTÈME'] as FilterType[]).map((filter) => (
             <button
@@ -143,7 +196,6 @@ export default function ClientNotifications() {
         </div>
       </div>
 
-      {/* LISTE DES ALERTES */}
       <div className="p-6 space-y-4">
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
@@ -202,11 +254,7 @@ export default function ClientNotifications() {
                 </div>
 
                 {n.is_challenge && (
-                    <motion.div 
-                        animate={{ opacity: [0.2, 0.5, 0.2] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="absolute inset-0 bg-blue-500/5 pointer-events-none"
-                    />
+                    <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 2, repeat: Infinity }} className="absolute inset-0 bg-blue-500/5 pointer-events-none" />
                 )}
               </motion.div>
             ))
@@ -214,10 +262,24 @@ export default function ClientNotifications() {
         </AnimatePresence>
       </div>
 
-      {/* FOOTER ACTION */}
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
-          <button className="pointer-events-auto bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black text-[10px] tracking-widest shadow-[0_15px_40px_rgba(16,185,129,0.4)] flex items-center gap-3 active:scale-95 transition-all">
-              <Bell size={16} /> REGLAGES_PUSH
+          <button 
+            onClick={togglePush}
+            disabled={isRegistering}
+            className={`pointer-events-auto px-8 py-4 rounded-2xl font-black text-[10px] tracking-widest flex items-center gap-3 active:scale-95 transition-all shadow-2xl ${
+              pushEnabled 
+              ? 'bg-slate-800 text-emerald-500 border border-emerald-500/20' 
+              : 'bg-emerald-500 text-black shadow-emerald-500/40'
+            }`}
+          >
+              {isRegistering ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : pushEnabled ? (
+                <Bell size={16} />
+              ) : (
+                <BellOff size={16} />
+              )}
+              {isRegistering ? 'CONFIGURATION...' : pushEnabled ? 'PUSH_ACTIF' : 'ACTIVER_PUSH'}
           </button>
       </div>
     </div>
