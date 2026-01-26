@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
-// Ta clé publique VAPID pour l'autorisation navigateur
 const VAPID_PUBLIC_KEY = "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
 
 export default function ClientNotifications() {
@@ -20,50 +19,53 @@ export default function ClientNotifications() {
   const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
-  // --- 1. LA FONCTION MAGIQUE : DÉCLENCHE LA BANNIÈRE EN HAUT ---
-  const showNativeBanner = async (title: string, message: string) => {
+  // --- ACTION : ENVOI IMMÉDIAT À LA BANNIÈRE SYSTÈME (COMME TON BOUTON) ---
+  const sendToSystemBanner = async (title: string, message: string) => {
     if (!("Notification" in window)) return;
 
     if (Notification.permission === "granted") {
-      const sw = await navigator.serviceWorker.ready;
-      const options: any = {
-        body: message,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        vibrate: [200, 100, 200],
-        timestamp: Date.now(),
-        data: { url: '/client/notifications' }
-      };
-      // Ceci fait apparaître la notification en haut de l'écran immédiatement
-      await sw.showNotification(title, options);
+      try {
+        const sw = await navigator.serviceWorker.ready;
+        await sw.showNotification(title, {
+          body: message,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          vibrate: [200, 100, 200],
+          tag: 'chif-pam-alert', // Évite les doublons si plusieurs arrivent d'un coup
+          data: { url: '/client/notifications' }
+        } as any);
+      } catch (err) {
+        console.error("Erreur d'affichage système:", err);
+      }
     }
   };
 
   useEffect(() => { 
     fetchAllData();
-    checkPushStatus();
+    checkPushSubscription();
 
-    // --- 2. ÉCOUTE EN TEMPS RÉEL + ENVOI IMMÉDIAT EN HAUT ---
-    const channel = supabase.channel('realtime_push_sync')
+    // --- ÉCOUTEUR TEMPS RÉEL : ICI ON DÉCLENCHE L'ACTION ---
+    const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         const newNotif = payload.new;
         setNotifications(prev => [newNotif, ...prev]);
         
-        // DÉCLENCHEMENT DE LA BANNIÈRE SYSTÈME
-        showNativeBanner(newNotif.title || "CHIF PAM ⚡", newNotif.content);
+        // DÉCLENCHEMENT : On envoie le contenu de "TOUT" directement en haut du tel
+        sendToSystemBanner(newNotif.title || "ALERTE CHIF PAM", newNotif.content);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
         const newChallenge = payload.new;
         setLiveChallenges(prev => [newChallenge, ...prev]);
         
-        // DÉCLENCHEMENT DE LA BANNIÈRE SYSTÈME POUR DÉFI
-        showNativeBanner("NOUVEAU DÉFI 🔥", newChallenge.title);
+        // DÉCLENCHEMENT : Spécial pour les nouveaux défis
+        sendToSystemBanner("NOUVEAU DÉFI 🔥", newChallenge.title);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Chargement initial des données
   const fetchAllData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -83,11 +85,11 @@ export default function ClientNotifications() {
     }
   };
 
-  const checkPushStatus = async () => {
-    if ('serviceWorker' in navigator) {
+  const checkPushSubscription = async () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
-      setPushEnabled(!!subscription && Notification.permission === "granted");
+      setPushEnabled(!!subscription);
     }
   };
 
@@ -98,27 +100,26 @@ export default function ClientNotifications() {
     return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
   };
 
-  // --- 3. BOUTON D'ACTIVATION (MÊME LOGIQUE QUE PROFIL) ---
+  // Logique du bouton d'activation
   const togglePush = async () => {
     try {
       setIsRegistering(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        alert("Permission refusée. Activez les notifications dans les réglages.");
-        return;
-      }
-
-      const registration = await navigator.serviceWorker.ready;
-      
       if (pushEnabled) {
-        const sub = await registration.pushManager.getSubscription();
-        if (sub) await sub.unsubscribe();
-        await supabase.from('push_subscriptions').delete().eq('user_id', user.id);
-        setPushEnabled(false);
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await subscription.unsubscribe();
+          await supabase.from('push_subscriptions').delete().eq('user_id', user.id);
+          setPushEnabled(false);
+        }
       } else {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return alert("Activez les permissions pour recevoir les alertes.");
+
+        const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
@@ -129,8 +130,7 @@ export default function ClientNotifications() {
           subscription: subscription.toJSON()
         });
         
-        // Test immédiat après clic
-        showNativeBanner("CHIF PAM ⚡", "Notifications activées ! ✅");
+        sendToSystemBanner("SYSTEME ACTIF", "Vous recevrez vos alertes ici désormais ! ✅");
         setPushEnabled(true);
       }
     } catch (err) {
@@ -140,10 +140,11 @@ export default function ClientNotifications() {
     }
   };
 
+  // Logique des filtres UI
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
-      title: `NOUVEAU DÉFI : ${c.title}`,
+      title: `DÉFI : ${c.title}`,
       content: `Récompense : ${c.prize_pool} HTG.`,
       created_at: c.created_at,
       is_read: false,
@@ -194,7 +195,7 @@ export default function ClientNotifications() {
           </button>
           <div className="text-center">
             <h1 className="text-xl tracking-tighter">CENTRE_D_ALERTES</h1>
-            <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">RADAR_ACTIF_SYSTÈME</p>
+            <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">RADAR_ACTIF_SYNCHRONISÉ</p>
           </div>
           <button onClick={markAllAsRead} className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-500">
             <CheckCheck size={20} />
@@ -225,8 +226,8 @@ export default function ClientNotifications() {
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
             <div className="flex flex-col items-center py-40 text-slate-700">
-              <BellOff size={60} strokeWidth={1} className="opacity-20 mb-4" />
-              <p className="text-[10px] tracking-[0.5em]">RIEN À SIGNALER</p>
+              <Bell size={60} strokeWidth={1} className="opacity-20 mb-4" />
+              <p className="text-[10px] tracking-[0.5em]">AUCUNE ALERTE</p>
             </div>
           ) : (
             filteredAlerts.map((n) => (
@@ -278,7 +279,7 @@ export default function ClientNotifications() {
             }`}
           >
               {isRegistering ? <Loader2 size={16} className="animate-spin" /> : pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-              {isRegistering ? 'SYNC...' : pushEnabled ? 'RADAR ACTIF' : 'ACTIVER RADAR'}
+              {isRegistering ? 'CONFIGURATION...' : pushEnabled ? 'PUSH_ACTIF' : 'ACTIVER_PUSH'}
           </button>
       </div>
     </div>
