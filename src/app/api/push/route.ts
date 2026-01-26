@@ -1,8 +1,8 @@
-import { createClient } from '@supabase/supabase-js'; // Plus simple que SSR pour une API Route
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import webpush from 'web-push';
 
-// Configuration WebPush
+// On s'assure que les clés sont bien chargées
 webpush.setVapidDetails(
   'mailto:jeanguidonyguillaume1@gmail.com',
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
@@ -11,46 +11,47 @@ webpush.setVapidDetails(
 
 export async function POST(req: Request) {
   try {
-    // Utilisation du client Service Role pour contourner les RLS
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY! // Crucial pour lire les abonnements
     );
 
-    const { title, message, url } = await req.json();
+    // Récupérer les données envoyées (soit par ton code, soit par un webhook)
+    const body = await req.json();
+    const { user_id, title, content } = body;
 
-    // Récupérer TOUS les abonnements
-    const { data: subs, error } = await supabaseAdmin
-      .from('push_subscriptions')
-      .select('subscription');
+    // 1. Chercher les abonnements
+    let query = supabaseAdmin.from('push_subscriptions').select('subscription');
+    
+    // Si un user_id est fourni, on n'envoie qu'à lui, sinon à tout le monde
+    if (user_id) {
+      query = query.eq('user_id', user_id);
+    }
 
-    if (error) throw error;
+    const { data: subs, error: dbError } = await query;
 
-    if (!subs || subs.length === 0) {
+    if (dbError || !subs || subs.length === 0) {
       return NextResponse.json({ success: false, error: "Aucun abonné trouvé" });
     }
 
-    // Envoi groupé
-    const results = await Promise.allSettled(
-      subs.map((item: any) => {
-        return webpush.sendNotification(
-          item.subscription,
-          JSON.stringify({
-            title: title || "Chif Pam",
-            body: message || "Nouveau message !",
-            url: url || "/client/notifications"
-          })
-        );
-      })
-    );
-
-    return NextResponse.json({ 
-      success: true, 
-      details: `Envoyé à ${results.length} appareils` 
+    // 2. Envoyer les notifications
+    const payload = JSON.stringify({
+      title: title || "CHIF PAM",
+      body: content || "Nouvelle notification disponible",
+      url: "/client/notifications"
     });
 
+    const pushPromises = subs.map((item: any) => 
+      webpush.sendNotification(item.subscription, payload)
+        .catch(err => console.error("Erreur d'envoi pour un token:", err.statusCode))
+    );
+
+    await Promise.all(pushPromises);
+
+    return NextResponse.json({ success: true, count: subs.length });
+
   } catch (err: any) {
-    console.error("Erreur API Push:", err.message);
+    console.error("Erreur API Route:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
