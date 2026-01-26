@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
 // Ta clé publique VAPID
-const VAPID_PUBLIC_KEY = "BNvlX2mjPKNieRRXyc6m447DSaOGizKiihBBZdwPJHD66OZ1LnOtNCzzZ08Yi-eIhTyzcLaFkD8oPWioWIE8aI0";
+const VAPID_PUBLIC_KEY = "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
 
 export default function ClientNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
