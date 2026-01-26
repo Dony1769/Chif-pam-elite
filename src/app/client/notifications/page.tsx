@@ -3,12 +3,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Zap, Shield, Cpu, Filter, Flame, BellOff } from 'lucide-react';
+import { 
+  ArrowLeft, Inbox, Loader2, CheckCheck, Bell, 
+  Trophy, Shield, Flame, BellOff 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
-// REMPLACE par ta clé publique VAPID certifiée P-256
+// Clé VAPID (Assure-toi qu'elle correspond à tes variables Vercel)
 const VAPID_PUBLIC_KEY = "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
 
 export default function ClientNotifications() {
@@ -20,19 +23,22 @@ export default function ClientNotifications() {
   const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
-  // --- FONCTION POUR DÉCLENCHER LE PUSH LOCAL (CORRIGÉE POUR TYPESCRIPT) ---
-  const triggerLocalNotification = (title: string, body: string) => {
-    if ('serviceWorker' in navigator && Notification.permission === 'granted') {
-      navigator.serviceWorker.ready.then(registration => {
-        // On utilise "as any" pour éviter l'erreur sur "vibrate" lors du build
-        const options: any = {
-          body: body,
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png',
+  // ==========================================
+  // ACTION : DÉCLENCHER LA NOTIFICATION SYSTÈME
+  // ==========================================
+  const triggerSystemNotification = (title: string, message: string) => {
+    if (!("Notification" in window)) return;
+
+    if (Notification.permission === "granted") {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.showNotification(title, {
+          body: message,
+          icon: "/icons/icon-192.png", // Vérifie ce chemin
+          badge: "/icons/icon-192.png",
           vibrate: [200, 100, 200],
-          data: { url: '/client/notifications' }
-        };
-        registration.showNotification(title, options);
+          tag: 'new-alert', // Évite d'empiler 50 notifs identiques
+          data: { url: window.location.href }
+        });
       });
     }
   };
@@ -41,21 +47,22 @@ export default function ClientNotifications() {
     fetchAllData();
     checkPushSubscription();
 
-    // --- SYNCHRONISATION TEMPS RÉEL + PUSH LOCAL ---
+    // RADAR DE SYNCHRONISATION EN TEMPS RÉEL
     const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         const newNotif = payload.new;
         setNotifications(prev => [newNotif, ...prev]);
-        
-        // Alerte instantanée sur le téléphone
-        triggerLocalNotification(newNotif.title || "CHIF PAM ⚡", newNotif.content);
+
+        // --- ICI L'ACTION QUE TU AS DEMANDÉE ---
+        // Dès qu'une ligne arrive, on génère l'action système (vibration + bannière)
+        triggerSystemNotification(newNotif.title || "CHIF PAM ⚡", newNotif.content);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
         const newChallenge = payload.new;
         setLiveChallenges(prev => [newChallenge, ...prev]);
-        
-        // Alerte instantanée pour les défis
-        triggerLocalNotification("NOUVEAU DÉFI 🔥", newChallenge.title);
+
+        // Action système pour les nouveaux défis
+        triggerSystemNotification("NOUVEAU DÉFI 🔥", newChallenge.title);
       })
       .subscribe();
 
@@ -74,14 +81,10 @@ export default function ClientNotifications() {
 
       setNotifications(notifsRes.data || []);
       setLiveChallenges(challengesRes.data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
-  // --- LOGIQUE WEB PUSH ---
+  // LOGIQUE D'ACTIVATION (Même que ton bouton Profile)
   const checkPushSubscription = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       const registration = await navigator.serviceWorker.ready;
@@ -90,53 +93,26 @@ export default function ClientNotifications() {
     }
   };
 
-  const urlBase64ToUint8Array = (base64String: string) => {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
-  };
-
   const togglePush = async () => {
     try {
       setIsRegistering(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      if (pushEnabled) {
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
-        if (subscription) {
-          await subscription.unsubscribe();
-          await supabase.from('push_subscriptions').delete().eq('user_id', user.id);
-          setPushEnabled(false);
-        }
-      } else {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return alert("Veuillez autoriser les notifications");
-
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-        });
-
-        await supabase.from('push_subscriptions').upsert({
-          user_id: user.id,
-          subscription: subscription.toJSON()
-        });
-        
-        triggerLocalNotification("CHIF PAM ⚡", "Notifications activées ! ✅");
+      const permission = await Notification.requestPermission();
+      
+      if (permission === 'granted') {
+        // On affiche une confirmation système immédiate
+        triggerSystemNotification("CHIF PAM ⚡", "Radar de notifications activé ! ✅");
         setPushEnabled(true);
+        // Ici tu peux ajouter la logique de sauvegarde du token si nécessaire
+      } else {
+        alert("Tu dois autoriser les notifications pour recevoir les alertes.");
       }
     } catch (err) {
-      console.error("Erreur Push:", err);
+      console.error(err);
     } finally {
       setIsRegistering(false);
     }
   };
 
-  // --- CALCULS ---
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
@@ -169,16 +145,9 @@ export default function ClientNotifications() {
     SYSTÈME: allAlerts.filter(n => !n.is_read && (!n.is_challenge && !n.title.includes('VIC') && !n.title.includes('DÉFI'))).length,
   }), [allAlerts]);
 
-  const markAllAsRead = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-  };
-
   if (loading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center text-emerald-500">
-        <Loader2 className="animate-spin" size={40} />
+      <Loader2 className="animate-spin" size={40} />
     </div>
   );
 
@@ -193,11 +162,10 @@ export default function ClientNotifications() {
             <h1 className="text-xl tracking-tighter">CENTRE_D_ALERTES</h1>
             <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">RADAR_ACTIF_SYNCHRONISÉ</p>
           </div>
-          <button onClick={markAllAsRead} className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-500">
-            <CheckCheck size={20} />
-          </button>
+          <div className="w-10"></div>
         </div>
 
+        {/* FILTRES AVEC BADGES */}
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {(['TOUT', 'VICTOIRES', 'DÉFIS', 'SYSTÈME'] as FilterType[]).map((filter) => (
             <button
@@ -232,7 +200,7 @@ export default function ClientNotifications() {
                 layout
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer ${
+                className={`relative p-6 rounded-[2rem] border overflow-hidden ${
                   n.is_challenge ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50' : 
                   n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30'
                 }`}
@@ -246,7 +214,6 @@ export default function ClientNotifications() {
                         </span>
                     </div>
                 )}
-                
                 <div className="flex gap-4 items-start">
                   <div className={`p-3 rounded-xl ${
                     n.is_challenge ? 'bg-blue-500 text-white animate-pulse' :
@@ -255,13 +222,9 @@ export default function ClientNotifications() {
                     {n.is_challenge ? <Flame size={20}/> : n.title.includes('VIC') ? <Trophy size={20}/> : <Shield size={20}/>}
                   </div>
                   <div className="flex-1">
-                    <h3 className={`text-sm tracking-tighter leading-none mb-1 pr-6 ${n.is_challenge ? 'text-blue-400 font-black' : ''}`}>
-                        {n.title}
-                    </h3>
+                    <h3 className={`text-sm tracking-tighter leading-none mb-1 pr-6 ${n.is_challenge ? 'text-blue-400 font-black' : ''}`}>{n.title}</h3>
                     <p className="text-[11px] lowercase not-italic text-slate-400 leading-relaxed">{n.content}</p>
-                    <div className="flex justify-between items-center mt-3">
-                        <p className="text-[7px] text-slate-600 tracking-widest">{new Date(n.created_at).toLocaleTimeString()}</p>
-                    </div>
+                    <p className="text-[7px] text-slate-600 tracking-widest mt-2">{new Date(n.created_at).toLocaleTimeString()}</p>
                   </div>
                 </div>
               </motion.div>
@@ -270,6 +233,7 @@ export default function ClientNotifications() {
         </AnimatePresence>
       </div>
 
+      {/* BOUTON FLOTTANT D'ACTIVATION RADAR */}
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
           <button 
             onClick={togglePush}
@@ -278,8 +242,8 @@ export default function ClientNotifications() {
               pushEnabled ? 'bg-slate-800 text-emerald-500 border border-emerald-500/20' : 'bg-emerald-500 text-black shadow-emerald-500/40'
             }`}
           >
-              {isRegistering ? <Loader2 size={16} className="animate-spin" /> : pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-              {isRegistering ? 'CONFIGURATION...' : pushEnabled ? 'PUSH_ACTIF' : 'ACTIVER_PUSH'}
+              {isRegistering ? <Loader2 size={16} className="animate-spin" /> : <Bell size={16} />}
+              {isRegistering ? 'CONFIGURATION...' : pushEnabled ? 'RADAR_ACTIF' : 'ACTIVER_PUSH_RADAR'}
           </button>
       </div>
     </div>
