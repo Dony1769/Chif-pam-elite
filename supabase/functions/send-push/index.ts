@@ -1,7 +1,7 @@
 // @ts-ignore: Deno types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 // @ts-ignore: Deno types
-import webpush from "https://esm.sh/web-push@3.6.6"
+import webpush from "https://esm.sh/web-push@3.6.7"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
