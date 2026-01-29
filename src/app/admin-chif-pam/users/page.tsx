@@ -1,11 +1,24 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase'; // Ton client habituel
+import { adminResetPassword } from '@/app/actions/adminActions'; // Import de l'action créée étape 2
 import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare, Key } from 'lucide-react';
 
+// Définition simple du type User pour TypeScript
+interface UserProfile {
+  id: string;
+  username: string;
+  phone: string;
+  balance: number;
+  is_banned: boolean;
+  ban_reason: string | null;
+  created_at: string;
+  role: 'admin' | 'client';
+}
+
 export default function AdminUsers() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -13,30 +26,39 @@ export default function AdminUsers() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    setUsers(data || []);
+    // On sélectionne tout depuis profiles
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+      
+    setUsers((data as UserProfile[]) || []);
     setLoading(false);
   };
 
-  // --- NOUVELLE FONCTION DE RÉINITIALISATION ---
-  const resetPassword = async (id: string, username: string) => {
+  // --- FONCTION CORRIGÉE ---
+  const handleResetPassword = async (id: string, username: string) => {
     const newPass = prompt(`Nouveau mot de passe pour @${username || 'cet utilisateur'} :`);
-    if (!newPass || newPass.length < 6) {
-      if (newPass) alert("Le mot de passe doit contenir au moins 6 caractères.");
+    
+    // Validation basique
+    if (!newPass) return;
+    if (newPass.length < 6) {
+      alert("Le mot de passe doit contenir au moins 6 caractères.");
       return;
     }
 
     try {
-      const { error } = await supabase.rpc('admin_reset_password', {
-        target_user_id: id,
-        new_password: newPass
-      });
+      // Appel de la Server Action (côté serveur)
+      const result = await adminResetPassword(id, newPass);
 
-      if (error) throw error;
-      alert("✅ Mot de passe modifié avec succès !");
-    } catch (err: any) {
+      if (result.success) {
+        alert("✅ " + result.message);
+      } else {
+        alert("❌ Erreur : " + result.message);
+      }
+    } catch (err) {
       console.error(err);
-      alert("Erreur lors de la réinitialisation.");
+      alert("Erreur technique lors de la réinitialisation.");
     }
   };
 
@@ -65,20 +87,28 @@ export default function AdminUsers() {
         )
       );
     } catch (err) {
-      alert("Erreur technique lors du bannissement.");
+      alert("Erreur technique : Vérifiez vos droits d'admin (RLS).");
     }
   };
 
   const adjustBalance = async (id: string) => {
     const newBalance = prompt("Entrez le nouveau solde total (HTG) :");
     if (newBalance !== null && !isNaN(Number(newBalance))) {
-      const { error } = await supabase.from('profiles').update({ balance: Number(newBalance) }).eq('id', id);
-      if (!error) fetchUsers();
+      const { error } = await supabase
+        .from('profiles')
+        .update({ balance: Number(newBalance) })
+        .eq('id', id);
+        
+      if (!error) {
+        fetchUsers(); // Rafraichir pour être sûr
+      } else {
+        alert("Erreur lors de la mise à jour du solde.");
+      }
     }
   };
 
   const filteredUsers = users.filter(u => 
-    u.phone.includes(searchTerm) || 
+    (u.phone && u.phone.includes(searchTerm)) || 
     (u.username && u.username.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -111,11 +141,16 @@ export default function AdminUsers() {
                 <div>
                   <p className="text-sm tracking-tighter">@{user.username || 'Inconnu'}</p>
                   <p className="text-[10px] text-emerald-500 font-bold">+{user.phone}</p>
+                  <p className="text-[8px] text-slate-500 mt-1 border border-white/10 px-1 rounded inline-block">{user.role}</p>
                 </div>
               </div>
               <div className="flex gap-2">
-                {/* BOUTON RESET MOT DE PASSE */}
-                <button onClick={() => resetPassword(user.id, user.username)} className="p-3 bg-slate-800 rounded-2xl text-amber-500 hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-90">
+                {/* BOUTON RESET MOT DE PASSE CONNECTÉ À LA SERVER ACTION */}
+                <button 
+                  onClick={() => handleResetPassword(user.id, user.username)} 
+                  className="p-3 bg-slate-800 rounded-2xl text-amber-500 hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-90"
+                  title="Réinitialiser le mot de passe"
+                >
                   <Key size={18} />
                 </button>
                 <button onClick={() => toggleBan(user.id, user.is_banned)} className={`p-3 rounded-2xl transition-all active:scale-90 ${user.is_banned ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
@@ -133,7 +168,7 @@ export default function AdminUsers() {
               <div className="bg-slate-950/50 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
                 <div>
                   <p className="text-[8px] text-slate-500 mb-1">Portefeuille</p>
-                  <p className="text-lg text-emerald-500">{user.balance.toLocaleString()} HTG</p>
+                  <p className="text-lg text-emerald-500">{user.balance?.toLocaleString()} HTG</p>
                 </div>
                 <button onClick={() => adjustBalance(user.id)} className="p-3 bg-slate-800 rounded-xl text-emerald-500 hover:bg-emerald-500 hover:text-slate-950 transition-all">
                   <Wallet size={18} />
@@ -161,4 +196,3 @@ export default function AdminUsers() {
     </div>
   );
 }
-
