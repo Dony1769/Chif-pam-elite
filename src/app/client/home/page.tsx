@@ -9,7 +9,7 @@ import {
   User as UserIcon, Lock, Trophy,
   Activity, ChevronRight, Brain, Fingerprint,
   Menu, X, Crown, ShieldCheck, Gift, Sparkles,
-  RefreshCw, Coins
+  RefreshCw, Coins, ShoppingCart
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -112,7 +112,6 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
-      {/* Menu Latéral (Inchangé) */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -135,7 +134,7 @@ export default function ClientHome() {
       </AnimatePresence>
 
       <div className="p-6 space-y-6">
-        {/* Header */}
+        {/* Header avec Panier et Cloche */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all">
@@ -143,16 +142,29 @@ export default function ClientHome() {
             </button>
             <h1 className="text-lg tracking-tighter italic uppercase font-black">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
-          <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
-            <Bell size={20} className={globalNotificationCount > 0 ? "text-emerald-500" : "text-slate-500"} />
-          </Link>
+          
+          <div className="flex items-center gap-2">
+            {/* Icône de Panier (Boutique Market) */}
+            <Link href="/client/market" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
+                <ShoppingCart size={20} className="text-emerald-500" />
+            </Link>
+            
+            <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
+                <Bell size={20} className={globalNotificationCount > 0 ? "text-emerald-500" : "text-slate-500"} />
+                {globalNotificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                        <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 items-center justify-center text-[8px] font-black">{globalNotificationCount}</span>
+                    </span>
+                )}
+            </Link>
+          </div>
         </div>
 
-        {/* --- DOUBLE BALANCE CARD (LA NOUVEAUTÉ) --- */}
+        {/* --- DOUBLE BALANCE CARD --- */}
         <div className="space-y-4">
           {/* Main Wallet: CP (Game Fuel) */}
-          <div className="bg-[#0f172a] border border-emerald-500/20 rounded-[2rem] p-6 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+          <div className="bg-[#0f172a] border border-emerald-500/20 rounded-[2rem] p-6 relative overflow-hidden group shadow-lg shadow-emerald-500/5">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
                 <Coins size={80} className="text-emerald-500" />
             </div>
             <div className="relative z-10">
@@ -183,33 +195,35 @@ export default function ClientHome() {
                 <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">HTG</span>
               </div>
             </div>
-            <Link href="/client/market" className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-emerald-500 hover:text-black transition-all">
-               <Plus size={20} />
-            </Link>
+            {profile?.vip_status !== 'free' && (
+              <div className="text-amber-500">
+                <Crown size={20} />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Action Buttons (Dépôt/Retrait redirigés vers Finance) */}
+        {/* Action Buttons (Dépôt / Retrait pour HTG) */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/market" className="bg-emerald-500 p-5 rounded-[1.8rem] text-slate-950 flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
-            <Sparkles size={20} /><span className="text-[9px] font-black italic uppercase tracking-widest">Boutique</span>
+          <Link href="/client/finance" className="bg-emerald-500 p-5 rounded-[1.8rem] text-slate-950 flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
+            <Plus size={20} /><span className="text-[9px] font-black italic uppercase tracking-widest">Dépôt</span>
           </Link>
           <Link href="/client/finance" className="bg-slate-900/50 p-5 rounded-[1.8rem] border border-white/10 flex flex-col items-center gap-1 active:scale-95 transition-all">
             <ArrowDownCircle size={20} className="text-rose-500" /><span className="text-[9px] font-black italic uppercase tracking-widest">Retrait</span>
           </Link>
         </div>
 
-        {/* Jeux / Défis (Inchangé) */}
+        {/* Jeux / Défis à la une */}
         <div className="space-y-4">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
           <div className="space-y-3 pb-10">
             <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
             <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
+            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
           </div>
         </div>
       </div>
 
-      {/* Barre de Navigation (Inchangée) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-15px_40px_rgba(0,0,0,0.6)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
@@ -231,7 +245,6 @@ export default function ClientHome() {
   );
 }
 
-// Les sous-composants MenuLink, GameRow et NavLink restent les mêmes
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all active:bg-white/5">
