@@ -95,12 +95,12 @@ function BiometricGameContent() {
     if (!profile) return;
     setLoading(true);
     try {
-      const miseEntiere = Math.floor(betCP);
+      const roundedMise = Math.floor(betCP);
 
-      // 1. Déduction des CP via RPC
+      // 1. Débit CP via RPC
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
-          p_mise_cp: miseEntiere,
+          p_mise_cp: roundedMise,
           p_gain_cp: 0,
           p_jeu_nom: 'Biometric Hack'
       });
@@ -108,13 +108,11 @@ function BiometricGameContent() {
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Insertion en base avec les noms de colonnes exacts (bet_amount)
+      // 2. Insertion Biometric Games (SANS bet_amount)
       const { data: game, error: gameErr } = await supabase.from('biometric_games').insert([{
           user_id: profile.id,
-          bet_amount: miseEntiere, // Correction ici
-          multiplier: 1.0,
-          is_active: true,
-          status: 'pending'
+          mise_cp: roundedMise,
+          is_active: true
       }]).select().single();
       
       if (gameErr) throw gameErr;
@@ -159,9 +157,8 @@ function BiometricGameContent() {
     playSound(110, 0.5, 'sawtooth');
     if (gameId) {
         await supabase.from('biometric_games').update({ 
-            is_active: false, 
-            payout: 0,
-            status: 'lost' 
+          is_active: false, 
+          gain_cp: 0 
         }).eq('id', gameId);
     }
     init(); 
@@ -172,7 +169,6 @@ function BiometricGameContent() {
     setLoading(true);
     const gainCalculé = Math.floor(betCP * multiplier);
     try {
-      // 1. Crédit des gains CP via RPC
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: 0,
@@ -183,18 +179,15 @@ function BiometricGameContent() {
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Update table avec les noms de colonnes exacts
       await supabase.from('biometric_games').update({ 
         is_active: false, 
-        payout: gainCalculé,
-        multiplier: multiplier,
-        status: 'won'
+        gain_cp: gainCalculé 
       }).eq('id', gameId);
 
       setStatus('won');
       playSound(523, 0.5);
     } catch (e: any) { 
-      alert("Erreur système lors du cashout."); 
+      alert("Erreur Cashout."); 
     } finally { 
       setLoading(false); 
       init();
@@ -203,11 +196,12 @@ function BiometricGameContent() {
 
   return (
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col font-sans">
+      {/* HEADER HUD */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
         <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
           <ChevronLeft size={20}/>
         </button>
-        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
             <Coins size={16} className="text-emerald-500" />
             <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
         </div>
@@ -215,52 +209,63 @@ function BiometricGameContent() {
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 relative">
         {status === 'maintenance' ? (
-          <div className="flex flex-col items-center justify-center p-10 bg-white/5 rounded-[3rem] border border-white/5">
+          <div className="flex flex-col items-center justify-center p-10 bg-white/5 rounded-[3rem] border border-white/5 backdrop-blur-sm">
             <Construction size={50} className="text-amber-500 animate-pulse" />
-            <h2 className="text-2xl text-amber-500 mt-4">MAINTENANCE</h2>
-            <p className="text-slate-500 text-[8px] text-center mt-2 italic uppercase tracking-widest">{maintenanceMsg}</p>
+            <h2 className="text-2xl text-amber-500 mt-4 tracking-tighter">MAINTENANCE</h2>
+            <p className="text-slate-500 text-[9px] text-center mt-2 italic leading-relaxed uppercase">{maintenanceMsg}</p>
           </div>
         ) : status === 'idle' || status === 'loading' ? (
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-xs bg-slate-900/40 border border-white/10 p-10 rounded-[3.5rem] text-center backdrop-blur-md">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-xs bg-slate-900/40 border border-white/10 p-10 rounded-[3.5rem] text-center backdrop-blur-md shadow-2xl">
             {status === 'loading' ? (
                 <Loader2 className="animate-spin mx-auto text-emerald-500" size={50} />
             ) : (
                 <>
                 <div className="relative inline-block mb-8">
-                    <div className="absolute inset-0 bg-emerald-500 blur-3xl opacity-20" />
+                    <div className="absolute inset-0 bg-emerald-500 blur-[60px] opacity-20" />
                     <Fingerprint className="text-emerald-500 relative" size={70} />
                 </div>
                 
-                <div className="bg-black/60 p-6 rounded-3xl border border-white/5 mb-8">
-                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic text-center">ALLOCATION CP</p>
-                    <input type="number" value={betCP} onChange={e => setBetCP(Number(e.target.value))} className="bg-transparent text-5xl font-black text-center w-full outline-none text-white tracking-tighter" />
+                <div className="bg-black/60 p-6 rounded-3xl border border-white/5 mb-8 shadow-inner">
+                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic tracking-widest">ALLOCATION_JETONS</p>
+                    <input 
+                      type="number" 
+                      value={betCP} 
+                      onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
+                      className="bg-transparent text-5xl font-black text-center w-full outline-none text-white tracking-tighter" 
+                    />
                 </div>
 
-                <button onClick={startGame} disabled={loading} className="w-full py-6 rounded-[2rem] text-xl font-black bg-emerald-600 text-white shadow-2xl active:scale-95 transition-all">
-                    {loading ? <Loader2 className="animate-spin" /> : "START_SCAN"}
+                <button 
+                  onClick={startGame} 
+                  disabled={loading} 
+                  className="w-full py-6 rounded-[2rem] text-xl font-black bg-emerald-600 text-white shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all disabled:opacity-50"
+                >
+                    {loading ? <Loader2 className="animate-spin mx-auto" /> : "ACCÉDER_SCAN"}
                 </button>
                 </>
             )}
           </motion.div>
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
+            {/* IN-GAME HUD */}
             <div className="w-full grid grid-cols-3 gap-4 mb-10 px-2">
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
-                    <p className="text-[7px] text-zinc-500 italic">SEC_TIMER</p>
+                    <p className="text-[7px] text-zinc-500 italic font-bold">TIMER</p>
                     <p className={`text-xl font-black ${sessionTimer < 4 ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>{sessionTimer}S</p>
                 </div>
                 <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 text-center">
-                    <p className="text-[7px] text-emerald-500 italic font-bold">BONUS</p>
+                    <p className="text-[7px] text-emerald-500 italic font-bold">MULT</p>
                     <p className="text-2xl font-black text-white">x{multiplier.toFixed(2)}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
-                    <p className="text-[7px] text-zinc-500 italic">GRID</p>
+                    <p className="text-[7px] text-zinc-500 italic font-bold">GRID</p>
                     <p className="text-xl font-black text-white">{gridSize}x{gridSize}</p>
                 </div>
             </div>
 
+            {/* THE SCANNER GRID */}
             <div 
-              className="grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border border-white/10 shadow-2xl relative"
+              className="grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border border-white/10 shadow-2xl relative overflow-hidden"
               style={{ 
                 gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))`,
                 width: 'min(90vw, 360px)',
@@ -274,47 +279,49 @@ function BiometricGameContent() {
                   onClick={() => handleCellClick(i)}
                   className={`
                     rounded-xl border-2 transition-all duration-300
-                    ${status === 'showing' && pattern.includes(i) ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-95' : 'bg-white/5 border-white/5'}
-                    ${status === 'input' && userPattern.includes(i) ? 'bg-emerald-600 border-emerald-400 shadow-lg' : ''}
+                    ${status === 'showing' && pattern.includes(i) ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.6)] scale-95' : 'bg-white/5 border-white/5'}
+                    ${status === 'input' && userPattern.includes(i) ? 'bg-emerald-600 border-emerald-400 shadow-md' : ''}
                   `}
                 />
               ))}
             </div>
 
-            {multiplier > 1.2 && (
+            {multiplier > 1.25 && (
                 <button 
                   onClick={cashout}
                   disabled={loading}
-                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/20"
+                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/20"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : <>ENCAISSER {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
+                  {loading ? <Loader2 className="animate-spin" /> : <>EXTRAIRE {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
                 </button>
             )}
           </div>
         )}
       </div>
 
+      {/* RESULTS MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
-            <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="mb-8">
-                {status === 'lost' ? <ShieldX size={120} className="text-rose-600 drop-shadow-2xl" /> : <ShieldCheck size={120} className="text-emerald-500 drop-shadow-2xl" />}
+            <motion.div initial={{ scale: 0.5, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} className="mb-8">
+                {status === 'lost' ? <ShieldX size={120} className="text-rose-600 drop-shadow-[0_0_30px_rgba(225,29,72,0.4)]" /> : <ShieldCheck size={120} className="text-emerald-500 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]" />}
             </motion.div>
             
-            <h2 className="text-4xl font-black italic mb-4 uppercase">
-              {status === 'lost' ? 'Signal Interrompu' : 'Scan Complété'}
+            <h2 className="text-4xl font-black italic mb-4 uppercase tracking-tighter">
+              {status === 'lost' ? 'DÉCRYPTAGE_ÉCHOUÉ' : 'SCAN_TERMINÉ'}
             </h2>
             
-            <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-10 border border-white/10 backdrop-blur-md">
-                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.3em] font-bold italic text-center">VALEUR RÉCUPÉRÉE</p>
-                <p className="text-6xl font-black tracking-tighter italic text-center">
+            <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-10 border border-white/10 backdrop-blur-md relative overflow-hidden">
+                <div className={`absolute top-0 left-0 w-full h-1 ${status === 'lost' ? 'bg-rose-500' : 'bg-emerald-500'} opacity-30`} />
+                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.4em] font-bold italic">JETONS_RÉCUPÉRÉS</p>
+                <p className="text-6xl font-black tracking-tighter italic">
                     {status === 'lost' ? '0' : Math.floor(betCP * multiplier)} 
-                    <span className="text-sm text-emerald-500 ml-2">CP</span>
+                    <span className="text-sm text-emerald-500 ml-2 font-black">CP</span>
                 </p>
             </div>
 
-            <button onClick={() => setStatus('idle')} className="w-full max-w-xs py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-xl active:scale-95 transition-all shadow-2xl">
-              RETOUR AU SCAN
+            <button onClick={() => setStatus('idle')} className="w-full max-w-xs py-6 bg-emerald-600 text-white rounded-[2.5rem] font-black text-xl active:scale-95 transition-all shadow-xl">
+              NOUVELLE TENTATIVE
             </button>
           </motion.div>
         )}
@@ -330,3 +337,4 @@ export default function BiometricHack() {
     </Suspense>
   );
 }
+
