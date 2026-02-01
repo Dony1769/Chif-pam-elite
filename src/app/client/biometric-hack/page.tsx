@@ -95,10 +95,12 @@ function BiometricGameContent() {
     if (!profile) return;
     setLoading(true);
     try {
-      // 1. Appel du RPC avec les nouveaux paramètres matchant ta fonction SQL
+      const miseEntiere = Math.floor(betCP);
+
+      // 1. Déduction des CP via RPC
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
-          p_mise_cp: Math.floor(betCP), // Forcer l'entier pour BIGINT
+          p_mise_cp: miseEntiere,
           p_gain_cp: 0,
           p_jeu_nom: 'Biometric Hack'
       });
@@ -106,11 +108,13 @@ function BiometricGameContent() {
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Création de la ligne de log du jeu
+      // 2. Insertion en base avec les noms de colonnes exacts (bet_amount)
       const { data: game, error: gameErr } = await supabase.from('biometric_games').insert([{
           user_id: profile.id,
-          mise_cp: Math.floor(betCP),
-          is_active: true
+          bet_amount: miseEntiere, // Correction ici
+          multiplier: 1.0,
+          is_active: true,
+          status: 'pending'
       }]).select().single();
       
       if (gameErr) throw gameErr;
@@ -154,9 +158,13 @@ function BiometricGameContent() {
     setStatus('lost');
     playSound(110, 0.5, 'sawtooth');
     if (gameId) {
-        await supabase.from('biometric_games').update({ is_active: false, gain_cp: 0 }).eq('id', gameId);
+        await supabase.from('biometric_games').update({ 
+            is_active: false, 
+            payout: 0,
+            status: 'lost' 
+        }).eq('id', gameId);
     }
-    init(); // Refresh le solde CP en haut
+    init(); 
   };
 
   const cashout = async () => {
@@ -164,7 +172,7 @@ function BiometricGameContent() {
     setLoading(true);
     const gainCalculé = Math.floor(betCP * multiplier);
     try {
-      // 1. On crédite via la nouvelle fonction (p_mise_cp à 0)
+      // 1. Crédit des gains CP via RPC
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: 0,
@@ -175,10 +183,12 @@ function BiometricGameContent() {
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Update de la table du jeu
+      // 2. Update table avec les noms de colonnes exacts
       await supabase.from('biometric_games').update({ 
         is_active: false, 
-        gain_cp: gainCalculé 
+        payout: gainCalculé,
+        multiplier: multiplier,
+        status: 'won'
       }).eq('id', gameId);
 
       setStatus('won');
@@ -208,7 +218,7 @@ function BiometricGameContent() {
           <div className="flex flex-col items-center justify-center p-10 bg-white/5 rounded-[3rem] border border-white/5">
             <Construction size={50} className="text-amber-500 animate-pulse" />
             <h2 className="text-2xl text-amber-500 mt-4">MAINTENANCE</h2>
-            <p className="text-slate-500 text-[8px] text-center mt-2 italic uppercase tracking-widest leading-loose">{maintenanceMsg}</p>
+            <p className="text-slate-500 text-[8px] text-center mt-2 italic uppercase tracking-widest">{maintenanceMsg}</p>
           </div>
         ) : status === 'idle' || status === 'loading' ? (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-xs bg-slate-900/40 border border-white/10 p-10 rounded-[3.5rem] text-center backdrop-blur-md">
@@ -222,7 +232,7 @@ function BiometricGameContent() {
                 </div>
                 
                 <div className="bg-black/60 p-6 rounded-3xl border border-white/5 mb-8">
-                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic">ALLOCATION CP</p>
+                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic text-center">ALLOCATION CP</p>
                     <input type="number" value={betCP} onChange={e => setBetCP(Number(e.target.value))} className="bg-transparent text-5xl font-black text-center w-full outline-none text-white tracking-tighter" />
                 </div>
 
@@ -296,8 +306,8 @@ function BiometricGameContent() {
             </h2>
             
             <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-10 border border-white/10 backdrop-blur-md">
-                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.3em] font-bold italic">VALEUR RÉCUPÉRÉE</p>
-                <p className="text-6xl font-black tracking-tighter italic">
+                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.3em] font-bold italic text-center">VALEUR RÉCUPÉRÉE</p>
+                <p className="text-6xl font-black tracking-tighter italic text-center">
                     {status === 'lost' ? '0' : Math.floor(betCP * multiplier)} 
                     <span className="text-sm text-emerald-500 ml-2">CP</span>
                 </p>
