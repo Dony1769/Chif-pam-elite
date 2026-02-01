@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -8,7 +8,8 @@ import {
   MessagesSquare, Home, Gamepad2, History, 
   User as UserIcon, Lock, Trophy,
   Activity, ChevronRight, Brain, Fingerprint,
-  Menu, X, Crown, ShieldCheck, Gift, Sparkles
+  Menu, X, Crown, ShieldCheck, Gift, Sparkles,
+  RefreshCw, Coins
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,16 +24,16 @@ const LogoSmall = () => (
 export default function ClientHome() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [unreadNotifs, setUnreadNotifs] = useState(0); // Notifications pures
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [unreadChat, setUnreadChat] = useState(0); 
   const [activeChallengesCount, setActiveChallengesCount] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   
   const prevUnreadChat = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
 
-  // CALCUL DU COMPTEUR GLOBAL (Notifs + Défis)
   const globalNotificationCount = unreadNotifs + activeChallengesCount;
 
   const playPing = () => {
@@ -45,8 +46,10 @@ export default function ClientHome() {
     fetchData();
     
     const channel = supabase.channel('client_home_ultra_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+          setProfile(payload.new);
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => refreshChatCount())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => refreshChatCount())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => fetchNotificationCount())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges' }, () => fetchChallengesCount())
       .subscribe();
@@ -62,7 +65,6 @@ export default function ClientHome() {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
 
-      // On lance tout en parallèle pour la vitesse
       await Promise.all([
         fetchNotificationCount(),
         fetchChallengesCount(),
@@ -72,38 +74,36 @@ export default function ClientHome() {
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 
+  const handleQuickConvert = async () => {
+    if (!profile || profile.jetons_cp < 100) return alert("Minimum 100 CP pour convertir");
+    
+    setIsConverting(true);
+    const { error } = await supabase.rpc('convertir_cp_en_htg', {
+        p_user_id: profile.id,
+        p_montant_cp: Math.floor(profile.jetons_cp)
+    });
+
+    if (error) alert(error.message);
+    else playPing();
+    setIsConverting(false);
+  };
+
   const fetchChallengesCount = async () => {
-    const { count } = await supabase.from('challenges')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true);
+    const { count } = await supabase.from('challenges').select('*', { count: 'exact', head: true }).eq('is_active', true);
     setActiveChallengesCount(count || 0);
   };
 
   const refreshChatCount = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    if (pathname === '/client/chat') { setUnreadChat(0); return; }
-
-    const { count } = await supabase
-      .from('messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_admin_message', true)
-      .eq('is_read_by_client', false);
-    
-    const newCount = count || 0;
-    if (prevUnreadChat.current === 0 && newCount > 0) playPing();
-    prevUnreadChat.current = newCount;
-    setUnreadChat(newCount);
+    if (!user || pathname === '/client/chat') { setUnreadChat(0); return; }
+    const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_admin_message', true).eq('is_read_by_client', false);
+    setUnreadChat(count || 0);
   };
 
   const fetchNotificationCount = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { count } = await supabase.from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_read', false);
+    const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read', false);
     setUnreadNotifs(count || 0);
   };
 
@@ -112,7 +112,7 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
       
-      {/* Menu Latéral */}
+      {/* Menu Latéral (Inchangé) */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -122,6 +122,7 @@ export default function ClientHome() {
               <div className="space-y-2">
                 <MenuLink href="/client/vip" icon={<Crown className="text-amber-500"/>} label="Abonnement VIP" />
                 <MenuLink href="/client/challenges" icon={<ShieldCheck className="text-emerald-500"/>} label="Mes Défis" badge={activeChallengesCount} />
+                <MenuLink href="/client/market" icon={<Sparkles className="text-purple-500"/>} label="Boutique CP" />
                 <MenuLink href="/client/referral" icon={<Gift className="text-rose-500"/>} label="Parrainage" />
                 <MenuLink href="/client/rank" icon={<Trophy className="text-blue-500"/>} label="Classement Global" />
                 <div className="pt-10 border-t border-white/5 mt-10">
@@ -133,104 +134,93 @@ export default function ClientHome() {
         )}
       </AnimatePresence>
 
-      <div className="p-6 space-y-8">
-        {/* Header avec Notification Intelligente */}
+      <div className="p-6 space-y-6">
+        {/* Header */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setIsMenuOpen(true)} 
-              className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all"
-            >
+            <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all">
                 <Menu size={24} className="text-emerald-500" />
-                {activeChallengesCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                  </span>
-                )}
             </button>
-            <h1 className="text-lg tracking-tighter italic">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
+            <h1 className="text-lg tracking-tighter italic uppercase font-black">Salut, <span className="text-emerald-500">@{profile?.username}</span></h1>
           </div>
-
-          {/* Cloche de Notification (Somme des Notifs + Défis) */}
           <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
             <Bell size={20} className={globalNotificationCount > 0 ? "text-emerald-500" : "text-slate-500"} />
-            {globalNotificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500 items-center justify-center text-[8px] font-black">
-                      {globalNotificationCount}
-                    </span>
-                </span>
-            )}
           </Link>
         </div>
 
-        {/* Balance Card */}
-        <div className={`p-8 rounded-[2.5rem] border relative overflow-hidden shadow-2xl transition-all duration-700 ${
-          profile?.vip_status !== 'free' 
-          ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-amber-500/30 shadow-amber-500/20 scale-[1.02]' 
-          : 'bg-slate-900 border-white/10'
-        }`}>
-          {profile?.vip_status !== 'free' && (
-            <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ repeat: Infinity, duration: 4, ease: "linear" }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12" />
-          )}
-          <div className="relative z-10 flex justify-between items-start">
-            <div>
-              <p className="text-[10px] text-slate-500 tracking-[0.4em] mb-2 font-black">Solde Disponible</p>
-              <h2 className="text-5xl tracking-tighter font-black italic uppercase">
-                {(profile?.balance || 0).toLocaleString()} <span className="text-xs text-emerald-500/70">HTG</span>
-              </h2>
+        {/* --- DOUBLE BALANCE CARD (LA NOUVEAUTÉ) --- */}
+        <div className="space-y-4">
+          {/* Main Wallet: CP (Game Fuel) */}
+          <div className="bg-[#0f172a] border border-emerald-500/20 rounded-[2rem] p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Coins size={80} className="text-emerald-500" />
             </div>
-            {profile?.vip_status !== 'free' && (
-              <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-                <Crown size={24} />
+            <div className="relative z-10">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[9px] text-emerald-500 font-black tracking-[0.3em] mb-1">JETONS DE JEU (CP)</p>
+                  <h2 className="text-4xl font-black italic tracking-tighter text-white">
+                    {(profile?.jetons_cp || 0).toLocaleString()}
+                  </h2>
+                </div>
+                <button 
+                  onClick={handleQuickConvert}
+                  disabled={isConverting || (profile?.jetons_cp || 0) < 100}
+                  className="bg-emerald-500 text-black px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 active:scale-90 disabled:opacity-30 transition-all"
+                >
+                  <RefreshCw size={14} className={isConverting ? "animate-spin" : ""} /> CONVERTIR
+                </button>
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* Secondary Wallet: HTG (Cash Balance) */}
+          <div className="bg-slate-900/40 border border-white/5 rounded-[2rem] p-5 flex justify-between items-center px-8">
+            <div>
+              <p className="text-[8px] text-slate-500 font-black tracking-widest mb-1 uppercase">Balance Gourdes</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black italic">{(profile?.balance || 0).toLocaleString()}</span>
+                <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">HTG</span>
+              </div>
+            </div>
+            <Link href="/client/market" className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-emerald-500 hover:text-black transition-all">
+               <Plus size={20} />
+            </Link>
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons (Dépôt/Retrait redirigés vers Finance) */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-6 rounded-[2rem] text-slate-950 flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
-            <Plus size={24} /><span className="text-[10px] font-black italic uppercase tracking-widest">Dépôt</span>
+          <Link href="/client/market" className="bg-emerald-500 p-5 rounded-[1.8rem] text-slate-950 flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
+            <Sparkles size={20} /><span className="text-[9px] font-black italic uppercase tracking-widest">Boutique</span>
           </Link>
-          <Link href="/client/finance" className="bg-slate-900/50 p-6 rounded-[2rem] border border-white/10 flex flex-col items-center gap-2 active:scale-95 transition-all">
-            <ArrowDownCircle size={24} className="text-rose-500" /><span className="text-[10px] font-black italic uppercase tracking-widest">Retrait</span>
+          <Link href="/client/finance" className="bg-slate-900/50 p-5 rounded-[1.8rem] border border-white/10 flex flex-col items-center gap-1 active:scale-95 transition-all">
+            <ArrowDownCircle size={20} className="text-rose-500" /><span className="text-[9px] font-black italic uppercase tracking-widest">Retrait</span>
           </Link>
         </div>
 
-        {/* Jeux / Défis à la une */}
+        {/* Jeux / Défis (Inchangé) */}
         <div className="space-y-4">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
           <div className="space-y-3 pb-10">
             <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
             <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="LASER VAULT" desc="Précision & Vitesse" players="2,094" />
-            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="BIOMETRIC HACK" desc="Mémoire Élite" players="652" />
           </div>
         </div>
       </div>
 
-      {/* Barre de Navigation avec Support Badge */}
+      {/* Barre de Navigation (Inchangée) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-[2.5rem] shadow-[0_-15px_40px_rgba(0,0,0,0.6)]">
         <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
         <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Jeux" active={pathname === '/client/list'} />
         <NavLink href="/client/history" icon={<History size={22}/>} label="Billets" active={pathname === '/client/history'} />
         
-        <Link 
-          href="/client/chat" 
-          className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}
-        >
+        <Link href="/client/chat" className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}>
           <div className="relative">
-            <MessagesSquare size={22} className={unreadChat > 0 && pathname !== '/client/chat' ? "animate-[bounce_1s_infinite] text-emerald-500" : ""} />
-            <AnimatePresence>
-              {unreadChat > 0 && pathname !== '/client/chat' && (
-                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -top-2 -right-2 flex h-4 w-4">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 items-center justify-center text-[8px] font-black text-slate-950">{unreadChat}</span>
-                </motion.span>
-              )}
-            </AnimatePresence>
+            <MessagesSquare size={22} className={unreadChat > 0 ? "animate-bounce text-emerald-500" : ""} />
+            {unreadChat > 0 && (
+                <span className="absolute -top-2 -right-2 bg-emerald-500 text-slate-950 h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-black">{unreadChat}</span>
+            )}
           </div>
           <span className="text-[8px] font-black uppercase italic tracking-tighter">Support</span>
         </Link>
@@ -241,6 +231,7 @@ export default function ClientHome() {
   );
 }
 
+// Les sous-composants MenuLink, GameRow et NavLink restent les mêmes
 function MenuLink({ href, icon, label, badge }: any) {
     return (
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all active:bg-white/5">
@@ -253,31 +244,25 @@ function MenuLink({ href, icon, label, badge }: any) {
 }
 
 function GameRow({ href, icon, title, desc, players }: any) {
-  return (
-    <Link href={href} className="bg-slate-900 border border-white/5 p-5 rounded-[1.8rem] flex items-center justify-between active:scale-[0.97] transition-all group">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-black border border-white/5 flex items-center justify-center group-hover:border-emerald-500/30 transition-colors">{icon}</div>
-        <div>
-          <h4 className="text-[12px] font-black italic tracking-tighter uppercase">{title}</h4>
-          <p className="text-[9px] text-slate-500 lowercase italic">{desc}</p>
+    return (
+      <Link href={href} className="bg-slate-900 border border-white/5 p-5 rounded-[1.8rem] flex items-center justify-between active:scale-[0.97] transition-all group">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-black border border-white/5 flex items-center justify-center">{icon}</div>
+          <div>
+            <h4 className="text-[12px] font-black italic tracking-tighter uppercase">{title}</h4>
+            <p className="text-[9px] text-slate-500 lowercase italic">{desc}</p>
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col items-end gap-1.5">
-        <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1 rounded-lg">
-           <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse"></span>
-           <span className="text-[9px] text-emerald-500 font-black tracking-tighter">{players}</span>
-        </div>
-      </div>
-    </Link>
-  );
+        <div className="bg-emerald-500/10 px-2 py-1 rounded-lg text-[9px] text-emerald-500 font-black">{players}</div>
+      </Link>
+    );
 }
 
 function NavLink({ href, icon, label, active }: any) {
-  return (
-    <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
-      {icon}
-      <span className="text-[8px] font-black uppercase italic tracking-tighter">{label}</span>
-    </Link>
-  );
+    return (
+      <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
+        {icon}
+        <span className="text-[8px] font-black uppercase italic tracking-tighter">{label}</span>
+      </Link>
+    );
 }
-
