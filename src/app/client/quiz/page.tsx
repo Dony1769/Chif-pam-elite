@@ -1,8 +1,8 @@
 "use client";
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Zap, Coins } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Coins } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const SETTINGS = {
   facile: { time: 10, step: 0.15 },
@@ -24,8 +24,8 @@ const CATEGORIES = [
 function QuizGameContent() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
-  const [betCP, setBetCP] = useState(100); // Mise par défaut en CP
-  const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
+  const [betCP, setBetCP] = useState(100);
+  const [difficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [category, setCategory] = useState(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState("Maintenance...");
@@ -42,18 +42,18 @@ function QuizGameContent() {
   
   const timerRef = useRef<any>(null);
 
-  useEffect(() => {
-    init();
-  }, []);
-
-  const init = async () => {
+  const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
     }
     checkMaintenance();
-  };
+  }, []);
+
+  useEffect(() => {
+    init();
+  }, [init]);
 
   const checkMaintenance = async () => {
     try {
@@ -74,22 +74,25 @@ function QuizGameContent() {
   };
 
   const start = async () => {
-    if (isProcessing) return;
+    if (isProcessing || !profile) return;
     setIsProcessing(true);
     setStatus('loading');
 
     try {
-      // 1. Appel RPC pour retirer les jetons CP
+      const roundedMise = Math.floor(betCP);
+
+      // 1. Débit des CP via RPC
       const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
-          p_mise_cp: betCP,
+          p_mise_cp: roundedMise,
           p_gain_cp: 0,
-          p_jeu_nom: 'Quiz'
+          p_jeu_nom: 'Quiz Elite'
       });
 
-      if (payError || !result.success) throw new Error(result?.message || "Erreur de paiement CP");
+      if (payError) throw new Error(payError.message);
+      if (!result.success) throw new Error(result.message);
 
-      // 2. Récupération des questions (API Externe)
+      // 2. Récupération des questions
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
       const processed = await Promise.all(raw.results.map(async (q: any) => {
@@ -100,15 +103,17 @@ function QuizGameContent() {
         return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
       }));
 
-      // 3. Enregistrement en base de données
-      const { data: game } = await supabase.from('quiz_games').insert([{
+      // 3. Enregistrement en base (SANS bet_amount)
+      const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
-        mise_cp: betCP,
+        mise_cp: roundedMise,
         difficulty,
         questions_data: processed,
         is_active: true
       }]).select().single();
       
+      if (insertError) throw insertError;
+
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
@@ -144,32 +149,35 @@ function QuizGameContent() {
   };
 
   const finalizeGame = async (isWin: boolean) => {
+    if (!gameId) return;
     setIsProcessing(true);
     const gainFinal = isWin ? Math.floor(betCP * multiplier) : 0;
     
     try {
-        // Enregistrement du gain final en CP
-        await supabase.rpc('jouer_partie_cp', {
+        // Crédit des gains CP via RPC
+        const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
             p_user_id: profile.id,
             p_mise_cp: 0,
             p_gain_cp: gainFinal,
-            p_jeu_nom: 'Quiz Win'
+            p_jeu_nom: isWin ? 'Quiz Victory' : 'Quiz Defeat'
         });
 
+        if (rpcError) throw new Error(rpcError.message);
+
+        // Update de la table quiz_games
         await supabase.from('quiz_games').update({ 
             is_active: false, 
             gain_cp: gainFinal,
-            is_won: isWin,
-            win_amount: 0 // On met 0 en HTG car on joue en CP
+            is_won: isWin
         }).eq('id', gameId);
 
         setStatus(isWin ? 'ended' : 'lost');
-    } catch (e) {
-        console.error("Fin de jeu erreur:", e);
+    } catch (e: any) {
+        console.error("Erreur finalisation:", e.message);
     } finally {
         setIsProcessing(false);
         setShowCorrection(false);
-        init(); // Rafraîchir le profil (solde CP)
+        init(); 
     }
   };
 
@@ -184,14 +192,13 @@ function QuizGameContent() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase flex flex-col items-center select-none">
-      {/* HEADER AVEC JETONS CP VISIBLES */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90">
           <ChevronLeft/>
         </button>
-        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-lg">
             <Coins size={16} className="text-emerald-500" />
-            <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp || 0} CP</span>
+            <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
         </div>
       </div>
 
@@ -216,45 +223,46 @@ function QuizGameContent() {
                   ))}
                 </div>
 
-                <div className="bg-[#0a0a0f] p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-2xl">
-                    <div className="flex justify-between items-center">
-                        <span className="text-emerald-500 text-[10px] italic font-bold">MISE EN JETONS CP</span>
-                        <div className="flex gap-2">
-                            {[100, 500, 1000].map(val => (
-                                <button key={val} onClick={() => setBetCP(val)} className={`px-3 py-1 rounded-lg text-[10px] ${betCP === val ? 'bg-emerald-500 text-black' : 'bg-white/10'}`}>{val}</button>
-                            ))}
-                        </div>
+                <div className="bg-[#0a0a0f] p-8 rounded-[2.5rem] border border-white/5 space-y-4 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><Brain size={80}/></div>
+                    <div className="flex justify-between items-center relative">
+                        <span className="text-emerald-500 text-[10px] italic font-bold">VALEUR DE LA SESSION (CP)</span>
                     </div>
-                    <input type="number" value={betCP} onChange={e => setBetCP(Number(e.target.value))} className="bg-transparent text-center outline-none w-full text-4xl font-black text-white italic"/>
+                    <input 
+                      type="number" 
+                      value={betCP} 
+                      onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
+                      className="bg-transparent text-left outline-none w-full text-5xl font-black text-white italic tracking-tighter"
+                    />
                 </div>
                 
-                <button onClick={start} disabled={isProcessing} className="w-full py-7 rounded-[2.5rem] text-xl bg-emerald-600 text-white font-black italic shadow-xl active:scale-95">
-                  LANCER LA SESSION CP
+                <button onClick={start} disabled={isProcessing} className="w-full py-7 rounded-[2.5rem] text-xl bg-emerald-600 text-white font-black italic shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all">
+                  INITIALISER LE QUIZ
                 </button>
               </>
             )}
           </div>
         ) : status === 'playing' ? (
-          <div className="space-y-6 animate-in zoom-in duration-300">
+          <div className="space-y-6">
             <div className="flex justify-between items-end px-2">
                 <div>
-                    <p className="text-[10px] text-slate-500 italic">MULTIPLICATEUR</p>
+                    <p className="text-[10px] text-slate-500 italic">SCORE_MULT</p>
                     <p className="text-3xl text-emerald-500 font-black italic">x{multiplier.toFixed(2)}</p>
                 </div>
-                {multiplier > 1.3 && (
-                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 animate-bounce">
-                        <Wallet size={14}/> CASHOUT {Math.floor(betCP * multiplier)} CP
+                {multiplier > 1.2 && (
+                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20">
+                        <Wallet size={14}/> ENCAISSER {Math.floor(betCP * multiplier)} CP
                     </button>
                 )}
             </div>
 
-            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
               <div className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
 
-            <div className="bg-white text-black p-10 rounded-[3.5rem] text-center min-h-[200px] flex flex-col items-center justify-center shadow-2xl relative">
-              <span className="absolute top-4 text-[9px] text-slate-400 font-black uppercase italic">QUESTION {currentIndex + 1} / 5</span>
-              <p className="text-xl font-black italic tracking-tighter uppercase">{questions[currentIndex]?.question}</p>
+            <div className="bg-white text-black p-10 rounded-[3rem] text-center min-h-[220px] flex flex-col items-center justify-center shadow-2xl relative">
+              <span className="absolute top-4 text-[8px] text-slate-400 font-bold italic">SÉQUENCE {currentIndex + 1} / 5</span>
+              <p className="text-lg font-black italic tracking-tight uppercase leading-tight">{questions[currentIndex]?.question}</p>
             </div>
 
             <div className="grid gap-3">
@@ -263,12 +271,12 @@ function QuizGameContent() {
                 const isSelected = a === selectedAnswer;
                 let style = "bg-white/5 border-white/5 text-white";
                 if (showCorrection) {
-                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.03] z-10 shadow-lg";
-                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-60";
+                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] shadow-lg";
+                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-50";
                   else style = "opacity-20";
                 }
                 return (
-                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection} className={`p-6 border rounded-[1.8rem] text-left transition-all font-black text-xs italic ${style}`}>
+                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection} className={`p-5 border rounded-2xl text-left transition-all font-black text-[11px] italic ${style}`}>
                     {a}
                   </button>
                 );
@@ -276,23 +284,23 @@ function QuizGameContent() {
             </div>
           </div>
         ) : (
-          <div className="text-center py-12 space-y-8 animate-in fade-in zoom-in duration-500">
-            <div className={`mx-auto w-28 h-28 rounded-full flex items-center justify-center border-2 ${status === 'lost' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                {status === 'lost' ? <XCircle size={70} className="text-rose-500"/> : <Trophy size={70} className="text-emerald-500"/>}
+          <div className="text-center py-12 space-y-8">
+            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center border-2 ${status === 'lost' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                {status === 'lost' ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
             </div>
 
-            <h2 className={`text-6xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "PERDU" : "GAGNÉ"}</h2>
+            <h2 className={`text-5xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "FAILED" : "SUCCESS"}</h2>
             
-            <div className="bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/10 backdrop-blur-xl">
-                <p className="text-[11px] text-slate-500 mb-4 font-black italic">RÉSULTAT DE SESSION</p>
-                <p className="text-6xl font-black text-white italic">
+            <div className="bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/10 backdrop-blur-xl relative">
+                <p className="text-[10px] text-zinc-500 mb-3 font-bold italic tracking-widest">JETONS RÉCUPÉRÉS</p>
+                <p className="text-6xl font-black text-white italic tracking-tighter">
                     {status === 'lost' ? 0 : Math.floor(betCP * multiplier)} 
-                    <span className="text-lg text-emerald-500 ml-3">CP</span>
+                    <span className="text-lg text-emerald-500 ml-2">CP</span>
                 </p>
             </div>
 
-            <button onClick={() => setStatus('idle')} className="w-full py-7 bg-white text-black rounded-[2.5rem] font-black text-2xl italic shadow-2xl">
-              REJOUER
+            <button onClick={() => setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl italic shadow-2xl active:scale-95 transition-all">
+              NOUVELLE SESSION
             </button>
           </div>
         )}
@@ -308,4 +316,3 @@ export default function QuizElite() {
     </Suspense>
   );
 }
-
