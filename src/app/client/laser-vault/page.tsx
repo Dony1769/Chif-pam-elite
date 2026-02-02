@@ -45,7 +45,9 @@ function LaserVaultGame() {
   const [profile, setProfile] = useState<any>(null);
   const [maintenance, setMaintenance] = useState<{ active: boolean; msg: string } | null>(null);
   const [loadingCheck, setLoadingCheck] = useState(true);
-  const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won' | 'maintenance'>('loading');
+  
+  // CORRECTION ICI : Ajout de 'loading' dans le type autorisé de l'état
+  const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won' | 'maintenance' | 'loading'>('loading');
   
   const [betCP, setBetCP] = useState(100);
   const [laserY, setLaserY] = useState(0);
@@ -101,7 +103,6 @@ function LaserVaultGame() {
     try {
       const roundedMise = Math.floor(betCP);
 
-      // 1. Débit des Jetons CP via RPC
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: roundedMise,
@@ -112,7 +113,6 @@ function LaserVaultGame() {
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Insertion Log Jeu (Sans bet_amount)
       const { data: game, error: gameErr } = await supabase.from('vault_games').insert([{
           user_id: profile.id,
           mise_cp: roundedMise,
@@ -174,15 +174,13 @@ function LaserVaultGame() {
     const gainFinal = isManualCashout ? Math.floor(betCP * multiplier) : 0;
     
     try {
-      // Crédit ou Log de perte via RPC
-      const { data: result } = await supabase.rpc('jouer_partie_cp', {
+      await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: 0,
           p_gain_cp: gainFinal,
           p_jeu_nom: isManualCashout ? 'Vault Cashout' : 'Vault Lost'
       });
 
-      // Update de la table de jeu
       await supabase.from('vault_games').update({ 
           is_active: false, 
           gain_cp: gainFinal
@@ -197,7 +195,7 @@ function LaserVaultGame() {
     }
   };
 
-  if (loadingCheck) return <div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
+  if (loadingCheck || status === 'loading') return <div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
 
   return (
     <div className="fixed inset-0 bg-[#020617] text-white font-black italic uppercase overflow-hidden select-none flex flex-col font-sans">
@@ -247,7 +245,6 @@ function LaserVaultGame() {
           </div>
         ) : (
           <div className="w-full max-w-sm flex flex-col h-full animate-in fade-in duration-700">
-            {/* LASER AREA */}
             <div className="relative flex-1 max-h-[40vh] bg-black rounded-[2.5rem] border-2 border-white/10 overflow-hidden mb-4 shrink-0 shadow-inner">
               <motion.div style={{ top: `${laserY}%` }} className="absolute left-0 right-0 h-1 bg-rose-600 shadow-[0_0_40px_#f43f5e] z-30" />
 
@@ -279,7 +276,6 @@ function LaserVaultGame() {
               </div>
             </div>
 
-            {/* KEYPAD */}
             <div className="grid grid-cols-3 gap-2 pb-4 shrink-0">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, "-", 0].map(n => (
                 <motion.button 
@@ -305,7 +301,6 @@ function LaserVaultGame() {
         )}
       </div>
 
-      {/* RESULT MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
