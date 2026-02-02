@@ -53,7 +53,7 @@ function LaserVaultGame() {
   const [laserY, setLaserY] = useState(0);
   const [problem, setProblem] = useState({ q: "", a: 0 });
   const [input, setInput] = useState("");
-  const [multiplier, setMultiplier] = useState(0.3);
+  const [multiplier, setMultiplier] = useState(1);
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsSolved, setQuestionsSolved] = useState(0);
@@ -122,7 +122,7 @@ function LaserVaultGame() {
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(0.3); 
+      setMultiplier(1); 
       setLaserY(0); 
       setQuestionsSolved(0); 
       setBaseSpeed(1); 
@@ -156,7 +156,7 @@ function LaserVaultGame() {
     
     if (parseInt(newVal) === problem.a) {
       setQuestionsSolved(q => q + 1);
-      setMultiplier(prev => parseFloat((prev + 0.2).toFixed(1)));
+      setMultiplier(prev => parseFloat((prev + 0.05).toFixed(1)));
       setLaserY(0); 
       setInput(""); 
       setErrorPenalty(1.0); 
