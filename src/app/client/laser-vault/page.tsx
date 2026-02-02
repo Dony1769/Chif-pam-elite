@@ -122,7 +122,7 @@ function LaserVaultGame() {
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(1.0); 
+      setMultiplier(0.3); 
       setLaserY(0); 
       setQuestionsSolved(0); 
       setBaseSpeed(1); 
@@ -156,11 +156,11 @@ function LaserVaultGame() {
     
     if (parseInt(newVal) === problem.a) {
       setQuestionsSolved(q => q + 1);
-      setMultiplier(prev => parseFloat((prev + 0.1).toFixed(1)));
+      setMultiplier(prev => parseFloat((prev + 0.2).toFixed(1)));
       setLaserY(0); 
       setInput(""); 
       setErrorPenalty(1.0); 
-      if ((questionsSolved + 1) % 3 === 0) { setBaseSpeed(s => s + 1.2); }
+      if ((questionsSolved + 1) % 3 === 0) { setBaseSpeed(s => s + 0.7); }
       generateProblem(multiplier + 0.1);
     } else if (newVal.length >= problem.a.toString().length) {
       setErrorPenalty(p => p + 1.2); 
