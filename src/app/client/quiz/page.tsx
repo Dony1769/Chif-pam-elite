@@ -33,7 +33,7 @@ function QuizGameContent() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [multiplier, setMultiplier] = useState(1.0);
+  const [multiplier, setMultiplier] = useState(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
   
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -117,7 +117,7 @@ function QuizGameContent() {
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
-      setMultiplier(1.0);
+      setMultiplier(0.5);
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
     } catch (e: any) {
