@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Shield, Flame, BellOff } from 'lucide-react';
+import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Shield, Flame, BellOff, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
@@ -19,13 +19,10 @@ export default function ClientNotifications() {
   const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
-  // --- MOTEUR DE BANNIÈRE SYSTÈME (TYPE-SAFE) ---
   const sendNativePush = async (title: string, body: string) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-
     try {
       const swReg = await navigator.serviceWorker.ready;
-      // On utilise 'any' pour éviter les erreurs TypeScript sur 'vibrate' ou 'badge'
       const nOptions: any = {
         body: body,
         icon: "/icons/icon-192.png",
@@ -45,18 +42,15 @@ export default function ClientNotifications() {
     fetchAllData();
     checkPushSubscription();
 
-    // --- LE RADAR QUI DÉCLENCHE LA BANNIÈRE COMME LE BOUTON ---
     const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         const n = payload.new;
         setNotifications(prev => [n, ...prev]);
-        // Déclenche la bannière système immédiatement avec les infos du message
-        sendNativePush(n.title || "CHIF PAM ⚡", n.content);
+        sendNativePush(n.title || "CHIF PAM ⚡", n.message || n.content);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
         const c = payload.new;
         setLiveChallenges(prev => [c, ...prev]);
-        // Déclenche la bannière système pour un défi
         sendNativePush("NOUVEAU DÉFI 🔥", c.title);
       })
       .subscribe();
@@ -97,8 +91,6 @@ export default function ClientNotifications() {
         });
         const { data: { user } } = await supabase.auth.getUser();
         if (user) await supabase.from('push_subscriptions').upsert({ user_id: user.id, subscription: sub.toJSON() });
-        
-        // Ton message de test favori
         sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Vous recevrez vos alertes ici.");
         setPushEnabled(true);
       }
@@ -111,18 +103,27 @@ export default function ClientNotifications() {
     return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
   };
 
-  // --- LOGIQUE FILTRES & UI ---
+  // --- LOGIQUE FILTRES AMÉLIORÉE POUR CP ---
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
       title: `NOUVEAU DÉFI : ${c.title}`,
-      content: `Récompense : ${c.prize_pool} HTG. Bonne chance !`,
+      content: `Récompense : ${c.prize_pool_cp} CP. Bonne chance !`,
       created_at: c.created_at,
       is_read: false,
       is_challenge: true,
-      link: '/client/challenges'
+      link: '/client/arena'
     }));
-    return [...mappedChallenges, ...notifications].sort((a, b) => 
+
+    // Adaptation aux colonnes 'message' ou 'content' de ta table
+    const normalizedNotifs = notifications.map(n => ({
+      ...n,
+      content: n.message || n.content,
+      // Détecte si c'est une victoire via les émojis du nouveau trigger
+      is_victory: n.title?.includes('VIC') || n.title?.includes('🥇') || n.title?.includes('🥈') || n.title?.includes('🥉') || n.message?.includes('CP')
+    }));
+
+    return [...mappedChallenges, ...normalizedNotifs].sort((a, b) => 
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [notifications, liveChallenges]);
@@ -130,17 +131,18 @@ export default function ClientNotifications() {
   const filteredAlerts = useMemo(() => {
     return allAlerts.filter(n => {
       if (activeFilter === 'TOUT') return true;
-      if (activeFilter === 'VICTOIRES') return n.title.includes('VIC') || n.title.includes('GAGNÉ');
-      if (activeFilter === 'DÉFIS') return n.is_challenge || n.title.includes('DÉFI');
-      return !n.is_challenge && !n.title.includes('VIC') && !n.title.includes('DÉFI');
+      if (activeFilter === 'VICTOIRES') return n.is_victory;
+      if (activeFilter === 'DÉFIS') return n.is_challenge;
+      if (activeFilter === 'SYSTÈME') return !n.is_challenge && !n.is_victory;
+      return true;
     });
   }, [allAlerts, activeFilter]);
 
   const counts = useMemo(() => ({
     TOUT: allAlerts.filter(n => !n.is_read).length,
-    VICTOIRES: allAlerts.filter(n => !n.is_read && (n.title.includes('VIC') || n.title.includes('GAGNÉ'))).length,
-    DÉFIS: allAlerts.filter(n => !n.is_read && (n.is_challenge || n.title.includes('DÉFI'))).length,
-    SYSTÈME: allAlerts.filter(n => !n.is_read && (!n.is_challenge && !n.title.includes('VIC') && !n.title.includes('DÉFI'))).length,
+    VICTOIRES: allAlerts.filter(n => !n.is_read && n.is_victory).length,
+    DÉFIS: allAlerts.filter(n => !n.is_read && n.is_challenge).length,
+    SYSTÈME: allAlerts.filter(n => !n.is_read && !n.is_challenge && !n.is_victory).length,
   }), [allAlerts]);
 
   if (loading) return (
@@ -152,10 +154,9 @@ export default function ClientNotifications() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-20">
       
-      {/* HEADER DESIGN */}
       <div className="p-6 sticky top-0 bg-[#020617]/95 backdrop-blur-2xl z-20 border-b border-emerald-500/10 space-y-6">
         <div className="flex items-center justify-between">
-          <button onClick={() => router.back()} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
+          <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
             <ArrowLeft size={20} />
           </button>
           <div className="text-center">
@@ -171,7 +172,6 @@ export default function ClientNotifications() {
           </button>
         </div>
 
-        {/* FILTRES DESIGN */}
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {(['TOUT', 'VICTOIRES', 'DÉFIS', 'SYSTÈME'] as FilterType[]).map((filter) => (
             <button
@@ -192,7 +192,6 @@ export default function ClientNotifications() {
         </div>
       </div>
 
-      {/* LISTE BANGER DESIGN */}
       <div className="p-6 space-y-4">
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
@@ -207,10 +206,12 @@ export default function ClientNotifications() {
                 layout
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer ${
+                className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer transition-all ${
                   n.is_challenge 
-                  ? 'bg-gradient-to-br from-blue-900/20 to-black border-blue-500/50' 
-                  : n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-gradient-to-br from-slate-900 to-black border-emerald-500/30'
+                  ? 'bg-gradient-to-br from-blue-900/30 to-black border-blue-500/50' 
+                  : n.is_victory 
+                  ? 'bg-gradient-to-br from-emerald-900/40 via-black to-black border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                  : n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-slate-900/40 border-white/10'
                 }`}
                 onClick={() => n.link && router.push(n.link)}
               >
@@ -225,19 +226,25 @@ export default function ClientNotifications() {
                 
                 <div className="flex gap-4 items-start">
                   <div className={`p-3 rounded-xl ${
-                    n.is_challenge ? 'bg-blue-500 text-white animate-pulse' :
-                    n.title?.includes('VIC') ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'
+                    n.is_challenge ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' :
+                    n.is_victory ? 'bg-emerald-500 text-black animate-pulse' : 'bg-white/5 text-slate-400'
                   }`}>
-                    {n.is_challenge ? <Flame size={20}/> : n.title?.includes('VIC') ? <Trophy size={20}/> : <Shield size={20}/>}
+                    {n.is_challenge ? <Flame size={20}/> : n.is_victory ? <Trophy size={20}/> : <Shield size={20}/>}
                   </div>
                   <div className="flex-1">
-                    <h3 className={`text-sm tracking-tighter leading-none mb-1 pr-6 ${n.is_challenge ? 'text-blue-400 font-black' : ''}`}>
-                        {n.title}
-                    </h3>
-                    <p className="text-[11px] lowercase not-italic text-slate-400 leading-relaxed">{n.content}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                        <h3 className={`text-sm tracking-tighter leading-none pr-6 ${n.is_challenge ? 'text-blue-400' : n.is_victory ? 'text-emerald-400 font-black' : ''}`}>
+                            {n.title}
+                        </h3>
+                        {n.is_victory && <Coins size={12} className="text-emerald-500" />}
+                    </div>
+                    <p className={`text-[11px] lowercase not-italic leading-relaxed ${n.is_victory ? 'text-white' : 'text-slate-400'}`}>
+                        {n.content}
+                    </p>
                     <div className="flex justify-between items-center mt-3">
                         <p className="text-[7px] text-slate-600 tracking-widest">{new Date(n.created_at).toLocaleTimeString()}</p>
-                        {n.is_challenge && <p className="text-[7px] text-blue-500 tracking-widest animate-pulse">VOIR_DÉFI_MAINTENANT</p>}
+                        {n.is_challenge && <p className="text-[7px] text-blue-500 tracking-widest animate-pulse font-bold">VOIR_DÉFI_MAINTENANT</p>}
+                        {n.is_victory && <p className="text-[7px] text-emerald-500 tracking-widest font-bold">SOLDE_MIS_À_JOUR</p>}
                     </div>
                   </div>
                 </div>
@@ -247,7 +254,6 @@ export default function ClientNotifications() {
         </AnimatePresence>
       </div>
 
-      {/* BOUTON FLOTTANT */}
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
           <button 
             onClick={togglePush}
