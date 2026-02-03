@@ -54,7 +54,7 @@ function LaserVaultGame() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsSolved, setQuestionsSolved] = useState(0);
-  const [baseSpeed, setBaseSpeed] = useState(0.6); // Vitesse initiale plus douce
+  const [baseSpeed, setBaseSpeed] = useState(1); // Vitesse initiale plus douce
   const [errorPenalty, setErrorPenalty] = useState(1.0);
 
   const init = useCallback(async () => {
