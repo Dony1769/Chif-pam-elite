@@ -141,6 +141,7 @@ export default function AdminArena() {
         })}
       </div>
 
+      
       {/* MODAL DE CRÉATION (Inchangé mais nettoyé) */}
       <AnimatePresence>
         {showModal && (
