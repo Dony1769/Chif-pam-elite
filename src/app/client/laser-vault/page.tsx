@@ -340,7 +340,7 @@ function LaserVaultGame() {
                         </p>
                         {challengeId && <p className="text-[8px] text-emerald-500 mt-4 font-bold tracking-widest uppercase">Participation enregistrée ✅</p>}
                     </div>
-                    <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="w-full py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-xl italic shadow-2xl">
+                    <button onClick={() => router.push(challengeId ? '/client/challenges': '/client/home')} className="w-full py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-xl italic shadow-2xl">
                         RETOUR AU HUB
                     </button>
                 </div>
