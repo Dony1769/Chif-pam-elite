@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
-import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet, Target } from 'lucide-react';
 
 // --- AUDIO SYSTEM ---
 const playSound = (freq: number, duration: number, type: OscillatorType = 'sine') => {
@@ -23,11 +23,17 @@ const playSound = (freq: number, duration: number, type: OscillatorType = 'sine'
 
 function BiometricGameContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Paramètres Challenge
+  const challengeId = searchParams.get('challengeId');
+  const challengeFee = searchParams.get('fee');
+
   const [profile, setProfile] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance'>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState("Protocole de sécurité...");
   
-  const [betCP, setBetCP] = useState(100);
+  const [betCP, setBetCP] = useState(challengeFee ? Number(challengeFee) : 100);
   const [multiplier, setMultiplier] = useState(1.0);
   const [gridSize, setGridSize] = useState(3); 
   const [pattern, setPattern] = useState<number[]>([]);
@@ -102,13 +108,29 @@ function BiometricGameContent() {
           p_user_id: profile.id,
           p_mise_cp: roundedMise,
           p_gain_cp: 0,
-          p_jeu_nom: 'Biometric Hack'
+          p_jeu_nom: challengeId ? `Challenge Biometric: ${challengeId}` : 'Biometric Hack'
       });
 
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Insertion Biometric Games (SANS bet_amount)
+      // 2. Initialisation du Challenge (Table challenge_attempts)
+      if (challengeId) {
+        const { data: existing } = await supabase
+          .from('challenge_attempts')
+          .select('*')
+          .eq('challenge_id', challengeId)
+          .eq('user_id', profile.id)
+          .single();
+
+        if (!existing) {
+          await supabase.from('challenge_attempts').insert([
+            { challenge_id: challengeId, user_id: profile.id, score_gained: 0 }
+          ]);
+        }
+      }
+
+      // 3. Insertion Session locale
       const { data: game, error: gameErr } = await supabase.from('biometric_games').insert([{
           user_id: profile.id,
           mise_cp: roundedMise,
@@ -155,6 +177,16 @@ function BiometricGameContent() {
   const handleFailure = async () => {
     setStatus('lost');
     playSound(110, 0.5, 'sawtooth');
+    
+    // Si c'est un challenge, on enregistre quand même les sessions résolues comme score
+    if (challengeId && sessionsSolved > 0) {
+        await supabase.rpc('increment_challenge_score', {
+            p_user_id: profile.id,
+            p_challenge_id: challengeId,
+            p_score: sessionsSolved * 10 // 10 points par scan réussi
+        });
+    }
+
     if (gameId) {
         await supabase.from('biometric_games').update({ 
           is_active: false, 
@@ -167,17 +199,26 @@ function BiometricGameContent() {
   const cashout = async () => {
     if (loading || sessionsSolved < 2 || !gameId) return;
     setLoading(true);
-    const gainCalculé = Math.floor(betCP * multiplier);
+    const gainCalculé = challengeId ? 0 : Math.floor(betCP * multiplier);
+    
     try {
-      const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-          p_user_id: profile.id,
-          p_mise_cp: 0,
-          p_gain_cp: gainCalculé,
-          p_jeu_nom: 'Biometric Success'
-      });
-
-      if (rpcError) throw new Error(rpcError.message);
-      if (!result.success) throw new Error(result.message);
+      // 1. Enregistrement du score si Challenge
+      if (challengeId) {
+        await supabase.rpc('increment_challenge_score', {
+            p_user_id: profile.id,
+            p_challenge_id: challengeId,
+            p_score: sessionsSolved * 15 // Bonus de points pour extraction réussie
+        });
+      } else {
+        // 2. Crédit CP si mode normal
+        const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
+            p_user_id: profile.id,
+            p_mise_cp: 0,
+            p_gain_cp: gainCalculé,
+            p_jeu_nom: 'Biometric Success'
+        });
+        if (rpcError) throw new Error(rpcError.message);
+      }
 
       await supabase.from('biometric_games').update({ 
         is_active: false, 
@@ -187,7 +228,7 @@ function BiometricGameContent() {
       setStatus('won');
       playSound(523, 0.5);
     } catch (e: any) { 
-      alert("Erreur Cashout."); 
+      alert("Erreur Finalisation."); 
     } finally { 
       setLoading(false); 
       init();
@@ -198,7 +239,7 @@ function BiometricGameContent() {
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col font-sans">
       {/* HEADER HUD */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
+        <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
           <ChevronLeft size={20}/>
         </button>
         <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
@@ -220,18 +261,27 @@ function BiometricGameContent() {
                 <Loader2 className="animate-spin mx-auto text-emerald-500" size={50} />
             ) : (
                 <>
+                {challengeId && (
+                    <div className="bg-emerald-500 text-black px-4 py-2 rounded-full mb-6 flex items-center justify-center gap-2 animate-pulse">
+                        <Target size={14} />
+                        <span className="text-[9px] font-black italic">MISSION_DÉCRYPTAGE_ACTIVE</span>
+                    </div>
+                )}
+                
                 <div className="relative inline-block mb-8">
                     <div className="absolute inset-0 bg-emerald-500 blur-[60px] opacity-20" />
                     <Fingerprint className="text-emerald-500 relative" size={70} />
                 </div>
                 
                 <div className="bg-black/60 p-6 rounded-3xl border border-white/5 mb-8 shadow-inner">
-                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic tracking-widest">ALLOCATION_JETONS</p>
+                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic tracking-widest uppercase">
+                        {challengeId ? 'MISE_DE_MISSION' : 'ALLOCATION_JETONS'}
+                    </p>
                     <input 
                       type="number" 
                       value={betCP} 
                       onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                      className="bg-transparent text-5xl font-black text-center w-full outline-none text-white tracking-tighter" 
+                      className={`bg-transparent text-5xl font-black text-center w-full outline-none tracking-tighter ${challengeId ? 'text-emerald-500' : 'text-white'}`} 
                     />
                 </div>
 
@@ -240,7 +290,7 @@ function BiometricGameContent() {
                   disabled={loading} 
                   className="w-full py-6 rounded-[2rem] text-xl font-black bg-emerald-600 text-white shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all disabled:opacity-50"
                 >
-                    {loading ? <Loader2 className="animate-spin mx-auto" /> : "ACCÉDER_SCAN"}
+                    {loading ? <Loader2 className="animate-spin mx-auto" /> : challengeId ? "INITIALISER_RAID" : "ACCÉDER_SCAN"}
                 </button>
                 </>
             )}
@@ -258,8 +308,8 @@ function BiometricGameContent() {
                     <p className="text-2xl font-black text-white">x{multiplier.toFixed(2)}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
-                    <p className="text-[7px] text-zinc-500 italic font-bold">GRID</p>
-                    <p className="text-xl font-black text-white">{gridSize}x{gridSize}</p>
+                    <p className="text-[7px] text-zinc-500 italic font-bold">SOLVED</p>
+                    <p className="text-xl font-black text-white">{sessionsSolved}</p>
                 </div>
             </div>
 
@@ -286,13 +336,13 @@ function BiometricGameContent() {
               ))}
             </div>
 
-            {multiplier > 1.25 && (
+            {sessionsSolved >= 2 && (
                 <button 
                   onClick={cashout}
                   disabled={loading}
                   className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/20"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : <>EXTRAIRE {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
+                  {loading ? <Loader2 className="animate-spin" /> : challengeId ? <>ENREGISTRER_SCORE <Target size={20}/></> : <>EXTRAIRE {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
                 </button>
             )}
           </div>
@@ -307,21 +357,23 @@ function BiometricGameContent() {
                 {status === 'lost' ? <ShieldX size={120} className="text-rose-600 drop-shadow-[0_0_30px_rgba(225,29,72,0.4)]" /> : <ShieldCheck size={120} className="text-emerald-500 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]" />}
             </motion.div>
             
-            <h2 className="text-4xl font-black italic mb-4 uppercase tracking-tighter">
-              {status === 'lost' ? 'DÉCRYPTAGE_ÉCHOUÉ' : 'SCAN_TERMINÉ'}
+            <h2 className="text-4xl font-black italic mb-4 uppercase tracking-tighter leading-none">
+              {status === 'lost' ? 'DÉCRYPTAGE_INTERROMPU' : 'SCAN_SUCCÈS'}
             </h2>
             
             <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-10 border border-white/10 backdrop-blur-md relative overflow-hidden">
                 <div className={`absolute top-0 left-0 w-full h-1 ${status === 'lost' ? 'bg-rose-500' : 'bg-emerald-500'} opacity-30`} />
-                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.4em] font-bold italic">JETONS_RÉCUPÉRÉS</p>
-                <p className="text-6xl font-black tracking-tighter italic">
-                    {status === 'lost' ? '0' : Math.floor(betCP * multiplier)} 
-                    <span className="text-sm text-emerald-500 ml-2 font-black">CP</span>
+                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.4em] font-bold italic">
+                    {challengeId ? 'SCORE_MISSION' : 'JETONS_RÉCUPÉRÉS'}
+                </p>
+                <p className="text-6xl font-black tracking-tighter italic leading-none">
+                    {challengeId ? (status === 'won' ? sessionsSolved * 15 : sessionsSolved * 10) : (status === 'lost' ? '0' : Math.floor(betCP * multiplier))} 
+                    <span className="text-sm text-emerald-500 ml-2 font-black uppercase">{challengeId ? 'pts' : 'CP'}</span>
                 </p>
             </div>
 
-            <button onClick={() => setStatus('idle')} className="w-full max-w-xs py-6 bg-emerald-600 text-white rounded-[2.5rem] font-black text-xl active:scale-95 transition-all shadow-xl">
-              NOUVELLE TENTATIVE
+            <button onClick={() => challengeId ? router.push('/client/arena') : setStatus('idle')} className="w-full max-w-xs py-6 bg-emerald-600 text-white rounded-[2.5rem] font-black text-xl active:scale-95 transition-all shadow-xl">
+              {challengeId ? 'RETOURNER_ARENA' : 'NOUVELLE TENTATIVE'}
             </button>
           </motion.div>
         )}
