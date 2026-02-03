@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect, Suspense, useMemo } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trophy, Timer, ChevronLeft, Loader2, Target, Zap, Medal, RefreshCcw, ArrowRight, Gamepad2, LayoutGrid, Star, TrendingUp, Crown } from 'lucide-react';
+import { Trophy, Timer, ChevronLeft, Loader2, Zap, ArrowRight, LayoutGrid, Star, TrendingUp, Crown, Gamepad2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 function RankContent() {
   const router = useRouter();
@@ -20,7 +20,7 @@ function RankContent() {
   useEffect(() => {
     initData();
 
-    // REALTIME : On écoute les tentatives pour recalculer le classement
+    // REALTIME : On écoute la table 'challenge_attempts' pour recharger la vue
     const channel = supabase
       .channel('arena_rank_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => {
@@ -36,18 +36,16 @@ function RankContent() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Récupérer les défis auxquels l'utilisateur a participé
+    // 1. Récupérer la liste des défis joués par l'utilisateur
+    // On passe par la table attempts pour savoir à quoi j'ai participé
     const { data: attempts } = await supabase
       .from('challenge_attempts')
       .select('challenge_id, challenges(*)')
       .eq('user_id', user.id);
 
-    // Extraction des défis uniques avec typage propre
-    const uniqueChallenges = Array.from(
-        new Map(attempts?.filter(a => a.challenges).map(item => [item.challenge_id, item.challenges])).values()
-    );
-    
-    setMyChallenges(uniqueChallenges);
+    // Dédoublonnage naturel (car un user n'a qu'une ligne par défi désormais, mais on map proprement)
+    const challengesList = attempts?.map((a: any) => a.challenges) || [];
+    setMyChallenges(challengesList);
 
     if (challengeId) {
       await fetchRankingsOnly();
@@ -59,45 +57,23 @@ function RankContent() {
     if (!challengeId) return;
     const { data: { user } } = await supabase.auth.getUser();
     
-    // 1. Récupérer les détails du défi
+    // 1. Infos du défi
     const { data: chall } = await supabase.from('challenges').select('*').eq('id', challengeId).single();
     setActiveChallenge(chall);
 
-    // 2. RÉCUPÉRATION DES SCORES CUMULÉS (LA LOGIQUE 300%)
-    // On récupère toutes les tentatives de ce défi pour faire le cumul
-    const { data: allAttempts } = await supabase
-      .from('challenge_attempts')
-      .select('user_id, score_gained, profiles(username)')
-      .eq('challenge_id', challengeId);
+    // 2. LEADERBOARD (Via la VUE optimisée SQL)
+    // Plus besoin de calcul JS, la vue renvoie déjà le rang et le total_score
+    const { data: board } = await supabase
+      .from('challenge_leaderboards')
+      .select('*')
+      .eq('challenge_id', challengeId)
+      .order('rank', { ascending: true }); // La vue calcule déjà le RANK
 
-    if (allAttempts) {
-      // Regroupement par utilisateur (Cumul)
-      const userMap = new Map();
-      allAttempts.forEach((att: any) => {
-        const userId = att.user_id;
-        const current = userMap.get(userId) || { 
-            username: att.profiles?.username || 'ANONYME', 
-            total_score: 0, 
-            attempts_count: 0 
-        };
-        userMap.set(userId, {
-          ...current,
-          total_score: current.total_score + (att.score_gained || 0),
-          attempts_count: current.attempts_count + 1,
-          user_id: userId
-        });
-      });
-
-      // Tri par score décroissant et assignation du rang
-      const sortedLeaderboard = Array.from(userMap.values())
-        .sort((a, b) => b.total_score - a.total_score)
-        .map((player, index) => ({ ...player, rank: index + 1 }));
-
-      setLeaderboard(sortedLeaderboard);
-      
+    if (board) {
+      setLeaderboard(board);
       if (user) {
-        const myRank = sortedLeaderboard.find(r => r.user_id === user.id);
-        setCurrentUserRank(myRank);
+        const myEntry = board.find(r => r.user_id === user.id);
+        setCurrentUserRank(myEntry);
       }
     }
   };
@@ -128,7 +104,7 @@ function RankContent() {
     </div>
   );
 
-  // VUE : LISTE DES DÉFIS
+  // VUE : LISTE DES DÉFIS (HUB STATS)
   if (!challengeId) {
     return (
       <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
@@ -197,7 +173,7 @@ function RankContent() {
                 <p className="text-lg flex items-center gap-2"><Timer size={18}/> {timeLeft}</p>
             </div>
             <div className="bg-slate-900 border border-white/10 p-6 rounded-[2.2rem]">
-                <p className="text-[8px] text-slate-500 mb-2">MON SCORE TOTAL</p>
+                <p className="text-[8px] text-slate-500 mb-2">MON SCORE CUMULÉ</p>
                 <p className="text-lg text-emerald-500 flex items-center gap-2"><TrendingUp size={18}/> {currentUserRank?.total_score || 0}</p>
             </div>
         </div>
@@ -226,7 +202,7 @@ function RankContent() {
                 </div>
                 <div className="text-right">
                     <p className="text-2xl font-black">{currentUserRank.total_score}</p>
-                    <p className="text-[8px] opacity-50">CUMUL_PTS</p>
+                    <p className="text-[8px] opacity-50">PTS ({currentUserRank.attempts_count} essais)</p>
                 </div>
             </motion.div>
         )}
@@ -264,7 +240,7 @@ function RankContent() {
                         <p className={`text-sm tracking-tight ${isMe ? 'text-emerald-400' : 'text-white'}`}>
                             {entry.username} {isMe && "(VOUS)"}
                         </p>
-                        <p className="text-[7px] text-slate-500">{entry.attempts_count} MISSIONS RÉUSSIES</p>
+                        <p className="text-[7px] text-slate-500">{entry.attempts_count} SESSIONS JOUÉES</p>
                     </div>
                   </div>
                   
@@ -311,4 +287,3 @@ export default function LeaderboardPage() {
     </Suspense>
   );
 }
-
