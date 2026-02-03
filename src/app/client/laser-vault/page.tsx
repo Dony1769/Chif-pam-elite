@@ -210,7 +210,7 @@ function LaserVaultGame() {
   return (
     <div className="fixed inset-0 bg-[#020617] text-white font-black italic uppercase overflow-hidden select-none flex flex-col font-sans">
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50 backdrop-blur-xl">
-        <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90">
+        <button onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90">
           <ChevronLeft size={20}/>
         </button>
         <div className="flex flex-col items-end">
