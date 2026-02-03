@@ -13,9 +13,11 @@ export default function ArenaPage() {
 
   useEffect(() => {
     fetchData();
-    const channel = supabase.channel('arena_live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges' }, () => fetchData())
+    // Ecoute globale : si quelqu'un joue, le compteur de participants ou les scores changent
+    const channel = supabase.channel('arena_main_hub')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => fetchData())
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
   }, []);
 
@@ -26,7 +28,13 @@ export default function ArenaPage() {
     const [pRes, cRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('challenges')
-        .select('*, challenge_attempts(user_id, score_gained)')
+        .select(`
+          *,
+          challenge_attempts (
+            user_id,
+            total_score
+          )
+        `)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
     ]);
@@ -77,11 +85,14 @@ export default function ArenaPage() {
       <div className="space-y-6">
         {challenges.map((ch) => {
           const entryPriceCP = calculateEntryFeeCP(ch.entry_fee_cp_base);
-          const myTotalScore = ch.challenge_attempts
-            ?.filter((a: any) => a.user_id === profile.id)
-            ?.reduce((acc: number, curr: any) => acc + curr.score_gained, 0) || 0;
           
-          const uniquePlayers = new Set(ch.challenge_attempts?.map((a: any) => a.user_id)).size;
+          // NOUVELLE LOGIQUE : 
+          // Grâce à la contrainte UNIQUE SQL, .length donne exactement le nombre de participants uniques.
+          const participantsCount = ch.challenge_attempts?.length || 0;
+          
+          // On trouve mon score directement
+          const myAttempt = ch.challenge_attempts?.find((a: any) => a.user_id === profile.id);
+          const myTotalScore = myAttempt ? myAttempt.total_score : 0;
 
           return (
             <motion.div key={ch.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 relative overflow-hidden group">
@@ -93,8 +104,10 @@ export default function ArenaPage() {
                   <div>
                     <h3 className="text-lg tracking-tight leading-none">{ch.title}</h3>
                     <div className="flex items-center gap-3 mt-2">
-                       <span className="flex items-center gap-1 text-[8px] text-slate-500"><Users size={10}/> {uniquePlayers}/{ch.max_participants}</span>
-                       <span className="text-[8px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 uppercase">MON SCORE: {myTotalScore}</span>
+                       <span className="flex items-center gap-1 text-[8px] text-slate-500"><Users size={10}/> {participantsCount}/{ch.max_participants}</span>
+                       <span className="text-[8px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 uppercase">
+                         MON CUMUL: {myTotalScore}
+                       </span>
                     </div>
                   </div>
                 </div>
@@ -107,7 +120,6 @@ export default function ArenaPage() {
               <button 
                 onClick={() => {
                   const routes: any = { quiz: 'quiz', biometric: 'biometric-hack', vault: 'laser-vault' };
-                  // On passe le prix réduit en CP pour que le jeu puisse appeler rpc.jouer_partie_cp correctement
                   router.push(`/client/${routes[ch.game_type]}?challengeId=${ch.id}&fee=${entryPriceCP}`);
                 }}
                 disabled={profile?.jetons_cp < entryPriceCP}
