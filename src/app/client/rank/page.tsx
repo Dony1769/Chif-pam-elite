@@ -20,7 +20,7 @@ function RankContent() {
   useEffect(() => {
     initData();
 
-    // REALTIME : On écoute la table 'challenge_attempts' pour recharger la vue
+    // REALTIME : On écoute la table 'challenge_attempts' pour recharger la vu
     const channel = supabase
       .channel('arena_rank_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => {
