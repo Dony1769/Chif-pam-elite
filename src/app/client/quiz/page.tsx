@@ -24,12 +24,14 @@ const CATEGORIES = [
 function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // Paramètres Challenge
   const challengeId = searchParams.get('challengeId');
-  const entryFee = searchParams.get('fee');
+  const challengeFee = searchParams.get('fee');
 
   const [profile, setProfile] = useState<any>(null);
-  const [betCP, setBetCP] = useState(100);
-  const [difficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
+  const [betCP, setBetCP] = useState(challengeFee ? Number(challengeFee) : 100);
+  const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [category, setCategory] = useState(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState("Maintenance...");
@@ -39,39 +41,26 @@ function QuizGameContent() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [multiplier, setMultiplier] = useState(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
+  const [scoreChallenge, setScoreChallenge] = useState(0);
   
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isChallengeMode, setIsChallengeMode] = useState(false);
-  const [hasPaidChallenge, setHasPaidChallenge] = useState(false);
   
   const timerRef = useRef<any>(null);
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return router.push('/connexion');
-
-    const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-    setProfile(prof);
-
-    // Vérifier si on est en mode défi
-    if (challengeId) {
-      setIsChallengeMode(true);
-      const { data: attempt } = await supabase
-        .from('challenge_attempts')
-        .select('*')
-        .eq('challenge_id', challengeId)
-        .eq('user_id', user.id)
-        .single();
-      
-      if (attempt) setHasPaidChallenge(true);
+    if (user) {
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      setProfile(prof);
     }
-
     checkMaintenance();
-  }, [challengeId, router]);
+  }, []);
 
-  useEffect(() => { init(); }, [init]);
+  useEffect(() => {
+    init();
+  }, [init]);
 
   const checkMaintenance = async () => {
     try {
@@ -97,41 +86,36 @@ function QuizGameContent() {
     setStatus('loading');
 
     try {
-      let currentMise = Math.floor(betCP);
+      const roundedMise = Math.floor(betCP);
 
-      // GESTION DU PAIEMENT
-      if (isChallengeMode) {
-        currentMise = Number(entryFee) || 0;
-        if (!hasPaidChallenge) {
-          // Débit initial pour le challenge
-          const { data: res, error: err } = await supabase.rpc('jouer_partie_cp', {
-              p_user_id: profile.id,
-              p_mise_cp: currentMise,
-              p_gain_cp: 0,
-              p_jeu_nom: 'Ticket Challenge Quiz'
-          });
-          if (err || !res.success) throw new Error(err?.message || res.message);
-          
-          // Créer l'entrée dans challenge_attempts
-          await supabase.from('challenge_attempts').insert([{
-            challenge_id: challengeId,
-            user_id: profile.id,
-            score_gained: 0
-          }]);
-          setHasPaidChallenge(true);
+      // 1. Débit des CP
+      const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
+          p_user_id: profile.id,
+          p_mise_cp: roundedMise,
+          p_gain_cp: 0,
+          p_jeu_nom: challengeId ? `Challenge: ${challengeId}` : 'Quiz Elite'
+      });
+
+      if (payError) throw new Error(payError.message);
+      if (!result.success) throw new Error(result.message);
+
+      // 2. Si c'est un challenge, on initialise la tentative si elle n'existe pas
+      if (challengeId) {
+        const { data: existing } = await supabase
+          .from('challenge_attempts')
+          .select('*')
+          .eq('challenge_id', challengeId)
+          .eq('user_id', profile.id)
+          .single();
+
+        if (!existing) {
+          await supabase.from('challenge_attempts').insert([
+            { challenge_id: challengeId, user_id: profile.id, score_gained: 0 }
+          ]);
         }
-      } else {
-        // Mode normal
-        const { data: res, error: err } = await supabase.rpc('jouer_partie_cp', {
-            p_user_id: profile.id,
-            p_mise_cp: currentMise,
-            p_gain_cp: 0,
-            p_jeu_nom: 'Quiz Session'
-        });
-        if (err || !res.success) throw new Error(err?.message || res.message);
       }
 
-      // FETCH QUESTIONS
+      // 3. Récupération des questions
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
       const processed = await Promise.all(raw.results.map(async (q: any) => {
@@ -142,9 +126,10 @@ function QuizGameContent() {
         return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
       }));
 
+      // 4. Enregistrement session locale
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
-        mise_cp: isChallengeMode ? 0 : currentMise,
+        mise_cp: roundedMise,
         difficulty,
         questions_data: processed,
         is_active: true
@@ -155,7 +140,8 @@ function QuizGameContent() {
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
-      setMultiplier(isChallengeMode ? 1 : 0.5); // Score commence à 1 en challenge
+      setMultiplier(0.5);
+      setScoreChallenge(0);
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
     } catch (e: any) {
@@ -171,8 +157,12 @@ function QuizGameContent() {
     setShowCorrection(true);
 
     if (ans === questions[currentIndex].correct) {
-      const step = isChallengeMode ? 100 : SETTINGS[difficulty].step; 
-      setMultiplier(p => p + step); // En challenge on incrémente le score par 100
+      // Calcul du score basé sur la difficulté
+      const points = difficulty === 'facile' ? 10 : difficulty === 'intermédiaire' ? 25 : 50;
+      setScoreChallenge(prev => prev + points);
+
+      const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
+      setMultiplier(nextM);
       
       setTimeout(() => {
         if (currentIndex < 4) {
@@ -181,7 +171,7 @@ function QuizGameContent() {
           setShowCorrection(false);
           setTimeLeft(SETTINGS[difficulty].time);
         } else { finalizeGame(true); }
-      }, 1000);
+      }, 1500);
     } else {
       finalizeGame(false);
     }
@@ -191,34 +181,35 @@ function QuizGameContent() {
     if (!gameId) return;
     setIsProcessing(true);
     
+    // Si challenge, gain direct = 0 (on attend la fin du défi pour le prize pool)
+    const gainFinal = challengeId ? 0 : (isWin ? Math.floor(betCP * multiplier) : 0);
+    
     try {
-        if (isChallengeMode) {
-          // Mise à jour du score cumulé dans le challenge
-          const finalScore = isWin ? Math.floor(multiplier) : Math.floor(multiplier * 0.5);
-          await supabase.rpc('increment_challenge_score', {
-            p_challenge_id: challengeId,
-            p_user_id: profile.id,
-            p_score: finalScore
-          });
+        if (!challengeId) {
+            await supabase.rpc('jouer_partie_cp', {
+                p_user_id: profile.id,
+                p_mise_cp: 0,
+                p_gain_cp: gainFinal,
+                p_jeu_nom: isWin ? 'Quiz Victory' : 'Quiz Defeat'
+            });
         } else {
-          // Gains normaux
-          const gainFinal = isWin ? Math.floor(betCP * multiplier) : 0;
-          await supabase.rpc('jouer_partie_cp', {
-              p_user_id: profile.id,
-              p_mise_cp: 0,
-              p_gain_cp: gainFinal,
-              p_jeu_nom: 'Quiz Elite Result'
-          });
+            // Mise à jour du score du challenge
+            await supabase.rpc('increment_challenge_score', {
+                p_user_id: profile.id,
+                p_challenge_id: challengeId,
+                p_score: scoreChallenge
+            });
         }
 
         await supabase.from('quiz_games').update({ 
             is_active: false, 
+            gain_cp: gainFinal,
             is_won: isWin
         }).eq('id', gameId);
 
         setStatus(isWin ? 'ended' : 'lost');
     } catch (e: any) {
-        console.error(e);
+        console.error("Erreur finalisation:", e.message);
     } finally {
         setIsProcessing(false);
         setShowCorrection(false);
@@ -236,69 +227,89 @@ function QuizGameContent() {
   }, [timeLeft, status, showCorrection]);
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase flex flex-col items-center">
+    <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase flex flex-col items-center select-none">
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.push(isChallengeMode ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10">
+        <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90">
           <ChevronLeft/>
         </button>
-        <div className="flex flex-col items-end">
-            <span className="text-[7px] text-slate-500 tracking-widest">DISPONIBLE</span>
-            <div className="flex items-center gap-2 text-emerald-500">
-                <Coins size={14} />
-                <span className="text-sm italic">{profile?.jetons_cp?.toLocaleString()} CP</span>
-            </div>
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-lg">
+            <Coins size={16} className="text-emerald-500" />
+            <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
         </div>
       </div>
 
       <div className="w-full max-w-md space-y-4">
-        {status === 'idle' ? (
+        {status === 'maintenance' ? (
+           <div className="flex flex-col items-center py-20 bg-white/5 rounded-[3rem] border border-white/5">
+                <Construction size={60} className="text-amber-500 animate-pulse" />
+                <h2 className="text-2xl text-amber-500 mt-4 italic">MAINTENANCE</h2>
+                <p className="text-zinc-500 text-[10px] mt-2 px-10 text-center">{maintenanceMsg}</p>
+           </div>
+        ) : status === 'idle' || status === 'loading' ? (
           <div className="space-y-6">
-            {isChallengeMode && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center gap-4">
-                <div className="p-3 bg-emerald-500 text-black rounded-xl animate-pulse"><Target size={20}/></div>
-                <div>
-                  <p className="text-[10px] text-emerald-500">MODE MISSION ACTIF</p>
-                  <p className="text-sm italic">SCOREZ POUR GRIMPER LE CLASSEMENT</p>
-                </div>
-              </div>
-            )}
-
-            {!isChallengeMode && (
-              <div className="grid grid-cols-4 gap-2">
-                {CATEGORIES.map(c => (
-                  <button key={c.id} onClick={() => setCategory(c.id)} className={`p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${category === c.id ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 border-white/5 text-slate-500'}`}>
-                    {c.icon} <span className="text-[7px] italic">{c.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="bg-[#0a0a0f] p-8 rounded-[2.5rem] border border-white/5 relative">
-                <p className="text-emerald-500 text-[10px] italic mb-2">{isChallengeMode ? "FRAIS DE PARTICIPATION" : "MISE DE LA SESSION"}</p>
-                <p className="text-5xl font-black italic tracking-tighter">
-                  {isChallengeMode ? entryFee : betCP} <span className="text-xl">CP</span>
-                </p>
-                {isChallengeMode && hasPaidChallenge && (
-                  <div className="mt-4 py-2 px-4 bg-white/5 rounded-xl border border-white/10 text-[9px] text-emerald-500 text-center">
-                    TICKET DÉJÀ VALIDÉ - ACCÈS LIBRE
-                  </div>
+            {status === 'loading' ? (
+               <div className="flex flex-col items-center py-20"><Loader2 className="animate-spin text-emerald-500" size={50}/></div>
+            ) : (
+              <>
+                {challengeId && (
+                    <div className="bg-emerald-500 text-black p-4 rounded-3xl flex items-center justify-center gap-3 animate-pulse">
+                        <Target size={20} />
+                        <span className="text-[10px] tracking-tighter font-black italic">MODE MISSION ACTIF : LES SCORES SERONT ENREGISTRÉS</span>
+                    </div>
                 )}
-            </div>
-            
-            <button onClick={start} disabled={isProcessing} className="w-full py-7 rounded-[2.5rem] text-xl bg-emerald-600 text-white font-black italic shadow-xl active:scale-95 transition-all">
-              {isChallengeMode ? (hasPaidChallenge ? "LANCER LA MISSION" : "PAYER & PARTICIPER") : "INITIALISER LE QUIZ"}
-            </button>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {CATEGORIES.map(c => (
+                    <button key={c.id} onClick={() => setCategory(c.id)} className={`p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${category === c.id ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-white/5 border-white/5 text-slate-500'}`}>
+                      {c.icon} <span className="text-[7px] font-black italic">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sélecteur de Difficulté */}
+                <div className="flex gap-2">
+                    {Object.keys(SETTINGS).map((d) => (
+                        <button key={d} onClick={() => setDifficulty(d as any)} className={`flex-1 py-3 rounded-xl border text-[8px] font-bold transition-all ${difficulty === d ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                            {d}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="bg-[#0a0a0f] p-8 rounded-[2.5rem] border border-white/5 space-y-4 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><Brain size={80}/></div>
+                    <div className="flex justify-between items-center relative">
+                        <span className="text-emerald-500 text-[10px] italic font-bold">VALEUR DE LA SESSION (CP)</span>
+                    </div>
+                    <input 
+                      type="number" 
+                      value={betCP} 
+                      disabled={!!challengeId}
+                      onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
+                      className={`bg-transparent text-left outline-none w-full text-5xl font-black italic tracking-tighter ${challengeId ? 'text-emerald-500' : 'text-white'}`}
+                    />
+                </div>
+                
+                <button onClick={start} disabled={isProcessing} className="w-full py-7 rounded-[2.5rem] text-xl bg-emerald-600 text-white font-black italic shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all">
+                  {challengeId ? 'DÉMARRER LA MISSION' : 'INITIALISER LE QUIZ'}
+                </button>
+              </>
+            )}
           </div>
         ) : status === 'playing' ? (
           <div className="space-y-6">
-            <div className="flex justify-between items-end">
+            <div className="flex justify-between items-end px-2">
                 <div>
-                    <p className="text-[10px] text-slate-500 italic">{isChallengeMode ? 'SCORE_MISSION' : 'MULTIPLICATEUR'}</p>
-                    <p className="text-3xl text-emerald-500 font-black italic">{isChallengeMode ? Math.floor(multiplier) : `x${multiplier.toFixed(2)}`}</p>
+                    <p className="text-[10px] text-slate-500 italic">SCORE_MULT</p>
+                    <p className="text-3xl text-emerald-500 font-black italic">x{multiplier.toFixed(2)}</p>
                 </div>
-                {!isChallengeMode && multiplier > 1.2 && (
-                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black">
-                        ENCAISSER {Math.floor(betCP * multiplier)} CP
+                {challengeId ? (
+                   <div className="text-right">
+                       <p className="text-[10px] text-slate-500 italic">SCORE CHALLENGE</p>
+                       <p className="text-3xl text-white font-black italic">{scoreChallenge}</p>
+                   </div>
+                ) : multiplier > 1.2 && (
+                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20">
+                        <Wallet size={14}/> ENCAISSER {Math.floor(betCP * multiplier)} CP
                     </button>
                 )}
             </div>
@@ -307,17 +318,19 @@ function QuizGameContent() {
               <div className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
             </div>
 
-            <div className="bg-white text-black p-10 rounded-[3rem] text-center min-h-[220px] flex flex-col items-center justify-center relative shadow-2xl">
-              <span className="absolute top-4 text-[8px] text-slate-400 font-bold">SÉQUENCE {currentIndex + 1} / 5</span>
-              <p className="text-lg font-black italic leading-tight uppercase">{questions[currentIndex]?.question}</p>
+            <div className="bg-white text-black p-10 rounded-[3rem] text-center min-h-[220px] flex flex-col items-center justify-center shadow-2xl relative">
+              <span className="absolute top-4 text-[8px] text-slate-400 font-bold italic">SÉQUENCE {currentIndex + 1} / 5</span>
+              <p className="text-lg font-black italic tracking-tight uppercase leading-tight">{questions[currentIndex]?.question}</p>
             </div>
 
             <div className="grid gap-3">
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
-                let style = "bg-white/5 border-white/10 text-white";
+                const isCorrect = a === questions[currentIndex].correct;
+                const isSelected = a === selectedAnswer;
+                let style = "bg-white/5 border-white/5 text-white";
                 if (showCorrection) {
-                  if (a === questions[currentIndex].correct) style = "bg-emerald-500 text-black border-emerald-400 scale-[1.02]";
-                  else if (a === selectedAnswer) style = "bg-rose-500 text-white border-rose-500 opacity-50";
+                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] shadow-lg";
+                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-50";
                   else style = "opacity-20";
                 }
                 return (
@@ -330,18 +343,24 @@ function QuizGameContent() {
           </div>
         ) : (
           <div className="text-center py-12 space-y-8">
-            <h2 className={`text-6xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>
-              {status === 'lost' ? "FAILED" : "FINISH"}
-            </h2>
-            <div className="bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/10">
-                <p className="text-[10px] text-zinc-500 mb-3 tracking-widest">{isChallengeMode ? "POINTS TRANSMIS" : "JETONS RÉCUPÉRÉS"}</p>
-                <p className="text-6xl font-black text-white italic">
-                    {isChallengeMode ? Math.floor(multiplier) : (status === 'lost' ? 0 : Math.floor(betCP * multiplier))} 
-                    <span className="text-lg text-emerald-500 ml-2">CP</span>
+            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center border-2 ${status === 'lost' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                {status === 'lost' ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
+            </div>
+
+            <h2 className={`text-5xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "FAILED" : "SUCCESS"}</h2>
+            
+            <div className="bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/10 backdrop-blur-xl relative">
+                <p className="text-[10px] text-zinc-500 mb-3 font-bold italic tracking-widest">
+                    {challengeId ? "SCORE ENREGISTRÉ" : "JETONS RÉCUPÉRÉS"}
+                </p>
+                <p className="text-6xl font-black text-white italic tracking-tighter">
+                    {challengeId ? scoreChallenge : (status === 'lost' ? 0 : Math.floor(betCP * multiplier))} 
+                    <span className="text-lg text-emerald-500 ml-2">{challengeId ? 'PTS' : 'CP'}</span>
                 </p>
             </div>
-            <button onClick={() => setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-xl italic shadow-2xl transition-all">
-              {isChallengeMode ? "RETOUR À L'ARENA" : "NOUVELLE SESSION"}
+
+            <button onClick={() => challengeId ? router.push('/client/arena') : setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl italic shadow-2xl active:scale-95 transition-all">
+              {challengeId ? 'RETOURNER À L\'ARENA' : 'NOUVELLE SESSION'}
             </button>
           </div>
         )}
@@ -352,7 +371,7 @@ function QuizGameContent() {
 
 export default function QuizElite() {
   return (
-    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center text-emerald-500 animate-pulse font-black italic">SYNCHRONISATION...</div>}>
+    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={50} /></div>}>
       <QuizGameContent />
     </Suspense>
   );
