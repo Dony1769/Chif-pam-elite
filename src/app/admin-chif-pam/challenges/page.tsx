@@ -1,10 +1,15 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+// AJOUT DE L'IMPORT useRouter
+import { useRouter } from 'next/navigation'; 
 import { Plus, Trash2, Loader2, ShieldCheck, Target, Users, Coins, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminArena() {
+  // INITIALISATION DU ROUTER
+  const router = useRouter(); 
+  
   const [challenges, setChallenges] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -26,7 +31,6 @@ export default function AdminArena() {
   }, [form.entry_fee_cp_base, form.max_participants]);
 
   const fetchChallenges = async () => {
-    // On sélectionne challenge_attempts pour voir les stats de participation
     const { data } = await supabase
       .from('challenges')
       .select('*, challenge_attempts(user_id, attempts_count, total_score)')
@@ -72,7 +76,6 @@ export default function AdminArena() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {challenges.map((ch) => {
-          // Stats basées sur la nouvelle logique de cumul
           const uniquePlayers = ch.challenge_attempts?.length || 0;
           const totalPaidSessions = ch.challenge_attempts?.reduce((acc: number, curr: any) => acc + curr.attempts_count, 0) || 0;
           
@@ -100,7 +103,6 @@ export default function AdminArena() {
                 </div>
               </div>
 
-              {/* STATS GRID OPTIMISÉE */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-black/50 p-4 rounded-3xl border border-white/5 text-center">
                   <p className="text-[7px] text-slate-500 mb-1">JOUEURS</p>
@@ -141,8 +143,6 @@ export default function AdminArena() {
         })}
       </div>
 
-      
-      {/* MODAL DE CRÉATION (Inchangé mais nettoyé) */}
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-2xl">
