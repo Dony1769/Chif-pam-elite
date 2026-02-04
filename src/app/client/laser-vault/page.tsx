@@ -42,8 +42,6 @@ const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }
 function LaserVaultGame() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  // Paramètres du Challenge
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
@@ -82,10 +80,7 @@ function LaserVaultGame() {
         setStatus('maintenance');
       } else { 
         setStatus('idle'); 
-        // AUTO-START SI MODE CHALLENGE
-        if (challengeId && challengeFee) {
-            setBetCP(Number(challengeFee));
-        }
+        if (challengeId && challengeFee) setBetCP(Number(challengeFee));
       }
     } catch (err) { setStatus('idle'); } finally { setLoadingCheck(false); }
   };
@@ -106,22 +101,20 @@ function LaserVaultGame() {
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
       
-      // 1. Payer les frais (Challenge ou Mise Solo)
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id, 
           p_mise_cp: finalFee, 
           p_gain_cp: 0, 
-          p_jeu_nom: challengeId ? `Challenge: ${challengeId}` : 'Laser Vault Solo'
+          p_jeu_nom: challengeId ? `Arena: Vault` : 'Laser Vault Solo'
       });
       
-      if (rpcError || !result.success) throw new Error(result?.message || "Erreur Solde");
+      if (rpcError || !result.success) throw new Error(result?.message || "Solde CP insuffisant");
 
-      // 2. Créer la session
       const { data: game, error: gameErr } = await supabase.from('vault_games').insert([{
           user_id: profile.id, 
           mise_cp: finalFee, 
           is_active: true,
-          challenge_id: challengeId || null // Optionnel: pour traçabilité
+          challenge_id: challengeId || null
       }]).select().single();
       
       if (gameErr) throw gameErr;
@@ -163,7 +156,7 @@ function LaserVaultGame() {
           setBaseSpeed(s => s + 0.4);
       }
       generateProblem(multiplier + 0.05);
-    } else if (newVal.length >= problem.a.toString().length) {
+    } else if (newVal.length >= problem.a.toString().length + 1) {
       setErrorPenalty(p => p + 1.1); setInput(""); playSound('error');
     }
   };
@@ -171,31 +164,37 @@ function LaserVaultGame() {
   const finalizeGame = async (wasAutoSaved: boolean) => {
     if (status !== 'playing' || !gameId) return;
     
-    const isManual = status === 'playing' && multiplier >= 1.0 && !wasAutoSaved;
     let gainFinal = 0;
-
-    // Calcul des gains Solo
-    if (!challengeId) {
-        if (multiplier < 1.0) gainFinal = Math.floor(betCP * multiplier);
-        else if (wasAutoSaved === false) gainFinal = Math.floor(betCP * multiplier);
-        else gainFinal = 0;
-    }
+    const finalScore = questionsSolved * 100;
 
     try {
-      // 1. Enregistrement des scores si c'est un challenge
       if (challengeId) {
-          // Dans un challenge, le score = questions résolues x 100 (ou autre logique)
-          const finalScore = questionsSolved * 100;
-          await supabase.from('challenge_attempts').insert([{
-              user_id: profile.id,
-              challenge_id: challengeId,
-              score_gained: finalScore
-          }]);
+          // MISE À JOUR DU SCORE (On incrémente le total_score existant)
+          const { data: currentAttempt } = await supabase
+            .from('challenge_attempts')
+            .select('total_score, attempts_count')
+            .eq('user_id', profile.id)
+            .eq('challenge_id', challengeId)
+            .single();
+
+          const newTotalScore = (currentAttempt?.total_score || 0) + finalScore;
+          const newAttemptsCount = (currentAttempt?.attempts_count || 0) + 1;
+
+          await supabase.from('challenge_attempts')
+            .update({
+                total_score: newTotalScore,
+                attempts_count: newAttemptsCount,
+                last_attempt_at: new Date().toISOString()
+            })
+            .eq('user_id', profile.id)
+            .eq('challenge_id', challengeId);
       } else {
-          // 2. Remboursement/Gain si c'est du solo
+          // Logique Solo
+          if (multiplier >= 1.0 && !wasAutoSaved) gainFinal = Math.floor(betCP * multiplier);
+          
           await supabase.rpc('jouer_partie_cp', {
               p_user_id: profile.id, p_mise_cp: 0, p_gain_cp: gainFinal,
-              p_jeu_nom: gainFinal > 0 ? 'Vault Success' : 'Vault Detected'
+              p_jeu_nom: gainFinal > 0 ? 'Vault Extraction' : 'Vault Detected'
           });
       }
 
@@ -208,17 +207,17 @@ function LaserVaultGame() {
   if (loadingCheck || status === 'loading') return <div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
 
   return (
-    <div className="fixed inset-0 bg-[#020617] text-white font-black italic uppercase overflow-hidden select-none flex flex-col font-sans">
+    <div className="fixed inset-0 bg-[#020617] text-white font-black italic uppercase overflow-hidden select-none flex flex-col">
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50 backdrop-blur-xl">
-        <button onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90">
+        <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="p-2 bg-white/5 rounded-xl border border-white/10 active:scale-90">
           <ChevronLeft size={20}/>
         </button>
         <div className="flex flex-col items-end">
-            <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+            <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">
                 <Coins size={14} className="text-emerald-500" />
-                <span className="text-emerald-500 text-[11px] italic font-bold">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+                <span className="text-emerald-500 text-[11px] font-bold">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
             </div>
-            {challengeId && <span className="text-[6px] text-amber-500 mt-1 tracking-widest animate-pulse">MODE_CHALLENGE_ACTIF</span>}
+            {challengeId && <span className="text-[6px] text-amber-500 mt-1 tracking-widest animate-pulse">ARENA_MODE_ON</span>}
         </div>
       </div>
 
@@ -226,8 +225,8 @@ function LaserVaultGame() {
         {status === 'maintenance' ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center">
             <ServerOff className="text-amber-500 mb-6 animate-pulse" size={64} />
-            <h1 className="text-2xl text-amber-500 italic uppercase">Vault Scellé</h1>
-            <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest">{maintenance?.msg}</p>
+            <h1 className="text-2xl text-amber-500 italic uppercase">Maintenance</h1>
+            <p className="text-[10px] text-slate-500 mt-2 tracking-widest">{maintenance?.msg}</p>
           </div>
         ) : status === 'idle' ? (
           <div className="flex-1 flex items-center justify-center w-full max-w-xs">
@@ -237,16 +236,12 @@ function LaserVaultGame() {
               </div>
               <div className="space-y-1 mb-8 italic">
                   <p className="text-[8px] text-emerald-500 tracking-widest font-bold uppercase">
-                      {challengeId ? "Frais de Mission" : "Mise à sécuriser"}
+                      {challengeId ? "Frais de Participation" : "Mise Solo"}
                   </p>
-                  {challengeId ? (
-                      <p className="text-5xl font-black text-white tracking-tighter">{challengeFee} CP</p>
-                  ) : (
-                    <input type="number" value={betCP} onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} className="bg-transparent text-5xl font-black text-center w-full outline-none text-white focus:text-emerald-500 tracking-tighter" />
-                  )}
+                  <p className="text-5xl font-black text-white tracking-tighter">{challengeId ? challengeFee : betCP} CP</p>
               </div>
               <button onClick={startGame} disabled={loading} className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-white shadow-2xl active:scale-95 transition-all ${challengeId ? 'bg-amber-600' : 'bg-emerald-600'}`}>
-                {loading ? <Loader2 className="animate-spin mx-auto"/> : challengeId ? "DÉMARRER CHALLENGE" : "LANCER L'EXTRACTION"}
+                {loading ? <Loader2 className="animate-spin mx-auto"/> : "DÉVERROUILLER"}
               </button>
             </motion.div>
           </div>
@@ -256,23 +251,19 @@ function LaserVaultGame() {
               <motion.div style={{ top: `${laserY}%` }} className="absolute left-0 right-0 h-1 bg-rose-600 shadow-[0_0_40px_#f43f5e] z-30" />
 
               <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-10">
-                 <div className="bg-black/80 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[60px]">
-                    <p className="text-[6px] text-zinc-500 font-bold tracking-widest">CODES</p>
+                 <div className="bg-black/80 px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[60px]">
+                    <p className="text-[6px] text-zinc-500 font-bold tracking-widest">COORDS</p>
                     <p className="text-sm text-white font-black">{questionsSolved}</p>
                  </div>
                  
                  <div className="flex flex-col items-center">
-                    <h2 className={`text-5xl font-black italic tracking-tighter drop-shadow-lg transition-colors ${multiplier >= 1 || challengeId ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    <h2 className={`text-5xl font-black italic tracking-tighter transition-colors ${multiplier >= 1 || challengeId ? 'text-emerald-500' : 'text-rose-500'}`}>
                         {challengeId ? `+${questionsSolved * 100}` : `x${multiplier.toFixed(2)}`}
                     </h2>
-                    {challengeId ? (
-                         <span className="text-[7px] text-emerald-500 font-bold tracking-widest">SCORE CHALLENGE</span>
-                    ) : (
-                        multiplier < 1 && <span className="text-[7px] text-rose-500 animate-pulse font-bold">MODE SAUVETAGE</span>
-                    )}
+                    <span className="text-[7px] text-zinc-500 font-bold uppercase">Points de Mission</span>
                  </div>
 
-                 <div className="bg-black/80 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[60px]">
+                 <div className="bg-black/80 px-3 py-1.5 rounded-xl border border-white/10 text-center min-w-[60px]">
                     <p className="text-[6px] text-zinc-500 uppercase font-bold">DANGER</p>
                     <p className="text-sm text-rose-500 font-black">{(baseSpeed * 10).toFixed(0)}%</p>
                  </div>
@@ -282,7 +273,7 @@ function LaserVaultGame() {
                  <AnimatePresence mode="wait">
                     <motion.div key={problem.q} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
                         <p className="text-6xl font-black mb-4 text-white italic tracking-tighter drop-shadow-2xl">{problem.q}</p>
-                        <div className="h-12 text-4xl text-emerald-500 border-b-2 border-emerald-500/40 px-8 font-black italic tracking-widest">
+                        <div className="h-12 text-4xl text-emerald-500 border-b-2 border-emerald-500/40 px-8 font-black italic">
                             {input || "?"}
                         </div>
                     </motion.div>
@@ -296,21 +287,19 @@ function LaserVaultGame() {
 
             <div className="grid grid-cols-3 gap-2 pb-4 shrink-0">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, "-", 0].map(n => (
-                <motion.button key={n} whileTap={{ scale: 0.95 }} onClick={() => handleKey(n.toString())} className="h-14 bg-white/5 border border-white/5 rounded-2xl text-2xl font-black active:bg-emerald-600 transition-colors">
+                <motion.button key={n} whileTap={{ scale: 0.95 }} onClick={() => handleKey(n.toString())} className="h-14 bg-white/5 border border-white/5 rounded-2xl text-2xl font-black">
                   {n}
                 </motion.button>
               ))}
-              <button onClick={() => setInput("")} className="bg-rose-600/10 text-rose-500 rounded-2xl font-black text-[10px] italic border border-rose-500/20 tracking-widest">CLR</button>
+              <button onClick={() => setInput("")} className="bg-rose-600/10 text-rose-500 rounded-2xl font-black text-[10px] italic border border-rose-500/20">CLR</button>
               
               <button 
                 onClick={() => finalizeGame(false)} 
                 disabled={!challengeId && multiplier < 1.0} 
-                className={`col-span-3 mt-2 py-6 font-black rounded-[1.8rem] text-xl italic tracking-tighter transition-all shadow-xl flex items-center justify-center gap-3 ${(!challengeId && multiplier < 1.0) ? "bg-zinc-900 text-zinc-700 opacity-60" : "bg-emerald-600 text-white animate-bounce-short"}`}
+                className={`col-span-3 mt-2 py-6 font-black rounded-[1.8rem] text-xl italic transition-all shadow-xl flex items-center justify-center gap-3 ${(!challengeId && multiplier < 1.0) ? "bg-zinc-900 text-zinc-700 opacity-60" : "bg-emerald-600 text-white"}`}
               >
                 {challengeId ? (
-                    <><Trophy size={24} /> VALIDER MON SCORE</>
-                ) : multiplier < 1.0 ? (
-                    <>SAUVETAGE EN COURS...</>
+                    <><Zap size={24} /> ENVOYER SCORE</>
                 ) : (
                     <><Zap size={24} /> CASH OUT {Math.floor(betCP * multiplier)} CP</>
                 )}
@@ -327,21 +316,20 @@ function LaserVaultGame() {
                     <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 ${status === 'lost' && !challengeId ? 'bg-rose-600/20 border-rose-500/40' : 'bg-emerald-500/20 border-emerald-500/40'} border-2`}>
                         {status === 'lost' && !challengeId ? <ShieldAlert size={48} className="text-rose-500" /> : <Unlock size={48} className="text-emerald-500" />}
                     </div>
-                    <h2 className="text-5xl font-black italic tracking-tighter mb-2 uppercase">
-                        {challengeId ? 'FIN DU RAID' : (status === 'lost' ? 'ALERTE' : 'VAULT OUVERT')}
+                    <h2 className="text-4xl font-black italic tracking-tighter mb-2 uppercase">
+                        {challengeId ? 'SCORE TRANSMIS' : (status === 'lost' ? 'DÉTECTÉ !' : 'EXTRACTION RÉUSSIE')}
                     </h2>
                     <div className="bg-white/5 p-8 rounded-[3rem] w-full mb-10 border border-white/10 shadow-inner">
                         <p className="text-[9px] text-slate-500 mb-3 uppercase italic font-bold tracking-[0.3em]">
-                            {challengeId ? "SCORE ENVOYÉ" : "JETONS RÉCUPÉRÉS"}
+                            {challengeId ? "POINTS ARENA" : "CP RÉCUPÉRÉS"}
                         </p>
                         <p className="text-6xl text-white font-black tracking-tighter italic">
                             {challengeId ? questionsSolved * 100 : Math.floor(betCP * multiplier)} 
                             <span className="text-lg text-emerald-500 ml-1 font-black">{challengeId ? 'PTS' : 'CP'}</span>
                         </p>
-                        {challengeId && <p className="text-[8px] text-emerald-500 mt-4 font-bold tracking-widest uppercase">Participation enregistrée ✅</p>}
                     </div>
-                    <button onClick={() => router.push(challengeId ? '/client/challenges': '/client/home')} className="w-full py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-xl italic shadow-2xl">
-                        RETOUR AU HUB
+                    <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="w-full py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-xl italic shadow-2xl">
+                        {challengeId ? 'VOIR LE CLASSEMENT' : 'RETOUR AU HUB'}
                     </button>
                 </div>
             </motion.div>
