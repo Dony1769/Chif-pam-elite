@@ -1,13 +1,14 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Coins, Target } from 'lucide-react';
+import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Coins, Target, Zap } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const SETTINGS = {
-  facile: { time: 10, step: 0.15 },
-  intermédiaire: { time: 7, step: 0.20 },
-  difficile: { time: 4, step: 0.50 }
+  facile: { time: 10, step: 0.15, points: 10 },
+  intermédiaire: { time: 7, step: 0.20, points: 25 },
+  difficile: { time: 4, step: 0.50, points: 50 }
 };
 
 const CATEGORIES = [
@@ -30,7 +31,7 @@ function QuizGameContent() {
   const challengeFee = searchParams.get('fee');
 
   const [profile, setProfile] = useState<any>(null);
-  const [betCP, setBetCP] = useState(challengeFee ? Number(challengeFee) : 100);
+  const [betCP, setBetCP] = useState(100);
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [category, setCategory] = useState(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
@@ -41,7 +42,9 @@ function QuizGameContent() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [multiplier, setMultiplier] = useState(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [scoreChallenge, setScoreChallenge] = useState(0);
+  
+  // Score spécifique pour le challenge (points accumulés dans cette session)
+  const [sessionScore, setSessionScore] = useState(0);
   
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
@@ -60,7 +63,11 @@ function QuizGameContent() {
 
   useEffect(() => {
     init();
-  }, [init]);
+    // Si c'est un challenge, on fixe la mise
+    if (challengeId && challengeFee) {
+        setBetCP(Number(challengeFee));
+    }
+  }, [init, challengeId, challengeFee]);
 
   const checkMaintenance = async () => {
     try {
@@ -86,34 +93,19 @@ function QuizGameContent() {
     setStatus('loading');
 
     try {
-      const roundedMise = Math.floor(betCP);
+      // 1. Déterminer la mise (Challenge imposé ou choix libre)
+      const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
 
-      // 1. Débit des CP
+      // 2. Débit des CP via RPC
       const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
-          p_mise_cp: roundedMise,
+          p_mise_cp: finalFee,
           p_gain_cp: 0,
-          p_jeu_nom: challengeId ? `Challenge: ${challengeId}` : 'Quiz Elite'
+          p_jeu_nom: challengeId ? `Challenge Quiz: ${challengeId}` : 'Quiz Elite Solo'
       });
 
       if (payError) throw new Error(payError.message);
       if (!result.success) throw new Error(result.message);
-
-      // 2. Si c'est un challenge, on initialise la tentative si elle n'existe pas
-      if (challengeId) {
-        const { data: existing } = await supabase
-          .from('challenge_attempts')
-          .select('*')
-          .eq('challenge_id', challengeId)
-          .eq('user_id', profile.id)
-          .single();
-
-        if (!existing) {
-          await supabase.from('challenge_attempts').insert([
-            { challenge_id: challengeId, user_id: profile.id, score_gained: 0 }
-          ]);
-        }
-      }
 
       // 3. Récupération des questions
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
@@ -126,13 +118,14 @@ function QuizGameContent() {
         return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
       }));
 
-      // 4. Enregistrement session locale
+      // 4. Enregistrement session locale (quiz_games)
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
-        mise_cp: roundedMise,
+        mise_cp: finalFee,
         difficulty,
         questions_data: processed,
         is_active: true
+        // Note: On pourrait ajouter challenge_id ici si tu as ajouté la colonne dans quiz_games
       }]).select().single();
       
       if (insertError) throw insertError;
@@ -141,7 +134,7 @@ function QuizGameContent() {
       setQuestions(processed);
       setCurrentIndex(0);
       setMultiplier(0.5);
-      setScoreChallenge(0);
+      setSessionScore(0); // Reset du score de la session
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
     } catch (e: any) {
@@ -157,9 +150,9 @@ function QuizGameContent() {
     setShowCorrection(true);
 
     if (ans === questions[currentIndex].correct) {
-      // Calcul du score basé sur la difficulté
-      const points = difficulty === 'facile' ? 10 : difficulty === 'intermédiaire' ? 25 : 50;
-      setScoreChallenge(prev => prev + points);
+      // Calcul du score pour le challenge
+      const points = SETTINGS[difficulty].points;
+      setSessionScore(prev => prev + points);
 
       const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
       setMultiplier(nextM);
@@ -181,26 +174,29 @@ function QuizGameContent() {
     if (!gameId) return;
     setIsProcessing(true);
     
-    // Si challenge, gain direct = 0 (on attend la fin du défi pour le prize pool)
-    const gainFinal = challengeId ? 0 : (isWin ? Math.floor(betCP * multiplier) : 0);
-    
+    let gainFinal = 0;
+
     try {
-        if (!challengeId) {
+        if (challengeId) {
+            // MODE CHALLENGE : Pas de gain CP immédiat, mais on envoie le score
+            // On utilise la fonction RPC qu'on a réparée ensemble
+            await supabase.rpc('increment_challenge_score', {
+                p_user_id: profile.id,
+                p_challenge_id: challengeId,
+                p_score: sessionScore // On envoie les points accumulés (ex: 50 pts)
+            });
+        } else {
+            // MODE SOLO : Gain CP classique
+            gainFinal = isWin ? Math.floor(betCP * multiplier) : 0;
             await supabase.rpc('jouer_partie_cp', {
                 p_user_id: profile.id,
                 p_mise_cp: 0,
                 p_gain_cp: gainFinal,
                 p_jeu_nom: isWin ? 'Quiz Victory' : 'Quiz Defeat'
             });
-        } else {
-            // Mise à jour du score du challenge
-            await supabase.rpc('increment_challenge_score', {
-                p_user_id: profile.id,
-                p_challenge_id: challengeId,
-                p_score: scoreChallenge
-            });
         }
 
+        // Clôture de la partie locale
         await supabase.from('quiz_games').update({ 
             is_active: false, 
             gain_cp: gainFinal,
@@ -221,20 +217,25 @@ function QuizGameContent() {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => setTimeLeft(p => Math.max(0, parseFloat((p - 0.1).toFixed(1)))), 100);
     } else if (timeLeft <= 0 && status === 'playing' && !showCorrection) {
-      handleAnswer(null);
+      handleAnswer(null); // Temps écoulé = mauvaise réponse
     }
     return () => clearInterval(timerRef.current);
   }, [timeLeft, status, showCorrection]);
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase flex flex-col items-center select-none">
+      
+      {/* HEADER */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90">
+        <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
           <ChevronLeft/>
         </button>
-        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-lg">
-            <Coins size={16} className="text-emerald-500" />
-            <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+        <div className="flex flex-col items-end">
+            <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-lg">
+                <Coins size={16} className="text-emerald-500" />
+                <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+            </div>
+            {challengeId && <span className="text-[7px] text-amber-500 mt-1 tracking-widest animate-pulse">MODE_DÉFI_ACTIVÉ</span>}
         </div>
       </div>
 
@@ -243,7 +244,7 @@ function QuizGameContent() {
            <div className="flex flex-col items-center py-20 bg-white/5 rounded-[3rem] border border-white/5">
                 <Construction size={60} className="text-amber-500 animate-pulse" />
                 <h2 className="text-2xl text-amber-500 mt-4 italic">MAINTENANCE</h2>
-                <p className="text-zinc-500 text-[10px] mt-2 px-10 text-center">{maintenanceMsg}</p>
+                <p className="text-slate-500 text-[10px] mt-2 px-10 text-center">{maintenanceMsg}</p>
            </div>
         ) : status === 'idle' || status === 'loading' ? (
           <div className="space-y-6">
@@ -252,10 +253,13 @@ function QuizGameContent() {
             ) : (
               <>
                 {challengeId && (
-                    <div className="bg-emerald-500 text-black p-4 rounded-3xl flex items-center justify-center gap-3 animate-pulse">
-                        <Target size={20} />
-                        <span className="text-[10px] tracking-tighter font-black italic">MODE MISSION ACTIF : LES SCORES SERONT ENREGISTRÉS</span>
-                    </div>
+                    <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-emerald-600 text-white p-6 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 shadow-2xl">
+                        <div className="flex items-center gap-2">
+                            <Target size={24} className="text-black" />
+                            <span className="text-lg tracking-tighter font-black italic">MISSION CIBLÉE</span>
+                        </div>
+                        <p className="text-[10px] opacity-80">CUMULEZ DES POINTS POUR LE CLASSEMENT</p>
+                    </motion.div>
                 )}
 
                 <div className="grid grid-cols-4 gap-2">
@@ -268,9 +272,9 @@ function QuizGameContent() {
 
                 {/* Sélecteur de Difficulté */}
                 <div className="flex gap-2">
-                    {Object.keys(SETTINGS).map((d) => (
-                        <button key={d} onClick={() => setDifficulty(d as any)} className={`flex-1 py-3 rounded-xl border text-[8px] font-bold transition-all ${difficulty === d ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-slate-500'}`}>
-                            {d}
+                    {Object.keys(SETTINGS).map((d: any) => (
+                        <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-4 rounded-xl border text-[8px] font-bold transition-all ${difficulty === d ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                            {d.toUpperCase()} <br/> <span className="text-[6px] opacity-50">+{SETTINGS[d].points} PTS</span>
                         </button>
                     ))}
                 </div>
@@ -278,19 +282,21 @@ function QuizGameContent() {
                 <div className="bg-[#0a0a0f] p-8 rounded-[2.5rem] border border-white/5 space-y-4 shadow-2xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10"><Brain size={80}/></div>
                     <div className="flex justify-between items-center relative">
-                        <span className="text-emerald-500 text-[10px] italic font-bold">VALEUR DE LA SESSION (CP)</span>
+                        <span className={`text-[10px] italic font-bold ${challengeId ? 'text-amber-500' : 'text-emerald-500'}`}>
+                            {challengeId ? "FRAIS DE MISSION (FIXE)" : "VALEUR DE LA SESSION"}
+                        </span>
                     </div>
                     <input 
                       type="number" 
                       value={betCP} 
-                      disabled={!!challengeId}
+                      disabled={!!challengeId} // Verrouillé si challenge
                       onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                      className={`bg-transparent text-left outline-none w-full text-5xl font-black italic tracking-tighter ${challengeId ? 'text-emerald-500' : 'text-white'}`}
+                      className={`bg-transparent text-left outline-none w-full text-5xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
                     />
                 </div>
                 
-                <button onClick={start} disabled={isProcessing} className="w-full py-7 rounded-[2.5rem] text-xl bg-emerald-600 text-white font-black italic shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all">
-                  {challengeId ? 'DÉMARRER LA MISSION' : 'INITIALISER LE QUIZ'}
+                <button onClick={start} disabled={isProcessing} className={`w-full py-7 rounded-[2.5rem] text-xl font-black italic shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all ${challengeId ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                  {isProcessing ? <Loader2 className="animate-spin mx-auto"/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
                 </button>
               </>
             )}
@@ -299,16 +305,14 @@ function QuizGameContent() {
           <div className="space-y-6">
             <div className="flex justify-between items-end px-2">
                 <div>
-                    <p className="text-[10px] text-slate-500 italic">SCORE_MULT</p>
-                    <p className="text-3xl text-emerald-500 font-black italic">x{multiplier.toFixed(2)}</p>
+                    <p className="text-[10px] text-slate-500 italic">INFO_SESSION</p>
+                    <p className="text-3xl text-emerald-500 font-black italic">
+                        {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
+                    </p>
                 </div>
-                {challengeId ? (
-                   <div className="text-right">
-                       <p className="text-[10px] text-slate-500 italic">SCORE CHALLENGE</p>
-                       <p className="text-3xl text-white font-black italic">{scoreChallenge}</p>
-                   </div>
-                ) : multiplier > 1.2 && (
-                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20">
+                {/* En mode Challenge, on ne peut pas encaisser au milieu, il faut finir */}
+                {!challengeId && multiplier > 1.2 && (
+                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20 active:scale-95 transition-all">
                         <Wallet size={14}/> ENCAISSER {Math.floor(betCP * multiplier)} CP
                     </button>
                 )}
@@ -343,24 +347,26 @@ function QuizGameContent() {
           </div>
         ) : (
           <div className="text-center py-12 space-y-8">
-            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center border-2 ${status === 'lost' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                {status === 'lost' ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
+            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                {status === 'lost' && !challengeId ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
             </div>
 
-            <h2 className={`text-5xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>{status === 'lost' ? "FAILED" : "SUCCESS"}</h2>
+            <h2 className={`text-5xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-500'}`}>
+                {challengeId ? "MISSION COMPLÈTE" : (status === 'lost' ? "ÉCHEC" : "VICTOIRE")}
+            </h2>
             
             <div className="bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/10 backdrop-blur-xl relative">
                 <p className="text-[10px] text-zinc-500 mb-3 font-bold italic tracking-widest">
-                    {challengeId ? "SCORE ENREGISTRÉ" : "JETONS RÉCUPÉRÉS"}
+                    {challengeId ? "POINTS AJOUTÉS AU CLASSEMENT" : "JETONS RÉCUPÉRÉS"}
                 </p>
                 <p className="text-6xl font-black text-white italic tracking-tighter">
-                    {challengeId ? scoreChallenge : (status === 'lost' ? 0 : Math.floor(betCP * multiplier))} 
+                    {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(betCP * multiplier))} 
                     <span className="text-lg text-emerald-500 ml-2">{challengeId ? 'PTS' : 'CP'}</span>
                 </p>
             </div>
 
-            <button onClick={() => challengeId ? router.push('/client/arena') : setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl italic shadow-2xl active:scale-95 transition-all">
-              {challengeId ? 'RETOURNER À L\'ARENA' : 'NOUVELLE SESSION'}
+            <button onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl italic shadow-2xl active:scale-95 transition-all">
+              {challengeId ? 'VOIR MON RANG' : 'NOUVELLE SESSION'}
             </button>
           </div>
         )}
