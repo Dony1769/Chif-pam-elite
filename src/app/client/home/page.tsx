@@ -119,6 +119,7 @@ export default function ClientHome() {
             <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', damping: 20 }} className="fixed top-0 left-0 h-full w-[80%] bg-slate-950 z-[70] border-r border-white/5 p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-10"><LogoSmall /><button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full"><X size={20}/></button></div>
               <div className="space-y-2">
+                <MenuLink href="/client/rewards" icon={<Gift className="text-pink-500"/>} label="Récompenses & Missions" badge={profile?.login_streak > 0 ? "!" : ""} />
                 <MenuLink href="/client/vip" icon={<Crown className="text-amber-500"/>} label="Abonnement VIP" />
                 <MenuLink href="/client/challenges" icon={<ShieldCheck className="text-emerald-500"/>} label="Mes Défis" badge={activeChallengesCount} />
                 <MenuLink href="/client/market" icon={<Sparkles className="text-purple-500"/>} label="Boutique CP" />
