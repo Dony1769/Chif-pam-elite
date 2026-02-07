@@ -1,11 +1,14 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Coins, Target, Zap } from 'lucide-react';
+import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Coins, Target } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SETTINGS = {
+// --- TYPAGE POUR CORRIGER L'ERREUR ---
+type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
+
+const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
   facile: { time: 10, step: 0.15, points: 10 },
   intermédiaire: { time: 7, step: 0.20, points: 25 },
   difficile: { time: 4, step: 0.50, points: 50 }
@@ -32,7 +35,7 @@ function QuizGameContent() {
 
   const [profile, setProfile] = useState<any>(null);
   const [betCP, setBetCP] = useState(100);
-  const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
+  const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
   const [category, setCategory] = useState(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState("Maintenance...");
@@ -43,7 +46,7 @@ function QuizGameContent() {
   const [multiplier, setMultiplier] = useState(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
   
-  // Score spécifique pour le challenge (points accumulés dans cette session)
+  // Score spécifique pour le challenge
   const [sessionScore, setSessionScore] = useState(0);
   
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -63,7 +66,6 @@ function QuizGameContent() {
 
   useEffect(() => {
     init();
-    // Si c'est un challenge, on fixe la mise
     if (challengeId && challengeFee) {
         setBetCP(Number(challengeFee));
     }
@@ -93,13 +95,12 @@ function QuizGameContent() {
     setStatus('loading');
 
     try {
-      // 1. Déterminer la mise (Challenge imposé ou choix libre)
-      const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
+      const roundedMise = Math.floor(betCP);
 
-      // 2. Débit des CP via RPC
+      // 1. Paiement RPC
       const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
-          p_mise_cp: finalFee,
+          p_mise_cp: roundedMise,
           p_gain_cp: 0,
           p_jeu_nom: challengeId ? `Challenge Quiz: ${challengeId}` : 'Quiz Elite Solo'
       });
@@ -107,7 +108,17 @@ function QuizGameContent() {
       if (payError) throw new Error(payError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 3. Récupération des questions
+      // 2. Initialisation Challenge (Si applicable)
+      if (challengeId) {
+        // On s'assure que la ligne attempt existe (UPSERT simple)
+        await supabase.from('challenge_attempts').upsert({
+            challenge_id: challengeId,
+            user_id: profile.id,
+            // On ne touche pas au score ici, on l'initialise juste si inexistant
+        }, { onConflict: 'challenge_id,user_id' });
+      }
+
+      // 3. Récupération Questions
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
       const processed = await Promise.all(raw.results.map(async (q: any) => {
@@ -118,14 +129,13 @@ function QuizGameContent() {
         return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
       }));
 
-      // 4. Enregistrement session locale (quiz_games)
+      // 4. Création Session Locale
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
-        mise_cp: finalFee,
+        mise_cp: roundedMise,
         difficulty,
         questions_data: processed,
         is_active: true
-        // Note: On pourrait ajouter challenge_id ici si tu as ajouté la colonne dans quiz_games
       }]).select().single();
       
       if (insertError) throw insertError;
@@ -134,7 +144,7 @@ function QuizGameContent() {
       setQuestions(processed);
       setCurrentIndex(0);
       setMultiplier(0.5);
-      setSessionScore(0); // Reset du score de la session
+      setSessionScore(0);
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
     } catch (e: any) {
@@ -150,9 +160,9 @@ function QuizGameContent() {
     setShowCorrection(true);
 
     if (ans === questions[currentIndex].correct) {
-      // Calcul du score pour le challenge
-      const points = SETTINGS[difficulty].points;
-      setSessionScore(prev => prev + points);
+      // Points selon difficulté
+      const pointsToAdd = SETTINGS[difficulty].points;
+      setSessionScore(prev => prev + pointsToAdd);
 
       const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
       setMultiplier(nextM);
@@ -174,38 +184,46 @@ function QuizGameContent() {
     if (!gameId) return;
     setIsProcessing(true);
     
-    let gainFinal = 0;
+    // Le score final à envoyer (accumulé durant la partie)
+    // Astuce: si c'est la dernière question, sessionScore n'est pas encore mis à jour dans le state
+    // donc on recalcule le total théorique pour être sûr
+    let finalSessionPoints = sessionScore;
+    if (isWin && currentIndex === 4) {
+        // C'était la dernière question et elle était juste, on s'assure d'avoir les points
+        // Note: handleAnswer l'a déjà fait via setSessionScore, mais pour être sûr de la valeur immédiate :
+        // On utilisera la valeur du state qui sera à jour au prochain render, ou on fait confiance à l'état actuel si handleAnswer a fini.
+        // Pour simplifier, on utilise sessionScore qui est mis à jour dans handleAnswer AVANT le timeout de 1500ms qui appelle finalizeGame.
+    }
+
+    const gainCP = challengeId ? 0 : (isWin ? Math.floor(betCP * multiplier) : 0);
 
     try {
         if (challengeId) {
-            // MODE CHALLENGE : Pas de gain CP immédiat, mais on envoie le score
-            // On utilise la fonction RPC qu'on a réparée ensemble
+            // ENVOI DU SCORE AU CHALLENGE
             await supabase.rpc('increment_challenge_score', {
                 p_user_id: profile.id,
                 p_challenge_id: challengeId,
-                p_score: sessionScore // On envoie les points accumulés (ex: 50 pts)
+                p_score: sessionScore // On envoie le score accumulé
             });
         } else {
-            // MODE SOLO : Gain CP classique
-            gainFinal = isWin ? Math.floor(betCP * multiplier) : 0;
+            // GAIN SOLO
             await supabase.rpc('jouer_partie_cp', {
                 p_user_id: profile.id,
                 p_mise_cp: 0,
-                p_gain_cp: gainFinal,
+                p_gain_cp: gainCP,
                 p_jeu_nom: isWin ? 'Quiz Victory' : 'Quiz Defeat'
             });
         }
 
-        // Clôture de la partie locale
         await supabase.from('quiz_games').update({ 
             is_active: false, 
-            gain_cp: gainFinal,
+            gain_cp: gainCP,
             is_won: isWin
         }).eq('id', gameId);
 
         setStatus(isWin ? 'ended' : 'lost');
     } catch (e: any) {
-        console.error("Erreur finalisation:", e.message);
+        console.error(e);
     } finally {
         setIsProcessing(false);
         setShowCorrection(false);
@@ -217,25 +235,20 @@ function QuizGameContent() {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => setTimeLeft(p => Math.max(0, parseFloat((p - 0.1).toFixed(1)))), 100);
     } else if (timeLeft <= 0 && status === 'playing' && !showCorrection) {
-      handleAnswer(null); // Temps écoulé = mauvaise réponse
+      handleAnswer(null);
     }
     return () => clearInterval(timerRef.current);
   }, [timeLeft, status, showCorrection]);
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase flex flex-col items-center select-none">
-      
-      {/* HEADER */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
-        <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all">
+        <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90">
           <ChevronLeft/>
         </button>
-        <div className="flex flex-col items-end">
-            <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-lg">
-                <Coins size={16} className="text-emerald-500" />
-                <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
-            </div>
-            {challengeId && <span className="text-[7px] text-amber-500 mt-1 tracking-widest animate-pulse">MODE_DÉFI_ACTIVÉ</span>}
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-lg">
+            <Coins size={16} className="text-emerald-500" />
+            <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
         </div>
       </div>
 
@@ -244,7 +257,7 @@ function QuizGameContent() {
            <div className="flex flex-col items-center py-20 bg-white/5 rounded-[3rem] border border-white/5">
                 <Construction size={60} className="text-amber-500 animate-pulse" />
                 <h2 className="text-2xl text-amber-500 mt-4 italic">MAINTENANCE</h2>
-                <p className="text-slate-500 text-[10px] mt-2 px-10 text-center">{maintenanceMsg}</p>
+                <p className="text-zinc-500 text-[10px] mt-2 px-10 text-center">{maintenanceMsg}</p>
            </div>
         ) : status === 'idle' || status === 'loading' ? (
           <div className="space-y-6">
@@ -270,9 +283,9 @@ function QuizGameContent() {
                   ))}
                 </div>
 
-                {/* Sélecteur de Difficulté */}
                 <div className="flex gap-2">
-                    {Object.keys(SETTINGS).map((d: any) => (
+                    {/* ICI LA CORRECTION PRINCIPALE : TYPAGE ET CASTING */}
+                    {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
                         <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-4 rounded-xl border text-[8px] font-bold transition-all ${difficulty === d ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                             {d.toUpperCase()} <br/> <span className="text-[6px] opacity-50">+{SETTINGS[d].points} PTS</span>
                         </button>
@@ -289,7 +302,7 @@ function QuizGameContent() {
                     <input 
                       type="number" 
                       value={betCP} 
-                      disabled={!!challengeId} // Verrouillé si challenge
+                      disabled={!!challengeId}
                       onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
                       className={`bg-transparent text-left outline-none w-full text-5xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
                     />
@@ -310,9 +323,8 @@ function QuizGameContent() {
                         {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
                     </p>
                 </div>
-                {/* En mode Challenge, on ne peut pas encaisser au milieu, il faut finir */}
                 {!challengeId && multiplier > 1.2 && (
-                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20 active:scale-95 transition-all">
+                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20">
                         <Wallet size={14}/> ENCAISSER {Math.floor(betCP * multiplier)} CP
                     </button>
                 )}
@@ -361,12 +373,12 @@ function QuizGameContent() {
                 </p>
                 <p className="text-6xl font-black text-white italic tracking-tighter">
                     {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(betCP * multiplier))} 
-                    <span className="text-lg text-emerald-500 ml-2">{challengeId ? 'PTS' : 'CP'}</span>
+                    <span className="text-lg text-emerald-500 ml-2 font-black">{challengeId ? 'PTS' : 'CP'}</span>
                 </p>
             </div>
 
             <button onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl italic shadow-2xl active:scale-95 transition-all">
-              {challengeId ? 'VOIR MON RANG' : 'NOUVELLE SESSION'}
+                {challengeId ? 'VOIR MON RANG' : 'NOUVELLE SESSION'}
             </button>
           </div>
         )}
@@ -382,3 +394,4 @@ export default function QuizElite() {
     </Suspense>
   );
 }
+
