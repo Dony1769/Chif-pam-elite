@@ -34,6 +34,20 @@ export default function RootLayout({
   
   return (
     <html lang="fr">
+      export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="fr">
+      <head>
+        {/* Balise de vérification Google */}
+        <meta
+          name="google-site-verification"
+          content="0DKoujhMc_f-hx6jkLpCVG5DC1apsfHK8VtM-do5Mf0"
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <PWARegister />
         {children}
