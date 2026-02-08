@@ -127,7 +127,6 @@ export default function ClientHome() {
                 <MenuLink href="/client/vip" icon={<Crown className="text-amber-500"/>} label="Abonnement VIP" />
                 <MenuLink href="/client/challenges" icon={<ShieldCheck className="text-emerald-500"/>} label="Mes Défis" badge={activeChallengesCount} />
                 <MenuLink href="/client/market" icon={<Sparkles className="text-purple-500"/>} label="Boutique CP" />
-                <MenuLink href="/client/referral" icon={<Gift className="text-rose-500"/>} label="Parrainage" />
                 <MenuLink href="/client/rank" icon={<Trophy className="text-blue-500"/>} label="Classement Global" />
                 <div className="pt-10 border-t border-white/5 mt-10">
                     <button onClick={() => supabase.auth.signOut().then(() => router.push('/'))} className="text-slate-500 text-[10px] tracking-widest uppercase font-black">Déconnexion</button>
