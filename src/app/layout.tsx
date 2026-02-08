@@ -20,21 +20,11 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
-// CORRECTION : Le themeColor doit être dans viewport maintenant
 export const viewport: Viewport = {
   themeColor: "#10B981",
 };
 
 export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  // SUPPRESSION DU CODE JS ICI. C'est le rôle de PWARegister.
-  
-  return (
-    <html lang="fr">
-      export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
