@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Script from "next/script"; // ✅ AJOUTÉ
+import Script from "next/script";
 import PWARegister from "@/components/PWARegister";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
@@ -38,9 +38,16 @@ export default function RootLayout({
           content="0DKoujhMc_f-hx6jkLpCVG5DC1apsfHK8VtM-do5Mf0"
         />
 
-        {/* ✅ Script Propeller Push Ads */}
+        {/* 🔔 Propeller Push Script */}
         <Script
           src="https://5gvci.com/act/files/tag.min.js?z=10584237"
+          strategy="afterInteractive"
+        />
+
+        {/* 💰 MultiTag Luminous Script */}
+        <Script
+          src="https://quge5.com/88/tag.min.js"
+          data-zone="209451"
           strategy="afterInteractive"
         />
       </head>
