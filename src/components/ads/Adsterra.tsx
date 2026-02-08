@@ -1,13 +1,7 @@
 "use client";
 import Script from "next/script";
 
-interface AdsterraProps {
-  active?: boolean; // si true, le script s'active
-}
-
-export default function Adsterra({ active = false }: AdsterraProps) {
-  if (!active) return null;
-
+export default function Adsterra() {
   return (
     <>
       {/* Script Adsterra Popunder */}
