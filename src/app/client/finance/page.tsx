@@ -6,6 +6,7 @@ import {
   ArrowUpCircle, ArrowDownCircle, Upload, Loader2, Clock, 
   Smartphone, ChevronLeft, TrendingUp, Wallet, CheckCircle2, Copy
 } from 'lucide-react';
+import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner"; // <-- Import
 
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
@@ -151,9 +152,16 @@ export default function FinancePage() {
             <button onClick={() => setView('deposit')} className="group p-8 bg-emerald-500 text-slate-950 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
               <ArrowUpCircle size={36} className="group-hover:translate-y-[-4px] transition-transform" /> <span className="text-lg">Dépôt</span>
             </button>
-            <button onClick={() => setView('withdrawal')} className="group p-8 bg-slate-900 border border-white/5 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95">
-              <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-[4px] transition-transform" /> <span className="text-lg">Retrait</span>
-            </button>
+            <div>
+              <button onClick={() => setView('withdrawal')} className="group p-8 bg-slate-900 border border-white/5 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95">
+                <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-[4px] transition-transform" /> <span className="text-lg">Retrait</span>
+              </button>
+
+              {/* --- Native Banner Adsterra juste sous la case Retrait --- */}
+              <div className="mt-4">
+                <AdsterraNativeBanner />
+              </div>
+            </div>
           </div>
         )}
 
@@ -169,7 +177,7 @@ export default function FinancePage() {
           </div>
         )}
 
-        {/* Formulaires simplifiés pour Dépôt/Retrait */}
+        {/* Formulaires Dépôt */}
         {view === 'deposit' && method && (
           <form onSubmit={handleDeposit} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-emerald-500/20 animate-in zoom-in-95 duration-300">
             <div className="text-center space-y-2">
@@ -192,6 +200,7 @@ export default function FinancePage() {
           </form>
         )}
 
+        {/* Formulaire Retrait */}
         {view === 'withdrawal' && method && (
           <form onSubmit={handleWithdrawal} className="space-y-6 bg-slate-900 p-8 rounded-[2.5rem] border border-amber-500/20 animate-in zoom-in-95 duration-300">
             <h3 className="text-center text-amber-500 text-xl">Retrait {method}</h3>
@@ -204,10 +213,15 @@ export default function FinancePage() {
               <button type="button" onClick={() => setMethod(null)} className="flex-1 py-5 bg-slate-950 rounded-2xl border border-white/5">Retour</button>
               <button type="submit" disabled={issubmitting} className="flex-1 py-5 bg-white text-slate-950 rounded-2xl flex justify-center items-center">{issubmitting ? <Loader2 className="animate-spin" /> : "Confirmer"}</button>
             </div>
+
+            {/* --- Native Banner Adsterra sous le formulaire Retrait --- */}
+            <div className="mt-6">
+              <AdsterraNativeBanner />
+            </div>
           </form>
         )}
 
       </div>
     </main>
   );
-}
+              }
