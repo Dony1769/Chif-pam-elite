@@ -9,6 +9,7 @@ import {
   Users, LucideIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import AdsBanner from "@/components/ads/AdsBanner"; // <-- IMPORT PUB
 
 // --- TYPES ---
 interface GameConfig {
@@ -16,7 +17,7 @@ interface GameConfig {
   name: string;
   desc: string;
   path: string;
-  Icon: LucideIcon; // On passe le composant, pas l'élément
+  Icon: LucideIcon;
   iconColor: string;
   color: string;
   players: string;
@@ -25,83 +26,13 @@ interface GameConfig {
 
 // --- CONFIGURATION DES JEUX ---
 const GAMES: GameConfig[] = [
-  {
-    id: 'crash',
-    name: "CROISSANCE",
-    desc: "Anticipez la courbe",
-    path: "/client/crash",
-    Icon: Zap,
-    iconColor: "text-amber-400",
-    color: "from-amber-500/20",
-    players: "1,248",
-    category: "Multiplicateur"
-  },
-  {
-    id: 'squidglass',
-    name: "SQUID GLASS",
-    desc: "Le pont de la survie",
-    path: "/client/squidglass",
-    Icon: Layers,
-    iconColor: "text-rose-500",
-    color: "from-rose-500/20",
-    players: "942",
-    category: "Agilité"
-  },
-  {
-    id: 'plinko',
-    name: "PLINKO ELITE",
-    desc: "Multiplicateurs en cascade",
-    path: "/client/plinko",
-    Icon: Target,
-    iconColor: "text-blue-400",
-    color: "from-blue-500/20",
-    players: "1,105",
-    category: "Hasard"
-  },
-  {
-    id: 'mines',
-    name: "MINES",
-    desc: "Gestion du risque",
-    path: "/client/mines",
-    Icon: Grid,
-    iconColor: "text-emerald-500",
-    color: "from-emerald-500/20",
-    players: "856",
-    category: "Stratégie"
-  },
-  {
-    id: 'biometric',
-    name: "BIOMETRIC HACK",
-    desc: "Agilité visuelle",
-    path: "/client/biometric-hack",
-    Icon: Fingerprint,
-    iconColor: "text-cyan-400",
-    color: "from-cyan-500/20",
-    players: "652",
-    category: "Réflexes"
-  },
-  {
-    id: 'quiz',
-    name: "CHIF QUIZ",
-    desc: "Connaissances",
-    path: "/client/quiz",
-    Icon: Brain,
-    iconColor: "text-purple-400",
-    color: "from-purple-500/20",
-    players: "3,012",
-    category: "Savoir"
-  },
-  {
-    id: 'laser',
-    name: "LASER VAULT",
-    desc: "Précision",
-    path: "/client/laser-vault",
-    Icon: Lock,
-    iconColor: "text-orange-500",
-    color: "from-orange-500/20",
-    players: "2,094",
-    category: "Précision"
-  }
+  { id: 'crash', name: "CROISSANCE", desc: "Anticipez la courbe", path: "/client/crash", Icon: Zap, iconColor: "text-amber-400", color: "from-amber-500/20", players: "1,248", category: "Multiplicateur" },
+  { id: 'squidglass', name: "SQUID GLASS", desc: "Le pont de la survie", path: "/client/squidglass", Icon: Layers, iconColor: "text-rose-500", color: "from-rose-500/20", players: "942", category: "Agilité" },
+  { id: 'plinko', name: "PLINKO ELITE", desc: "Multiplicateurs en cascade", path: "/client/plinko", Icon: Target, iconColor: "text-blue-400", color: "from-blue-500/20", players: "1,105", category: "Hasard" },
+  { id: 'mines', name: "MINES", desc: "Gestion du risque", path: "/client/mines", Icon: Grid, iconColor: "text-emerald-500", color: "from-emerald-500/20", players: "856", category: "Stratégie" },
+  { id: 'biometric', name: "BIOMETRIC HACK", desc: "Agilité visuelle", path: "/client/biometric-hack", Icon: Fingerprint, iconColor: "text-cyan-400", color: "from-cyan-500/20", players: "652", category: "Réflexes" },
+  { id: 'quiz', name: "CHIF QUIZ", desc: "Connaissances", path: "/client/quiz", Icon: Brain, iconColor: "text-purple-400", color: "from-purple-500/20", players: "3,012", category: "Savoir" },
+  { id: 'laser', name: "LASER VAULT", desc: "Précision", path: "/client/laser-vault", Icon: Lock, iconColor: "text-orange-500", color: "from-orange-500/20", players: "2,094", category: "Précision" }
 ];
 
 export default function GameListPage() {
@@ -201,6 +132,9 @@ export default function GameListPage() {
           )}
         </AnimatePresence>
 
+        {/* --- BANNIÈRE PUB --- */}
+        <AdsBanner type="monetag" />
+
         {/* Grille de tous les jeux */}
         <section>
           <h2 className="text-[10px] font-black text-slate-500 mb-6 tracking-[0.3em] uppercase">
@@ -217,19 +151,13 @@ export default function GameListPage() {
                 onClick={() => router.push(game.path)}
                 className="group relative bg-[#0a0a0f] border border-white/5 rounded-[1.8rem] p-4 flex items-center gap-4 active:scale-[0.98] transition-all overflow-hidden"
               >
-                {/* Glow discret au hover */}
                 <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity`} />
-
-                {/* Icône du jeu */}
                 <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 z-10">
                   <game.Icon size={26} className={game.iconColor} />
                 </div>
-
-                {/* Infos du jeu */}
                 <div className="flex-1 min-w-0 z-10">
                   <h3 className="font-black text-sm tracking-tight uppercase truncate">{game.name}</h3>
                   <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">{game.desc}</p>
-                  
                   <div className="flex items-center gap-2 mt-2">
                     <Users size={10} className="text-emerald-500" />
                     <span className="text-[9px] text-emerald-500/80 font-black uppercase tracking-tighter">
@@ -237,8 +165,6 @@ export default function GameListPage() {
                     </span>
                   </div>
                 </div>
-
-                {/* Bouton Favori */}
                 <button 
                   onClick={(e) => toggleFavorite(e, game.id)}
                   className="p-3 z-20 relative"
@@ -282,4 +208,4 @@ function NavIcon({ icon, label, active = false }: { icon: React.ReactNode, label
       )}
     </div>
   );
-}
+                             }
