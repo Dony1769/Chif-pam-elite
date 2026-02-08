@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Trophy, Zap, Brain, Lock, Loader2, ChevronLeft, Crown, Coins, Users, AlertTriangle } from 'lucide-react';
+import { Loader2, ChevronLeft, Coins } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function ArenaPage() {
@@ -10,14 +10,27 @@ export default function ArenaPage() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [entryLoading, setEntryLoading] = useState<string | null>(null);
+
+  // 🔥 PUB SYSTEM
+  const [showAd, setShowAd] = useState(true);
+  const [canCloseAd, setCanCloseAd] = useState(false);
+
   const router = useRouter();
 
   useEffect(() => {
     fetchData();
+
     const channel = supabase.channel('arena_main_hub')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => fetchData())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    // ⏳ Bouton dispo après 5 sec
+    const timer = setTimeout(() => setCanCloseAd(true), 5000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearTimeout(timer);
+    };
   }, []);
 
   const fetchData = async () => {
@@ -48,82 +61,107 @@ export default function ArenaPage() {
     setEntryLoading(challenge.id);
 
     try {
-      // 1. Déduction des Jetons
-      const { error: payError } = await supabase
-        .from('profiles')
+      await supabase.from('profiles')
         .update({ jetons_cp: profile.jetons_cp - fee })
         .eq('id', profile.id);
-      if (payError) throw payError;
 
-      // 2. Inscription / Incrémentation (UPSERT)
-      // On s'assure que la ligne existe pour que l'admin et le rang voient le joueur
-      const { error: attError } = await supabase
-        .from('challenge_attempts')
+      await supabase.from('challenge_attempts')
         .upsert({ 
           challenge_id: challenge.id, 
           user_id: profile.id,
           last_attempt_at: new Date().toISOString()
         }, { onConflict: 'challenge_id,user_id' });
-      if (attError) throw attError;
 
-      // 3. Redirection
       const routes: any = { quiz: 'quiz', biometric: 'biometric-hack', vault: 'laser-vault' };
       router.push(`/client/${routes[challenge.game_type]}?challengeId=${challenge.id}`);
+
     } catch (err: any) {
       alert("Erreur: " + err.message);
       setEntryLoading(null);
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40}/></div>;
-
-  return (
-    <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-24">
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90">
-          <ChevronLeft size={24} />
-        </button>
-        <h1 className="text-4xl tracking-tighter">ARENA <span className="text-emerald-500">MISSIONS</span></h1>
-      </div>
-
-      <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-[2rem] border border-white/10">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500"><Coins size={20}/></div>
-          <div>
-            <p className="text-[8px] text-slate-500 tracking-widest">SOLDE CP</p>
-            <p className="text-xl text-emerald-500">{profile?.jetons_cp?.toLocaleString()} CP</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        {challenges.map((ch) => {
-          const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
-          const participants = ch.challenge_attempts?.length || 0;
-          const myScore = ch.challenge_attempts?.find((a:any) => a.user_id === profile.id)?.total_score || 0;
-
-          return (
-            <motion.div key={ch.id} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6">
-              <div className="flex justify-between mb-6">
-                <div>
-                  <h3 className="text-lg">{ch.title}</h3>
-                  <p className="text-[10px] text-slate-500 mt-1">{participants} PARTICIPANTS | SCORE: {myScore}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl text-emerald-500">{ch.prize_pool_cp} CP</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => handleEntry(ch, fee)}
-                disabled={profile?.jetons_cp < fee || entryLoading === ch.id}
-                className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30"
-              >
-                {entryLoading === ch.id ? <Loader2 className="animate-spin mx-auto"/> : `ENTRER (${fee} CP)`}
-              </button>
-            </motion.div>
-          );
-        })}
-      </div>
+  if (loading) return (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <Loader2 className="animate-spin text-emerald-500" size={40}/>
     </div>
   );
-}
+
+  return (
+    <>
+      {/* 🔥 FULL SCREEN AD OVERLAY */}
+      {showAd && (
+        <div className="fixed inset-0 bg-black z-[9999] flex flex-col items-center justify-center">
+
+          {/* Script Exoclick */}
+          <script async src="https://a.magsrv.com/ad-provider.js"></script>
+          <ins className="eas6a97888e37"
+               data-zoneid="5848116"
+               data-block-ad-types="0"></ins>
+          <script dangerouslySetInnerHTML={{
+            __html: '(AdProvider = window.AdProvider || []).push({"serve": {}});'
+          }} />
+
+          {/* Bouton sortie */}
+          {canCloseAd && (
+            <button
+              onClick={() => setShowAd(false)}
+              className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse"
+            >
+              ACCÉDER À L’APPLICATION
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* SITE NORMAL */}
+      <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-24">
+        <div className="flex items-center gap-4 mb-8">
+          <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90">
+            <ChevronLeft size={24} />
+          </button>
+          <h1 className="text-4xl tracking-tighter">ARENA <span className="text-emerald-500">MISSIONS</span></h1>
+        </div>
+
+        <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-[2rem] border border-white/10">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500"><Coins size={20}/></div>
+            <div>
+              <p className="text-[8px] text-slate-500 tracking-widest">SOLDE CP</p>
+              <p className="text-xl text-emerald-500">{profile?.jetons_cp?.toLocaleString()} CP</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {challenges.map((ch) => {
+            const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
+            const participants = ch.challenge_attempts?.length || 0;
+            const myScore = ch.challenge_attempts?.find((a:any) => a.user_id === profile.id)?.total_score || 0;
+
+            return (
+              <motion.div key={ch.id} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6">
+                <div className="flex justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg">{ch.title}</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">{participants} PARTICIPANTS | SCORE: {myScore}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl text-emerald-500">{ch.prize_pool_cp} CP</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleEntry(ch, fee)}
+                  disabled={profile?.jetons_cp < fee || entryLoading === ch.id}
+                  className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30"
+                >
+                  {entryLoading === ch.id ? <Loader2 className="animate-spin mx-auto"/> : `ENTRER (${fee} CP)`}
+                </button>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+              }
