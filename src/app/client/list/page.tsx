@@ -133,7 +133,7 @@ export default function GameListPage() {
         </AnimatePresence>
 
         {/* --- BANNIÈRE PUB --- */}
-        <AdsBanner type="monetag" />
+        <AdsBanner type="multitag" />
 
         {/* Grille de tous les jeux */}
         <section>
