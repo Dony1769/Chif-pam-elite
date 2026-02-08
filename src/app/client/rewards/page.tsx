@@ -14,7 +14,6 @@ export default function RewardsPage() {
   const [userTasks, setUserTasks] = useState<any[]>([]);
   const [claiming, setClaiming] = useState<string | boolean>(false);
   const router = useRouter();
-
   
   useEffect(() => { fetchData(); }, []);
 
