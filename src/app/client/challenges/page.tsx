@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Loader2, ChevronLeft, Coins } from 'lucide-react';
 import { motion } from 'framer-motion';
+import VideoSliderAd from '@/components/ads/VideoSliderAd';
 
 export default function ArenaPage() {
   const [challenges, setChallenges] = useState<any[]>([]);
@@ -14,6 +15,7 @@ export default function ArenaPage() {
   // 🔥 PUB SYSTEM
   const [showAd, setShowAd] = useState(true);
   const [canCloseAd, setCanCloseAd] = useState(false);
+  const [showSliderAd, setShowSliderAd] = useState(false);
 
   const router = useRouter();
 
@@ -24,7 +26,6 @@ export default function ArenaPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => fetchData())
       .subscribe();
 
-    // ⏳ Bouton dispo après 5 sec
     const timer = setTimeout(() => setCanCloseAd(true), 5000);
 
     return () => {
@@ -89,23 +90,28 @@ export default function ArenaPage() {
 
   return (
     <>
-      {/* 🔥 FULL SCREEN AD OVERLAY */}
+      {/* 🔥 INTERSTITIAL AU CHARGEMENT */}
       {showAd && (
         <div className="fixed inset-0 bg-black z-[9999] flex flex-col items-center justify-center">
 
-          {/* Script Exoclick */}
           <script async src="https://a.magsrv.com/ad-provider.js"></script>
-          <ins className="eas6a97888e37"
-               data-zoneid="5848116"
-               data-block-ad-types="0"></ins>
-          <script dangerouslySetInnerHTML={{
-            __html: '(AdProvider = window.AdProvider || []).push({"serve": {}});'
-          }} />
+          <ins
+            className="eas6a97888e37"
+            data-zoneid="5848116"
+            data-block-ad-types="0"
+          />
+          <script
+            dangerouslySetInnerHTML={{
+              __html: '(AdProvider = window.AdProvider || []).push({"serve": {}});'
+            }}
+          />
 
-          {/* Bouton sortie */}
           {canCloseAd && (
             <button
-              onClick={() => setShowAd(false)}
+              onClick={() => {
+                setShowAd(false);
+                setShowSliderAd(true); // 👈 active la pub slider après
+              }}
               className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse"
             >
               ACCÉDER À L’APPLICATION
@@ -113,6 +119,9 @@ export default function ArenaPage() {
           )}
         </div>
       )}
+
+      {/* 🎥 VIDEO SLIDER PUB (après fermeture) */}
+      {showSliderAd && <VideoSliderAd />}
 
       {/* SITE NORMAL */}
       <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-24">
@@ -164,4 +173,4 @@ export default function ArenaPage() {
       </div>
     </>
   );
-              }
+  }
