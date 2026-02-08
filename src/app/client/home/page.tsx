@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+// IMPORTE TON COMPOSANT ONBOARDING ICI (Assure-toi de créer le fichier d'abord)
+import OnboardingTour from '@/components/OnboardingTour';
 
 const LogoSmall = () => (
   <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -30,7 +32,6 @@ export default function ClientHome() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   
-  const prevUnreadChat = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -110,8 +111,11 @@ export default function ClientHome() {
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Activity className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden">
+    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-32 overflow-x-hidden relative">
       
+      {/* INTEGRATION DU POP-UP ONBOARDING */}
+      <OnboardingTour />
+
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -145,8 +149,7 @@ export default function ClientHome() {
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Icône de Panier (Boutique Market) */}
-            <Link href="/client/market" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
+            <Link href="/client/market" id="market-btn" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
                 <ShoppingCart size={20} className="text-emerald-500" />
             </Link>
             
@@ -162,7 +165,7 @@ export default function ClientHome() {
         </div>
 
         {/* --- DOUBLE BALANCE CARD --- */}
-        <div className="space-y-4">
+        <div className="space-y-4" id="balance-card">
           {/* Main Wallet: CP (Game Fuel) */}
           <div className="bg-[#0f172a] border border-emerald-500/20 rounded-[2rem] p-6 relative overflow-hidden group shadow-lg shadow-emerald-500/5">
             <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -215,7 +218,7 @@ export default function ClientHome() {
         </div>
 
         {/* Jeux / Défis à la une */}
-        <div className="space-y-4">
+        <div className="space-y-4" id="challenges-section">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
           <div className="space-y-3 pb-10">
             <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="CHIF QUIZ" desc="Gagne avec ton cerveau" players="3,012" />
@@ -251,7 +254,7 @@ function MenuLink({ href, icon, label, badge }: any) {
         <Link href={href} className="flex items-center gap-4 p-5 rounded-2xl hover:bg-white/5 transition-all active:bg-white/5">
             {icon}
             <span className="text-[10px] font-black tracking-widest uppercase italic">{label}</span>
-            {badge > 0 && <span className="ml-2 bg-emerald-500 text-black text-[8px] px-2 py-0.5 rounded-md font-black">{badge}</span>}
+            {badge && <span className="ml-2 bg-emerald-500 text-black text-[8px] px-2 py-0.5 rounded-md font-black">{badge}</span>}
             <ChevronRight size={14} className="ml-auto text-slate-700" />
         </Link>
     )
