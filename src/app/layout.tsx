@@ -23,6 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           name="google-site-verification"
           content="0DKoujhMc_f-hx6jkLpCVG5DC1apsfHK8VtM-do5Mf0"
         />
+        {/* ExoClick verification */}
+  <meta
+    name="6a97888e-site-verification"
+    content="5e81fa45aafa6f5cc66cc432be3668ca"
+  />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {/* PWARegister global si tu veux juste Propeller */}
