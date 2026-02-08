@@ -6,14 +6,6 @@ self.options = {
 self.lary = ""
 importScripts('https://5gvci.com/act/files/service-worker.min.js?r=sw')
 
-// ===== MultiTag Luminous Push =====
-self.options2 = {
-  "domain": "3nbf4.com",  // ou 3nbf4.com pour MultiTag
-  "zoneId": 10585090
-}
-self.lary2 = ""
-importScripts('https://3nbf4.com/act/files/service-worker.min.js?r=sw')
-
 // ===== Tes notifications custom =====
 self.addEventListener("push", (event) => {
   let data = {
