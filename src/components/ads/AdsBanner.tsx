@@ -5,6 +5,7 @@ interface AdsBannerProps {
   type?: "vignette";
 }
 
+
 export default function AdsBanner({ type = "vignette" }: AdsBannerProps) {
   useEffect(() => {
     if (type === "vignette") {
