@@ -15,6 +15,7 @@ export default function RewardsPage() {
   const [claiming, setClaiming] = useState<string | boolean>(false);
   const router = useRouter();
 
+  
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
