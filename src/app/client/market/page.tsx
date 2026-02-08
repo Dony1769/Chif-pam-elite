@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Coins, Gem, Sparkles, ShoppingBag, CreditCard, Loader2 } from 'lucide-react';
+import { ChevronLeft, Coins, Gem, Sparkles, ShoppingBag, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Adsterra from "@/components/ads/Adsterra"; // <-- import Adsterra
 
 export default function MarketPage() {
     const [profile, setProfile] = useState<any>(null);
@@ -11,6 +12,7 @@ export default function MarketPage() {
     const [loading, setLoading] = useState(true);
     const [buying, setBuying] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'htg' | 'diamonds'>('htg');
+    const [showAd, setShowAd] = useState(false); // <-- pub après achat
     const router = useRouter();
 
     useEffect(() => { fetchData(); }, []);
@@ -51,8 +53,8 @@ export default function MarketPage() {
         }
 
         if (res && res.success) {
-            // Un petit son ou une notif ici serait cool
             fetchData(); 
+            setShowAd(true); // <-- on active la pub après achat
         }
         setBuying(null);
     };
@@ -61,7 +63,11 @@ export default function MarketPage() {
         activeTab === 'htg' ? (p.currency_type === 'HTG' || !p.currency_type) : p.currency_type === 'DIAMONDS'
     );
 
-    if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
+    if (loading) return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" />
+      </div>
+    );
 
     return (
         <div className="min-h-screen bg-[#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
@@ -80,10 +86,8 @@ export default function MarketPage() {
             </div>
 
             <div className="max-w-6xl mx-auto p-4">
-                
                 {/* Navigation Onglets */}
                 <div className="flex p-1 bg-white/5 rounded-2xl mb-8 border border-white/5">
-                    {/* CHANGEMENT DE TEXTE ICI : "Jetons CP" */}
                     <TabButton active={activeTab === 'htg'} onClick={() => setActiveTab('htg')} label="Jetons CP" icon={<Coins size={16}/>} />
                     <TabButton active={activeTab === 'diamonds'} onClick={() => setActiveTab('diamonds')} label="Échange Diamants" icon={<Gem size={16}/>} />
                 </div>
@@ -142,6 +146,9 @@ export default function MarketPage() {
                     </AnimatePresence>
                 </div>
             </div>
+
+            {/* --- Script Adsterra activé après achat --- */}
+            <Adsterra active={showAd} />
         </div>
     );
 }
