@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Coins, Gem, Sparkles, ShoppingBag, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Adsterra from "@/components/ads/Adsterra"; // <-- import Adsterra
+import Adsterra from "@/components/ads/Adsterra";
 
 export default function MarketPage() {
     const [profile, setProfile] = useState<any>(null);
@@ -12,7 +12,6 @@ export default function MarketPage() {
     const [loading, setLoading] = useState(true);
     const [buying, setBuying] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'htg' | 'diamonds'>('htg');
-    const [showAd, setShowAd] = useState(false); // <-- pub après achat
     const router = useRouter();
 
     useEffect(() => { fetchData(); }, []);
@@ -23,13 +22,13 @@ export default function MarketPage() {
             const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
             setProfile(data);
         }
-        
+
         const { data: packsData } = await supabase
             .from('boutique_packs')
             .select('*')
             .eq('active', true)
             .order('prix_htg', { ascending: true });
-            
+
         setPacks(packsData || []);
         setLoading(false);
     };
@@ -37,7 +36,7 @@ export default function MarketPage() {
     const handlePurchase = async (pack: any, method: string) => {
         if (!profile) return;
         setBuying(pack.id);
-        
+
         let res = null;
 
         if (method === 'diamonds') {
@@ -53,13 +52,12 @@ export default function MarketPage() {
         }
 
         if (res && res.success) {
-            fetchData(); 
-            setShowAd(true); // <-- on active la pub après achat
+            fetchData();
         }
         setBuying(null);
     };
 
-    const filteredPacks = packs.filter(p => 
+    const filteredPacks = packs.filter(p =>
         activeTab === 'htg' ? (p.currency_type === 'HTG' || !p.currency_type) : p.currency_type === 'DIAMONDS'
     );
 
@@ -86,6 +84,7 @@ export default function MarketPage() {
             </div>
 
             <div className="max-w-6xl mx-auto p-4">
+
                 {/* Navigation Onglets */}
                 <div className="flex p-1 bg-white/5 rounded-2xl mb-8 border border-white/5">
                     <TabButton active={activeTab === 'htg'} onClick={() => setActiveTab('htg')} label="Jetons CP" icon={<Coins size={16}/>} />
@@ -102,12 +101,12 @@ export default function MarketPage() {
                             </motion.div>
                         ) : (
                             filteredPacks.map((pack) => (
-                                <motion.div 
+                                <motion.div
+                                    key={pack.id}
                                     layout
-                                    initial={{ opacity: 0, scale: 0.95 }} 
-                                    animate={{ opacity: 1, scale: 1 }} 
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.95 }}
-                                    key={pack.id} 
                                     className={`relative group overflow-hidden border rounded-[2rem] p-6 transition-all duration-300 hover:-translate-y-1 ${
                                         activeTab === 'diamonds' ? 'bg-blue-950/20 border-blue-500/20 hover:border-blue-500/50' : 'bg-slate-900/40 border-white/5 hover:border-emerald-500/30'
                                     }`}
@@ -118,18 +117,18 @@ export default function MarketPage() {
                                         }`}>
                                             <Sparkles size={24} className={activeTab === 'diamonds' ? 'text-blue-400' : 'text-emerald-400'} />
                                         </div>
-                                        
+
                                         <h4 className="text-xs font-black italic uppercase text-slate-300 mb-1 tracking-widest">{pack.nom}</h4>
                                         <p className="text-3xl font-black italic text-white tracking-tighter mb-6">
                                             {pack.jetons_quantite.toLocaleString()} <span className="text-[10px] text-slate-500 font-bold not-italic">CP</span>
                                         </p>
 
-                                        <button 
+                                        <button
                                             onClick={() => handlePurchase(pack, activeTab)}
                                             disabled={buying === pack.id}
                                             className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all ${
-                                                activeTab === 'diamonds' 
-                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500' 
+                                                activeTab === 'diamonds'
+                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500'
                                                 : 'bg-white text-black shadow-lg shadow-white/10 hover:bg-emerald-400'
                                             }`}
                                         >
@@ -145,10 +144,14 @@ export default function MarketPage() {
                         )}
                     </AnimatePresence>
                 </div>
-            </div>
 
-            {/* --- Script Adsterra activé après achat --- */}
-            <Adsterra active={showAd} />
+                {/* --- Section Publicité Popunder --- */}
+                <div className="my-12 text-center">
+                    <p className="text-sm text-gray-400 mb-2">Publicité sponsorisée</p>
+                    <Adsterra />
+                </div>
+
+            </div>
         </div>
     );
 }
