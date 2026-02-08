@@ -5,15 +5,8 @@ import PWARegister from "@/components/PWARegister";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Chif Pam",
@@ -21,15 +14,9 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
-export const viewport: Viewport = {
-  themeColor: "#10B981",
-};
+export const viewport: Viewport = { themeColor: "#10B981" };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
       <head>
@@ -49,6 +36,12 @@ export default function RootLayout({
           src="https://quge5.com/88/tag.min.js"
           data-zone="209451"
           data-cfasync="false"
+          strategy="afterInteractive"
+        />
+
+        {/* ⚡ Monetag Script (si nécessaire) */}
+        <Script
+          src="https://3nbf4.com/act/files/tag.min.js?z=10585090"
           strategy="afterInteractive"
         />
       </head>
