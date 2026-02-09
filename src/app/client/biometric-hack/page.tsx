@@ -137,8 +137,8 @@ function BiometricGameContent() {
       setMultiplier(prev => parseFloat((prev + 0.10).toFixed(2)));
       
       let nextGrid = gridSize;
-      if (sessionsSolved >= 3 && gridSize === 3) nextGrid = 4;
-      if (sessionsSolved >= 6 && gridSize === 4) nextGrid = 5;
+      if (sessionsSolved >= 3 && gridSize === 3) nextGrid = 5;
+      if (sessionsSolved >= 4 && gridSize === 4) nextGrid = 6;
       setGridSize(nextGrid);
       
       setDisplayTime(prev => Math.max(300, prev - 100));
