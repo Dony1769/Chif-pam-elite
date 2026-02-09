@@ -6,7 +6,7 @@ import { ChevronLeft, Coins, Gem, Sparkles, ShoppingBag, Loader2 } from 'lucide-
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- IMPORT DE TA PUBLICITÉ ---
-import AdsterraNativeBanner from "@/components/AdsterraNativeBanner";
+import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
 export default function MarketPage() {
     const [profile, setProfile] = useState<any>(null);
