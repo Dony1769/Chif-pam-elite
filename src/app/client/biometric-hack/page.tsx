@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet, Target } from 'lucide-react';
+import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet, Target, Play, X } from 'lucide-react';
 
 // --- AUDIO SYSTEM ---
 const playSound = (freq: number, duration: number, type: OscillatorType = 'sine') => {
@@ -21,20 +21,89 @@ const playSound = (freq: number, duration: number, type: OscillatorType = 'sine'
   } catch (e) {}
 };
 
+// --- VAST AD PLAYER COMPONENT ---
+// Ce composant gère la lecture de la publicité pour la seconde chance
+const AdPlayer = ({ vastUrl, onComplete, onClose }: { vastUrl: string, onComplete: () => void, onClose: () => void }) => {
+    const [videoSrc, setVideoSrc] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        // 1. Fetch et Parse du VAST XML
+        const fetchAd = async () => {
+            try {
+                const res = await fetch(vastUrl);
+                const text = await res.text();
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, "text/xml");
+                // On cherche le fichier média MP4
+                const mediaFiles = xml.getElementsByTagName("MediaFile");
+                let foundSrc = null;
+                
+                for (let i = 0; i < mediaFiles.length; i++) {
+                    const type = mediaFiles[i].getAttribute("type");
+                    if (type === "video/mp4" || type === "video/webm") {
+                        foundSrc = mediaFiles[i].textContent?.trim();
+                        break;
+                    }
+                }
+
+                if (foundSrc) setVideoSrc(foundSrc);
+                else throw new Error("Aucune vidéo compatible trouvée");
+            } catch (err) {
+                console.error("Erreur Pub:", err);
+                setError(true);
+                // Fallback: Si erreur de chargement pub (CORS souvent), on peut soit fermer, soit accorder la vie (choix dev)
+                // Ici on montre l'erreur
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAd();
+    }, [vastUrl]);
+
+    if (error) return (
+        <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-6 text-center">
+            <ShieldX size={50} className="text-rose-500 mb-4"/>
+            <p className="text-white text-xs font-bold mb-4">PUBLICITÉ INDISPONIBLE</p>
+            <button onClick={onClose} className="bg-white text-black px-6 py-3 rounded-xl font-black text-xs">FERMER</button>
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
+            {loading ? <Loader2 className="animate-spin text-emerald-500" size={40}/> : (
+                <div className="relative w-full h-full flex items-center justify-center bg-black">
+                    <video 
+                        src={videoSrc!} 
+                        autoPlay 
+                        playsInline 
+                        controls={false}
+                        className="max-w-full max-h-full aspect-video"
+                        onEnded={onComplete}
+                    />
+                    <div className="absolute top-4 right-4 bg-black/50 px-3 py-1 rounded text-[10px] text-white font-bold border border-white/20">
+                        PUBLICITÉ
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 function BiometricGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Paramètres Challenge
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
   const [profile, setProfile] = useState<any>(null);
-  const [status, setStatus] = useState<'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance'>('loading');
+  const [status, setStatus] = useState<'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance' | 'watching_ad'>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState("Protocole de sécurité...");
   
   const [betCP, setBetCP] = useState(100);
-  const [multiplier, setMultiplier] = useState(1.0);
+  const [multiplier, setMultiplier] = useState(0.5); // DÉMARRAGE À 0.5
   const [gridSize, setGridSize] = useState(3); 
   const [pattern, setPattern] = useState<number[]>([]);
   const [userPattern, setUserPattern] = useState<number[]>([]);
@@ -43,6 +112,9 @@ function BiometricGameContent() {
   const [displayTime, setDisplayTime] = useState(1000); 
   const [sessionTimer, setSessionTimer] = useState(10);
   const [sessionsSolved, setSessionsSolved] = useState(0);
+  
+  // Gestion de la "Seconde Chance"
+  const [hasRevived, setHasRevived] = useState(false);
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -55,7 +127,6 @@ function BiometricGameContent() {
 
   useEffect(() => {
     init();
-    // Si mode challenge, on force la mise
     if (challengeId && challengeFee) {
         setBetCP(Number(challengeFee));
     }
@@ -105,10 +176,8 @@ function BiometricGameContent() {
     if (!profile) return;
     setLoading(true);
     try {
-      // 1. Déterminer la mise
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
 
-      // 2. Débit CP via RPC
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: finalFee,
@@ -119,30 +188,27 @@ function BiometricGameContent() {
       if (rpcError) throw new Error(rpcError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 3. Initialisation du Challenge (Si applicable)
       if (challengeId) {
-        // On s'assure que la ligne existe (UPSERT simple pour initialiser)
         await supabase.from('challenge_attempts').upsert({
             challenge_id: challengeId,
             user_id: profile.id,
         }, { onConflict: 'challenge_id,user_id' });
       }
 
-      // 4. Insertion Session locale
       const { data: game, error: gameErr } = await supabase.from('biometric_games').insert([{
           user_id: profile.id,
           mise_cp: finalFee,
           is_active: true
-          // challenge_id: challengeId (si tu as la colonne)
       }]).select().single();
       
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(1.0);
+      setMultiplier(0.5); // START @ 0.5
       setGridSize(3);
       setSessionsSolved(0);
-      setDisplayTime(1000);
+      setHasRevived(false); // Reset revive status
+      setDisplayTime(1200); // Un peu plus lent au début
       generatePattern(3);
       playSound(440, 0.1);
     } catch (e: any) { 
@@ -152,6 +218,27 @@ function BiometricGameContent() {
 
   const handleCellClick = (idx: number) => {
     if (status !== 'input' || userPattern.includes(idx)) return;
+    
+    // --- LOGIQUE MULTIPLICATEUR < 1.0 (PHASE SÉCURISÉE) ---
+    if (multiplier < 1.0) {
+        if (!pattern.includes(idx)) {
+            // Erreur en phase safe : On ne perd pas, on vibre juste
+            playSound(150, 0.2, 'sawtooth');
+            if (navigator.vibrate) navigator.vibrate(200);
+            return; // On ignore le clic incorrect
+        }
+        // Clic correct : on continue normalement
+        const nextUserPattern = [...userPattern, idx];
+        setUserPattern(nextUserPattern);
+        playSound(880, 0.05);
+
+        if (nextUserPattern.length === pattern.length) {
+            handleLevelComplete();
+        }
+        return;
+    }
+
+    // --- LOGIQUE MULTIPLICATEUR >= 1.0 (PHASE RISQUE) ---
     const nextUserPattern = [...userPattern, idx];
     setUserPattern(nextUserPattern);
 
@@ -159,58 +246,85 @@ function BiometricGameContent() {
     playSound(880, 0.05);
 
     if (nextUserPattern.length === pattern.length) {
+      handleLevelComplete();
+    }
+  };
+
+  const handleLevelComplete = () => {
       const nextSolvedCount = sessionsSolved + 1;
       setSessionsSolved(nextSolvedCount);
-      setMultiplier(prev => parseFloat((prev + 0.15).toFixed(2)));
+      
+      // Progression du multiplicateur (0.5 -> 0.7 -> 0.9 -> 1.0 -> 1.2 ...)
+      setMultiplier(prev => {
+          if (prev < 1.0) return parseFloat((prev + 0.2).toFixed(2)); // Monte vite vers 1
+          return parseFloat((prev + 0.15).toFixed(2)); // Monte doucement après 1
+      });
       
       let nextGrid = gridSize;
       if (nextSolvedCount >= 3 && gridSize === 3) nextGrid = 4;
       if (nextSolvedCount >= 6 && gridSize === 4) nextGrid = 5;
       setGridSize(nextGrid);
       
-      setDisplayTime(prev => Math.max(300, prev - 100));
+      setDisplayTime(prev => Math.max(300, prev - 80));
       setTimeout(() => generatePattern(nextGrid), 500);
-    }
   };
 
   const handleFailure = async () => {
+    // Si on est en phase safe (< 1.0), on ne devrait techniquement pas échouer sur le timer
+    // Mais si le timer expire, on considère ça comme une défaite quand même ?
+    // Le prompt dit "le client ne perd pas ses cp". 
+    // On va dire que Timer = Perdu, mais Clic = Safe.
+    
     setStatus('lost');
     playSound(110, 0.5, 'sawtooth');
-    
-    // En cas de défaite, on enregistre quand même les points acquis
+    saveProgress(0); // Gain 0 pour l'instant
+  };
+
+  const reviveGame = () => {
+      setStatus('watching_ad');
+  };
+
+  const onAdCompleted = () => {
+      // Le joueur a vu la pub, on le remet en jeu
+      setHasRevived(true);
+      setStatus('showing'); // On remontre le pattern actuel pour être sympa
+      setSessionTimer(10); // Reset timer
+      setUserPattern([]); // Reset input
+  };
+
+  const saveProgress = async (gain: number) => {
     if (challengeId && sessionsSolved > 0) {
         await supabase.rpc('increment_challenge_score', {
             p_user_id: profile.id,
             p_challenge_id: challengeId,
-            p_score: sessionsSolved * 10 // 10 pts par niveau réussi
+            p_score: sessionsSolved * 10 
         });
     }
-
     if (gameId) {
         await supabase.from('biometric_games').update({ 
           is_active: false, 
-          gain_cp: 0 
+          gain_cp: gain 
         }).eq('id', gameId);
     }
-    init(); 
+    init();
   };
 
   const cashout = async () => {
-    if (loading || sessionsSolved < 2 || !gameId) return;
+    if (loading || !gameId) return;
+    // Sécurité : Impossible d'encaisser avant x1.0 (sauf si challenge)
+    if (!challengeId && multiplier < 1.0) return;
+
     setLoading(true);
-    
     const gainCP = challengeId ? 0 : Math.floor(betCP * multiplier);
     
     try {
       if (challengeId) {
-        // MODE CHALLENGE : Envoi du score cumulé
         await supabase.rpc('increment_challenge_score', {
             p_user_id: profile.id,
             p_challenge_id: challengeId,
-            p_score: sessionsSolved * 15 // Bonus de points pour extraction réussie (15 pts/niveau)
+            p_score: sessionsSolved * 15 
         });
       } else {
-        // MODE SOLO : Gain CP
         const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
             p_user_id: profile.id,
             p_mise_cp: 0,
@@ -218,6 +332,11 @@ function BiometricGameContent() {
             p_jeu_nom: 'Biometric Success'
         });
         if (rpcError) throw new Error(rpcError.message);
+        
+        // VALIDATION TÂCHE SI GAIN IMPORTANT
+        if (gainCP > 200) {
+             await supabase.rpc('update_task_progress', { p_user_id: profile.id, p_task_code: 'PLAY_BIO' });
+        }
       }
 
       await supabase.from('biometric_games').update({ 
@@ -237,6 +356,16 @@ function BiometricGameContent() {
 
   return (
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col font-sans">
+      
+      {/* PUBLICITÉ OVERLAY */}
+      {status === 'watching_ad' && (
+          <AdPlayer 
+            vastUrl="https://s.magsrv.com/v1/vast.php?idzone=5848158" 
+            onComplete={onAdCompleted}
+            onClose={() => setStatus('lost')} // Si ferme la pub, il reste perdu
+          />
+      )}
+
       {/* HEADER HUD */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
         <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
@@ -283,7 +412,7 @@ function BiometricGameContent() {
                     <input 
                       type="number" 
                       value={betCP} 
-                      disabled={!!challengeId} // Verrouillé si challenge
+                      disabled={!!challengeId}
                       onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
                       className={`bg-transparent text-5xl font-black text-center w-full outline-none tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`} 
                     />
@@ -309,7 +438,8 @@ function BiometricGameContent() {
                 </div>
                 <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 text-center">
                     <p className="text-[7px] text-emerald-500 italic font-bold">MULT</p>
-                    <p className="text-2xl font-black text-white">x{multiplier.toFixed(2)}</p>
+                    <p className={`text-2xl font-black ${multiplier < 1.0 ? 'text-amber-400' : 'text-white'}`}>x{multiplier.toFixed(2)}</p>
+                    {multiplier < 1.0 && <p className="text-[6px] text-amber-500">PROTECTED</p>}
                 </div>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
                     <p className="text-[7px] text-zinc-500 italic font-bold">GRID</p>
@@ -319,7 +449,7 @@ function BiometricGameContent() {
 
             {/* THE SCANNER GRID */}
             <div 
-              className="grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border border-white/10 shadow-2xl relative overflow-hidden"
+              className={`grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border shadow-2xl relative overflow-hidden transition-all duration-500 ${multiplier < 1.0 ? 'border-amber-500/30' : 'border-white/10'}`}
               style={{ 
                 gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))`,
                 width: 'min(90vw, 360px)',
@@ -340,14 +470,21 @@ function BiometricGameContent() {
               ))}
             </div>
 
-            {sessionsSolved >= 2 && (
+            {/* BOUTON ENCAISSER (Seulement si Mult >= 1.0 et pas Challenge) */}
+            {multiplier >= 1.0 && !challengeId && (
                 <button 
                   onClick={cashout}
                   disabled={loading}
-                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/20"
+                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/20 hover:bg-emerald-400"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : challengeId ? <>ENREGISTRER_SCORE <Target size={20}/></> : <>EXTRAIRE {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
+                  {loading ? <Loader2 className="animate-spin" /> : <>EXTRAIRE {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
                 </button>
+            )}
+            
+            {multiplier < 1.0 && !challengeId && (
+                <div className="mt-10 py-4 text-center">
+                    <p className="text-[10px] text-amber-500 font-bold uppercase animate-pulse">Synchronisation en cours... ({Math.floor(multiplier*100)}%)</p>
+                </div>
             )}
           </div>
         )}
@@ -365,7 +502,7 @@ function BiometricGameContent() {
               {challengeId ? 'FIN DE SÉQUENCE' : (status === 'lost' ? 'DÉCRYPTAGE_INTERROMPU' : 'SCAN_SUCCÈS')}
             </h2>
             
-            <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-10 border border-white/10 backdrop-blur-md relative overflow-hidden">
+            <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-6 border border-white/10 backdrop-blur-md relative overflow-hidden">
                 <div className={`absolute top-0 left-0 w-full h-1 ${status === 'lost' ? 'bg-rose-500' : 'bg-emerald-500'} opacity-30`} />
                 <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.4em] font-bold italic">
                     {challengeId ? 'SCORE_MISSION' : 'JETONS_RÉCUPÉRÉS'}
@@ -377,9 +514,19 @@ function BiometricGameContent() {
                 {challengeId && <p className="text-[8px] text-emerald-500 mt-4 font-bold tracking-widest uppercase">Score cumulé ✅</p>}
             </div>
 
-            <button onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} className="w-full max-w-xs py-6 bg-emerald-600 text-white rounded-[2.5rem] font-black text-xl active:scale-95 transition-all shadow-xl">
-              {challengeId ? 'VOIR MON RANG' : 'NOUVELLE TENTATIVE'}
-            </button>
+            {/* OPTIONS DE FIN DE JEU */}
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+                {/* BOUTON REVIVE (Si Perdu + Pas Challenge + Pas encore utilisé + Mult > 1) */}
+                {status === 'lost' && !challengeId && !hasRevived && multiplier > 1.0 && (
+                    <button onClick={reviveGame} className="w-full py-5 bg-amber-500 text-black rounded-[2rem] font-black text-lg active:scale-95 transition-all shadow-xl flex items-center justify-center gap-2">
+                        <Play size={18} fill="black"/> SECONDE CHANCE (PUB)
+                    </button>
+                )}
+
+                <button onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} className="w-full py-5 bg-white/10 text-white border border-white/10 rounded-[2rem] font-black text-lg active:scale-95 transition-all">
+                    {challengeId ? 'VOIR MON RANG' : 'NOUVELLE TENTATIVE'}
+                </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -394,4 +541,3 @@ export default function BiometricHack() {
     </Suspense>
   );
 }
-
