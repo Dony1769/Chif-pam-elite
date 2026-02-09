@@ -3,8 +3,9 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet, Target, Play, HeartPulse } from 'lucide-react';
-import RewardedVideo from '@/components/ads/RewardedVideo'; // Import du composant Ad
+import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Coins, HeartPulse, Zap } from 'lucide-react';
+// Assure-toi que le chemin d'import correspond bien à l'emplacement de ton fichier
+import RewardedVideo from '@/components/ads/RewardedVideo';
 
 // --- AUDIO SYSTEM ---
 const playSound = (freq: number, duration: number, type: OscillatorType = 'sine') => {
@@ -33,7 +34,7 @@ function BiometricGameContent() {
   const [maintenanceMsg, setMaintenanceMsg] = useState("Protocole de sécurité...");
   
   const [betCP, setBetCP] = useState(100);
-  const [multiplier, setMultiplier] = useState(0.5); // Start à 0.5
+  const [multiplier, setMultiplier] = useState(0.5);
   const [gridSize, setGridSize] = useState(3); 
   const [pattern, setPattern] = useState<number[]>([]);
   const [userPattern, setUserPattern] = useState<number[]>([]);
@@ -42,7 +43,7 @@ function BiometricGameContent() {
   const [displayTime, setDisplayTime] = useState(1000); 
   const [sessionTimer, setSessionTimer] = useState(10);
   const [sessionsSolved, setSessionsSolved] = useState(0);
-  const [canRevive, setCanRevive] = useState(true); // Une seule fois par game
+  const [canRevive, setCanRevive] = useState(true);
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -114,7 +115,7 @@ function BiometricGameContent() {
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(0.5); // Initialisation à 0.5
+      setMultiplier(0.5);
       setGridSize(3);
       setSessionsSolved(0);
       setCanRevive(true);
@@ -133,7 +134,7 @@ function BiometricGameContent() {
 
     if (nextUserPattern.length === pattern.length) {
       setSessionsSolved(s => s + 1);
-      setMultiplier(prev => parseFloat((prev + 0.10).toFixed(2))); // +0.1 par succès
+      setMultiplier(prev => parseFloat((prev + 0.10).toFixed(2)));
       
       let nextGrid = gridSize;
       if (sessionsSolved >= 3 && gridSize === 3) nextGrid = 4;
@@ -146,13 +147,10 @@ function BiometricGameContent() {
   };
 
   const handleFailure = async () => {
-    // LOGIQUE DE SAUVEGARDE AUTOMATIQUE (Si < 1.0)
     if (multiplier < 1.0 && !challengeId) {
-        finalizeGame(true); // On force le cashout du multiplicateur actuel
+        finalizeGame(true);
         return;
     }
-
-    // Sinon, on a perdu (Zone > 1.0 ou Challenge)
     playSound(110, 0.5, 'sawtooth');
     setStatus('lost');
   };
@@ -161,7 +159,6 @@ function BiometricGameContent() {
     if (!gameId) return;
     setLoading(true);
     
-    // Si < 1.0 ou manuel, on calcule le gain. Si perdu en zone > 1.0, gain = 0.
     let gainFinal = 0;
     if (wasAutoSaved || status === 'input') {
         gainFinal = Math.floor(betCP * multiplier);
@@ -184,10 +181,9 @@ function BiometricGameContent() {
     } catch (e) { console.error(e); } finally { setLoading(false); init(); }
   };
 
-  // --- LOGIQUE AD REWARD ---
   const handleAdComplete = () => {
     setCanRevive(false);
-    setStatus('showing'); // On remontre le pattern actuel
+    setStatus('showing');
     generatePattern(gridSize);
     playSound(600, 0.2);
   };
@@ -197,12 +193,11 @@ function BiometricGameContent() {
   return (
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col font-sans">
       
-      {/* AD OVERLAY */}
+      {/* AD OVERLAY CORRIGÉ */}
       {status === 'watching_ad' && (
           <RewardedVideo onReward={handleAdComplete} onClose={() => setStatus('lost')} />
       )}
 
-      {/* HEADER */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
         <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
           <ChevronLeft size={20}/>
@@ -231,7 +226,6 @@ function BiometricGameContent() {
           </motion.div>
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
-            {/* IN-GAME HUD */}
             <div className="w-full grid grid-cols-3 gap-4 mb-10">
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
                     <p className="text-[7px] text-zinc-500 italic font-bold tracking-widest uppercase">Timer</p>
@@ -247,7 +241,6 @@ function BiometricGameContent() {
                 </div>
             </div>
 
-            {/* SCANNER GRID */}
             <div 
               className="grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border border-white/10 shadow-2xl"
               style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)`, width: 'min(90vw, 360px)', height: 'min(90vw, 360px)' }}
@@ -265,7 +258,6 @@ function BiometricGameContent() {
               ))}
             </div>
 
-            {/* CASHOUT BUTTON (Only if Multiplier >= 1.0) */}
             {multiplier >= 1.0 && (
                 <motion.button 
                   initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
@@ -283,7 +275,6 @@ function BiometricGameContent() {
         )}
       </div>
 
-      {/* RESULTS MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
