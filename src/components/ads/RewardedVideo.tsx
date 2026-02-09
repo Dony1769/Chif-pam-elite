@@ -11,21 +11,15 @@ export interface RewardedVideoProps {
 
 export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: RewardedVideoProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [errorMsg, setErrorMsg] = useState("Chargement...");
+  const [errorMsg, setErrorMsg] = useState("Chargement publicité...");
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
-
-  // --- CONFIGURATION ---
-  // Mettre à FALSE quand tu seras validé par ExoClick pour la production
-  const IS_TEST_MODE = true; 
-
-  // Lien officiel ExoClick
-  const liveVastUrl = `https://s.magsrv.com/v1/vast.php?idzone=${zoneId}`;
   
-  // Lien de test Google (Marche toujours, utile pour le dev)
-  const testVastUrl = "https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=";
+  // Variable pour suivre si une pub a réellement démarré
+  const adStartedRef = useRef(false);
 
-  const vastUrl = IS_TEST_MODE ? testVastUrl : liveVastUrl;
+  // Lien officiel (Production)
+  const vastUrl = `https://s.magsrv.com/v1/vast.php?idzone=${zoneId}`;
 
   const initPlayer = () => {
     if (!window.fluidPlayer || !videoRef.current) return;
@@ -38,106 +32,138 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
           autoPlay: true,
           mute: false,
           allowTheatre: false,
-          keyboardControl: false, // Empêcher de passer la pub
-          logo: { imageUrl: null, position: 'top right', clickUrl: null, opacity: 0 }
+          keyboardControl: false, // Bloque les raccourcis clavier pour passer
+          // On cache tout ce qui n'est pas la pub
+          logo: { imageUrl: null, position: 'top right', clickUrl: null, opacity: 0 },
+          controlBar: {
+            autoHide: true,
+            autoHideTimeout: 3,
+            animated: true
+          }
         },
         vastOptions: {
-          adList: [{ roll: 'preRoll', vastTag: vastUrl, timer: 5 }],
+          adList: [
+            {
+              roll: 'preRoll',
+              vastTag: vastUrl,
+              timer: 5 // Oblige à regarder au moins 5s (selon la pub)
+            }
+          ],
           allowVPAID: true,
           showProgressbarMarkers: true,
-          adCTAText: "Visiter",
-          adCTATextPosition: "bottom right"
+          adCTAText: "VISITER",
+          adCTATextPosition: "top right"
         }
       });
 
-      // Événements
-      playerRef.current.on('ended', () => {
-        onReward();
+      // --- ÉVÉNEMENTS CRITIQUES ---
+
+      // 1. La pub commence VRAIMENT
+      playerRef.current.on('adImpression', () => {
+        console.log("Pub démarrée");
+        adStartedRef.current = true;
+        setStatus('ready');
       });
 
-      // Si le VAST est vide (pas de pub dispo dans le pays) ou bloqué
+      // 2. La pub est terminée -> RÉCOMPENSE
+      playerRef.current.on('adFinished', () => {
+        if (adStartedRef.current) {
+            console.log("Pub terminée avec succès");
+            onReward();
+        }
+      });
+
+      // 3. Erreur de chargement (Pas de pub, Adblock, ou Site non validé)
       playerRef.current.on('adError', () => {
-        console.error("Erreur VAST (No Fill)");
-        setErrorMsg("Aucune publicité disponible pour votre région.");
+        console.error("Erreur VAST : Pas de publicité disponible");
+        adStartedRef.current = false;
+        setErrorMsg("Aucune publicité disponible pour le moment.");
         setStatus('error');
       });
 
-      setStatus('ready');
+      // 4. Sécurité : Si le lecteur finit la vidéo "principale" (le fond noir) sans avoir joué de pub
+      playerRef.current.on('ended', () => {
+        if (!adStartedRef.current) {
+            // Si on arrive ici, c'est que le lecteur a sauté la pub et fini la vidéo de fond.
+            // ON NE DONNE PAS LA RÉCOMPENSE.
+            setErrorMsg("Publicité ignorée ou indisponible.");
+            setStatus('error');
+        }
+      });
 
     } catch (err) {
-      setErrorMsg("Erreur lecteur vidéo.");
+      setErrorMsg("Erreur interne du lecteur.");
       setStatus('error');
     }
   };
 
-  // Timeout de sécurité : Si après 10s rien ne se passe, on libère le client
+  // Timeout de sécurité (15s max d'attente)
   useEffect(() => {
     const timer = setTimeout(() => {
-        if(status === 'loading') {
-            setErrorMsg("La connexion est trop lente.");
+        if (status === 'loading' && !adStartedRef.current) {
+            setErrorMsg("Connexion trop lente ou pas de publicité.");
             setStatus('error');
         }
-    }, 10000); 
+    }, 15000);
     return () => clearTimeout(timer);
   }, [status]);
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-[200] bg-black/98 flex flex-col items-center justify-center p-4 backdrop-blur-xl">
       
       <Script 
         src="https://cdn.fluidplayer.com/v3/current/fluidplayer.min.js" 
         onLoad={initPlayer}
-        onError={() => { setErrorMsg("Bloqueur de pub détecté"); setStatus('error'); }}
+        onError={() => { setErrorMsg("Erreur chargement script"); setStatus('error'); }}
       />
       <link rel="stylesheet" href="https://cdn.fluidplayer.com/v3/current/fluidplayer.min.css" type="text/css" />
 
-      <div className="relative w-full max-w-lg aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col justify-center">
+      <div className="relative w-full max-w-lg aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col justify-center">
         
-        {/* Le Lecteur */}
-        <video ref={videoRef} className="w-full h-full" style={{ width: '100%', height: '100%' }}>
+        {/* Vidéo placeholder (Vide et muette, sert juste de support au VAST) */}
+        <video ref={videoRef} className="w-full h-full">
             <source src="https://cdn.fluidplayer.com/videos/valerian-1080p.mkv" type="video/mp4" />
         </video>
 
-        {/* Écran de Chargement */}
+        {/* --- ÉCRANS DE STATUT (S'affichent par dessus le lecteur) --- */}
+
+        {/* Chargement */}
         {status === 'loading' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-20">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30">
             <Loader2 className="animate-spin text-emerald-500 mb-4" size={40} />
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest animate-pulse">Chargement Sponsor...</p>
+            <p className="text-[10px] text-white font-black uppercase tracking-widest animate-pulse">Recherche de sponsor...</p>
           </div>
         )}
 
-        {/* Écran d'Erreur (Fallback) */}
+        {/* Erreur / Pas de pub */}
         {status === 'error' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-30 p-6 text-center">
-            <WifiOff className="text-slate-600 mb-4" size={40} />
-            <p className="text-white font-bold uppercase mb-2">Oups !</p>
-            <p className="text-[10px] text-slate-400 mb-6">{errorMsg}</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-40 p-6 text-center">
+            <WifiOff className="text-slate-500 mb-4" size={40} />
+            <p className="text-white font-black uppercase mb-2 text-sm">Oups !</p>
+            <p className="text-[10px] text-slate-400 mb-6 font-medium">{errorMsg}</p>
             
-            <div className="flex gap-3">
-                <button onClick={onClose} className="px-6 py-3 bg-white/10 rounded-xl text-xs font-bold hover:bg-white/20 transition-colors">
-                Abandonner
-                </button>
-                {/* En dev, on peut tricher pour tester le jeu même si la pub plante */}
-                {IS_TEST_MODE && (
-                    <button onClick={onReward} className="px-6 py-3 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-xl text-xs font-bold">
-                    [DEV] Simuler Succès
-                    </button>
-                )}
-            </div>
+            <button 
+                onClick={onClose} 
+                className="px-8 py-3 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-colors active:scale-95"
+            >
+                Fermer
+            </button>
           </div>
         )}
 
-        {/* Bouton fermeture secours (visible après 5s de lecture ou erreur) */}
-        <button 
-            onClick={onClose} 
-            className="absolute top-2 right-2 p-2 bg-black/50 text-white/50 hover:text-white hover:bg-rose-600 rounded-full transition-colors z-50 active:scale-90"
-        >
-            <X size={16}/>
-        </button>
+        {/* Bouton fermeture secours (Visible uniquement sur erreur ou chargement long) */}
+        {(status === 'error' || status === 'loading') && (
+            <button 
+                onClick={onClose} 
+                className="absolute top-3 right-3 p-2 bg-white/10 text-white rounded-full hover:bg-rose-600 transition-colors z-50"
+            >
+                <X size={16}/>
+            </button>
+        )}
       </div>
 
-      <p className="text-[9px] text-slate-500 mt-4 uppercase tracking-[0.2em]">
-        {IS_TEST_MODE ? "MODE TEST ACTIVÉ" : "Regardez jusqu'à la fin pour revivre"}
+      <p className="text-[9px] text-slate-500 mt-6 uppercase tracking-[0.2em] font-medium text-center">
+        {status === 'ready' ? "Publicité en cours - Ne fermez pas" : "Sponsorisé par nos partenaires"}
       </p>
     </div>
   );
