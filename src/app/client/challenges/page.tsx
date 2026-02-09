@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, ChevronLeft, Coins } from 'lucide-react';
 import { motion } from 'framer-motion';
 import VideoSliderAd from '@/components/ads/VideoSliderAd';
+import ExoOutstream from '@/components/ads/ExoOutstream';
 
 export default function ArenaPage() {
   const [challenges, setChallenges] = useState<any[]>([]);
@@ -16,6 +17,7 @@ export default function ArenaPage() {
   const [showAd, setShowAd] = useState(true);
   const [canCloseAd, setCanCloseAd] = useState(false);
   const [showSliderAd, setShowSliderAd] = useState(false);
+  const [showOutstreamAd, setShowOutstreamAd] = useState(false);
 
   const router = useRouter();
 
@@ -26,6 +28,7 @@ export default function ArenaPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => fetchData())
       .subscribe();
 
+    // ⏳ Bouton dispo après 5 sec
     const timer = setTimeout(() => setCanCloseAd(true), 5000);
 
     return () => {
@@ -67,8 +70,8 @@ export default function ArenaPage() {
         .eq('id', profile.id);
 
       await supabase.from('challenge_attempts')
-        .upsert({ 
-          challenge_id: challenge.id, 
+        .upsert({
+          challenge_id: challenge.id,
           user_id: profile.id,
           last_attempt_at: new Date().toISOString()
         }, { onConflict: 'challenge_id,user_id' });
@@ -110,7 +113,7 @@ export default function ArenaPage() {
             <button
               onClick={() => {
                 setShowAd(false);
-                setShowSliderAd(true); // 👈 active la pub slider après
+                setShowOutstreamAd(true); // 👈 affiche l'outstream après interstitial
               }}
               className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse"
             >
@@ -120,7 +123,10 @@ export default function ArenaPage() {
         </div>
       )}
 
-      {/* 🎥 VIDEO SLIDER PUB (après fermeture) */}
+      {/* 🎥 EXO OUTSTREAM (après fermeture interstitial) */}
+      {showOutstreamAd && <ExoOutstream />}
+
+      {/* 🎥 VIDEO SLIDER PUB (après outstream si tu veux) */}
       {showSliderAd && <VideoSliderAd />}
 
       {/* SITE NORMAL */}
@@ -159,7 +165,7 @@ export default function ArenaPage() {
                     <p className="text-xl text-emerald-500">{ch.prize_pool_cp} CP</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => handleEntry(ch, fee)}
                   disabled={profile?.jetons_cp < fee || entryLoading === ch.id}
                   className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30"
@@ -173,4 +179,4 @@ export default function ArenaPage() {
       </div>
     </>
   );
-  }
+}
