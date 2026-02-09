@@ -1,9 +1,10 @@
 "use client";
-import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet, Target, Play, X } from 'lucide-react';
+import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Zap, Coins, Wallet, Target, Play, HeartPulse } from 'lucide-react';
+import RewardedVideo from '@/components/ads/RewardedVideo'; // Import du composant Ad
 
 // --- AUDIO SYSTEM ---
 const playSound = (freq: number, duration: number, type: OscillatorType = 'sine') => {
@@ -21,80 +22,9 @@ const playSound = (freq: number, duration: number, type: OscillatorType = 'sine'
   } catch (e) {}
 };
 
-// --- VAST AD PLAYER COMPONENT ---
-// Ce composant gère la lecture de la publicité pour la seconde chance
-const AdPlayer = ({ vastUrl, onComplete, onClose }: { vastUrl: string, onComplete: () => void, onClose: () => void }) => {
-    const [videoSrc, setVideoSrc] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(false);
-
-    useEffect(() => {
-        // 1. Fetch et Parse du VAST XML
-        const fetchAd = async () => {
-            try {
-                const res = await fetch(vastUrl);
-                const text = await res.text();
-                const parser = new DOMParser();
-                const xml = parser.parseFromString(text, "text/xml");
-                // On cherche le fichier média MP4
-                const mediaFiles = xml.getElementsByTagName("MediaFile");
-                let foundSrc = null;
-                
-                for (let i = 0; i < mediaFiles.length; i++) {
-                    const type = mediaFiles[i].getAttribute("type");
-                    if (type === "video/mp4" || type === "video/webm") {
-                        foundSrc = mediaFiles[i].textContent?.trim();
-                        break;
-                    }
-                }
-
-                if (foundSrc) setVideoSrc(foundSrc);
-                else throw new Error("Aucune vidéo compatible trouvée");
-            } catch (err) {
-                console.error("Erreur Pub:", err);
-                setError(true);
-                // Fallback: Si erreur de chargement pub (CORS souvent), on peut soit fermer, soit accorder la vie (choix dev)
-                // Ici on montre l'erreur
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchAd();
-    }, [vastUrl]);
-
-    if (error) return (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-6 text-center">
-            <ShieldX size={50} className="text-rose-500 mb-4"/>
-            <p className="text-white text-xs font-bold mb-4">PUBLICITÉ INDISPONIBLE</p>
-            <button onClick={onClose} className="bg-white text-black px-6 py-3 rounded-xl font-black text-xs">FERMER</button>
-        </div>
-    );
-
-    return (
-        <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
-            {loading ? <Loader2 className="animate-spin text-emerald-500" size={40}/> : (
-                <div className="relative w-full h-full flex items-center justify-center bg-black">
-                    <video 
-                        src={videoSrc!} 
-                        autoPlay 
-                        playsInline 
-                        controls={false}
-                        className="max-w-full max-h-full aspect-video"
-                        onEnded={onComplete}
-                    />
-                    <div className="absolute top-4 right-4 bg-black/50 px-3 py-1 rounded text-[10px] text-white font-bold border border-white/20">
-                        PUBLICITÉ
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
 function BiometricGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
@@ -103,7 +33,7 @@ function BiometricGameContent() {
   const [maintenanceMsg, setMaintenanceMsg] = useState("Protocole de sécurité...");
   
   const [betCP, setBetCP] = useState(100);
-  const [multiplier, setMultiplier] = useState(0.5); // DÉMARRAGE À 0.5
+  const [multiplier, setMultiplier] = useState(0.5); // Start à 0.5
   const [gridSize, setGridSize] = useState(3); 
   const [pattern, setPattern] = useState<number[]>([]);
   const [userPattern, setUserPattern] = useState<number[]>([]);
@@ -112,9 +42,7 @@ function BiometricGameContent() {
   const [displayTime, setDisplayTime] = useState(1000); 
   const [sessionTimer, setSessionTimer] = useState(10);
   const [sessionsSolved, setSessionsSolved] = useState(0);
-  
-  // Gestion de la "Seconde Chance"
-  const [hasRevived, setHasRevived] = useState(false);
+  const [canRevive, setCanRevive] = useState(true); // Une seule fois par game
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -122,23 +50,21 @@ function BiometricGameContent() {
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(data);
     }
-    checkMaintenance();
+    checkAccess();
   }, []);
 
-  useEffect(() => {
-    init();
-    if (challengeId && challengeFee) {
-        setBetCP(Number(challengeFee));
-    }
-  }, [init, challengeId, challengeFee]);
+  useEffect(() => { init(); }, [init]);
 
-  const checkMaintenance = async () => {
+  const checkAccess = async () => {
     try {
       const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'biometric').single();
       if (data && !data.is_active) {
         setMaintenanceMsg(data.maintenance_msg);
         setStatus('maintenance');
-      } else { setStatus('idle'); }
+      } else { 
+        setStatus('idle'); 
+        if (challengeId && challengeFee) setBetCP(Number(challengeFee));
+      }
     } catch (e) { setStatus('idle'); }
   };
 
@@ -173,72 +99,32 @@ function BiometricGameContent() {
   }, [status, displayTime]);
 
   const startGame = async () => {
-    if (!profile) return;
+    if (!profile || loading) return;
     setLoading(true);
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
-
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-          p_user_id: profile.id,
-          p_mise_cp: finalFee,
-          p_gain_cp: 0,
-          p_jeu_nom: challengeId ? `Challenge Biometric: ${challengeId}` : 'Biometric Hack Solo'
+          p_user_id: profile.id, p_mise_cp: finalFee, p_gain_cp: 0, p_jeu_nom: 'Biometric Start'
       });
-
-      if (rpcError) throw new Error(rpcError.message);
-      if (!result.success) throw new Error(result.message);
-
-      if (challengeId) {
-        await supabase.from('challenge_attempts').upsert({
-            challenge_id: challengeId,
-            user_id: profile.id,
-        }, { onConflict: 'challenge_id,user_id' });
-      }
+      if (rpcError || !result.success) throw new Error(result?.message || "Erreur Solde");
 
       const { data: game, error: gameErr } = await supabase.from('biometric_games').insert([{
-          user_id: profile.id,
-          mise_cp: finalFee,
-          is_active: true
+          user_id: profile.id, mise_cp: finalFee, is_active: true
       }]).select().single();
-      
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(0.5); // START @ 0.5
+      setMultiplier(0.5); // Initialisation à 0.5
       setGridSize(3);
       setSessionsSolved(0);
-      setHasRevived(false); // Reset revive status
-      setDisplayTime(1200); // Un peu plus lent au début
+      setCanRevive(true);
       generatePattern(3);
       playSound(440, 0.1);
-    } catch (e: any) { 
-        alert(e.message); 
-    } finally { setLoading(false); }
+    } catch (e: any) { alert(e.message); } finally { setLoading(false); }
   };
 
   const handleCellClick = (idx: number) => {
     if (status !== 'input' || userPattern.includes(idx)) return;
-    
-    // --- LOGIQUE MULTIPLICATEUR < 1.0 (PHASE SÉCURISÉE) ---
-    if (multiplier < 1.0) {
-        if (!pattern.includes(idx)) {
-            // Erreur en phase safe : On ne perd pas, on vibre juste
-            playSound(150, 0.2, 'sawtooth');
-            if (navigator.vibrate) navigator.vibrate(200);
-            return; // On ignore le clic incorrect
-        }
-        // Clic correct : on continue normalement
-        const nextUserPattern = [...userPattern, idx];
-        setUserPattern(nextUserPattern);
-        playSound(880, 0.05);
-
-        if (nextUserPattern.length === pattern.length) {
-            handleLevelComplete();
-        }
-        return;
-    }
-
-    // --- LOGIQUE MULTIPLICATEUR >= 1.0 (PHASE RISQUE) ---
     const nextUserPattern = [...userPattern, idx];
     setUserPattern(nextUserPattern);
 
@@ -246,184 +132,99 @@ function BiometricGameContent() {
     playSound(880, 0.05);
 
     if (nextUserPattern.length === pattern.length) {
-      handleLevelComplete();
-    }
-  };
-
-  const handleLevelComplete = () => {
-      const nextSolvedCount = sessionsSolved + 1;
-      setSessionsSolved(nextSolvedCount);
-      
-      // Progression du multiplicateur (0.5 -> 0.7 -> 0.9 -> 1.0 -> 1.2 ...)
-      setMultiplier(prev => {
-          if (prev < 1.0) return parseFloat((prev + 0.2).toFixed(2)); // Monte vite vers 1
-          return parseFloat((prev + 0.15).toFixed(2)); // Monte doucement après 1
-      });
+      setSessionsSolved(s => s + 1);
+      setMultiplier(prev => parseFloat((prev + 0.10).toFixed(2))); // +0.1 par succès
       
       let nextGrid = gridSize;
-      if (nextSolvedCount >= 3 && gridSize === 3) nextGrid = 4;
-      if (nextSolvedCount >= 6 && gridSize === 4) nextGrid = 5;
+      if (sessionsSolved >= 3 && gridSize === 3) nextGrid = 4;
+      if (sessionsSolved >= 6 && gridSize === 4) nextGrid = 5;
       setGridSize(nextGrid);
       
-      setDisplayTime(prev => Math.max(300, prev - 80));
+      setDisplayTime(prev => Math.max(300, prev - 100));
       setTimeout(() => generatePattern(nextGrid), 500);
+    }
   };
 
   const handleFailure = async () => {
-    // Si on est en phase safe (< 1.0), on ne devrait techniquement pas échouer sur le timer
-    // Mais si le timer expire, on considère ça comme une défaite quand même ?
-    // Le prompt dit "le client ne perd pas ses cp". 
-    // On va dire que Timer = Perdu, mais Clic = Safe.
-    
-    setStatus('lost');
+    // LOGIQUE DE SAUVEGARDE AUTOMATIQUE (Si < 1.0)
+    if (multiplier < 1.0 && !challengeId) {
+        finalizeGame(true); // On force le cashout du multiplicateur actuel
+        return;
+    }
+
+    // Sinon, on a perdu (Zone > 1.0 ou Challenge)
     playSound(110, 0.5, 'sawtooth');
-    saveProgress(0); // Gain 0 pour l'instant
+    setStatus('lost');
   };
 
-  const reviveGame = () => {
-      setStatus('watching_ad');
-  };
-
-  const onAdCompleted = () => {
-      // Le joueur a vu la pub, on le remet en jeu
-      setHasRevived(true);
-      setStatus('showing'); // On remontre le pattern actuel pour être sympa
-      setSessionTimer(10); // Reset timer
-      setUserPattern([]); // Reset input
-  };
-
-  const saveProgress = async (gain: number) => {
-    if (challengeId && sessionsSolved > 0) {
-        await supabase.rpc('increment_challenge_score', {
-            p_user_id: profile.id,
-            p_challenge_id: challengeId,
-            p_score: sessionsSolved * 10 
-        });
-    }
-    if (gameId) {
-        await supabase.from('biometric_games').update({ 
-          is_active: false, 
-          gain_cp: gain 
-        }).eq('id', gameId);
-    }
-    init();
-  };
-
-  const cashout = async () => {
-    if (loading || !gameId) return;
-    // Sécurité : Impossible d'encaisser avant x1.0 (sauf si challenge)
-    if (!challengeId && multiplier < 1.0) return;
-
+  const finalizeGame = async (wasAutoSaved: boolean = false) => {
+    if (!gameId) return;
     setLoading(true);
-    const gainCP = challengeId ? 0 : Math.floor(betCP * multiplier);
     
+    // Si < 1.0 ou manuel, on calcule le gain. Si perdu en zone > 1.0, gain = 0.
+    let gainFinal = 0;
+    if (wasAutoSaved || status === 'input') {
+        gainFinal = Math.floor(betCP * multiplier);
+    }
+
     try {
       if (challengeId) {
         await supabase.rpc('increment_challenge_score', {
-            p_user_id: profile.id,
-            p_challenge_id: challengeId,
-            p_score: sessionsSolved * 15 
+            p_user_id: profile.id, p_challenge_id: challengeId, p_score: sessionsSolved * 10
         });
       } else {
-        const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-            p_user_id: profile.id,
-            p_mise_cp: 0,
-            p_gain_cp: gainCP,
-            p_jeu_nom: 'Biometric Success'
+        await supabase.rpc('jouer_partie_cp', {
+            p_user_id: profile.id, p_mise_cp: 0, p_gain_cp: gainFinal, p_jeu_nom: 'Biometric Final'
         });
-        if (rpcError) throw new Error(rpcError.message);
-        
-        // VALIDATION TÂCHE SI GAIN IMPORTANT
-        if (gainCP > 200) {
-             await supabase.rpc('update_task_progress', { p_user_id: profile.id, p_task_code: 'PLAY_BIO' });
-        }
       }
 
-      await supabase.from('biometric_games').update({ 
-        is_active: false, 
-        gain_cp: gainCP 
-      }).eq('id', gameId);
-
-      setStatus('won');
-      playSound(523, 0.5);
-    } catch (e: any) { 
-      alert("Erreur Finalisation."); 
-    } finally { 
-      setLoading(false); 
-      init();
-    }
+      await supabase.from('biometric_games').update({ is_active: false, gain_cp: gainFinal }).eq('id', gameId);
+      setStatus(gainFinal > 0 || (challengeId && sessionsSolved > 0) ? 'won' : 'lost');
+      if (gainFinal > 0) playSound(523, 0.5);
+    } catch (e) { console.error(e); } finally { setLoading(false); init(); }
   };
+
+  // --- LOGIQUE AD REWARD ---
+  const handleAdComplete = () => {
+    setCanRevive(false);
+    setStatus('showing'); // On remontre le pattern actuel
+    generatePattern(gridSize);
+    playSound(600, 0.2);
+  };
+
+  if (status === 'maintenance') return <div className="h-screen bg-[#020617] flex items-center justify-center text-amber-500 font-black uppercase italic p-10 text-center">{maintenanceMsg}</div>;
 
   return (
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col font-sans">
       
-      {/* PUBLICITÉ OVERLAY */}
+      {/* AD OVERLAY */}
       {status === 'watching_ad' && (
-          <AdPlayer 
-            vastUrl="https://s.magsrv.com/v1/vast.php?idzone=5848158" 
-            onComplete={onAdCompleted}
-            onClose={() => setStatus('lost')} // Si ferme la pub, il reste perdu
-          />
+          <RewardedVideo onReward={handleAdComplete} onClose={() => setStatus('lost')} />
       )}
 
-      {/* HEADER HUD */}
+      {/* HEADER */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
+        <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
           <ChevronLeft size={20}/>
         </button>
-        <div className="flex flex-col items-end">
-            <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-                <Coins size={16} className="text-emerald-500" />
-                <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
-            </div>
-            {challengeId && <span className="text-[7px] text-amber-500 mt-1 tracking-widest animate-pulse">MODE_DÉFI_ACTIVÉ</span>}
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+            <Coins size={16} className="text-emerald-500" />
+            <span className="text-emerald-500 text-sm italic">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 relative">
-        {status === 'maintenance' ? (
-          <div className="flex flex-col items-center justify-center p-10 bg-white/5 rounded-[3rem] border border-white/5 backdrop-blur-sm">
-            <Construction size={50} className="text-amber-500 animate-pulse" />
-            <h2 className="text-2xl text-amber-500 mt-4 tracking-tighter">MAINTENANCE</h2>
-            <p className="text-slate-500 text-[9px] text-center mt-2 italic leading-relaxed uppercase">{maintenanceMsg}</p>
-          </div>
-        ) : status === 'idle' || status === 'loading' ? (
+        {status === 'idle' || status === 'loading' ? (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-xs bg-slate-900/40 border border-white/10 p-10 rounded-[3.5rem] text-center backdrop-blur-md shadow-2xl">
-            {status === 'loading' ? (
-                <Loader2 className="animate-spin mx-auto text-emerald-500" size={50} />
-            ) : (
+            {status === 'loading' ? <Loader2 className="animate-spin mx-auto text-emerald-500" size={50} /> : (
                 <>
-                {challengeId && (
-                    <div className="bg-emerald-500 text-black px-4 py-2 rounded-full mb-6 flex items-center justify-center gap-2 animate-pulse">
-                        <Target size={14} />
-                        <span className="text-[9px] font-black italic">MISSION_DÉCRYPTAGE_ACTIVE</span>
-                    </div>
-                )}
-                
-                <div className="relative inline-block mb-8">
-                    <div className="absolute inset-0 bg-emerald-500 blur-[60px] opacity-20" />
-                    <Fingerprint className="text-emerald-500 relative" size={70} />
-                </div>
-                
+                <Fingerprint className="text-emerald-500 mx-auto mb-8 drop-shadow-[0_0_20px_#10b981]" size={70} />
                 <div className="bg-black/60 p-6 rounded-3xl border border-white/5 mb-8 shadow-inner">
-                    <p className="text-[10px] text-emerald-500 mb-2 font-bold italic tracking-widest uppercase">
-                        {challengeId ? 'FRAIS DE MISSION (FIXE)' : 'ALLOCATION_JETONS'}
-                    </p>
-                    <input 
-                      type="number" 
-                      value={betCP} 
-                      disabled={!!challengeId}
-                      onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                      className={`bg-transparent text-5xl font-black text-center w-full outline-none tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`} 
-                    />
+                    <p className="text-[10px] text-emerald-500 mb-2 tracking-widest">{challengeId ? 'MISSION FEE' : 'MISE CP'}</p>
+                    <input type="number" disabled={!!challengeId} value={betCP} onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} className="bg-transparent text-5xl font-black text-center w-full outline-none text-white focus:text-emerald-400 tracking-tighter" />
                 </div>
-
-                <button 
-                  onClick={startGame} 
-                  disabled={loading} 
-                  className={`w-full py-6 rounded-[2rem] text-xl font-black text-white shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all disabled:opacity-50 ${challengeId ? 'bg-amber-600' : 'bg-emerald-600'}`}
-                >
-                    {loading ? <Loader2 className="animate-spin mx-auto" /> : challengeId ? "INITIALISER_RAID" : "ACCÉDER_SCAN"}
+                <button onClick={startGame} disabled={loading} className="w-full py-6 rounded-[2rem] text-xl font-black bg-emerald-600 text-white shadow-xl active:scale-95 transition-all">
+                    {loading ? <Loader2 className="animate-spin mx-auto" /> : "INITIALISER LE SCAN"}
                 </button>
                 </>
             )}
@@ -431,60 +232,52 @@ function BiometricGameContent() {
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
             {/* IN-GAME HUD */}
-            <div className="w-full grid grid-cols-3 gap-4 mb-10 px-2">
+            <div className="w-full grid grid-cols-3 gap-4 mb-10">
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
-                    <p className="text-[7px] text-zinc-500 italic font-bold">TIMER</p>
-                    <p className={`text-xl font-black ${sessionTimer < 4 ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>{sessionTimer}S</p>
+                    <p className="text-[7px] text-zinc-500 italic font-bold tracking-widest uppercase">Timer</p>
+                    <p className={`text-xl font-black ${sessionTimer < 4 ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>{sessionTimer}s</p>
                 </div>
-                <div className="bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/20 text-center">
-                    <p className="text-[7px] text-emerald-500 italic font-bold">MULT</p>
-                    <p className={`text-2xl font-black ${multiplier < 1.0 ? 'text-amber-400' : 'text-white'}`}>x{multiplier.toFixed(2)}</p>
-                    {multiplier < 1.0 && <p className="text-[6px] text-amber-500">PROTECTED</p>}
+                <div className={`p-4 rounded-2xl border text-center transition-all ${multiplier >= 1.0 ? 'bg-rose-500/10 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)]' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                    <p className={`text-[7px] italic font-bold uppercase ${multiplier >= 1.0 ? 'text-rose-500' : 'text-emerald-500'}`}>Multiplier</p>
+                    <p className="text-2xl font-black">x{multiplier.toFixed(2)}</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
-                    <p className="text-[7px] text-zinc-500 italic font-bold">GRID</p>
-                    <p className="text-xl font-black text-white">{gridSize}x{gridSize}</p>
+                    <p className="text-[7px] text-zinc-500 italic font-bold uppercase tracking-widest">Score</p>
+                    <p className="text-xl font-black">{sessionsSolved}</p>
                 </div>
             </div>
 
-            {/* THE SCANNER GRID */}
+            {/* SCANNER GRID */}
             <div 
-              className={`grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border shadow-2xl relative overflow-hidden transition-all duration-500 ${multiplier < 1.0 ? 'border-amber-500/30' : 'border-white/10'}`}
-              style={{ 
-                gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))`,
-                width: 'min(90vw, 360px)',
-                height: 'min(90vw, 360px)'
-              }}
+              className="grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border border-white/10 shadow-2xl"
+              style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)`, width: 'min(90vw, 360px)', height: 'min(90vw, 360px)' }}
             >
               {Array.from({ length: gridSize * gridSize }).map((_, i) => (
                 <motion.div
                   key={i}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => handleCellClick(i)}
-                  className={`
-                    rounded-xl border-2 transition-all duration-300
-                    ${status === 'showing' && pattern.includes(i) ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.6)] scale-95' : 'bg-white/5 border-white/5'}
-                    ${status === 'input' && userPattern.includes(i) ? 'bg-emerald-600 border-emerald-400 shadow-md' : ''}
-                  `}
+                  className={`rounded-xl border-2 transition-all duration-300 ${
+                    status === 'showing' && pattern.includes(i) ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_15px_#10b981]' : 
+                    status === 'input' && userPattern.includes(i) ? 'bg-emerald-600/50 border-emerald-400' : 'bg-white/5 border-white/5'
+                  }`}
                 />
               ))}
             </div>
 
-            {/* BOUTON ENCAISSER (Seulement si Mult >= 1.0 et pas Challenge) */}
-            {multiplier >= 1.0 && !challengeId && (
-                <button 
-                  onClick={cashout}
-                  disabled={loading}
-                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/20 hover:bg-emerald-400"
+            {/* CASHOUT BUTTON (Only if Multiplier >= 1.0) */}
+            {multiplier >= 1.0 && (
+                <motion.button 
+                  initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+                  onClick={() => finalizeGame(false)}
+                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 flex items-center justify-center gap-3"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : <>EXTRAIRE {Math.floor(betCP * multiplier)} CP <Wallet size={20}/></>}
-                </button>
+                  <Zap size={20} fill="black" /> ENCAISSER {Math.floor(betCP * multiplier)} CP
+                </motion.button>
             )}
             
             {multiplier < 1.0 && !challengeId && (
-                <div className="mt-10 py-4 text-center">
-                    <p className="text-[10px] text-amber-500 font-bold uppercase animate-pulse">Synchronisation en cours... ({Math.floor(multiplier*100)}%)</p>
-                </div>
+                <p className="mt-8 text-[8px] text-emerald-500/50 tracking-[0.3em] font-black uppercase animate-pulse">Mode Sauvetage Actif : Pas de perte</p>
             )}
           </div>
         )}
@@ -494,38 +287,34 @@ function BiometricGameContent() {
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
-            <motion.div initial={{ scale: 0.5, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} className="mb-8">
-                {status === 'lost' ? <ShieldX size={120} className="text-rose-600 drop-shadow-[0_0_30px_rgba(225,29,72,0.4)]" /> : <ShieldCheck size={120} className="text-emerald-500 drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]" />}
-            </motion.div>
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
+                {status === 'lost' ? <ShieldX size={48} className="text-rose-500" /> : <ShieldCheck size={48} className="text-emerald-500" />}
+            </div>
             
-            <h2 className="text-4xl font-black italic mb-4 uppercase tracking-tighter leading-none">
-              {challengeId ? 'FIN DE SÉQUENCE' : (status === 'lost' ? 'DÉCRYPTAGE_INTERROMPU' : 'SCAN_SUCCÈS')}
-            </h2>
+            <h2 className="text-4xl font-black italic mb-2 tracking-tighter uppercase">{status === 'lost' ? 'Scan Interrompu' : 'Succès'}</h2>
             
-            <div className="bg-white/5 p-10 rounded-[3rem] w-full max-w-xs mb-6 border border-white/10 backdrop-blur-md relative overflow-hidden">
-                <div className={`absolute top-0 left-0 w-full h-1 ${status === 'lost' ? 'bg-rose-500' : 'bg-emerald-500'} opacity-30`} />
-                <p className="text-[10px] text-zinc-500 mb-2 tracking-[0.4em] font-bold italic">
-                    {challengeId ? 'SCORE_MISSION' : 'JETONS_RÉCUPÉRÉS'}
+            <div className="bg-white/5 p-8 rounded-[2.5rem] w-full max-w-xs mb-8 border border-white/10 shadow-inner">
+                <p className="text-[10px] text-zinc-500 mb-2 font-bold tracking-widest uppercase">Gains Finale</p>
+                <p className="text-6xl font-black italic tracking-tighter text-white">
+                    {status === 'won' ? Math.floor(betCP * multiplier) : 0} 
+                    <span className="text-sm text-emerald-500 ml-1 uppercase font-black">cp</span>
                 </p>
-                <p className="text-6xl font-black tracking-tighter italic leading-none">
-                    {challengeId ? (status === 'won' ? sessionsSolved * 15 : sessionsSolved * 10) : (status === 'lost' ? '0' : Math.floor(betCP * multiplier))} 
-                    <span className="text-sm text-emerald-500 ml-2 font-black uppercase">{challengeId ? 'pts' : 'CP'}</span>
-                </p>
-                {challengeId && <p className="text-[8px] text-emerald-500 mt-4 font-bold tracking-widest uppercase">Score cumulé ✅</p>}
             </div>
 
-            {/* OPTIONS DE FIN DE JEU */}
             <div className="flex flex-col gap-3 w-full max-w-xs">
-                {/* BOUTON REVIVE (Si Perdu + Pas Challenge + Pas encore utilisé + Mult > 1) */}
-                {status === 'lost' && !challengeId && !hasRevived && multiplier > 1.0 && (
-                    <button onClick={reviveGame} className="w-full py-5 bg-amber-500 text-black rounded-[2rem] font-black text-lg active:scale-95 transition-all shadow-xl flex items-center justify-center gap-2">
-                        <Play size={18} fill="black"/> SECONDE CHANCE (PUB)
+                {status === 'lost' && canRevive && (
+                    <button onClick={() => setStatus('watching_ad')} className="w-full py-6 bg-emerald-600 text-white rounded-[1.8rem] font-black text-lg active:scale-95 flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20">
+                        <HeartPulse className="animate-pulse" size={20}/> REVIVRE (PUBLICITÉ)
                     </button>
                 )}
-
-                <button onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} className="w-full py-5 bg-white/10 text-white border border-white/10 rounded-[2rem] font-black text-lg active:scale-95 transition-all">
-                    {challengeId ? 'VOIR MON RANG' : 'NOUVELLE TENTATIVE'}
+                
+                <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="w-full py-5 bg-white/5 text-slate-400 rounded-[1.8rem] font-black text-sm active:scale-95 transition-all">
+                    QUITTER L'ARÈNE
                 </button>
+                
+                {status === 'won' && (
+                     <button onClick={() => setStatus('idle')} className="w-full py-6 bg-emerald-600 text-white rounded-[1.8rem] font-black text-xl active:scale-95 shadow-xl">NOUVEAU SCAN</button>
+                )}
             </div>
           </motion.div>
         )}
