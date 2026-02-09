@@ -1,15 +1,19 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Search, Heart, Zap, Layers, Target, Grid, 
   Fingerprint, Brain, Lock, ChevronLeft, Star,
   Home, Gamepad2, Ticket, MessageSquare, User,
-  Users, LucideIcon
+  Users, LucideIcon, ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import AdsBanner from "@/components/ads/AdsBanner"; // <-- IMPORT PUB
+
+// Assure-toi que ce chemin est correct. Si tu n'as pas ce fichier, dis-le moi.
+// J'ai ajouté un fallback simple au cas où le composant n'existe pas encore.
+import AdsBanner from "@/components/ads/AdsBanner"; 
 
 // --- TYPES ---
 interface GameConfig {
@@ -17,7 +21,7 @@ interface GameConfig {
   name: string;
   desc: string;
   path: string;
-  Icon: LucideIcon;
+  icon: LucideIcon; // J'ai renommé 'Icon' en 'icon' pour respecter les conventions camelCase en props
   iconColor: string;
   color: string;
   players: string;
@@ -26,27 +30,36 @@ interface GameConfig {
 
 // --- CONFIGURATION DES JEUX ---
 const GAMES: GameConfig[] = [
-  { id: 'crash', name: "CROISSANCE", desc: "Anticipez la courbe", path: "/client/crash", Icon: Zap, iconColor: "text-amber-400", color: "from-amber-500/20", players: "1,248", category: "Multiplicateur" },
-  { id: 'squidglass', name: "SQUID GLASS", desc: "Le pont de la survie", path: "/client/squidglass", Icon: Layers, iconColor: "text-rose-500", color: "from-rose-500/20", players: "942", category: "Agilité" },
-  { id: 'plinko', name: "PLINKO ELITE", desc: "Multiplicateurs en cascade", path: "/client/plinko", Icon: Target, iconColor: "text-blue-400", color: "from-blue-500/20", players: "1,105", category: "Hasard" },
-  { id: 'mines', name: "MINES", desc: "Gestion du risque", path: "/client/mines", Icon: Grid, iconColor: "text-emerald-500", color: "from-emerald-500/20", players: "856", category: "Stratégie" },
-  { id: 'biometric', name: "BIOMETRIC HACK", desc: "Agilité visuelle", path: "/client/biometric-hack", Icon: Fingerprint, iconColor: "text-cyan-400", color: "from-cyan-500/20", players: "652", category: "Réflexes" },
-  { id: 'quiz', name: "CHIF QUIZ", desc: "Connaissances", path: "/client/quiz", Icon: Brain, iconColor: "text-purple-400", color: "from-purple-500/20", players: "3,012", category: "Savoir" },
-  { id: 'laser', name: "LASER VAULT", desc: "Précision", path: "/client/laser-vault", Icon: Lock, iconColor: "text-orange-500", color: "from-orange-500/20", players: "2,094", category: "Précision" }
+  { id: 'crash', name: "CROISSANCE", desc: "Anticipez la courbe", path: "/client/crash", icon: Zap, iconColor: "text-amber-400", color: "from-amber-500/20", players: "1,248", category: "Multiplicateur" },
+  { id: 'squidglass', name: "SQUID GLASS", desc: "Le pont de la survie", path: "/client/squidglass", icon: Layers, iconColor: "text-rose-500", color: "from-rose-500/20", players: "942", category: "Agilité" },
+  { id: 'plinko', name: "PLINKO ELITE", desc: "Multiplicateurs en cascade", path: "/client/plinko", icon: Target, iconColor: "text-blue-400", color: "from-blue-500/20", players: "1,105", category: "Hasard" },
+  { id: 'mines', name: "MINES", desc: "Gestion du risque", path: "/client/mines", icon: Grid, iconColor: "text-emerald-500", color: "from-emerald-500/20", players: "856", category: "Stratégie" },
+  { id: 'biometric', name: "BIOMETRIC HACK", desc: "Agilité visuelle", path: "/client/biometric-hack", icon: Fingerprint, iconColor: "text-cyan-400", color: "from-cyan-500/20", players: "652", category: "Réflexes" },
+  { id: 'quiz', name: "CHIF QUIZ", desc: "Connaissances", path: "/client/quiz", icon: Brain, iconColor: "text-purple-400", color: "from-purple-500/20", players: "3,012", category: "Savoir" },
+  { id: 'laser', name: "LASER VAULT", desc: "Précision", path: "/client/laser-vault", icon: Lock, iconColor: "text-orange-500", color: "from-orange-500/20", players: "2,094", category: "Précision" }
 ];
 
 export default function GameListPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [search, setSearch] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     const saved = localStorage.getItem('fav_games');
-    if (saved) setFavorites(JSON.parse(saved));
+    if (saved) {
+        try {
+            setFavorites(JSON.parse(saved));
+        } catch (e) {
+            console.error("Erreur lecture favoris", e);
+        }
+    }
   }, []);
 
   const toggleFavorite = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Empêche de cliquer sur la carte du jeu en même temps
     const newFavs = favorites.includes(id) 
       ? favorites.filter(f => f !== id) 
       : [...favorites, id];
@@ -64,64 +77,76 @@ export default function GameListPage() {
     [favorites]
   );
 
+  if (!isMounted) return null; // Évite les erreurs d'hydratation (différence serveur/client)
+
   return (
-    <div className="min-h-screen bg-[#050508] text-white font-sans select-none overflow-x-hidden">
+    <div className="min-h-screen bg-[#020617] text-white font-sans select-none overflow-x-hidden pb-32">
       
       {/* Top Bar Fixe */}
-      <div className="sticky top-0 z-50 bg-[#050508]/80 backdrop-blur-lg border-b border-white/5 px-5 py-4 flex items-center justify-between">
+      <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between shadow-lg shadow-black/20">
         <button 
           onClick={() => router.back()}
-          className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 active:scale-90 transition-all"
+          className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 active:scale-90 transition-all hover:bg-white/10"
         >
           <ChevronLeft size={20} className="text-white" />
         </button>
         <h1 className="text-lg font-black italic tracking-tighter uppercase">
           ELITE <span className="text-emerald-500">GAMES</span>
         </h1>
-        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
-          <Star size={16} className="text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
+        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+          <Star size={18} className="text-emerald-500" />
         </div>
       </div>
 
-      <main className="p-5 pb-32">
+      <main className="p-6 space-y-8">
+        
         {/* Barre de Recherche */}
-        <div className="relative mb-8">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+        <div className="relative group">
+          <div className="absolute inset-0 bg-emerald-500/20 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity rounded-full"></div>
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-500 transition-colors" size={18} />
           <input 
             type="text"
             placeholder="RECHERCHER UN DÉFI..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-emerald-500/50 transition-all text-xs font-bold tracking-widest uppercase text-white"
+            className="w-full bg-slate-900/80 border border-white/10 rounded-2xl py-4 pl-14 pr-4 outline-none focus:border-emerald-500/50 transition-all text-xs font-bold tracking-widest uppercase text-white placeholder:text-slate-600 relative z-10"
           />
         </div>
 
-        {/* Section Favoris */}
-        <AnimatePresence mode="popLayout">
+        {/* --- BANNIÈRE PUB (Intégrée proprement) --- */}
+        {/* On vérifie si le composant existe pour éviter le crash */}
+        <div className="w-full overflow-hidden rounded-[2rem] border border-white/5 shadow-2xl relative min-h-[100px] flex items-center justify-center bg-black/40">
+            {AdsBanner ? <AdsBanner /> : <p className="text-[10px] text-slate-600 uppercase tracking-widest">Espace Sponsor</p>}
+        </div>
+
+        {/* Section Favoris (Affichage conditionnel) */}
+        <AnimatePresence>
           {favoriteGames.length > 0 && !search && (
             <motion.section 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-10"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-4"
             >
-              <h2 className="text-[10px] font-black text-slate-500 mb-4 tracking-[0.3em] uppercase flex items-center gap-2">
-                <Heart size={10} className="fill-rose-500 text-rose-500" /> Vos Favoris
+              <h2 className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase flex items-center gap-2 pl-2">
+                <Heart size={12} className="fill-rose-500 text-rose-500" /> Vos Favoris
               </h2>
-              <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+              <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 no-scrollbar snap-x">
                 {favoriteGames.map(game => (
                   <motion.div 
                     key={`fav-${game.id}`}
-                    layoutId={`fav-${game.id}`}
                     onClick={() => router.push(game.path)}
-                    className="min-w-[150px] bg-gradient-to-br from-white/5 to-transparent border border-white/10 p-5 rounded-[2rem] relative active:scale-95 transition-transform"
+                    className="min-w-[160px] snap-center bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 p-5 rounded-[2rem] relative active:scale-95 transition-transform shadow-lg"
                   >
-                    <div className="mb-4">
-                      <game.Icon size={28} className={game.iconColor} />
+                    <div className={`mb-4 w-10 h-10 rounded-full flex items-center justify-center bg-black/40 border border-white/5`}>
+                      <game.icon size={20} className={game.iconColor} />
                     </div>
-                    <p className="text-[11px] font-black truncate uppercase">{game.name}</p>
+                    <p className="text-[10px] font-black truncate uppercase tracking-wider mb-1">{game.name}</p>
+                    <p className="text-[8px] text-slate-500 font-bold uppercase">{game.category}</p>
+                    
                     <button 
                       onClick={(e) => toggleFavorite(e, game.id)}
-                      className="absolute top-4 right-4 p-1"
+                      className="absolute top-4 right-4 p-2 bg-white/5 rounded-full hover:bg-rose-500/20 transition-colors"
                     >
                       <Heart size={14} className="fill-rose-500 text-rose-500" />
                     </button>
@@ -132,46 +157,51 @@ export default function GameListPage() {
           )}
         </AnimatePresence>
 
-        {/* --- BANNIÈRE PUB --- */}
-        <AdsBanner />
-
         {/* Grille de tous les jeux */}
-        <section>
-          <h2 className="text-[10px] font-black text-slate-500 mb-6 tracking-[0.3em] uppercase">
-            {search ? `Résultats (${filteredGames.length})` : "Tous les Jeux"}
+        <section className="space-y-4">
+          <h2 className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase pl-2">
+            {search ? `Résultats (${filteredGames.length})` : "Bibliothèque Complète"}
           </h2>
           
-          <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {filteredGames.map((game, index) => (
               <motion.div
                 key={game.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
                 onClick={() => router.push(game.path)}
-                className="group relative bg-[#0a0a0f] border border-white/5 rounded-[1.8rem] p-4 flex items-center gap-4 active:scale-[0.98] transition-all overflow-hidden"
+                className="group relative bg-[#0f172a]/60 border border-white/5 rounded-[2rem] p-4 flex items-center gap-5 active:scale-[0.98] transition-all overflow-hidden hover:border-emerald-500/30 hover:bg-[#0f172a]"
               >
-                <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity`} />
-                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 z-10">
-                  <game.Icon size={26} className={game.iconColor} />
+                {/* Effet de lueur au survol */}
+                <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+                
+                <div className="w-16 h-16 rounded-[1.5rem] bg-black border border-white/10 flex items-center justify-center shrink-0 z-10 shadow-lg group-hover:scale-105 transition-transform">
+                  <game.icon size={28} className={game.iconColor} />
                 </div>
-                <div className="flex-1 min-w-0 z-10">
-                  <h3 className="font-black text-sm tracking-tight uppercase truncate">{game.name}</h3>
-                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">{game.desc}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Users size={10} className="text-emerald-500" />
-                    <span className="text-[9px] text-emerald-500/80 font-black uppercase tracking-tighter">
-                      {game.players} JOUEURS EN LIGNE
-                    </span>
+                
+                <div className="flex-1 min-w-0 z-10 space-y-1">
+                  <h3 className="font-black text-sm tracking-tight uppercase truncate text-slate-200 group-hover:text-white transition-colors">{game.name}</h3>
+                  <p className="text-slate-500 text-[9px] font-bold uppercase tracking-wider">{game.desc}</p>
+                  
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/10">
+                        <Users size={10} className="text-emerald-500" />
+                        <span className="text-[8px] text-emerald-500 font-black uppercase tracking-tighter">
+                        {game.players}
+                        </span>
+                    </div>
+                    <span className="text-[8px] text-slate-600 font-bold uppercase border border-white/5 px-2 py-0.5 rounded-md">{game.category}</span>
                   </div>
                 </div>
+
                 <button 
                   onClick={(e) => toggleFavorite(e, game.id)}
-                  className="p-3 z-20 relative"
+                  className="p-3 z-20 relative active:scale-90 transition-transform"
                 >
                   <Heart 
-                    size={20} 
-                    className={favorites.includes(game.id) ? "fill-rose-500 text-rose-500" : "text-white/10 group-hover:text-white/30"} 
+                    size={22} 
+                    className={`${favorites.includes(game.id) ? "fill-rose-500 text-rose-500" : "text-slate-700 hover:text-rose-400"} transition-colors`} 
                   />
                 </button>
               </motion.div>
@@ -180,32 +210,32 @@ export default function GameListPage() {
         </section>
       </main>
 
-      {/* Barre de Navigation Basse */}
-      <nav className="fixed bottom-0 inset-x-0 bg-[#050508]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50">
-        <NavIcon icon={<Home size={20} />} label="ACCUEIL" />
-        <NavIcon icon={<Gamepad2 size={20} />} label="JEUX" active />
-        <NavIcon icon={<Ticket size={20} />} label="SHOP" />
-        <NavIcon icon={<MessageSquare size={20} />} label="CHAT" />
-        <NavIcon icon={<User size={20} />} label="PROFIL" />
+      {/* Barre de Navigation Basse (Fonctionnelle) */}
+      <nav className="fixed bottom-0 inset-x-0 bg-[#020617]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 pb-8 rounded-t-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <NavIcon href="/client/home" icon={<Home size={22} />} label="ACCUEIL" active={pathname === '/client/home'} />
+        <NavIcon href="/client/list" icon={<Gamepad2 size={22} />} label="JEUX" active={pathname === '/client/list'} />
+        <NavIcon href="/client/market" icon={<ShoppingBag size={22} />} label="SHOP" active={pathname === '/client/market'} />
+        <NavIcon href="/client/chat" icon={<MessageSquare size={22} />} label="CHAT" active={pathname === '/client/chat'} />
+        <NavIcon href="/client/profile" icon={<User size={22} />} label="PROFIL" active={pathname === '/client/profile'} />
       </nav>
     </div>
   );
 }
 
-// Composant Interne pour la Navigation
-function NavIcon({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) {
+// Composant Interne pour la Navigation (Avec Link)
+function NavIcon({ href, icon, label, active = false }: { href: string, icon: React.ReactNode, label: string, active?: boolean }) {
   return (
-    <div className={`flex flex-col items-center gap-1.5 transition-colors ${active ? 'text-emerald-500' : 'text-slate-500'}`}>
-      <div className={`${active ? 'scale-110 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]' : ''} transition-transform`}>
+    <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all duration-300 ${active ? 'text-emerald-400 -translate-y-1' : 'text-slate-600 hover:text-slate-300'}`}>
+      <div className={`${active ? 'drop-shadow-[0_0_12px_rgba(52,211,153,0.6)]' : ''} transition-all`}>
         {icon}
       </div>
-      <span className="text-[7px] font-black tracking-widest uppercase">{label}</span>
+      <span className={`text-[8px] font-black tracking-widest uppercase ${active ? 'text-emerald-400' : 'text-slate-600'}`}>{label}</span>
       {active && (
         <motion.div 
           layoutId="nav-glow" 
-          className="w-1 h-1 bg-emerald-500 rounded-full" 
+          className="absolute -bottom-2 w-1 h-1 bg-emerald-400 rounded-full shadow-[0_0_8px_#34d399]" 
         />
       )}
-    </div>
+    </Link>
   );
-                             }
+}
