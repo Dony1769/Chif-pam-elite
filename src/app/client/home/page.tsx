@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
@@ -13,8 +13,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-// IMPORTE TON COMPOSANT ONBOARDING ICI (Assure-toi de créer le fichier d'abord)
+
+// Vos composants personnalisés
 import OnboardingTour from '@/components/OnboardingTour';
+import ExoClickInterstitial from '@/components/ads/ExoClickInterstitial'; // <-- IMPORT DU NOUVEAU COMPOSANT
 
 const LogoSmall = () => (
   <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -115,6 +117,9 @@ export default function ClientHome() {
       
       {/* INTEGRATION DU POP-UP ONBOARDING */}
       <OnboardingTour />
+      
+      {/* INTEGRATION DE LA PUB INTERSTITIELLE EXOCLICK */}
+      <ExoClickInterstitial />
 
       <AnimatePresence>
         {isMenuOpen && (
