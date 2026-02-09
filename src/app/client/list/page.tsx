@@ -11,9 +11,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Assure-toi que ce chemin est correct. Si tu n'as pas ce fichier, dis-le moi.
-// J'ai ajouté un fallback simple au cas où le composant n'existe pas encore.
-import AdsBanner from "@/components/ads/AdsBanner"; 
+// --- IMPORT DU NOUVEAU BANNER ADSTERRA ---
+import AdsterraBanner from "@/components/ads/AdsterraBanner"; 
 
 // --- TYPES ---
 interface GameConfig {
@@ -21,7 +20,7 @@ interface GameConfig {
   name: string;
   desc: string;
   path: string;
-  icon: LucideIcon; // J'ai renommé 'Icon' en 'icon' pour respecter les conventions camelCase en props
+  icon: LucideIcon;
   iconColor: string;
   color: string;
   players: string;
@@ -59,7 +58,7 @@ export default function GameListPage() {
   }, []);
 
   const toggleFavorite = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // Empêche de cliquer sur la carte du jeu en même temps
+    e.stopPropagation();
     const newFavs = favorites.includes(id) 
       ? favorites.filter(f => f !== id) 
       : [...favorites, id];
@@ -77,7 +76,7 @@ export default function GameListPage() {
     [favorites]
   );
 
-  if (!isMounted) return null; // Évite les erreurs d'hydratation (différence serveur/client)
+  if (!isMounted) return null;
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans select-none overflow-x-hidden pb-32">
@@ -113,13 +112,12 @@ export default function GameListPage() {
           />
         </div>
 
-        {/* --- BANNIÈRE PUB (Intégrée proprement) --- */}
-        {/* On vérifie si le composant existe pour éviter le crash */}
-        <div className="w-full overflow-hidden rounded-[2rem] border border-white/5 shadow-2xl relative min-h-[100px] flex items-center justify-center bg-black/40">
-            {AdsBanner ? <AdsBanner /> : <p className="text-[10px] text-slate-600 uppercase tracking-widest">Espace Sponsor</p>}
+        {/* --- BANNIÈRE PUB ADSTERRA --- */}
+        <div className="w-full overflow-hidden rounded-[2rem] border border-white/5 shadow-2xl relative min-h-[80px] flex items-center justify-center bg-black/40">
+            <AdsterraBanner />
         </div>
 
-        {/* Section Favoris (Affichage conditionnel) */}
+        {/* Section Favoris */}
         <AnimatePresence>
           {favoriteGames.length > 0 && !search && (
             <motion.section 
@@ -173,7 +171,6 @@ export default function GameListPage() {
                 onClick={() => router.push(game.path)}
                 className="group relative bg-[#0f172a]/60 border border-white/5 rounded-[2rem] p-4 flex items-center gap-5 active:scale-[0.98] transition-all overflow-hidden hover:border-emerald-500/30 hover:bg-[#0f172a]"
               >
-                {/* Effet de lueur au survol */}
                 <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
                 
                 <div className="w-16 h-16 rounded-[1.5rem] bg-black border border-white/10 flex items-center justify-center shrink-0 z-10 shadow-lg group-hover:scale-105 transition-transform">
@@ -210,7 +207,7 @@ export default function GameListPage() {
         </section>
       </main>
 
-      {/* Barre de Navigation Basse (Fonctionnelle) */}
+      {/* Barre de Navigation Basse */}
       <nav className="fixed bottom-0 inset-x-0 bg-[#020617]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 pb-8 rounded-t-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
         <NavIcon href="/client/home" icon={<Home size={22} />} label="ACCUEIL" active={pathname === '/client/home'} />
         <NavIcon href="/client/list" icon={<Gamepad2 size={22} />} label="JEUX" active={pathname === '/client/list'} />
@@ -222,7 +219,6 @@ export default function GameListPage() {
   );
 }
 
-// Composant Interne pour la Navigation (Avec Link)
 function NavIcon({ href, icon, label, active = false }: { href: string, icon: React.ReactNode, label: string, active?: boolean }) {
   return (
     <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all duration-300 ${active ? 'text-emerald-400 -translate-y-1' : 'text-slate-600 hover:text-slate-300'}`}>
@@ -239,3 +235,4 @@ function NavIcon({ href, icon, label, active = false }: { href: string, icon: Re
     </Link>
   );
 }
+
