@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, ArrowRight, HelpCircle, ShieldCheck, Gamepad2, Trophy, Lock } from 'lucide-react';
+import { Loader2, ArrowRight, HelpCircle, ShieldCheck, Gamepad2, Trophy, Lock, ScrollText } from 'lucide-react';
 import Link from 'next/link';
 
 // --- LOGO ---
