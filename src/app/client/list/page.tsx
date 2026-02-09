@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- IMPORT DU NOUVEAU BANNER ADSTERRA ---
-import AdsterraBanner from "@/components/ads/AdsterraBanner"; 
+// --- IMPORT DU NOUVEAU BANNER EXOCLICK ---
+import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
 
 // --- TYPES ---
 interface GameConfig {
@@ -112,9 +112,9 @@ export default function GameListPage() {
           />
         </div>
 
-        {/* --- BANNIÈRE PUB ADSTERRA --- */}
-        <div className="w-full overflow-hidden rounded-[2rem] border border-white/5 shadow-2xl relative min-h-[80px] flex items-center justify-center bg-black/40">
-            <AdsterraBanner />
+        {/* --- BANNIÈRE PUB EXOCLICK --- */}
+        <div className="w-full overflow-hidden rounded-[2rem] border border-white/5 shadow-2xl relative min-h-[100px] flex items-center justify-center bg-black/40">
+            <ExoClickBanner />
         </div>
 
         {/* Section Favoris */}
@@ -235,4 +235,3 @@ function NavIcon({ href, icon, label, active = false }: { href: string, icon: Re
     </Link>
   );
 }
-
