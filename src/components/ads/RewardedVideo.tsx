@@ -9,16 +9,17 @@ export interface RewardedVideoProps {
   zoneId?: number;
 }
 
-export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: RewardedVideoProps) {
+// MISE À JOUR ICI : Nouvel ID de zone par défaut (5848554)
+export default function RewardedVideo({ onReward, onClose, zoneId = 5848554 }: RewardedVideoProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState("Chargement publicité...");
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
   
-  // Variable pour suivre si une pub a réellement démarré
+  // Variable pour suivre si une pub a réellement démarré (Anti-Triche)
   const adStartedRef = useRef(false);
 
-  // Lien officiel (Production)
+  // Lien officiel VAST utilisant l'ID de zone
   const vastUrl = `https://s.magsrv.com/v1/vast.php?idzone=${zoneId}`;
 
   const initPlayer = () => {
@@ -27,12 +28,12 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
     try {
       playerRef.current = window.fluidPlayer(videoRef.current, {
         layoutControls: {
-          primaryColor: "#10B981",
+          primaryColor: "#10B981", // Vert Emerald
           fillToContainer: true,
           autoPlay: true,
           mute: false,
           allowTheatre: false,
-          keyboardControl: false, // Bloque les raccourcis clavier pour passer
+          keyboardControl: false, // Bloque les raccourcis clavier
           // On cache tout ce qui n'est pas la pub
           logo: { imageUrl: null, position: 'top right', clickUrl: null, opacity: 0 },
           controlBar: {
@@ -46,7 +47,7 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
             {
               roll: 'preRoll',
               vastTag: vastUrl,
-              timer: 5 // Oblige à regarder au moins 5s (selon la pub)
+              timer: 5 // Oblige à regarder au moins 5s avant de pouvoir skipper (si la pub le permet)
             }
           ],
           allowVPAID: true,
@@ -60,7 +61,7 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
 
       // 1. La pub commence VRAIMENT
       playerRef.current.on('adImpression', () => {
-        console.log("Pub démarrée");
+        console.log("Pub démarrée - ID Zone:", zoneId);
         adStartedRef.current = true;
         setStatus('ready');
       });
@@ -75,17 +76,16 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
 
       // 3. Erreur de chargement (Pas de pub, Adblock, ou Site non validé)
       playerRef.current.on('adError', () => {
-        console.error("Erreur VAST : Pas de publicité disponible");
+        console.error("Erreur VAST : Pas de publicité disponible pour cette zone");
         adStartedRef.current = false;
         setErrorMsg("Aucune publicité disponible pour le moment.");
         setStatus('error');
       });
 
-      // 4. Sécurité : Si le lecteur finit la vidéo "principale" (le fond noir) sans avoir joué de pub
+      // 4. Sécurité : Si le lecteur finit la vidéo de fond sans avoir joué de pub
       playerRef.current.on('ended', () => {
         if (!adStartedRef.current) {
             // Si on arrive ici, c'est que le lecteur a sauté la pub et fini la vidéo de fond.
-            // ON NE DONNE PAS LA RÉCOMPENSE.
             setErrorMsg("Publicité ignorée ou indisponible.");
             setStatus('error');
         }
@@ -111,6 +111,7 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
   return (
     <div className="fixed inset-0 z-[200] bg-black/98 flex flex-col items-center justify-center p-4 backdrop-blur-xl">
       
+      {/* Chargement du script Fluid Player */}
       <Script 
         src="https://cdn.fluidplayer.com/v3/current/fluidplayer.min.js" 
         onLoad={initPlayer}
@@ -120,12 +121,12 @@ export default function RewardedVideo({ onReward, onClose, zoneId = 5848158 }: R
 
       <div className="relative w-full max-w-lg aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 flex flex-col justify-center">
         
-        {/* Vidéo placeholder (Vide et muette, sert juste de support au VAST) */}
+        {/* Vidéo placeholder (Support pour le VAST) */}
         <video ref={videoRef} className="w-full h-full">
             <source src="https://cdn.fluidplayer.com/videos/valerian-1080p.mkv" type="video/mp4" />
         </video>
 
-        {/* --- ÉCRANS DE STATUT (S'affichent par dessus le lecteur) --- */}
+        {/* --- ÉCRANS DE STATUT (Overlay) --- */}
 
         {/* Chargement */}
         {status === 'loading' && (
@@ -174,3 +175,4 @@ declare global {
     fluidPlayer: any;
   }
 }
+
