@@ -26,8 +26,8 @@ export default function MentionsLegales() {
             <div className="bg-black/20 p-4 rounded-xl border border-white/5 text-sm space-y-2">
                 <p><span className="text-slate-500 font-bold uppercase">Nom commercial :</span> CHIF PAM</p>
                 <p><span className="text-slate-500 font-bold uppercase">Statut :</span> Plateforme de jeux d'adresse en ligne</p>
-                <p><span className="text-slate-500 font-bold uppercase">Responsable :</span> [TON NOM COMPLET ICI]</p>
-                <p><span className="text-slate-500 font-bold uppercase">Adresse :</span> [TON ADRESSE OU VILLE, HAÏTI]</p>
+                <p><span className="text-slate-500 font-bold uppercase">Responsable :</span> [Guillaume Jhonn]</p>
+                <p><span className="text-slate-500 font-bold uppercase">Adresse :</span> [Jeremie, HAÏTI]</p>
             </div>
           </section>
 
