@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Coins, HeartPulse, Zap } from 'lucide-react';
-// Assure-toi que le chemin d'import correspond bien à l'emplacement de ton fichier
+// Import du composant publicitaire mis à jour
 import RewardedVideo from '@/components/ads/RewardedVideo';
 
 // --- AUDIO SYSTEM ---
@@ -147,6 +147,7 @@ function BiometricGameContent() {
   };
 
   const handleFailure = async () => {
+    // Si on perd en zone "Safe" (<1.0) et hors challenge, on encaisse auto
     if (multiplier < 1.0 && !challengeId) {
         finalizeGame(true);
         return;
@@ -181,10 +182,11 @@ function BiometricGameContent() {
     } catch (e) { console.error(e); } finally { setLoading(false); init(); }
   };
 
+  // --- REWARD: LE JOUEUR A VU LA PUB EN ENTIER ---
   const handleAdComplete = () => {
-    setCanRevive(false);
-    setStatus('showing');
-    generatePattern(gridSize);
+    setCanRevive(false); // On désactive le revive pour ne pas abuser
+    setStatus('showing'); // On revient au jeu
+    generatePattern(gridSize); // On relance une séquence
     playSound(600, 0.2);
   };
 
@@ -193,11 +195,18 @@ function BiometricGameContent() {
   return (
     <div className="h-screen bg-[#020617] text-white font-black italic uppercase overflow-hidden flex flex-col font-sans">
       
-      {/* AD OVERLAY CORRIGÉ */}
+      {/* INTÉGRATION DE LA PUB AVEC VOTRE NOUVEL ID 
+          Si le joueur clique sur "Revivre", on affiche ce composant.
+      */}
       {status === 'watching_ad' && (
-          <RewardedVideo onReward={handleAdComplete} onClose={() => setStatus('lost')} />
+          <RewardedVideo 
+            onReward={handleAdComplete} 
+            onClose={() => setStatus('lost')} 
+            zoneId={5848554} 
+          />
       )}
 
+      {/* HEADER */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
         <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
           <ChevronLeft size={20}/>
@@ -226,6 +235,7 @@ function BiometricGameContent() {
           </motion.div>
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
+            {/* IN-GAME HUD */}
             <div className="w-full grid grid-cols-3 gap-4 mb-10">
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
                     <p className="text-[7px] text-zinc-500 italic font-bold tracking-widest uppercase">Timer</p>
@@ -241,6 +251,7 @@ function BiometricGameContent() {
                 </div>
             </div>
 
+            {/* SCANNER GRID */}
             <div 
               className="grid gap-2.5 p-6 bg-black/40 rounded-[3rem] border border-white/10 shadow-2xl"
               style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)`, width: 'min(90vw, 360px)', height: 'min(90vw, 360px)' }}
@@ -275,6 +286,7 @@ function BiometricGameContent() {
         )}
       </div>
 
+      {/* RESULTS MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
@@ -293,6 +305,8 @@ function BiometricGameContent() {
             </div>
 
             <div className="flex flex-col gap-3 w-full max-w-xs">
+                
+                {/* BOUTON REVIVRE PAR PUB */}
                 {status === 'lost' && canRevive && (
                     <button onClick={() => setStatus('watching_ad')} className="w-full py-6 bg-emerald-600 text-white rounded-[1.8rem] font-black text-lg active:scale-95 flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20">
                         <HeartPulse className="animate-pulse" size={20}/> REVIVRE (PUBLICITÉ)
