@@ -215,6 +215,7 @@ export default function Connexion() {
             <div className="flex gap-6">
                 <Link href="/legal/confidentialite" className="hover:text-emerald-500 transition-colors">Politique de Confidentialité</Link>
                 <Link href="/legal/conditions" className="hover:text-emerald-500 transition-colors">Conditions d'Utilisation</Link>
+              <Link href="/legal/mention-legales" className="hover:text-white transition-colors flex items-center gap-1"><ScrollText size={12}/> Mentions Légales</Link>
             </div>
         </div>
       </footer>
