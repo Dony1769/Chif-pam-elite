@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { 
   ArrowUpCircle, ArrowDownCircle, 
   Clock, Loader2, ChevronLeft, 
-  AlertCircle, Wallet
+  AlertCircle, Wallet, History // <--- J'ai ajouté l'import ici
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// Import de la publicité (Zone Banner vérifiée)
+// Import de la publicité
 import ExoClickBanner from "@/components/ads/ExoClickBanner";
 
 // --- COMPOSANT LOGO MINI ---
@@ -28,7 +28,6 @@ export default function ClientHistory() {
 
   useEffect(() => {
     fetchHistory();
-    // Écoute en temps réel des nouvelles transactions (ex: dépôt validé par l'admin)
     const channel = supabase.channel('history-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchHistory())
       .subscribe();
@@ -40,7 +39,6 @@ export default function ClientHistory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // On ne récupère que les transactions financières
       const { data } = await supabase
         .from('transactions')
         .select('*')
@@ -80,7 +78,7 @@ export default function ClientHistory() {
 
       <div className="max-w-md mx-auto p-4 space-y-6">
         
-        {/* Résumé visuel (Optionnel) */}
+        {/* Résumé visuel */}
         <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-6 rounded-[2rem] border border-white/5 shadow-lg flex items-center gap-4">
           <div className="p-3 bg-emerald-500/10 rounded-full border border-emerald-500/20">
              <Wallet className="text-emerald-500" size={24} />
@@ -91,7 +89,7 @@ export default function ClientHistory() {
           </div>
         </div>
 
-        {/* --- PUBLICITÉ INTEGRÉE (Juste avant la liste) --- */}
+        {/* --- PUBLICITÉ INTEGRÉE --- */}
         <div className="w-full overflow-hidden rounded-[1.5rem] border border-white/5 shadow-lg bg-black/20 relative min-h-[100px] flex items-center justify-center">
             <p className="absolute top-2 right-4 text-[8px] text-slate-600 font-black uppercase tracking-widest z-0">Sponsor</p>
             <ExoClickBanner />
@@ -101,6 +99,7 @@ export default function ClientHistory() {
         <div className="space-y-3">
             {transactions.length === 0 ? (
                 <div className="text-center py-10 opacity-30 flex flex-col items-center">
+                    {/* History est maintenant bien importé et fonctionnera */}
                     <History size={40} className="mb-2"/>
                     <p className="text-xs font-bold uppercase">Aucune transaction trouvée</p>
                 </div>
