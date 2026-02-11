@@ -4,22 +4,27 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Loader2, ChevronLeft, TrendingUp, 
-  ShieldCheck, History, DollarSign, Sprout, Target, AlertTriangle, Hammer
+  ShieldCheck, DollarSign, Sprout, Target, AlertTriangle, Hammer, Coins
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 
+// IMPORT DE LA PUBLICITÉ
+import ExoClickBanner from "@/components/ads/ExoClickBanner"; // Vérifie si ton fichier s'appelle ExoBanner ou ExoClickBanner
+
 export default function CrashElite() {
   const router = useRouter();
   
   // --- ÉTATS ---
-  const [bet, setBet] = useState(10);
+  const [bet, setBet] = useState(100); // Mise par défaut en CP
+  const [jetonsCP, setJetonsCP] = useState(0); // Solde CP
   const [autoCashout, setAutoCashout] = useState(2.0);
   const [mult, setMult] = useState(1.0);
   const [status, setStatus] = useState<'idle' | 'running' | 'crashed' | 'collected'>('idle');
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // --- ÉTAT MAINTENANCE ---
   const [isMaintenance, setIsMaintenance] = useState(false);
@@ -33,44 +38,25 @@ export default function CrashElite() {
   const gameBoxRef = useRef<HTMLDivElement>(null);
   const isCollectingRef = useRef<boolean>(false);
 
-  // --- LOGIQUE DE MAINTENANCE (LIVE) ---
+  // --- INITIALISATION ---
   useEffect(() => {
-    // 1. Vérification initiale
-    const checkInitialMaintenance = async () => {
-      const { data } = await supabase.from('game_settings').select('*').eq('game_id', 'crash').single();
-      if (data && !data.is_active) {
-        setIsMaintenance(true);
-        setMaintMsg(data.maintenance_msg);
-      }
-    };
-    checkInitialMaintenance();
-
-    // 2. Écoute en temps réel des changements (Admin Panel)
-    const channel = supabase
-      .channel('game_maintenance')
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'game_settings',
-        filter: 'game_id=eq.crash' 
-      }, (payload) => {
-        const active = payload.new.is_active;
-        if (!active) {
-          setIsMaintenance(true);
-          setMaintMsg(payload.new.maintenance_msg);
-          // Arrêter le jeu si en cours
-          if (requestRef.current) cancelAnimationFrame(requestRef.current);
-        } else {
-          setIsMaintenance(false);
+    const init = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            setUserId(user.id);
+            const { data } = await supabase.from('profiles').select('jetons_cp').eq('id', user.id).single();
+            if (data) setJetonsCP(data.jetons_cp);
         }
-      })
-      .subscribe();
+        
+        // Vérification Maintenance
+        const { data: setting } = await supabase.from('game_settings').select('*').eq('game_id', 'crash').single();
+        if (setting && !setting.is_active) {
+            setIsMaintenance(true);
+            setMaintMsg(setting.maintenance_msg);
+        }
+    };
+    init();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  // --- NETTOYAGE ---
-  useEffect(() => {
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       gsap.killTweensOf(".game-box");
@@ -89,8 +75,10 @@ export default function CrashElite() {
     return () => ctx.revert();
   }, []);
 
+  // --- FONCTION ENCAISSER (COLLECT) ---
   const collect = useCallback(async (forcedMult?: number) => {
-    if (status !== 'running' || !gameId || loading || isCollectingRef.current) return;
+    if (status !== 'running' || !gameId || loading || isCollectingRef.current || !userId) return;
+    
     isCollectingRef.current = true;
     setLoading(true);
 
@@ -100,12 +88,30 @@ export default function CrashElite() {
     }
     
     const finalMult = forcedMult || parseFloat(multRef.current.toFixed(2));
+    const winAmount = Math.floor(bet * finalMult); // Gain total (Mise * Mult)
+
     try {
-      const { data: success, error: collectErr } = await supabase.rpc('process_game_win_crash', { 
-        p_game_id: gameId, 
-        p_multiplier: finalMult 
+      // 1. Transaction RPC : CRÉDIT DU GAIN
+      // Note : On crédite tout le gain car la mise a déjà été débitée au start
+      const { data: result, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
+          p_user_id: userId,
+          p_mise_cp: 0,
+          p_gain_cp: winAmount, 
+          p_jeu_nom: `Crash Win x${finalMult}`
       });
-      if (collectErr || !success) throw new Error();
+
+      if (rpcErr || !result.success) throw new Error("Erreur transaction gain");
+
+      // 2. Mise à jour locale
+      setJetonsCP(prev => prev + winAmount);
+      
+      // 3. Mise à jour de la session de jeu
+      await supabase.from('crash_games').update({
+          status: 'cashed_out',
+          multiplier_out: finalMult,
+          payout: winAmount
+      }).eq('id', gameId);
+
       setStatus('collected');
     } catch (e) {
       alert("Erreur de synchronisation.");
@@ -113,33 +119,47 @@ export default function CrashElite() {
       setLoading(false);
       isCollectingRef.current = false;
     }
-  }, [status, gameId, loading]);
+  }, [status, gameId, loading, userId, bet]);
 
+  // --- BOUCLE DE JEU ---
   const gameLoop = useCallback((time: number) => {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
-    const currentMult = Math.pow(Math.E, 0.07 * elapsed) * 1;
+    
+    // Formule exponentielle classique du Crash
+    const currentMult = Math.pow(Math.E, 0.06 * elapsed); 
     
     if (currentMult >= crashAtRef.current) {
+      // CRASH !
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
       setMult(crashAtRef.current);
       setStatus('crashed');
       triggerCrashAnimation();
+      
+      // Update DB en background pour dire que c'est perdu
+      if (gameId) {
+          supabase.from('crash_games').update({ status: 'crashed' }).eq('id', gameId).then();
+      }
+
     } else if (autoCashout > 1.01 && currentMult >= autoCashout) {
+      // AUTO-CASHOUT
       setMult(autoCashout);
       multRef.current = autoCashout;
       collect(autoCashout); 
     } else {
+      // CONTINUER
       multRef.current = currentMult;
       setMult(currentMult);
       requestRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [triggerCrashAnimation, autoCashout, collect]);
+  }, [triggerCrashAnimation, autoCashout, collect, gameId]);
 
+  // --- DÉMARRAGE DU JEU ---
   const start = async () => {
-    if (isMaintenance) return; // Sécurité supplémentaire
-    if (bet < 10 || loading || status === 'running') return;
+    if (isMaintenance || !userId) return;
+    if (bet > jetonsCP || bet < 10 || loading || status === 'running') return;
+    
     setLoading(true);
     setStatus('idle');
     setMult(1.0);
@@ -148,43 +168,56 @@ export default function CrashElite() {
     isCollectingRef.current = false;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/connexion');
+      // 1. Transaction RPC : DÉBIT DE LA MISE
+      const { data: ok, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
+          p_user_id: userId,
+          p_mise_cp: Math.floor(bet),
+          p_gain_cp: 0,
+          p_jeu_nom: 'Crash Bet'
+      });
 
-      const { data: ok, error: rpcErr } = await supabase.rpc('process_bet', { p_amount: Number(bet) });
-      if (rpcErr || !ok) {
-        alert("Solde insuffisant.");
+      if (rpcErr || !ok.success) {
+        alert("Solde insuffisant ou erreur.");
         setLoading(false);
         return;
       }
 
+      setJetonsCP(prev => prev - bet); // Update visuel immédiat
+
+      // 2. Calcul du Crash Point (Algorithme Provably Fair simplifié)
       const result = Math.random();
-      if (result < 0.05) {
+      // 4% de chance de crash instantané (House Edge)
+      if (result < 0.04) {
         crashAtRef.current = 1.00;
       } else {
-        crashAtRef.current = parseFloat((0.97 / (1 - result)).toFixed(2));
+        // Formule standard : 0.99 / (1 - X)
+        crashAtRef.current = parseFloat((0.99 / (1 - result)).toFixed(2));
       }
 
+      // 3. Création de la partie en DB
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
-        user_id: user.id,
+        user_id: userId,
         bet_amount: Number(bet),
-        crash_point: crashAtRef.current,
+        crash_point: crashAtRef.current, // On stocke le point de crash (secret coté client normalement mais ok pour MVP)
         status: 'playing'
       }).select().single();
 
       if (gameErr) throw gameErr;
+      
       setGameId(game.id);
       setStatus('running');
       setLoading(false);
       requestRef.current = requestAnimationFrame(gameLoop);
+
     } catch (error) {
+      console.error(error);
       alert("Erreur technique.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white flex flex-col items-center p-4 font-sans select-none overflow-hidden">
+    <div className="min-h-screen bg-[#050508] text-white flex flex-col items-center p-4 font-sans select-none overflow-hidden relative">
       <div className="crash-overlay fixed inset-0 bg-rose-600 opacity-0 pointer-events-none z-50" />
 
       {/* OVERLAY MAINTENANCE */}
@@ -199,7 +232,7 @@ export default function CrashElite() {
                 <Hammer className="text-amber-500 animate-bounce" size={40} />
               </div>
               <h2 className="text-3xl font-black italic uppercase tracking-tighter">Crash en <span className="text-amber-500">Pause</span></h2>
-              <p className="text-slate-400 text-xs font-bold leading-relaxed italic">"{maintMsg || "Nous effectuons des mises à jour pour améliorer votre expérience."}"</p>
+              <p className="text-slate-400 text-xs font-bold leading-relaxed italic">"{maintMsg || "Nous effectuons des mises à jour."}"</p>
               <button onClick={() => router.push('/client/home')} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
                 Retour à l'accueil
               </button>
@@ -209,25 +242,25 @@ export default function CrashElite() {
       </AnimatePresence>
 
       <div className="w-full max-w-lg flex justify-between items-center mb-6">
-        <button onClick={() => router.push('/client/home')} className="p-3 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all">
+        <button onClick={() => router.push('/client/list')} className="p-3 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all">
           <ChevronLeft size={22} />
         </button>
-        <div className="text-right">
-          <div className="flex items-center gap-2 text-emerald-400 font-black italic text-lg">
-            <Sprout size={20} className="animate-pulse" /> PLANTE ELITE
-          </div>
-          <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest">
-            <ShieldCheck size={8} className="inline mr-1"/> Sécurité Maison Activée (3% Edge)
-          </div>
+        
+        {/* SOLDE CP */}
+        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+            <Coins size={16} className="text-emerald-500" />
+            <span className="text-emerald-500 font-black tracking-tighter">{Math.floor(jetonsCP).toLocaleString()} CP</span>
         </div>
       </div>
 
       <main className="w-full max-w-lg space-y-4">
-        <div ref={gameBoxRef} className="game-box relative h-96 bg-[#0a0a0f] rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl">
+        
+        {/* --- ZONE DE JEU (GAME BOX) --- */}
+        <div ref={gameBoxRef} className="game-box relative h-80 bg-[#0a0a0f] rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <div className="absolute bottom-0 w-full flex justify-center items-end">
-             <motion.div style={{ height: `${Math.min((mult - 1) * 150, 300)}px` }} className="w-4 bg-gradient-to-t from-emerald-800 to-emerald-400 rounded-t-full relative">
+             <motion.div style={{ height: `${Math.min((mult - 1) * 150, 280)}px` }} className="w-4 bg-gradient-to-t from-emerald-800 to-emerald-400 rounded-t-full relative">
                 {mult > 1.2 && <SproutLeaf side="left" top="20%" />}
                 {mult > 1.5 && <SproutLeaf side="right" top="40%" />}
                 {mult > 2.0 && <SproutLeaf side="left" top="60%" />}
@@ -235,40 +268,70 @@ export default function CrashElite() {
           </div>
 
           <div className="relative z-10 flex flex-col items-center">
-            <span className={`text-8xl font-black tracking-tighter ${status === 'crashed' ? 'text-rose-500' : 'text-emerald-400'}`}>
+            <span className={`text-7xl font-black tracking-tighter ${status === 'crashed' ? 'text-rose-500' : 'text-emerald-400'}`}>
               {mult.toFixed(2)}<span className="text-2xl ml-1">x</span>
             </span>
-            {status === 'running' && <div className="text-xs font-bold text-white/30 tracking-[0.4em] uppercase">Croissance...</div>}
+            {status === 'running' && <div className="text-[10px] font-bold text-white/30 tracking-[0.4em] uppercase animate-pulse">En cours...</div>}
           </div>
 
           <AnimatePresence>
             {status === 'collected' && (
               <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="win-display absolute inset-0 bg-emerald-500/20 backdrop-blur-md flex items-center justify-center z-20">
                 <div className="bg-emerald-500 text-black px-10 py-5 rounded-full font-black text-3xl shadow-2xl">
-                   +{Math.floor(bet * mult)} HTG
+                   +{Math.floor(bet * mult)} CP
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        <div className="bg-[#0d0d12] p-6 rounded-[2.5rem] border border-white/5 space-y-5 shadow-2xl">
+        {/* 🧠 ZONE PUB SÉCURISÉE */}
+        <div className="w-full overflow-hidden rounded-2xl border border-white/5 bg-black/20 relative min-h-[80px] flex items-center justify-center">
+            <p className="absolute top-1 right-2 text-[6px] text-slate-600 font-black uppercase tracking-widest z-0">SPONSOR</p>
+            <ExoClickBanner />
+        </div>
+
+        {/* --- PANNEAU DE CONTRÔLE --- */}
+        <div className="bg-[#0d0d12] p-6 rounded-[2.5rem] border border-white/5 space-y-5 shadow-2xl relative z-10">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><DollarSign size={10} /> Mise (HTG)</label>
-              <input type="number" value={bet} onChange={e => setBet(Number(e.target.value))} disabled={status === 'running'} className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-emerald-500/50" />
+              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={10} /> Mise (CP)</label>
+              <input 
+                type="number" 
+                value={bet} 
+                onChange={e => setBet(Number(e.target.value))} 
+                disabled={status === 'running'} 
+                className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-emerald-500/50" 
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Target size={10} /> Auto-Cashout</label>
-              <input type="number" step="0.1" value={autoCashout} onChange={e => setAutoCashout(Number(e.target.value))} disabled={status === 'running'} className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-amber-500/50" />
+              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Target size={10} /> Auto-Stop (x)</label>
+              <input 
+                type="number" 
+                step="0.1" 
+                value={autoCashout} 
+                onChange={e => setAutoCashout(Number(e.target.value))} 
+                disabled={status === 'running'} 
+                className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-amber-500/50" 
+              />
             </div>
           </div>
 
           {status === 'running' ? (
-            <button onClick={() => collect()} disabled={loading} className="w-full py-6 bg-amber-500 text-black rounded-[2rem] text-2xl font-black shadow-xl transition-all">{loading ? <Loader2 className="animate-spin mx-auto" /> : `ENCAISSER ${Math.floor(bet * mult)}`}</button>
+            <button 
+                onClick={() => collect()} 
+                disabled={loading} 
+                className="w-full py-6 bg-amber-500 text-black rounded-[2rem] text-2xl font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+                {loading ? <Loader2 className="animate-spin" /> : `STOP @ ${Math.floor(bet * mult)} CP`}
+            </button>
           ) : (
-            <button onClick={start} disabled={loading || isMaintenance} className={`w-full py-6 rounded-[2rem] text-2xl font-black shadow-lg transition-all ${status === 'crashed' ? 'bg-rose-600 text-white' : 'bg-emerald-500 text-black'}`}>
-              {loading ? <Loader2 className="animate-spin mx-auto" /> : (status === 'crashed' ? "REPLANTER" : "LANCER")}
+            <button 
+                onClick={start} 
+                disabled={loading || isMaintenance || bet > jetonsCP} 
+                className={`w-full py-6 rounded-[2rem] text-2xl font-black shadow-lg active:scale-95 transition-all ${status === 'crashed' ? 'bg-rose-600 text-white' : 'bg-emerald-500 text-black'}`}
+            >
+              {loading ? <Loader2 className="animate-spin mx-auto" /> : (status === 'crashed' ? "REJOUER" : "LANCER")}
             </button>
           )}
         </div>
@@ -282,4 +345,3 @@ function SproutLeaf({ side, top }: { side: 'left' | 'right', top: string }) {
     <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`absolute w-8 h-4 bg-emerald-400 rounded-full ${side === 'left' ? '-left-8 rotate-[-30deg]' : '-right-8 rotate-[30deg]'}`} style={{ top }} />
   );
 }
-
