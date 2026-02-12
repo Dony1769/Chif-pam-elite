@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Zap, Trophy } from 'lucide-react';
+import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Zap, Trophy, Minus, Plus } from 'lucide-react';
 
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
   if (typeof window === 'undefined') return;
@@ -50,7 +50,9 @@ function LaserVaultGame() {
   const [loadingCheck, setLoadingCheck] = useState(true);
   const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won' | 'maintenance' | 'loading'>('loading');
   
-  const [betCP, setBetCP] = useState(100);
+  // Gestion de la mise
+  const [betCP, setBetCP] = useState(10); 
+
   const [laserY, setLaserY] = useState(0);
   const [problem, setProblem] = useState({ q: "", a: 0 });
   const [input, setInput] = useState("");
@@ -96,7 +98,11 @@ function LaserVaultGame() {
   }, []);
 
   const startGame = async () => {
+    // Validation de la mise
+    if (betCP < 10) { alert("Mise minimum : 10 CP"); return; }
+    if (betCP > (profile?.jetons_cp || 0)) { alert("Solde insuffisant"); return; }
     if (loading || !profile) return;
+
     setLoading(true);
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
@@ -126,6 +132,7 @@ function LaserVaultGame() {
     } catch (e: any) { alert(e.message); } finally { setLoading(false); }
   };
 
+  // --- LOGIQUE DE JEU & PÉNALITÉ ---
   useEffect(() => {
     if (status !== 'playing') return;
     const timer = setInterval(() => {
@@ -134,7 +141,12 @@ function LaserVaultGame() {
           finalizeGame(multiplier < 1.0); 
           return 88;
         }
+        
+        // CORRECTION DE LA VITESSE
+        // Zone Safe (x0.5 - x0.99) : Vitesse très réduite (40% de la base)
+        // Zone Danger (x1.0+) : Vitesse augmente progressivement
         const speedFactor = multiplier < 1.0 ? 0.4 : (1 + (multiplier - 1) * 0.2);
+        
         return prev + (baseSpeed * errorPenalty * speedFactor);
       });
     }, 100);
@@ -148,16 +160,28 @@ function LaserVaultGame() {
     setInput(newVal);
     if (newVal === "-") return;
     
+    // BONNE RÉPONSE
     if (parseInt(newVal) === problem.a) {
       setQuestionsSolved(q => q + 1);
       setMultiplier(prev => parseFloat((prev + 0.05).toFixed(2))); 
-      setLaserY(0); setInput(""); setErrorPenalty(1.0); 
+      setLaserY(0); setInput(""); setErrorPenalty(1.0); // Reset pénalité erreur
+      
+      // Accélération naturelle du jeu
       if (multiplier >= 1.0 && (questionsSolved + 1) % 2 === 0) {
           setBaseSpeed(s => s + 0.4);
       }
       generateProblem(multiplier + 0.05);
+    
+    // MAUVAISE RÉPONSE
     } else if (newVal.length >= problem.a.toString().length + 1) {
-      setErrorPenalty(p => p + 1.1); setInput(""); playSound('error');
+      // CORRECTION PÉNALITÉ ERREUR
+      // Si en zone safe (<1.0) : Pénalité légère (+5%)
+      // Si en zone danger (>=1.0) : Pénalité forte (+10%)
+      const penaltyIncrement = multiplier < 1.0 ? 0.05 : 0.1;
+      
+      setErrorPenalty(p => p + penaltyIncrement); 
+      setInput(""); 
+      playSound('error');
     }
   };
 
@@ -169,7 +193,6 @@ function LaserVaultGame() {
 
     try {
       if (challengeId) {
-          // MISE À JOUR DU SCORE (On incrémente le total_score existant)
           const { data: currentAttempt } = await supabase
             .from('challenge_attempts')
             .select('total_score, attempts_count')
@@ -189,7 +212,6 @@ function LaserVaultGame() {
             .eq('user_id', profile.id)
             .eq('challenge_id', challengeId);
       } else {
-          // Logique Solo
           if (multiplier >= 1.0 && !wasAutoSaved) gainFinal = Math.floor(betCP * multiplier);
           
           await supabase.rpc('jouer_partie_cp', {
@@ -234,13 +256,33 @@ function LaserVaultGame() {
               <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
                 {challengeId ? <Trophy className="text-amber-500" size={28} /> : <Lock className="text-emerald-500" size={28} />}
               </div>
-              <div className="space-y-1 mb-8 italic">
+              
+              <div className="space-y-4 mb-8">
                   <p className="text-[8px] text-emerald-500 tracking-widest font-bold uppercase">
-                      {challengeId ? "Frais de Participation" : "Mise Solo"}
+                      {challengeId ? "Frais de Participation" : "Montant à miser"}
                   </p>
-                  <p className="text-5xl font-black text-white tracking-tighter">{challengeId ? challengeFee : betCP} CP</p>
+                  
+                  {/* SÉLECTEUR DE MISE (ACTIVÉ UNIQUEMENT SI PAS EN CHALLENGE) */}
+                  {challengeId ? (
+                      <p className="text-5xl font-black text-white tracking-tighter">{challengeFee} CP</p>
+                  ) : (
+                      <div className="flex items-center justify-center gap-4 bg-black/40 p-2 rounded-2xl border border-white/5">
+                          <button onClick={() => setBetCP(Math.max(10, betCP - 10))} className="p-3 bg-white/5 rounded-xl active:scale-90 transition-all hover:bg-white/10"><Minus size={16}/></button>
+                          <div className="w-24">
+                              <input 
+                                type="number" 
+                                value={betCP} 
+                                onChange={(e) => setBetCP(Math.max(0, Number(e.target.value)))}
+                                className="w-full bg-transparent text-center text-3xl font-black outline-none"
+                              />
+                              <p className="text-[8px] text-slate-500">CP</p>
+                          </div>
+                          <button onClick={() => setBetCP(betCP + 10)} className="p-3 bg-white/5 rounded-xl active:scale-90 transition-all hover:bg-white/10"><Plus size={16}/></button>
+                      </div>
+                  )}
               </div>
-              <button onClick={startGame} disabled={loading} className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-white shadow-2xl active:scale-95 transition-all ${challengeId ? 'bg-amber-600' : 'bg-emerald-600'}`}>
+
+              <button onClick={startGame} disabled={loading || (!challengeId && betCP < 10)} className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-white shadow-2xl active:scale-95 transition-all ${challengeId ? 'bg-amber-600' : 'bg-emerald-600'}`}>
                 {loading ? <Loader2 className="animate-spin mx-auto"/> : "DÉVERROUILLER"}
               </button>
             </motion.div>
