@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Trophy, Calendar, CheckCircle2, Lock, Gift, Star, ChevronLeft, Coins, Gem, Loader2, Brain, ShoppingBag, CheckCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // Import du banner (Assurez-vous d'avoir ce composant ou remplacez par ExoClickBanner si vous préférez)
-import AdsterraNativeBanner from "@/components/AdsterraNativeBanner"; 
+import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
 
 export default function RewardsPage() {
   const [profile, setProfile] = useState<any>(null);
