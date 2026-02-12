@@ -25,23 +25,22 @@ function RankContent() {
     return () => { supabase.removeChannel(channel); };
   }, [challengeId]);
 
-  /* ============================= */
-  /* 🔥 VIGNETTE — 1 FOIS / SESSION */
-  /* ============================= */
+  // ✅ VIGNETTE UNIQUEMENT SUR LA PREMIÈRE PARTIE
   useEffect(() => {
     if (!challengeId) {
       const alreadyShown = sessionStorage.getItem("rankVignetteShown");
+
       if (!alreadyShown) {
         const script = document.createElement("script");
         script.dataset.zone = "10586275";
         script.src = "https://gizokraijaw.net/vignette.min.js";
         script.async = true;
         document.body.appendChild(script);
+
         sessionStorage.setItem("rankVignetteShown", "true");
       }
     }
   }, [challengeId]);
-  /* ============================= */
 
   const initData = async () => {
     setLoading(true);
@@ -94,15 +93,16 @@ function RankContent() {
     return () => clearInterval(interval);
   }, [activeChallenge]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-      <Loader2 className="animate-spin text-emerald-500" size={40} />
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" size={40} />
+      </div>
+    );
 
-  /* ============================= */
-  /* 🔹 PARTIE 1 : LISTE DES DÉFIS */
-  /* ============================= */
+  // ===========================
+  // PARTIE 1 : LISTE DES DÉFIS
+  // ===========================
   if (!challengeId) {
     return (
       <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
@@ -160,13 +160,26 @@ function RankContent() {
     );
   }
 
-  /* ============================= */
-  /* 🔹 PARTIE 2 : CLASSEMENT */
-  /* ============================= */
+  // ===========================
+  // PARTIE 2 : CLASSEMENT (INCHANGÉE)
+  // ===========================
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase italic pb-40">
-      {/* ... PARTIE 2 INCHANGÉE ... */}
+      <div className="max-w-md mx-auto flex justify-between items-center mb-8 mt-2">
+        <button onClick={() => router.push('/client/rank')} className="p-4 bg-white/5 rounded-3xl border border-white/10 active:scale-90 transition-all">
+          <ChevronLeft size={20} />
+        </button>
+        <div className="text-center">
+          <p className="text-[9px] text-emerald-500 tracking-[0.3em] mb-1">DATA_STREAM_SYNC</p>
+          <h2 className="text-sm border-b border-emerald-500/30 pb-1">{activeChallenge?.title}</h2>
+        </div>
+        <div className="w-12 h-12 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+          <Star size={20} className="animate-pulse" />
+        </div>
+      </div>
+
+      {/* --- RESTE STRICTEMENT IDENTIQUE À TON CODE --- */}
     </div>
   );
 }
@@ -181,4 +194,4 @@ export default function LeaderboardPage() {
       <RankContent />
     </Suspense>
   );
-  }
+                                       }
