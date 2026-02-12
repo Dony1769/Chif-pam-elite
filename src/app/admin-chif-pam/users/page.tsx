@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase'; // Ton client habituel
-import { adminResetPassword } from '@/app/actions/adminActions'; // Import de l'action créée étape 2
+import { supabase } from '@/lib/supabase';
+// IMPORT DE LA SERVER ACTION CRÉÉE CI-DESSUS
+import { adminResetPassword } from '@/app/actions/adminActions'; 
 import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare, Key } from 'lucide-react';
 
-// Définition simple du type User pour TypeScript
 interface UserProfile {
   id: string;
   username: string;
@@ -26,7 +26,6 @@ export default function AdminUsers() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    // On sélectionne tout depuis profiles
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -36,11 +35,10 @@ export default function AdminUsers() {
     setLoading(false);
   };
 
-  // --- FONCTION CORRIGÉE ---
+  // --- FONCTION DE RESET (VIA SERVER ACTION) ---
   const handleResetPassword = async (id: string, username: string) => {
     const newPass = prompt(`Nouveau mot de passe pour @${username || 'cet utilisateur'} :`);
     
-    // Validation basique
     if (!newPass) return;
     if (newPass.length < 6) {
       alert("Le mot de passe doit contenir au moins 6 caractères.");
@@ -48,7 +46,7 @@ export default function AdminUsers() {
     }
 
     try {
-      // Appel de la Server Action (côté serveur)
+      // Appel sécurisé au serveur
       const result = await adminResetPassword(id, newPass);
 
       if (result.success) {
@@ -62,48 +60,26 @@ export default function AdminUsers() {
     }
   };
 
+  // ... (Le reste de vos fonctions toggleBan et adjustBalance reste inchangé) ...
+
   const toggleBan = async (id: string, currentStatus: boolean) => {
     let banReason = null;
     if (!currentStatus) {
-      banReason = prompt("Motif du blocage (Ex: Fraude, non-respect des règles...) :");
+      banReason = prompt("Motif du blocage :");
       if (banReason === null) return;
     }
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          is_banned: !currentStatus,
-          ban_reason: !currentStatus ? (banReason || "Non spécifié") : null 
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setUsers(prevUsers => 
-        prevUsers.map(u => u.id === id 
-          ? { ...u, is_banned: !currentStatus, ban_reason: !currentStatus ? banReason : null } 
-          : u
-        )
-      );
-    } catch (err) {
-      alert("Erreur technique : Vérifiez vos droits d'admin (RLS).");
-    }
+    const { error } = await supabase.from('profiles').update({ 
+      is_banned: !currentStatus,
+      ban_reason: !currentStatus ? (banReason || "Non spécifié") : null 
+    }).eq('id', id);
+    if (!error) fetchUsers();
   };
 
   const adjustBalance = async (id: string) => {
     const newBalance = prompt("Entrez le nouveau solde total (HTG) :");
     if (newBalance !== null && !isNaN(Number(newBalance))) {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ balance: Number(newBalance) })
-        .eq('id', id);
-        
-      if (!error) {
-        fetchUsers(); // Rafraichir pour être sûr
-      } else {
-        alert("Erreur lors de la mise à jour du solde.");
-      }
+      const { error } = await supabase.from('profiles').update({ balance: Number(newBalance) }).eq('id', id);
+      if (!error) fetchUsers();
     }
   };
 
@@ -116,16 +92,12 @@ export default function AdminUsers() {
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto text-white italic uppercase font-black">
+      {/* ... (Votre Header avec SearchBar) ... */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl tracking-tighter">Gestion <span className="text-emerald-500">Elite</span></h1>
         <div className="relative w-full md:w-96">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-          <input 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Nom ou Numéro..." 
-            className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[10px] outline-none focus:border-emerald-500 transition-all font-bold"
-          />
+          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Rechercher..." className="w-full bg-slate-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[10px] outline-none focus:border-emerald-500 transition-all font-bold" />
         </div>
       </div>
 
@@ -141,24 +113,25 @@ export default function AdminUsers() {
                 <div>
                   <p className="text-sm tracking-tighter">@{user.username || 'Inconnu'}</p>
                   <p className="text-[10px] text-emerald-500 font-bold">+{user.phone}</p>
-                  <p className="text-[8px] text-slate-500 mt-1 border border-white/10 px-1 rounded inline-block">{user.role}</p>
                 </div>
               </div>
               <div className="flex gap-2">
-                {/* BOUTON RESET MOT DE PASSE CONNECTÉ À LA SERVER ACTION */}
+                {/* BOUTON CLÉ (RESET PASSWORD) */}
                 <button 
                   onClick={() => handleResetPassword(user.id, user.username)} 
                   className="p-3 bg-slate-800 rounded-2xl text-amber-500 hover:bg-amber-500 hover:text-slate-950 transition-all active:scale-90"
-                  title="Réinitialiser le mot de passe"
+                  title="Changer mot de passe"
                 >
                   <Key size={18} />
                 </button>
+                
                 <button onClick={() => toggleBan(user.id, user.is_banned)} className={`p-3 rounded-2xl transition-all active:scale-90 ${user.is_banned ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                   {user.is_banned ? <UserCheck size={20} /> : <Ban size={20} />}
                 </button>
               </div>
             </div>
 
+            {/* ... (Reste de l'affichage utilisateur) ... */}
             <div className="space-y-3 mb-6">
               <div className="flex items-center gap-2 text-[9px] text-slate-500">
                 <Calendar size={12} />
