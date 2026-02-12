@@ -248,9 +248,9 @@ export default function RewardsPage() {
                 )
               })}
 
-              {/* --- Native Banner Adsterra --- */}  
+              {/* --- ExoClickBanner --- */}  
               <div className="mt-4 mb-10 flex justify-center">
-                <AdsterraNativeBanner />
+                <ExoClickBanner />
               </div>
             </motion.div>
           )}
