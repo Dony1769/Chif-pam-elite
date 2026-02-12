@@ -47,8 +47,15 @@ export default function RewardsPage() {
 
   // --- NOUVELLE FONCTION DE RÉCLAMATION ---
   const handleClaimDaily = async () => {
-    if (!profile || claiming) return;
+    // --- DEBUG ---
+    console.log("Profile ID:", profile?.id);
+    console.log("Claiming State:", claiming);
+    // -------------
+    
+    if (!profile || claiming) return; // Si profile est null ici, c'est un problème de fetch initial
+    
     setClaiming(true);
+    // ... reste du code
     
     try {
         // Appel de la V2 qui gère mieux les dates et les logs
