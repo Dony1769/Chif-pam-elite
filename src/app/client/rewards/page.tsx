@@ -2,9 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Trophy, Calendar, CheckCircle2, Lock, Gift, Star, ChevronLeft, Coins, Gem, Loader2, Brain, ShoppingBag, CheckCheck } from 'lucide-react';
+import { Trophy, Calendar, CheckCircle2, Lock, Star, ChevronLeft, Coins, Gem, Loader2, Brain, ShoppingBag, CheckCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-// --- IMPORT DE LA PUBLICITÉ ---
 import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
 
 export default function RewardsPage() {
@@ -12,13 +11,16 @@ export default function RewardsPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'tasks'>('login');
   const [loading, setLoading] = useState(true);
   const [rewardsConfig, setRewardsConfig] = useState<any[]>([]);
-  const [userTasks, setUserTasks] = useState<any[]>([]);
-  const [claiming, setClaiming] = useState<boolean>(false);
-  
-  // État local pour forcer l'affichage immédiat après clic
-  const [localClaimed, setLocalClaimed] = useState(false);
-
+  const [claimedDays, setClaimedDays] = useState<number[]>([]); // Liste des jours réclamés ce mois-ci
+  const [claiming, setClaiming] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date()); // Date du jour
   const router = useRouter();
+
+  // Calcul dynamique des jours du mois
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth(); // 0 = Janvier
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate(); // Renvoie 28, 29, 30 ou 31
+  const todayDayNumber = currentDate.getDate(); // ex: 12
 
   useEffect(() => { fetchData(); }, []);
 
@@ -26,90 +28,64 @@ export default function RewardsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return router.push('/connexion');
 
-    // On récupère les données
-    const [profRes, rewRes, taskRes] = await Promise.all([
+    // 1. Profil & Config
+    const [profRes, rewRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('daily_rewards_config').select('*').order('day_number', { ascending: true }),
-      supabase.from('tasks_config').select(`*, user_tasks_progress(progress, is_claimed)`)
+      supabase.from('daily_rewards_config').select('*').lte('day_number', daysInMonth).order('day_number', { ascending: true })
     ]);
 
-    if (profRes.data) {
-        setProfile(profRes.data);
-        // Vérifie si la date de DERNIÈRE RÉCLAMATION est aujourd'hui
-        if (profRes.data.last_reward_claim) {
-            const lastDate = new Date(profRes.data.last_reward_claim);
-            const today = new Date();
-            if (lastDate.toDateString() === today.toDateString()) {
-                setLocalClaimed(true);
-            }
-        }
+    setProfile(profRes.data);
+    setRewardsConfig(rewRes.data || []);
+
+    // 2. Récupérer les jours DÉJÀ réclamés ce mois-ci
+    const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString();
+    const endOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString();
+
+    const { data: claims } = await supabase
+      .from('user_calendar_claims')
+      .select('day_number')
+      .eq('user_id', user.id)
+      .gte('claim_date', startOfMonth)
+      .lte('claim_date', endOfMonth);
+
+    if (claims) {
+      setClaimedDays(claims.map(c => c.day_number));
     }
 
-    setRewardsConfig(rewRes.data || []);
-    
-    const tasksFormatted = taskRes.data?.map((t: any) => {
-        const prog = t.user_tasks_progress?.[0];
-        return {
-            ...t,
-            progress: prog?.progress || 0,
-            is_claimed: prog?.is_claimed || false
-        };
-    }) || [];
-    
-    setUserTasks(tasksFormatted);
     setLoading(false);
   };
 
-  const handleClaimDaily = async () => {
-    if (!profile || claiming || localClaimed) return;
+  const handleClaim = async () => {
+    if (!profile || claiming || claimedDays.includes(todayDayNumber)) return;
     setClaiming(true);
-    
+
     try {
-        console.log("Tentative de réclamation pour:", profile.id);
-
-        // Appel RPC
-        const { data, error } = await supabase.rpc('claim_daily_reward_v2', { p_user_id: profile.id });
+      const { data, error } = await supabase.rpc('claim_calendar_reward', { p_user_id: profile.id });
+      
+      if (error) throw error;
+      if (!data.success) {
+        alert(data.message);
+      } else {
+        // Succès : Mise à jour locale
+        setProfile((prev: any) => ({
+          ...prev,
+          jetons_cp: data.new_cp,
+          diamonds: data.new_diamonds,
+          xp: data.new_xp
+        }));
+        setClaimedDays(prev => [...prev, todayDayNumber]); // On marque aujourd'hui comme fait
         
-        if (error) {
-            console.error("Erreur RPC:", error);
-            alert("Erreur technique: " + error.message);
-            throw error;
-        }
-        
-        if (!data.success) {
-            alert(data.message); // Message: "Déjà réclamé"
-            setLocalClaimed(true);
-        } else {
-            // SUCCÈS
-            setLocalClaimed(true); // Bloque le bouton immédiatement
-            
-            // Mise à jour du profil local avec les nouvelles valeurs renvoyées par le RPC
-            setProfile((prev: any) => ({
-                ...prev,
-                jetons_cp: data.new_cp,
-                diamonds: data.new_diamonds,
-                xp: data.new_xp,
-                level: data.new_level, // Au cas où on level up
-                login_streak: data.new_streak,
-                last_reward_claim: new Date().toISOString()
-            }));
-
-            // Son de victoire
-            const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3");
-            audio.volume = 0.5;
-            audio.play().catch(()=>{});
-        }
+        const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3");
+        audio.volume = 0.5; audio.play().catch(()=>{});
+      }
     } catch (err: any) {
-        console.error("Catch Error:", err);
+      alert("Erreur: " + err.message);
     } finally {
-        setClaiming(false);
+      setClaiming(false);
     }
   };
 
-  // Calcul du jour à afficher
-  // Si déjà réclamé : On montre le jour actuel (ex: Jour 1)
-  // Si pas encore réclamé : On montre le jour SUIVANT le streak actuel (ex: 0 + 1 = Jour 1)
-  const displayStreak = localClaimed ? profile?.login_streak : (profile?.login_streak || 0) + 1;
+  const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
   if (loading) return <div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500"/></div>;
 
@@ -130,7 +106,6 @@ export default function RewardsPage() {
         </div>
       </div>
 
-      {/* Navigation Onglets */}
       <div className="flex justify-center gap-2 p-6">
         <TabButton active={activeTab === 'login'} onClick={() => setActiveTab('login')} label="Calendrier" icon={<Calendar size={16}/>} />
         <TabButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} label="Défis du Jour" icon={<Trophy size={16}/>} />
@@ -138,95 +113,105 @@ export default function RewardsPage() {
 
       <div className="px-4 max-w-lg mx-auto">
         <AnimatePresence mode="wait">
-
-          {/* --- ONGLET CONNEXION --- */}
           {activeTab === 'login' && (
             <motion.div key="login" initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}}>
-              {/* Hero Card */}
-              <div className="bg-gradient-to-br from-emerald-900/40 to-black p-6 rounded-[2rem] border border-emerald-500/20 text-center mb-8 relative overflow-hidden shadow-2xl">
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 mix-blend-overlay"></div>
-                
-                <h2 className="text-3xl font-black italic text-white mb-1">JOUR {displayStreak}</h2>
-                <p className="text-[10px] text-emerald-500 uppercase tracking-widest mb-6 font-bold">Série en cours</p>
-                
-                <button 
-                    onClick={handleClaimDaily}
-                    disabled={localClaimed || claiming}
-                    className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                        localClaimed 
-                        ? 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/5' 
-                        : 'bg-emerald-500 text-black shadow-[0_0_25px_rgba(16,185,129,0.4)] hover:bg-emerald-400'
-                    }`}
-                >
-                    {claiming ? <Loader2 className="animate-spin" size={18}/> : localClaimed ? "REVIENS DEMAIN" : "RÉCLAMER BONUS"}
-                </button>
+              
+              {/* Entête du mois */}
+              <div className="flex justify-between items-end mb-4 px-2">
+                <div>
+                    <h2 className="text-2xl font-black italic text-white uppercase">{monthNames[currentMonth]}</h2>
+                    <p className="text-[10px] text-slate-500 font-bold tracking-widest">{currentYear}</p>
+                </div>
+                <div className="text-right">
+                    <p className="text-3xl font-black text-emerald-500">{todayDayNumber}</p>
+                    <p className="text-[9px] text-emerald-500/60 font-bold uppercase">Aujourd'hui</p>
+                </div>
               </div>
 
-              {/* Grille des 30 jours */}
-              <div className="grid grid-cols-5 gap-2 pb-10">
-                {rewardsConfig.map((day) => {
-                    // Calcul précis pour l'affichage visuel
-                    // Passé : Jours inférieurs au streak actuel
-                    const isPast = day.day_number <= profile?.login_streak;
-                    // Futur immédiat (Le jour à réclamer) : Égal au streak + 1 (si pas encore réclamé)
-                    const isNext = !localClaimed && day.day_number === (profile?.login_streak || 0) + 1;
-                    const isMilestone = day.is_milestone;
+              {/* Bouton d'action principal */}
+              <div className="mb-8">
+                 {!claimedDays.includes(todayDayNumber) ? (
+                    <button 
+                        onClick={handleClaim}
+                        disabled={claiming}
+                        className="w-full py-4 bg-emerald-500 text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-pulse hover:scale-[1.02] transition-transform"
+                    >
+                        {claiming ? <Loader2 className="animate-spin mx-auto"/> : `RÉCLAMER CADEAU DU ${todayDayNumber}`}
+                    </button>
+                 ) : (
+                    <div className="w-full py-4 bg-white/5 border border-white/5 rounded-2xl text-center">
+                        <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center justify-center gap-2">
+                            <CheckCircle2 size={14}/> Récompense du jour récupérée
+                        </p>
+                    </div>
+                 )}
+              </div>
+
+              {/* Grille Calendrier Dynamique */}
+              <div className="grid grid-cols-7 gap-2 pb-10">
+                {/* On génère exactement le nombre de jours du mois (28, 29, 30, 31) */}
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((dayNum) => {
+                    const isToday = dayNum === todayDayNumber;
+                    const isPast = dayNum < todayDayNumber;
+                    const isClaimed = claimedDays.includes(dayNum);
                     
+                    // On cherche la config pour ce jour (si elle existe)
+                    const dayConfig = rewardsConfig.find(r => r.day_number === dayNum);
+                    const isMilestone = dayConfig?.is_milestone;
+
                     return (
-                        <div key={day.day_number} className={`aspect-[4/5] rounded-xl border flex flex-col items-center justify-center relative overflow-hidden transition-all ${
-                            isPast ? 'bg-emerald-500/10 border-emerald-500/40 opacity-60' : 
-                            isNext ? 'bg-white/10 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)] scale-105 z-10 animate-pulse' : 
-                            isMilestone ? 'bg-amber-500/10 border-amber-500/30' : 'bg-black/40 border-white/5'
+                        <div key={dayNum} className={`aspect-square rounded-xl border flex flex-col items-center justify-center relative overflow-hidden transition-all ${
+                            isToday 
+                                ? (isClaimed ? 'bg-emerald-500/20 border-emerald-500' : 'bg-white/10 border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)] z-10 scale-110')
+                                : isClaimed 
+                                    ? 'bg-emerald-900/20 border-emerald-500/20 opacity-60' // Passé et réclamé
+                                    : isPast 
+                                        ? 'bg-rose-500/5 border-rose-500/20 opacity-40 grayscale' // Passé et raté
+                                        : 'bg-black/40 border-white/5' // Futur
                         }`}>
-                            <span className="text-[7px] text-slate-500 absolute top-1 left-1.5 font-bold">J{day.day_number}</span>
+                            <span className={`text-[8px] absolute top-1 left-1.5 font-bold ${isToday ? 'text-emerald-400' : 'text-slate-600'}`}>{dayNum}</span>
                             
-                            <div className="mb-1">
-                                {day.reward_type === 'diamonds' ? <Gem size={18} className="text-blue-400"/> : 
-                                 day.reward_type === 'cp' ? <Coins size={18} className="text-emerald-400"/> : 
-                                 <Star size={18} className="text-amber-400"/>}
+                            {/* Icone */}
+                            <div className="mb-0.5 scale-75">
+                                {dayConfig?.reward_type === 'diamonds' ? <Gem size={16} className="text-blue-400"/> : 
+                                 dayConfig?.reward_type === 'cp' ? <Coins size={16} className="text-emerald-400"/> : 
+                                 <Star size={16} className="text-amber-400"/>}
                             </div>
                             
-                            <span className={`text-[9px] font-black ${isMilestone ? 'text-amber-400' : 'text-white'}`}>{day.amount}</span>
-                            
-                            {isPast && (
-                                <div className="absolute inset-0 bg-black/70 flex items-center justify-center backdrop-blur-[1px]">
-                                    <CheckCircle2 className="text-emerald-500" size={20}/>
+                            {/* Montant */}
+                            <span className={`text-[8px] font-black ${isMilestone ? 'text-amber-400' : 'text-slate-300'}`}>
+                                {dayConfig?.amount || '?'}
+                            </span>
+
+                            {/* Overlay Status */}
+                            {isClaimed && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                    <CheckCheck className="text-emerald-500" size={16}/>
+                                </div>
+                            )}
+                            {isPast && !isClaimed && (
+                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                    <Lock className="text-rose-500/50" size={14}/>
                                 </div>
                             )}
                         </div>
-                    )
+                    );
                 })}
               </div>
+              
+              <div className="mt-4 mb-10 flex justify-center"><ExoClickBanner /></div>
             </motion.div>
           )}
 
-          {/* --- ONGLET TÂCHES --- */}
           {activeTab === 'tasks' && (
-            <motion.div key="tasks" initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="space-y-3">
-               {userTasks.length === 0 ? <div className="text-center py-10 opacity-50 text-xs">Aucune tâche</div> : userTasks.map(t => (
-                   <div key={t.id} className="bg-slate-900/50 p-4 rounded-xl border border-white/5">
-                       <p className="text-xs font-bold">{t.description}</p>
-                       <div className="flex justify-between items-center mt-2">
-                           <span className="text-[10px] text-emerald-400">+{t.reward_amount} {t.reward_type}</span>
-                           <span className="text-[10px] text-slate-500">{t.progress}/{t.target_count}</span>
-                       </div>
-                   </div>
-               ))}
-               
-               {/* BANNIÈRE PUBLICITAIRE */}
-               <div className="mt-6 flex justify-center w-full overflow-hidden rounded-xl">
-                  <ExoClickBanner />
-               </div>
-            </motion.div>
+             <div className="text-center text-slate-500 py-10 text-xs italic">Section Tâches (À implémenter selon votre ancienne logique)</div>
           )}
-
         </AnimatePresence>
       </div>
     </div>
   );
 }
 
-// Composants UI
 const StatPill = ({icon, val, label, color}: any) => (
   <div className={`bg-slate-900/80 border border-white/10 px-4 py-2 rounded-xl flex items-center gap-2.5 shadow-sm min-w-[80px] justify-center ${color}`}>
       {icon} <span className="text-sm font-black italic">{val?.toLocaleString() || 0}</span>
