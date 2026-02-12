@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
@@ -9,13 +9,18 @@ import {
 import { 
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
-  Dices, MessageSquare, LogOut, Ticket, ClipboardList,
-  Activity, AlertCircle, ChevronRight, Target
+  Dices, MessageSquare, Ticket, ClipboardList,
+  Target, AlertCircle, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboard() {
-  const [loading, setLoading] = useState(true);
+  // Loading initial (Vrai chargement)
+  const [initialLoading, setInitialLoading] = useState(true);
+  
+  // Loading silencieux (pour le bouton refresh manuel)
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const router = useRouter();
   const pathname = usePathname();
   
@@ -24,114 +29,111 @@ export default function AdminDashboard() {
     totalBalance: 0, 
     pendingDepots: 0, 
     pendingRetraits: 0,
-    unreadMessages: 0 // Statistique pour le nouveau chat
+    unreadMessages: 0
   });
   const [chartData, setChartData] = useState<any[]>([]);
 
+  // Ref pour éviter les fuites de mémoire sur l'intervalle
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    fetchGlobalStats();
+    // 1. Premier chargement
+    fetchGlobalStats(true);
     
-    // ECOUTEUR ULTRA INSTANTANÉ (Modifié pour inclure les messages)
+    // 2. Écouteur TRÈS RAPIDE (Realtime Supabase)
     const channel = supabase
       .channel('admin-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchGlobalStats())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchGlobalStats()) // Nouveau message = Update stats
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => fetchGlobalStats()) // Message lu = Update stats
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => fetchGlobalStats())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchGlobalStats(false))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchGlobalStats(false))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => fetchGlobalStats(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => fetchGlobalStats(false))
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // 3. Intervalle de sécurité (30 secondes) - Rafraîchissement silencieux
+    intervalRef.current = setInterval(() => {
+        fetchGlobalStats(false);
+    }, 30000);
+
+    return () => { 
+        supabase.removeChannel(channel);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
-  const fetchGlobalStats = async () => {
+  const fetchGlobalStats = async (isInitial = false) => {
+    if (isInitial) setInitialLoading(true);
+    else setIsRefreshing(true); // Indique un refresh léger
+
     try {
-      const { count: userCount } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
+      // Exécution parallèle pour la vitesse
+      const [
+        userRes,
+        balanceRes,
+        depotsRes,
+        retraitsRes,
+        msgRes,
+        fluxRes
+      ] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.rpc('get_total_balance'),
+        supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['deposit', 'depot']),
+        supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['withdrawal', 'retrait']),
+        supabase.from('messages').select('*', { count: 'exact', head: true }).eq('is_read_by_admin', false).eq('is_admin_message', false),
+        // Pour le graph
+        supabase.from('mises').select('montant, gain, status, created_at').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      ]);
 
-      const { data: balanceData } = await supabase.rpc('get_total_balance'); 
-
-      const { count: countDepots } = await supabase
-        .from('transactions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending')
-        .in('type', ['deposit', 'depot']);
-
-      const { count: countRetraits } = await supabase
-        .from('transactions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending')
-        .in('type', ['withdrawal', 'retrait']);
-
-      // --- LOGIQUE CHAT MISE À JOUR ---
-      const { count: unread } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_read_by_admin', false)   // Nouvelle colonne
-        .eq('is_admin_message', false); // Messages venant des clients seulement
-
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const { data: flux } = await supabase
-        .from('mises')
-        .select('montant, gain, status, created_at') 
-        .gte('created_at', sevenDaysAgo.toISOString());
-
-      if (flux) {
+      // Traitement Graphique
+      if (fluxRes.data) {
         const dailyStats: { [key: string]: number } = {};
-        const last7DaysLabels = [...Array(7)].map((_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          return d.toLocaleDateString('fr-FR', { weekday: 'short' });
-        }).reverse();
-        
-        last7DaysLabels.forEach(day => dailyStats[day] = 0);
-
-        flux.forEach(item => {
-          const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-          let impactAdmin = 0;
-          if (item.status === 'perdu') {
-            impactAdmin = item.montant;
-          } else if (['gagne', 'gagné', 'win'].includes(item.status)) {
-            const payout = item.gain || item.montant; 
-            impactAdmin = -payout;
-          }
-          if (dailyStats[day] !== undefined) dailyStats[day] += impactAdmin;
+        // Initialiser les 7 derniers jours à 0
+        [...Array(7)].forEach((_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            dailyStats[d.toLocaleDateString('fr-FR', { weekday: 'short' })] = 0;
         });
 
-        setChartData(Object.keys(dailyStats).map(day => ({ name: day, revenue: dailyStats[day] })));
+        fluxRes.data.forEach(item => {
+          const day = new Date(item.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
+          let impact = 0;
+          if (item.status === 'perdu') impact = item.montant;
+          else if (['gagne', 'gagné', 'win'].includes(item.status)) impact = -(item.gain || item.montant);
+          
+          if (dailyStats[day] !== undefined) dailyStats[day] += impact;
+        });
+        setChartData(Object.keys(dailyStats).reverse().map(day => ({ name: day, revenue: dailyStats[day] })));
       }
 
       setStats({
-        totalUsers: userCount || 0,
-        totalBalance: balanceData || 0,
-        pendingDepots: countDepots || 0,
-        pendingRetraits: countRetraits || 0,
-        unreadMessages: unread || 0
+        totalUsers: userRes.count || 0,
+        totalBalance: balanceRes.data || 0,
+        pendingDepots: depotsRes.count || 0,
+        pendingRetraits: retraitsRes.count || 0,
+        unreadMessages: msgRes.count || 0
       });
 
     } catch (error) {
       console.error("Sync Error:", error);
     } finally {
-      setLoading(false);
+      if (isInitial) setInitialLoading(false);
+      setIsRefreshing(false);
     }
   };
 
-  if (loading) return (
+  // Seul le chargement initial bloque l'écran
+  if (initialLoading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">
       <Loader2 className="animate-spin text-emerald-500" size={40} />
     </div>
   );
 
   const totalPending = stats.pendingDepots + stats.pendingRetraits;
-  const totalRevenuePeriod = chartData.reduce((acc, curr) => acc + curr.revenue, 0);
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
         
-        {/* SIDEBAR (Inchangée) */}
+        {/* SIDEBAR */}
         <aside className="w-72 bg-slate-950 min-h-screen border-r border-white/5 p-8 hidden lg:block sticky top-0 h-screen overflow-y-auto">
           <div className="flex items-center gap-3 mb-12">
             <svg viewBox="0 0 100 100" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -154,17 +156,35 @@ export default function AdminDashboard() {
         {/* MAIN CONTENT */}
         <main className="flex-1 p-6 lg:p-12 space-y-8 overflow-y-auto h-screen">
           
-          {/* BANDEAU ALERTE MISE À JOUR */}
+          {/* Header avec indicateur de refresh subtil */}
+          <div className="flex justify-between items-center">
+            <div className="flex flex-col">
+                <h1 className="text-4xl uppercase tracking-tighter">Control <span className="text-emerald-500">Center</span></h1>
+                {/* Petit indicateur discret qui montre la dernière mise à jour */}
+                <p className="text-[9px] text-slate-600 mt-1 flex items-center gap-2">
+                    {isRefreshing ? <span className="text-emerald-500 animate-pulse">● Mise à jour...</span> : <span>● Données en direct</span>}
+                </p>
+            </div>
+            
+            <button 
+                onClick={() => fetchGlobalStats(false)} 
+                className={`p-4 bg-slate-900 rounded-2xl border border-white/5 hover:border-emerald-500 transition-all ${isRefreshing ? 'text-emerald-500 animate-spin' : 'text-slate-500 hover:text-emerald-500'}`}
+            >
+              <RefreshCw size={20} />
+            </button>
+          </div>
+
+          {/* BANDEAU ALERTE (Apparaît s'il y a du travail) */}
           {(totalPending > 0 || stats.unreadMessages > 0) && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2.5rem] flex items-center justify-between animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.1)]">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2.5rem] flex items-center justify-between shadow-[0_0_30px_rgba(16,185,129,0.1)] animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-5">
                 <div className="bg-emerald-500 p-3 rounded-2xl text-slate-950">
                   <AlertCircle size={24} />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[11px] tracking-[0.2em] font-black uppercase">Statut Critique</span>
+                  <span className="text-[11px] tracking-[0.2em] font-black uppercase text-white">Statut Critique</span>
                   <span className="text-sm font-black text-emerald-500">
-                    {totalPending} ACTIONS FINANCIÈRES & {stats.unreadMessages} MESSAGES CLIENTS NON LUS
+                    {totalPending} ACTIONS FINANCIÈRES & {stats.unreadMessages} MESSAGES
                   </span>
                 </div>
               </div>
@@ -174,20 +194,34 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <div className="flex justify-between items-center">
-            <h1 className="text-4xl uppercase tracking-tighter">Control <span className="text-emerald-500">Center</span></h1>
-            <button onClick={fetchGlobalStats} className="p-4 bg-slate-900 rounded-2xl border border-white/5 hover:border-emerald-500 transition-all text-slate-500 hover:text-emerald-500">
-              <RefreshCw size={20} />
-            </button>
-          </div>
-
-          {/* ... (Reste du code Chart et StatCards inchangé) ... */}
-          
+          {/* KPI CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard title="Total Joueurs" value={stats.totalUsers.toLocaleString()} icon={<Users />} color="blue" />
             <StatCard title="Trésorerie" value={stats.totalBalance.toLocaleString()} icon={<Wallet />} color="emerald" />
             <StatCard title="Dépôts Attente" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
             <StatCard title="Retraits Attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
+          </div>
+
+          {/* GRAPH & ACTIONS */}
+          <div className="h-64 w-full bg-slate-900/50 rounded-[2.5rem] border border-white/5 p-6 relative overflow-hidden">
+             <p className="absolute top-6 left-8 text-[10px] text-slate-500 font-bold uppercase tracking-widest z-10">Flux de Trésorerie (7J)</p>
+             <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                    <defs>
+                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                        </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                    <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 10, fontWeight: 900}} tickLine={false} axisLine={false} />
+                    <Tooltip 
+                        contentStyle={{ backgroundColor: '#020617', border: '1px solid #1e293b', borderRadius: '12px' }}
+                        itemStyle={{ color: '#10B981', fontWeight: 'bold' }}
+                    />
+                    <Area type="monotone" dataKey="revenue" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                </AreaChart>
+             </ResponsiveContainer>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
@@ -203,7 +237,6 @@ export default function AdminDashboard() {
                <ActionCard href="/admin-chif-pam/demandes" label="Validation Flux" count={totalPending} icon={<ClipboardList size={24}/>} color="bg-white" />
                <div className="grid grid-cols-2 gap-4">
                   <ActionCard href="/admin-chif-pam/notifications" label="Alertes" icon={<Bell size={20}/>} color="bg-amber-500/10" textColor="text-amber-500" border="border-amber-500/20" />
-                  {/* CARD CHAT MISE À JOUR ICI */}
                   <ActionCard href="/admin-chif-pam/chat" label="Support" count={stats.unreadMessages} icon={<MessageSquare size={20}/>} color="bg-slate-800" textColor="text-emerald-500" />
                </div>
                <ActionCard href="/admin-chif-pam/users" label="Audit Utilisateurs" icon={<Users size={24}/>} color="bg-slate-900" textColor="text-blue-500" border="border-blue-500/20" />
@@ -215,22 +248,12 @@ export default function AdminDashboard() {
   );
 }
 
-// --- COMPOSANTS UI CHIF-PAM (À mettre en bas du fichier ou dans un dossier components) ---
+// --- UI COMPONENTS ---
 
 function SidebarLink({ href, icon, label, active = false }: any) {
   return (
-    <Link 
-      href={href} 
-      className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
-        active 
-          ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-[1.02]' 
-          : 'hover:bg-white/5 text-slate-500 hover:text-emerald-500/50'
-      }`}
-    >
-      {icon} 
-      <span className="text-[10px] font-black tracking-[0.2em] uppercase italic">
-        {label}
-      </span>
+    <Link href={href} className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-[1.02]' : 'hover:bg-white/5 text-slate-500 hover:text-emerald-500/50'}`}>
+      {icon} <span className="text-[10px] font-black tracking-[0.2em] uppercase italic">{label}</span>
     </Link>
   );
 }
@@ -242,16 +265,11 @@ function StatCard({ title, value, icon, color }: any) {
     amber: "text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-amber-500/5",
     rose: "text-rose-500 bg-rose-500/10 border-rose-500/20 shadow-rose-500/5",
   };
-  
   return (
-    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden shadow-2xl backdrop-blur-sm group`}>
+    <div className={`p-8 rounded-[2.5rem] border ${colors[color]} relative overflow-hidden shadow-2xl backdrop-blur-sm group transition-all duration-500 hover:-translate-y-1`}>
       <div className="relative z-10">
-        <p className="text-[9px] uppercase font-black tracking-widest opacity-60 mb-2 italic">
-          {title}
-        </p>
-        <p className="text-3xl font-black italic tracking-tighter">
-          {value}
-        </p>
+        <p className="text-[9px] uppercase font-black tracking-widest opacity-60 mb-2 italic">{title}</p>
+        <p className="text-3xl font-black italic tracking-tighter">{value}</p>
       </div>
       <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
         {React.cloneElement(icon, { size: 100 })}
@@ -262,27 +280,18 @@ function StatCard({ title, value, icon, color }: any) {
 
 function ActionCard({ href, label, count, icon, color, textColor = "text-slate-950", border="border-transparent" }: any) {
   return (
-    <Link 
-      href={href} 
-      className={`flex items-center justify-between p-6 ${color} ${border} border rounded-[2.5rem] hover:scale-[1.03] active:scale-95 transition-all shadow-xl group`}
-    >
+    <Link href={href} className={`flex items-center justify-between p-6 ${color} ${border} border rounded-[2.5rem] hover:scale-[1.03] active:scale-95 transition-all shadow-xl group`}>
       <div className="flex items-center gap-5">
-        <div className="p-4 bg-black/10 rounded-2xl group-hover:rotate-6 transition-transform">
-          {icon}
-        </div>
+        <div className="p-4 bg-black/10 rounded-2xl group-hover:rotate-6 transition-transform">{icon}</div>
         <div className={textColor}>
           <p className="text-[10px] opacity-60 font-black uppercase tracking-widest">Accès Rapide</p>
           <p className="text-sm font-black uppercase italic tracking-tighter">{label}</p>
         </div>
       </div>
-      
-      {/* Badge de notification style Chif-Pam */}
       {count !== undefined && count !== 0 && (
-        <div className={`px-4 py-2 bg-black/20 rounded-full text-[10px] ${textColor} font-black animate-pulse border border-black/5`}>
-          {count}
-        </div>
+        <div className={`px-4 py-2 bg-black/20 rounded-full text-[10px] ${textColor} font-black animate-pulse border border-black/5`}>{count}</div>
       )}
     </Link>
   );
 }
-// ... Les composants SidebarLink, StatCard et ActionCard restent identiques
+
