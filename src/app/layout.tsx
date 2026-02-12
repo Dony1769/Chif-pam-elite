@@ -19,10 +19,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <head>
-        {/* Vérification Google */}
+        {/* Google Search Console */}
         <meta
           name="google-site-verification"
           content="0DKoujhMc_f-hx6jkLpCVG5DC1apsfHK8VtM-do5Mf0"
+        />
+
+        {/* Google AdSense account verification */}
+        <meta
+          name="google-adsense-account"
+          content="ca-pub-5900590603770169"
         />
 
         {/* ExoClick verification */}
@@ -31,7 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           content="5e81fa45aafa6f5cc66cc432be3668ca"
         />
 
-        {/* Google AdSense */}
+        {/* Google AdSense script */}
         <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5900590603770169"
