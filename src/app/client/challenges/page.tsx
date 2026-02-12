@@ -16,9 +16,9 @@ export default function ArenaPage() {
   const [entryLoading, setEntryLoading] = useState<string | null>(null);
 
   // 🔥 PUB SYSTEM
-  const [showInterstitial, setShowInterstitial] = useState(true); // ExoOutstream
+  const [showInterstitial, setShowInterstitial] = useState(true); // ExoOutstream au chargement
   const [canCloseInterstitial, setCanCloseInterstitial] = useState(false);
-  const [showAdsterraNativeBanner, setShowAdsterraNativeBanner] = useState(false); // Slider ad visible après interstitial
+  const [showAdsterraNativeBanner, setShowAdsterraNativeBanner] = useState(false); // S'active après l'interstitiel
 
   const router = useRouter();
 
@@ -35,7 +35,7 @@ export default function ArenaPage() {
       )
       .subscribe();
 
-    // ⏳ Affiche le bouton fermer après 5 sec
+    // ⏳ Timer pour le bouton fermer de l'interstitiel (5 sec)
     const timer = setTimeout(() => setCanCloseInterstitial(true), 5000);
 
     return () => {
@@ -110,18 +110,20 @@ export default function ArenaPage() {
 
   return (
     <>
-      {/* 🔥 INTERSTITIAL EXO OUTSTREAM */}
+      {/* 🔥 INTERSTITIAL (Apparait au dessus de tout) */}
       {showInterstitial && (
-        <div className="fixed inset-0 bg-black z-[9999] flex flex-col items-center justify-center">
-          <ExoOutstream />
+        <div className="fixed inset-0 bg-black z-[9999] flex flex-col items-center justify-center p-4">
+          <div className="w-full max-w-md">
+             <ExoOutstream />
+          </div>
 
           {canCloseInterstitial && (
             <button
               onClick={() => {
                 setShowInterstitial(false);
-                setShowAdsterraNativeBanner(true); // active la pub slider après interstitial
+                setShowAdsterraNativeBanner(true); // Active la pub du bas une fois l'interstitiel fermé
               }}
-              className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse"
+              className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse shadow-[0_0_20px_rgba(16,185,129,0.5)]"
             >
               ACCÉDER À L’APPLICATION
             </button>
@@ -129,15 +131,14 @@ export default function ArenaPage() {
         </div>
       )}
 
-      {/* 🎥 VIDEO SLIDER PUB (reste active tant que la page est ouverte) */}
-      {showAdsterraNativeBanner && <AdsterraNativeBanner />}
-
-      {/* 🌟 PAGE ARENA NORMALE */}
-      <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-24">
+      {/* 🌟 CONTENU PRINCIPAL */}
+      <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-32 overflow-x-hidden">
+        
+        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => router.push("/client/home")}
-            className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90"
+            className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all"
           >
             <ChevronLeft size={24} />
           </button>
@@ -146,6 +147,7 @@ export default function ArenaPage() {
           </h1>
         </div>
 
+        {/* Solde Card */}
         <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-[2rem] border border-white/10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500">
@@ -158,6 +160,7 @@ export default function ArenaPage() {
           </div>
         </div>
 
+        {/* Liste des Défis */}
         <div className="space-y-6">
           {challenges.map((ch) => {
             const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
@@ -166,7 +169,7 @@ export default function ArenaPage() {
               ch.challenge_attempts?.find((a: any) => a.user_id === profile.id)?.total_score || 0;
 
             return (
-              <motion.div key={ch.id} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6">
+              <motion.div key={ch.id} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 shadow-lg">
                 <div className="flex justify-between mb-6">
                   <div>
                     <h3 className="text-lg">{ch.title}</h3>
@@ -181,7 +184,7 @@ export default function ArenaPage() {
                 <button
                   onClick={() => handleEntry(ch, fee)}
                   disabled={profile?.jetons_cp < fee || entryLoading === ch.id}
-                  className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30"
+                  className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30 active:scale-95 transition-all"
                 >
                   {entryLoading === ch.id ? <Loader2 className="animate-spin mx-auto" /> : `ENTRER (${fee} CP)`}
                 </button>
@@ -189,6 +192,18 @@ export default function ArenaPage() {
             );
           })}
         </div>
+
+        {/* 💵 ZONE PUBLICITÉ RENTABLE (En bas de page) */}
+        {showAdsterraNativeBanner && (
+          <div className="mt-10 mb-6 w-full flex flex-col items-center animate-in slide-in-from-bottom-10 fade-in duration-700">
+            <p className="text-[9px] text-slate-600 mb-2 tracking-[0.3em]">SPONSOR</p>
+            {/* Conteneur Responsive qui évite le débordement horizontal */}
+            <div className="w-full max-w-[350px] overflow-hidden rounded-2xl bg-black/20 border border-white/5 p-1">
+               <AdsterraNativeBanner />
+            </div>
+          </div>
+        )}
+
       </div>
     </>
   );
