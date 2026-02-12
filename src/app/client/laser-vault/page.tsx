@@ -168,7 +168,7 @@ function LaserVaultGame() {
       
       // Accélération naturelle du jeu
       if (multiplier >= 1.0 && (questionsSolved + 1) % 2 === 0) {
-          setBaseSpeed(s => s + 0.4);
+          setBaseSpeed(s => s + 0.7);
       }
       generateProblem(multiplier + 0.05);
     
