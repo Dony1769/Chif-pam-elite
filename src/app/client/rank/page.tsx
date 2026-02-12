@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trophy, Timer, RefreshCcw, ChevronLeft, Loader2, Zap, ArrowRight, LayoutGrid, Star, TrendingUp, Crown, Gamepad2 } from 'lucide-react';
+import { Trophy, Timer, RefreshCcw, ChevronLeft, Loader2, Zap, ArrowRight, LayoutGrid, Star, TrendingUp, Crown, Gamepad2, Home } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 
@@ -59,7 +59,7 @@ function RankContent() {
     }
   };
 
-  // Logique du Timer présente uniquement dans le code 1
+  // Logique du Timer
   useEffect(() => {
     const interval = setInterval(() => {
       if (activeChallenge?.ends_at) {
@@ -80,13 +80,28 @@ function RankContent() {
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
 
+  // --- PARTIE 1 : LISTE DES DÉFIS (SANS ID) ---
   if (!challengeId) {
     return (
       <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
-        <div className="flex items-center gap-3 mb-10 mt-4">
-            <div className="p-3 bg-emerald-500 rounded-2xl text-black"><LayoutGrid size={24} /></div>
+        
+        {/* BOUTON RETOUR VERS HOME AJOUTÉ ICI */}
+        <div className="flex justify-between items-center mb-8 mt-2">
+            <button 
+                onClick={() => router.push('/client/home')} 
+                className="p-3 bg-white/5 border border-white/10 rounded-2xl active:scale-90 transition-all text-slate-400 hover:text-white"
+            >
+                <ChevronLeft size={24} />
+            </button>
+            <div className="bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20">
+                <Trophy size={20} className="text-emerald-500" />
+            </div>
+        </div>
+
+        <div className="flex items-center gap-3 mb-10">
             <h1 className="text-3xl tracking-tighter">MES_STATS_ARENA</h1>
         </div>
+
         <div className="space-y-4">
           {myChallenges.length === 0 ? (
              <div className="py-20 text-center bg-white/5 rounded-[3rem] border border-white/5">
@@ -113,6 +128,7 @@ function RankContent() {
     );
   }
 
+  // --- PARTIE 2 : CLASSEMENT DÉTAILLÉ (AVEC ID) ---
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase italic pb-40">
       <div className="max-w-md mx-auto flex justify-between items-center mb-8 mt-2">
@@ -205,3 +221,4 @@ export default function LeaderboardPage() {
     </Suspense>
   );
 }
+
