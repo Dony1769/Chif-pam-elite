@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { Loader2, ChevronLeft, Coins } from "lucide-react";
 import { motion } from "framer-motion";
-import VideoSliderAd from "@/components/ads/VideoSliderAd";
+import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 import ExoOutstream from "@/components/ads/ExoOutstream";
 
 export default function ArenaPage() {
@@ -18,7 +18,7 @@ export default function ArenaPage() {
   // 🔥 PUB SYSTEM
   const [showInterstitial, setShowInterstitial] = useState(true); // ExoOutstream
   const [canCloseInterstitial, setCanCloseInterstitial] = useState(false);
-  const [showSliderAd, setShowSliderAd] = useState(false); // Slider ad visible après interstitial
+  const [showAdsterraNativeBanner, setShowAdsterraNativeBanner] = useState(false); // Slider ad visible après interstitial
 
   const router = useRouter();
 
@@ -119,7 +119,7 @@ export default function ArenaPage() {
             <button
               onClick={() => {
                 setShowInterstitial(false);
-                setShowSliderAd(true); // active la pub slider après interstitial
+                setShowAdsterraNativeBanner(true); // active la pub slider après interstitial
               }}
               className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse"
             >
@@ -130,7 +130,7 @@ export default function ArenaPage() {
       )}
 
       {/* 🎥 VIDEO SLIDER PUB (reste active tant que la page est ouverte) */}
-      {showSliderAd && <VideoSliderAd />}
+      {showAdsterraNativeBanner && <AdsterraNativeBanner />}
 
       {/* 🌟 PAGE ARENA NORMALE */}
       <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-24">
