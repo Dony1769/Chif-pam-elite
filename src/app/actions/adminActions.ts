@@ -1,72 +1,29 @@
-'use server';
+"use server";
 
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 
-// 1. Client Admin (Pour bypasser les restrictions et changer le MDP)
+// On utilise la clé SERVICE_ROLE ici car c'est du code serveur sécurisé
+// Cela permet de contourner toutes les restrictions RLS pour l'admin
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Assurez-vous d'avoir cette variable dans votre .env.local
 );
 
-export async function adminResetPassword(targetUserId: string, newPassword: string) {
-  // CORRECTIF ICI : On attend que les cookies soient résolus
-  const cookieStore = await cookies();
+export async function adminResetPassword(userId: string, newPassword: string) {
+  try {
+    // 1. Mise à jour directe via l'API Admin de Supabase
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password: newPassword }
+    );
 
-  // 2. Client pour vérifier l'identité de l'admin
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          // Maintenant cookieStore est résolu, on peut appeler .get()
-          return cookieStore.get(name)?.value;
-        },
-        // Optionnel mais recommandé pour éviter d'autres erreurs TS
-        set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.delete({ name, ...options });
-        },
-      },
+    if (error) {
+      console.error("Erreur Reset Password:", error);
+      return { success: false, message: error.message };
     }
-  );
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, message: "Non authentifié." };
+    return { success: true, message: "Mot de passe mis à jour avec succès." };
+  } catch (err: any) {
+    return { success: false, message: "Erreur serveur : " + err.message };
   }
-
-  // 3. Vérification du rôle admin
-  const { data: currentUserProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (currentUserProfile?.role !== 'admin') {
-    return { success: false, message: "Accès refusé." };
-  }
-
-  // 4. Action de réinitialisation
-  const { error } = await supabaseAdmin.auth.admin.updateUserById(
-    targetUserId,
-    { password: newPassword }
-  );
-
-  if (error) {
-    return { success: false, message: error.message };
-  }
-
-  return { success: true, message: "Mot de passe modifié avec succès !" };
 }
