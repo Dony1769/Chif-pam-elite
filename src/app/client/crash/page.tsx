@@ -29,7 +29,7 @@ export default function CrashElite() {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintMsg, setMaintMsg] = useState("");
 
-  const multRef = useRef<number>(0.5); // DÉPART À 0.5x
+  const multRef = useRef<number>(0.5);
   const requestRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const crashAtRef = useRef<number>(0);
@@ -116,9 +116,7 @@ export default function CrashElite() {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
     
-    // --- NOUVELLE FORMULE : DÉPART 0.5 ---
-    // On multiplie par 0.5 pour que t=0 donne 0.5
-    // On augmente légèrement la vitesse (0.08) pour que ça ne soit pas trop lent au début
+    // Animation de montée (0.5 -> 1.0 -> Infini)
     const currentMult = 0.5 * Math.pow(Math.E, 0.08 * elapsed); 
     
     if (currentMult >= crashAtRef.current) {
@@ -149,7 +147,7 @@ export default function CrashElite() {
     
     setLoading(true);
     setStatus('idle');
-    setMult(0.5); // RESET À 0.5
+    setMult(0.5); 
     multRef.current = 0.5;
     startTimeRef.current = null;
     isCollectingRef.current = false;
@@ -170,15 +168,16 @@ export default function CrashElite() {
 
       setJetonsCP(prev => prev - bet); 
 
-      // --- ALGORITHME DU CRASH POINT (30% House Edge à 1.00x) ---
+      // --- ALGORITHME DU CRASH POINT (55% House Edge à 1.00x) ---
       const result = Math.random();
       
-      if (result < 0.30) {
-        // Le crash sera à 1.00x exactement.
-        // Comme on part de 0.5x, le joueur verra monter de 0.5 à 1.00 puis CRASH.
+      if (result < 0.55) {
+        // 55% de chance de CRASH INSTANTANÉ (1.00x)
         crashAtRef.current = 1.00;
       } else {
-        const remainingProb = (result - 0.30) / 0.70; 
+        // Les 45% restants suivent la courbe normale
+        // On normalise le résultat restant (0.55 à 1.0) vers (0.0 à 1.0)
+        const remainingProb = (result - 0.55) / 0.45; 
         crashAtRef.current = parseFloat((0.99 / (1 - remainingProb)).toFixed(2));
       }
 
@@ -247,7 +246,7 @@ export default function CrashElite() {
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <div className="absolute bottom-0 w-full flex justify-center items-end">
-             {/* Animation de la pousse (ajustée pour échelle 0.5 - 2.0) */}
+             {/* Animation de la pousse */}
              <motion.div style={{ height: `${Math.min((mult - 0.5) * 200, 280)}px` }} className="w-4 bg-gradient-to-t from-emerald-800 to-emerald-400 rounded-t-full relative">
                 {mult > 1.2 && <SproutLeaf side="left" top="20%" />}
                 {mult > 1.5 && <SproutLeaf side="right" top="40%" />}
