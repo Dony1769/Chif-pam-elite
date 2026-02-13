@@ -20,7 +20,7 @@ export default function CrashElite() {
   const [bet, setBet] = useState(100); 
   const [jetonsCP, setJetonsCP] = useState(0); 
   const [autoCashout, setAutoCashout] = useState(2.0);
-  const [mult, setMult] = useState(1.0);
+  const [mult, setMult] = useState(0.5); // DÉPART À 0.5x
   const [status, setStatus] = useState<'idle' | 'running' | 'crashed' | 'collected'>('idle');
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export default function CrashElite() {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintMsg, setMaintMsg] = useState("");
 
-  const multRef = useRef<number>(1.0);
+  const multRef = useRef<number>(0.5); // DÉPART À 0.5x
   const requestRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const crashAtRef = useRef<number>(0);
@@ -116,7 +116,10 @@ export default function CrashElite() {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
     
-    const currentMult = Math.pow(Math.E, 0.06 * elapsed); 
+    // --- NOUVELLE FORMULE : DÉPART 0.5 ---
+    // On multiplie par 0.5 pour que t=0 donne 0.5
+    // On augmente légèrement la vitesse (0.08) pour que ça ne soit pas trop lent au début
+    const currentMult = 0.5 * Math.pow(Math.E, 0.08 * elapsed); 
     
     if (currentMult >= crashAtRef.current) {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -129,7 +132,7 @@ export default function CrashElite() {
           supabase.from('crash_games').update({ status: 'crashed' }).eq('id', gameId).then();
       }
 
-    } else if (autoCashout > 1.01 && currentMult >= autoCashout) {
+    } else if (autoCashout > 0.51 && currentMult >= autoCashout) {
       setMult(autoCashout);
       multRef.current = autoCashout;
       collect(autoCashout); 
@@ -146,8 +149,8 @@ export default function CrashElite() {
     
     setLoading(true);
     setStatus('idle');
-    setMult(1.0);
-    multRef.current = 1.0;
+    setMult(0.5); // RESET À 0.5
+    multRef.current = 0.5;
     startTimeRef.current = null;
     isCollectingRef.current = false;
 
@@ -167,17 +170,14 @@ export default function CrashElite() {
 
       setJetonsCP(prev => prev - bet); 
 
-      // --- ALGORITHME DU CRASH POINT (HOUSE EDGE CONFIGURÉ À 30%) ---
+      // --- ALGORITHME DU CRASH POINT (30% House Edge à 1.00x) ---
       const result = Math.random();
       
-      // 30% de chance de CRASH INSTANTANÉ (1.00x)
-      // Le joueur perd immédiatement s'il n'a pas auto-cashout à 1.01 (impossible en pratique)
       if (result < 0.30) {
+        // Le crash sera à 1.00x exactement.
+        // Comme on part de 0.5x, le joueur verra monter de 0.5 à 1.00 puis CRASH.
         crashAtRef.current = 1.00;
       } else {
-        // Sinon, calcul normal (Provably Fair standard)
-        // 0.99 / (1 - X) donne une distribution exponentielle
-        // On retire le 0.30 déjà consommé pour normaliser le reste
         const remainingProb = (result - 0.30) / 0.70; 
         crashAtRef.current = parseFloat((0.99 / (1 - remainingProb)).toFixed(2));
       }
@@ -233,6 +233,7 @@ export default function CrashElite() {
           <ChevronLeft size={22} />
         </button>
         
+        {/* SOLDE CP */}
         <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
             <Coins size={16} className="text-emerald-500" />
             <span className="text-emerald-500 font-black tracking-tighter">{Math.floor(jetonsCP).toLocaleString()} CP</span>
@@ -241,12 +242,13 @@ export default function CrashElite() {
 
       <main className="w-full max-w-lg space-y-4">
         
-        {/* --- ZONE DE JEU --- */}
+        {/* --- ZONE DE JEU (GAME BOX) --- */}
         <div ref={gameBoxRef} className="game-box relative h-80 bg-[#0a0a0f] rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <div className="absolute bottom-0 w-full flex justify-center items-end">
-             <motion.div style={{ height: `${Math.min((mult - 1) * 150, 280)}px` }} className="w-4 bg-gradient-to-t from-emerald-800 to-emerald-400 rounded-t-full relative">
+             {/* Animation de la pousse (ajustée pour échelle 0.5 - 2.0) */}
+             <motion.div style={{ height: `${Math.min((mult - 0.5) * 200, 280)}px` }} className="w-4 bg-gradient-to-t from-emerald-800 to-emerald-400 rounded-t-full relative">
                 {mult > 1.2 && <SproutLeaf side="left" top="20%" />}
                 {mult > 1.5 && <SproutLeaf side="right" top="40%" />}
                 {mult > 2.0 && <SproutLeaf side="left" top="60%" />}
