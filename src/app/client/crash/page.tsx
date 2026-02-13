@@ -48,7 +48,6 @@ export default function CrashElite() {
             if (data) setJetonsCP(data.jetons_cp);
         }
         
-        // Vérification Maintenance
         const { data: setting } = await supabase.from('game_settings').select('*').eq('game_id', 'crash').single();
         if (setting && !setting.is_active) {
             setIsMaintenance(true);
@@ -91,6 +90,7 @@ export default function CrashElite() {
     const winAmount = Math.floor(bet * finalMult); 
 
     try {
+      // 1. Transaction RPC : CRÉDIT DU GAIN
       const { data: result, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: userId,
           p_mise_cp: 0,
@@ -100,8 +100,10 @@ export default function CrashElite() {
 
       if (rpcErr || !result.success) throw new Error("Erreur transaction gain");
 
+      // 2. Mise à jour locale
       setJetonsCP(prev => prev + winAmount);
       
+      // 3. Mise à jour de la session de jeu
       await supabase.from('crash_games').update({
           status: 'cashed_out',
           multiplier_out: finalMult,
@@ -125,6 +127,7 @@ export default function CrashElite() {
     const currentMult = Math.pow(Math.E, 0.06 * elapsed); 
     
     if (currentMult >= crashAtRef.current) {
+      // CRASH !
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
       setMult(crashAtRef.current);
@@ -136,10 +139,12 @@ export default function CrashElite() {
       }
 
     } else if (autoCashout > 1.01 && currentMult >= autoCashout) {
+      // AUTO-CASHOUT
       setMult(autoCashout);
       multRef.current = autoCashout;
       collect(autoCashout); 
     } else {
+      // CONTINUER
       multRef.current = currentMult;
       setMult(currentMult);
       requestRef.current = requestAnimationFrame(gameLoop);
@@ -159,6 +164,7 @@ export default function CrashElite() {
     isCollectingRef.current = false;
 
     try {
+      // 1. Transaction RPC : DÉBIT DE LA MISE
       const { data: ok, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: userId,
           p_mise_cp: Math.floor(bet),
@@ -174,16 +180,19 @@ export default function CrashElite() {
 
       setJetonsCP(prev => prev - bet); 
 
-      // --- CALCUL DU CRASH POINT (HOUSE EDGE RENFORCÉ) ---
+      // 2. CALCUL DU CRASH POINT (Algorithme House Edge Ajusté)
       const result = Math.random();
-      // 6% de chance de crash instantané à 1.00x (House Edge)
-      if (result < 0.06) {
+      
+      // 🔥 HOUSE EDGE : 12% de chance de crash immédiat (1.00x)
+      if (result < 0.12) {
         crashAtRef.current = 1.00;
       } else {
-        // Formule ajustée avec un coefficient de 0.94 (6% edge)
-        crashAtRef.current = parseFloat((0.94 / (1 - result)).toFixed(2));
+        // Formule standard ajustée : 0.99 / (1 - X)
+        // Cela assure une distribution équitable pour les 88% restants
+        crashAtRef.current = parseFloat((0.99 / (1 - result)).toFixed(2));
       }
 
+      // 3. Création de la partie en DB
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
         user_id: userId,
         bet_amount: Number(bet),
@@ -209,6 +218,7 @@ export default function CrashElite() {
     <div className="min-h-screen bg-[#050508] text-white flex flex-col items-center p-4 font-sans select-none overflow-hidden relative">
       <div className="crash-overlay fixed inset-0 bg-rose-600 opacity-0 pointer-events-none z-50" />
 
+      {/* OVERLAY MAINTENANCE */}
       <AnimatePresence>
         {isMaintenance && (
           <motion.div 
@@ -234,6 +244,7 @@ export default function CrashElite() {
           <ChevronLeft size={22} />
         </button>
         
+        {/* SOLDE CP */}
         <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
             <Coins size={16} className="text-emerald-500" />
             <span className="text-emerald-500 font-black tracking-tighter">{Math.floor(jetonsCP).toLocaleString()} CP</span>
@@ -242,6 +253,7 @@ export default function CrashElite() {
 
       <main className="w-full max-w-lg space-y-4">
         
+        {/* --- ZONE DE JEU (GAME BOX) --- */}
         <div ref={gameBoxRef} className="game-box relative h-80 bg-[#0a0a0f] rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
@@ -271,11 +283,13 @@ export default function CrashElite() {
           </AnimatePresence>
         </div>
 
+        {/* 🧠 ZONE PUB SÉCURISÉE */}
         <div className="w-full overflow-hidden rounded-2xl border border-white/5 bg-black/20 relative min-h-[80px] flex items-center justify-center">
             <p className="absolute top-1 right-2 text-[6px] text-slate-600 font-black uppercase tracking-widest z-0">SPONSOR</p>
             <ExoClickBanner />
         </div>
 
+        {/* --- PANNEAU DE CONTRÔLE --- */}
         <div className="bg-[#0d0d12] p-6 rounded-[2.5rem] border border-white/5 space-y-5 shadow-2xl relative z-10">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
