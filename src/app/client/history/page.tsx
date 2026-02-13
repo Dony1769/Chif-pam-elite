@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation';
 import { 
   ArrowUpCircle, ArrowDownCircle, 
   Clock, Loader2, ChevronLeft, 
-  AlertCircle, Wallet, History // <--- J'ai ajouté l'import ici
+  AlertCircle, Wallet, History
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// Import de la publicité
-import ExoClickBanner from "@/components/ads/ExoClickBanner";
+// --- IMPORT DU NOUVEAU TAG MONETAG ---
+import MonetagMultiTag from "@/components/ads/MonetagMultiTag";
 
 // --- COMPOSANT LOGO MINI ---
 const LogoTiny = () => (
@@ -63,6 +63,9 @@ export default function ClientHistory() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
       
+      {/* --- INTEGRATION MONETAG (INVISIBLE MAIS ACTIF) --- */}
+      <MonetagMultiTag />
+
       {/* HEADER FIXE */}
       <div className="sticky top-0 z-30 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
           <button onClick={() => router.back()} className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center active:scale-90 transition-all hover:bg-white/10">
@@ -89,17 +92,12 @@ export default function ClientHistory() {
           </div>
         </div>
 
-        {/* --- PUBLICITÉ INTEGRÉE --- */}
-        <div className="w-full overflow-hidden rounded-[1.5rem] border border-white/5 shadow-lg bg-black/20 relative min-h-[100px] flex items-center justify-center">
-            <p className="absolute top-2 right-4 text-[8px] text-slate-600 font-black uppercase tracking-widest z-0">Sponsor</p>
-            <ExoClickBanner />
-        </div>
+        {/* Note : J'ai retiré le bloc ExoClickBanner ici car le MultiTag n'est pas une bannière visuelle */}
 
         {/* LISTE FINANCES */}
         <div className="space-y-3">
             {transactions.length === 0 ? (
                 <div className="text-center py-10 opacity-30 flex flex-col items-center">
-                    {/* History est maintenant bien importé et fonctionnera */}
                     <History size={40} className="mb-2"/>
                     <p className="text-xs font-bold uppercase">Aucune transaction trouvée</p>
                 </div>
