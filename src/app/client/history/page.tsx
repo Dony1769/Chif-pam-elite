@@ -11,7 +11,8 @@ import {
 import { motion } from 'framer-motion';
 
 import ExoClickBanner from "@/components/ads/ExoClickBanner";
-import MonetagMultiTag from "@/components/ads/MonetagMultiTag";
+// ✅ Remplacement ici
+import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
 
 // --- LOGO MINI ---
@@ -73,8 +74,8 @@ export default function ClientHistory() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
       
-      {/* ✅ MONETAG MULTITAG — chargé uniquement sur cette page */}
-      <MonetagMultiTag />
+      {/* ✅ ADSTERRA NATIVE BANNER — chargé uniquement sur cette page */}
+      <AdsterraNativeBanner />
 
       {/* HEADER */}
       <div className="sticky top-0 z-30 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
@@ -213,4 +214,4 @@ export default function ClientHistory() {
       </div>
     </div>
   );
-                             }
+                }
