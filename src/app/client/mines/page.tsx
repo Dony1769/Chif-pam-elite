@@ -33,7 +33,9 @@ export default function MinesElite() {
     if (status === 'playing' && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (timeLeft === 0 && status === 'playing') {
-      handleGameOver(0); // Temps écoulé = Perdu
+      // Temps écoulé = On considère ça comme une défaite (bombe)
+      // Mais on applique la logique de sécurité (si < 1.0 on sauve les meubles)
+      handleGameOver(true); 
     }
     return () => clearInterval(timer);
   }, [status, timeLeft]);
@@ -67,10 +69,11 @@ export default function MinesElite() {
     setMines(counts[difficulty]);
   }, [difficulty]);
 
-  const getMultiplier = () => {
-    if (revealed.length === 0) return 1.0;
-    const steps = { facile: 0.05, intermédiaire: 0.10, difficile: 0.50 }; // Un peu boosté pour CP
-    return parseFloat((1.0 + (revealed.length * steps[difficulty])).toFixed(2));
+  // --- CALCUL DU MULTIPLICATEUR ---
+  // Base 0.5 + Incrément selon difficulté
+  const getMultiplier = (revealedCount = revealed.length) => {
+    const steps = { facile: 0.20, intermédiaire: 0.35, difficile: 0.50 };
+    return parseFloat((0.5 + (revealedCount * steps[difficulty])).toFixed(2));
   };
 
   const start = async () => {
@@ -126,9 +129,9 @@ export default function MinesElite() {
   const clickTile = (i: number) => {
     if (status !== 'playing' || revealed.includes(i)) return;
     
-    // BOOM
+    // BOOM (Mine touchée)
     if (minePositions.includes(i)) {
-      handleGameOver(0); // Perdu
+      handleGameOver(true); // true = forced loss (bombe)
       return;
     }
     
@@ -136,17 +139,38 @@ export default function MinesElite() {
     setRevealed(prev => [...prev, i]);
   };
 
-  const handleGameOver = async (winAmount: number) => {
-    setStatus('ended');
+  // --- FIN DE PARTIE ---
+  // isBombHit = true si on a touché une mine ou temps écoulé
+  // isBombHit = false si on encaisse manuellement (Cashout)
+  const handleGameOver = async (isBombHit: boolean) => {
     if (!gameId) return;
+    
+    const currentMult = getMultiplier();
+    let winAmount = 0;
 
-    // Si on a gagné quelque chose
+    if (!isBombHit) {
+        // ENCAISSEMENT MANUEL (Succès)
+        winAmount = Math.floor(bet * currentMult);
+    } else {
+        // ECHEC (Bombe ou Temps)
+        if (currentMult <= 1.0) {
+            // ZONE SÉCURITÉ : On sauve les meubles (Encaissement auto)
+            winAmount = Math.floor(bet * currentMult);
+        } else {
+            // ZONE DANGER : Perte totale
+            winAmount = 0;
+        }
+    }
+
+    setStatus('ended');
+
+    // Transaction Gain (si > 0)
     if (winAmount > 0) {
         await supabase.rpc('jouer_partie_cp', {
             p_user_id: userId,
             p_mise_cp: 0,
             p_gain_cp: winAmount,
-            p_jeu_nom: 'Mines Win'
+            p_jeu_nom: isBombHit ? 'Mines Safety Cashout' : 'Mines Win'
         });
         setJetonsCP(prev => prev + winAmount);
     }
@@ -160,14 +184,10 @@ export default function MinesElite() {
   };
 
   const cashout = async () => {
-    if (status !== 'playing' || revealed.length < 2 || loading) return;
+    if (status !== 'playing' || revealed.length < 1 || loading) return; // Min 1 case pour encaisser
     setLoading(true);
-    
-    const currentMult = getMultiplier();
-    const winAmount = Math.floor(bet * currentMult);
-
     try {
-        await handleGameOver(winAmount);
+        await handleGameOver(false); // false = cashout volontaire
     } catch (err: any) {
         alert("Erreur d'encaissement.");
     } finally { setLoading(false); }
@@ -194,6 +214,8 @@ export default function MinesElite() {
       </div>
     );
   }
+
+  const currentMult = getMultiplier();
 
   return (
     <div className="min-h-screen bg-[#050508] text-white p-4 font-black italic uppercase flex flex-col items-center select-none pb-20">
@@ -229,11 +251,11 @@ export default function MinesElite() {
           <div className="grid grid-cols-3 gap-3 animate-in fade-in zoom-in duration-300">
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
               <p className="text-[8px] text-slate-500 mb-1 flex items-center justify-center gap-1"><TrendingUp size={10}/> COTE</p>
-              <p className="text-lg text-emerald-500 font-bold">{getMultiplier().toFixed(2)}X</p>
+              <p className={`text-lg font-bold ${currentMult <= 1.0 ? 'text-emerald-500' : 'text-amber-500'}`}>{currentMult.toFixed(2)}X</p>
             </div>
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
               <p className="text-[8px] text-slate-500 mb-1 flex items-center justify-center gap-1"><Zap size={10}/> GAIN</p>
-              <p className="text-lg text-amber-500 font-bold">{Math.floor(bet * getMultiplier())}</p>
+              <p className="text-lg text-white font-bold">{Math.floor(bet * currentMult)}</p>
             </div>
             <div className={`p-4 rounded-2xl border text-center transition-all ${timeLeft <= 5 ? 'bg-rose-500/20 border-rose-500 animate-pulse' : 'bg-white/5 border-white/5'}`}>
               <p className="text-[8px] text-slate-500 mb-1 flex items-center justify-center gap-1"><Clock size={10}/> TEMPS</p>
@@ -257,17 +279,19 @@ export default function MinesElite() {
 
           <button 
             onClick={status === 'playing' ? cashout : start}
-            disabled={loading || (status === 'playing' && revealed.length < 2) || (status !== 'playing' && bet > jetonsCP)}
+            disabled={loading || (status === 'playing' && revealed.length < 1) || (status !== 'playing' && bet > jetonsCP)}
             className={`w-full py-6 rounded-3xl text-2xl font-black transition-all flex flex-col items-center justify-center shadow-lg active:scale-95 ${
               status === 'playing' 
-              ? (revealed.length < 2 ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-amber-500 text-black shadow-amber-500/20') 
+              ? (revealed.length < 1 ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-amber-500 text-black shadow-amber-500/20') 
               : 'bg-emerald-500 text-black shadow-emerald-500/20'
             }`}
           >
             {loading ? <Loader2 className="animate-spin" /> : status === 'playing' ? (
               <>
                 <span>ENCAISSER</span>
-                {revealed.length < 2 && <span className="text-[10px] opacity-60 flex items-center gap-1 mt-1"><Lock size={10}/> MINIMUM 2 CASES</span>}
+                {/* Indicateur Zone Danger */}
+                {currentMult > 1.0 && <span className="text-[10px] bg-black/20 px-2 py-0.5 rounded text-white flex items-center gap-1 mt-1"><ShieldAlert size={10}/> ZONE DANGER</span>}
+                {currentMult <= 1.0 && <span className="text-[10px] bg-black/20 px-2 py-0.5 rounded text-white flex items-center gap-1 mt-1"><Lock size={10}/> SÉCURISÉ</span>}
               </>
             ) : (bet > jetonsCP ? "SOLDE INSUFFISANT" : "JOUER")}
           </button>
@@ -312,3 +336,4 @@ export default function MinesElite() {
     </div>
   );
 }
+
