@@ -26,11 +26,9 @@ export default function CrashElite() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // --- ÉTAT MAINTENANCE ---
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintMsg, setMaintMsg] = useState("");
 
-  // --- REFS ---
   const multRef = useRef<number>(1.0);
   const requestRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -38,7 +36,6 @@ export default function CrashElite() {
   const gameBoxRef = useRef<HTMLDivElement>(null);
   const isCollectingRef = useRef<boolean>(false);
 
-  // --- INITIALISATION ---
   useEffect(() => {
     const init = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -74,7 +71,6 @@ export default function CrashElite() {
     return () => ctx.revert();
   }, []);
 
-  // --- FONCTION ENCAISSER (COLLECT) ---
   const collect = useCallback(async (forcedMult?: number) => {
     if (status !== 'running' || !gameId || loading || isCollectingRef.current || !userId) return;
     
@@ -90,7 +86,6 @@ export default function CrashElite() {
     const winAmount = Math.floor(bet * finalMult); 
 
     try {
-      // 1. Transaction RPC : CRÉDIT DU GAIN
       const { data: result, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: userId,
           p_mise_cp: 0,
@@ -100,10 +95,8 @@ export default function CrashElite() {
 
       if (rpcErr || !result.success) throw new Error("Erreur transaction gain");
 
-      // 2. Mise à jour locale
       setJetonsCP(prev => prev + winAmount);
       
-      // 3. Mise à jour de la session de jeu
       await supabase.from('crash_games').update({
           status: 'cashed_out',
           multiplier_out: finalMult,
@@ -119,7 +112,6 @@ export default function CrashElite() {
     }
   }, [status, gameId, loading, userId, bet]);
 
-  // --- BOUCLE DE JEU ---
   const gameLoop = useCallback((time: number) => {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
@@ -127,7 +119,6 @@ export default function CrashElite() {
     const currentMult = Math.pow(Math.E, 0.06 * elapsed); 
     
     if (currentMult >= crashAtRef.current) {
-      // CRASH !
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
       setMult(crashAtRef.current);
@@ -139,19 +130,16 @@ export default function CrashElite() {
       }
 
     } else if (autoCashout > 1.01 && currentMult >= autoCashout) {
-      // AUTO-CASHOUT
       setMult(autoCashout);
       multRef.current = autoCashout;
       collect(autoCashout); 
     } else {
-      // CONTINUER
       multRef.current = currentMult;
       setMult(currentMult);
       requestRef.current = requestAnimationFrame(gameLoop);
     }
   }, [triggerCrashAnimation, autoCashout, collect, gameId]);
 
-  // --- DÉMARRAGE DU JEU ---
   const start = async () => {
     if (isMaintenance || !userId) return;
     if (bet > jetonsCP || bet < 10 || loading || status === 'running') return;
@@ -164,7 +152,6 @@ export default function CrashElite() {
     isCollectingRef.current = false;
 
     try {
-      // 1. Transaction RPC : DÉBIT DE LA MISE
       const { data: ok, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: userId,
           p_mise_cp: Math.floor(bet),
@@ -180,19 +167,21 @@ export default function CrashElite() {
 
       setJetonsCP(prev => prev - bet); 
 
-      // 2. CALCUL DU CRASH POINT (Algorithme House Edge Ajusté)
+      // --- ALGORITHME DU CRASH POINT (HOUSE EDGE CONFIGURÉ À 30%) ---
       const result = Math.random();
       
-      // 🔥 HOUSE EDGE : 12% de chance de crash immédiat (1.00x)
-      if (result < 0.12) {
+      // 30% de chance de CRASH INSTANTANÉ (1.00x)
+      // Le joueur perd immédiatement s'il n'a pas auto-cashout à 1.01 (impossible en pratique)
+      if (result < 0.30) {
         crashAtRef.current = 1.00;
       } else {
-        // Formule standard ajustée : 0.99 / (1 - X)
-        // Cela assure une distribution équitable pour les 88% restants
-        crashAtRef.current = parseFloat((0.99 / (1 - result)).toFixed(2));
+        // Sinon, calcul normal (Provably Fair standard)
+        // 0.99 / (1 - X) donne une distribution exponentielle
+        // On retire le 0.30 déjà consommé pour normaliser le reste
+        const remainingProb = (result - 0.30) / 0.70; 
+        crashAtRef.current = parseFloat((0.99 / (1 - remainingProb)).toFixed(2));
       }
 
-      // 3. Création de la partie en DB
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
         user_id: userId,
         bet_amount: Number(bet),
@@ -244,7 +233,6 @@ export default function CrashElite() {
           <ChevronLeft size={22} />
         </button>
         
-        {/* SOLDE CP */}
         <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
             <Coins size={16} className="text-emerald-500" />
             <span className="text-emerald-500 font-black tracking-tighter">{Math.floor(jetonsCP).toLocaleString()} CP</span>
@@ -253,7 +241,7 @@ export default function CrashElite() {
 
       <main className="w-full max-w-lg space-y-4">
         
-        {/* --- ZONE DE JEU (GAME BOX) --- */}
+        {/* --- ZONE DE JEU --- */}
         <div ref={gameBoxRef} className="game-box relative h-80 bg-[#0a0a0f] rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
