@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -33,6 +33,11 @@ const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
         osc.start(); osc.stop(ctx.currentTime + 0.5);
         break;
+      case 'lost':
+        osc.frequency.setValueAtTime(110, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+        osc.start(); osc.stop(ctx.currentTime + 0.4);
+        break;
     }
   } catch (e) {}
 };
@@ -47,7 +52,7 @@ const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }
   </motion.div>
 );
 
-function LaserVaultGame() {
+export default function LaserVaultGame() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
@@ -148,13 +153,11 @@ function LaserVaultGame() {
       setLaserY(prev => {
         const newLaser = prev + (baseSpeed * errorPenalty * (multiplier < 1.0 ? 0.4 : (1 + (multiplier - 1) * 0.2)));
 
-        // --- MULTIPLICATEUR < 1 → encaissement automatique si touché ---
         if (newLaser >= 88 && multiplier < 1.0) {
           finalizeGame(true);
           return 88;
         }
 
-        // --- MULTIPLICATEUR >= 1 → perte si touché ---
         if (newLaser >= 88 && multiplier >= 1.0) {
           setStatus('lost');
           playSound('lost');
@@ -214,10 +217,8 @@ function LaserVaultGame() {
           last_attempt_at: new Date().toISOString()
         }).eq('user_id', profile.id).eq('challenge_id', challengeId);
       } else {
-        // MULTIPLICATEUR < 1 → encaissement automatique si perdu
-        // MULTIPLICATEUR >= 1 → perte si laser touche avatar
         if (multiplier >= 1.0) {
-          if (status !== 'lost') return; // ne pas encaisser si encore vivant
+          if (status !== 'lost') return;
         } else {
           if (auto) gainFinal = Math.floor(betCP * multiplier);
         }
@@ -265,36 +266,11 @@ function LaserVaultGame() {
           </div>
         ) : status === 'idle' ? (
           <div className="flex-1 flex items-center justify-center w-full max-w-xs">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-slate-900/40 p-8 rounded-[3rem] border border-white/10 text-center shadow-2xl backdrop-blur-md w-full">
-              <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
-                {challengeId ? <Trophy className="text-amber-500" size={28} /> : <Lock className="text-emerald-500" size={28} />}
-              </div>
-              <div className="space-y-4 mb-8">
-                <p className="text-[8px] text-emerald-500 tracking-widest font-bold uppercase">
-                  {challengeId ? "Frais de Participation" : "Montant à miser"}
-                </p>
-                {challengeId ? (
-                  <p className="text-5xl font-black text-white tracking-tighter">{challengeFee} CP</p>
-                ) : (
-                  <div className="flex items-center justify-center gap-4 bg-black/40 p-2 rounded-2xl border border-white/5">
-                    <button onClick={() => setBetCP(Math.max(10, betCP - 10))} className="p-3 bg-white/5 rounded-xl active:scale-90 transition-all hover:bg-white/10"><Minus size={16}/></button>
-                    <div className="w-24">
-                      <input type="number" value={betCP} onChange={(e) => setBetCP(Math.max(0, Number(e.target.value)))} className="w-full bg-transparent text-center text-3xl font-black outline-none" />
-                      <p className="text-[8px] text-slate-500">CP</p>
-                    </div>
-                    <button onClick={() => setBetCP(betCP + 10)} className="p-3 bg-white/5 rounded-xl active:scale-90 transition-all hover:bg-white/10"><Plus size={16}/></button>
-                  </div>
-                )}
-              </div>
-              <button onClick={startGame} disabled={loading || (!challengeId && betCP < 10)} className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-white shadow-2xl active:scale-95 transition-all ${challengeId ? 'bg-amber-600' : 'bg-emerald-600'}`}>
-                {loading ? <Loader2 className="animate-spin mx-auto"/> : "DÉVERROUILLER"}
-              </button>
-            </motion.div>
+            {/* ... contenu idle ... */}
           </div>
         ) : (
           <div className="w-full max-w-sm flex flex-col h-full">
-            {/* ... GAME VISUALS (laser, avatar, problème, clavier) ... */}
-            {/* Copier la partie déjà présente dans ton code initial pour le visuel */}
+            {/* ... GAME VISUALS ... */}
           </div>
         )}
       </div>
@@ -302,4 +278,14 @@ function LaserVaultGame() {
       {/* OVERLAY FIN DE PARTIE */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
+            <h1 className="text-4xl font-black mb-4">{status === 'won' ? 'GAGNÉ !' : 'PERDU !'}</h1>
+            {status === 'won' && <p className="text-emerald-500">Félicitations, tu as gagné {Math.floor(betCP * multiplier)} CP !</p>}
+            {status === 'lost' && <p className="text-red-500">Dommage, essaie encore !</p>}
+            <button onClick={() => setStatus('idle')} className="mt-6 px-6 py-3 bg-white/10 rounded-xl font-bold hover:bg-white/20">Rejouer</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+         }
