@@ -14,6 +14,9 @@ import {
 } from 'recharts';
 import Link from 'next/link';
 
+// IMPORT DU POPUNDER MONETAG
+import MonetagPopunder from '@/components/ads/MonetagPopunder';
+
 const LogoChifPamSmall = () => (
   <svg viewBox="0 0 100 100" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="8" strokeLinecap="round" />
@@ -136,6 +139,10 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-[#020617] text-white p-6 pb-32 font-sans overflow-x-hidden">
+      
+      {/* ACTIVATION DE LA PUB POPUNDER ICI */}
+      <MonetagPopunder />
+
       <div className="max-w-md mx-auto space-y-6">
         <div className="flex items-center justify-between mb-8">
           <button onClick={() => router.push('/client/home')} className="p-3 bg-slate-900 border border-white/5 rounded-2xl hover:bg-slate-800 transition-all active:scale-90">
