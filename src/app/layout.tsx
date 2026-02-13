@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import PWARegister from "@/components/PWARegister";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+// IMPORT DU NOUVEAU COMPOSANT
+import MonetagMultiTag from "@/components/ads/MonetagMultiTag";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -46,6 +48,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {/* Intégration du Multi Tag ici */}
+        <MonetagMultiTag />
+        
         <PWARegister propeller={true} />
         {children}
         <SpeedInsights />
