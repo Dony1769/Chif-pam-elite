@@ -72,7 +72,7 @@ export default function MinesElite() {
   // --- CALCUL DU MULTIPLICATEUR ---
   // Base 0.5 + Incrément selon difficulté
   const getMultiplier = (revealedCount = revealed.length) => {
-    const steps = { facile: 0.20, intermédiaire: 0.35, difficile: 0.50 };
+    const steps = { facile: 0.05, intermédiaire: 0.1, difficile: 0.2 };
     return parseFloat((0.5 + (revealedCount * steps[difficulty])).toFixed(2));
   };
 
