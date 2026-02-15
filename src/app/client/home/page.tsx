@@ -208,16 +208,6 @@ export default function ClientHome() {
           </div>
         </div>
 
-        {/* Action Buttons (Dépôt / Retrait pour HTG) */}
-        <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-5 rounded-[1.8rem] text-slate-950 flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
-            <Plus size={20} /><span className="text-[9px] font-black italic uppercase tracking-widest">Dépôt</span>
-          </Link>
-          <Link href="/client/finance" className="bg-slate-900/50 p-5 rounded-[1.8rem] border border-white/10 flex flex-col items-center gap-1 active:scale-95 transition-all">
-            <ArrowDownCircle size={20} className="text-rose-500" /><span className="text-[9px] font-black italic uppercase tracking-widest">Retrait</span>
-          </Link>
-        </div>
-
         {/* Jeux / Défis à la une */}
         <div className="space-y-4" id="challenges-section">
           <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Défis à la une</h3>
