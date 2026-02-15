@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, Check, Languages } from 'lucide-react';
+import { X, ChevronRight, Check, Languages, Globe } from 'lucide-react';
 
-// --- CONTENU DU TOUR (Français & Kreyòl) ---
-const STEPS_CONTENT = {
+// --- CONFIGURATION DU CONTENU (BILINGUE) ---
+const TOUR_DATA = {
   fr: [
     { 
       target: "balance-card", 
@@ -14,99 +14,101 @@ const STEPS_CONTENT = {
     { 
       target: "market-btn", 
       title: "BOUTIQUE ELITE", 
-      desc: "Le raccourci rapide pour acheter des packs de CP ou échanger vos diamants." 
+      desc: "Le raccourci rapide pour acheter des packs de CP ou échanger vos diamants contre des bonus." 
     },
     { 
       target: "challenges-section", 
       title: "ZONE DE MISSION", 
-      desc: "C'est le cœur de l'action. Choisissez un défi, battez le score et remportez la mise." 
+      desc: "C'est le cœur de l'action. Choisissez un défi, battez le score et remportez la cagnotte." 
     },
     { 
       target: "nav-profile", 
       title: "FINANCES & COMPTE", 
-      desc: "C'est ici que ça se passe ! Pour effectuer un DÉPÔT ou un RETRAIT, cliquez ici pour accéder à votre Profil." 
+      desc: "C'est ici que ça se passe ! Pour effectuer un DÉPÔT ou un RETRAIT, accédez maintenant à votre Profil." 
     }
   ],
   ht: [
     { 
       target: "balance-card", 
-      title: "RESOUS OU YO", 
-      desc: "Men motè jwèt ou a! Jetons CP pou jwe ak balans Goud (HTG) ou. Ou ka konvèti CP ou yo la a." 
+      title: "RESOUSE OU YO", 
+      desc: "Sa se motè jwèt ou ! Jeton CP pou jwe ak balans Goud (HTG) ou. Ou ka konvèti CP ou yo la." 
     },
     { 
       target: "market-btn", 
       title: "BOUTIK ELIT", 
-      desc: "Chemen kout pou achte pakèt CP rapid oswa chanje dyaman ou yo." 
+      desc: "Chemen kout pou achte pake CP oswa chanje dyaman ou yo pou jwenn bonis." 
     },
     { 
       target: "challenges-section", 
       title: "ZÒN MISYON", 
-      desc: "Se la tout aksyon an ye. Chwazi yon defi, kraze skò a epi ranpòte miz la." 
+      desc: "Se la aksyon an ye. Chwazi yon defi, bat skò a epi ranpòte lajan an." 
     },
     { 
       target: "nav-profile", 
       title: "FINANS & KONT", 
-      desc: "Se la tout bagay regle! Pou fè yon DEPÒT oswa yon RETRÈ, klike la a pou ale sou Pwofil ou." 
+      desc: "Se la tout bagay fèt ! Pou fè yon DEPÒT oswa yon RETRÈ, ale kounye a nan pwofil ou." 
     }
   ]
 };
 
+// Clé de version pour forcer le redémarrage chez les anciens utilisateurs
+const STORAGE_KEY = 'has_seen_home_tour_v5'; 
+
 export default function OnboardingTour() {
   const [stepIndex, setStepIndex] = useState<number>(-1);
-  const [showLangSelect, setShowLangSelect] = useState(false);
-  const [lang, setLang] = useState<'fr' | 'ht'>('fr');
-  const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number } | null>(null);
+  const [lang, setLang] = useState<'fr' | 'ht'>('fr'); // Langue par défaut
+  const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number, bottom: number } | null>(null);
   
-  // Démarrage automatique (v5 pour reset chez tout le monde)
+  // 1. Démarrage automatique (Reset pour tout le monde via v5)
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem('has_seen_home_tour_v5'); 
+    const hasSeenTour = localStorage.getItem(STORAGE_KEY); 
     if (!hasSeenTour) {
-      // On lance d'abord le choix de langue après un petit délai
-      const timer = setTimeout(() => setShowLangSelect(true), 1000); 
+      // Délai pour laisser le temps au DOM de se charger (surtout sur mobile lent)
+      const timer = setTimeout(() => setStepIndex(0), 1200);
       return () => clearTimeout(timer);
     }
   }, []);
 
-  // Lancer le tour après choix de langue
-  const startTour = (selectedLang: 'fr' | 'ht') => {
-    setLang(selectedLang);
-    setShowLangSelect(false);
-    setStepIndex(0);
-  };
-
-  // Calcul de la position
+  // 2. Calculer la position et scroller vers l'élément
   useEffect(() => {
-    if (stepIndex === -1 || stepIndex >= STEPS_CONTENT[lang].length) {
+    if (stepIndex === -1) {
         setRect(null);
         return;
     }
 
     const updatePosition = () => {
-      const targetId = STEPS_CONTENT[lang][stepIndex].target;
+      // On utilise les données FR pour cibler les IDs (les IDs sont les mêmes peu importe la langue)
+      const targetId = TOUR_DATA['fr'][stepIndex]?.target;
+      if (!targetId) return finishTour();
+
       const element = document.getElementById(targetId);
 
       if (element) {
-        // Scroll intelligent : Si c'est les dernières étapes (3 ou 4), on scroll en bas
-        const blockPosition = stepIndex >= 2 ? 'center' : 'center'; 
-        // Note: pour le nav-profile (step 3/index 3), 'center' ou 'end' marche bien
+        // Scroll intelligent : 'center' pour le haut, 'end' pour le bas (menu)
+        const blockPosition = stepIndex >= 2 ? 'end' : 'center'; // Pour step 2, 3 (index 2, 3) on scroll en bas
         
         element.scrollIntoView({ behavior: 'smooth', block: blockPosition });
 
         const r = element.getBoundingClientRect();
+        
+        // On ajoute un padding dynamique
+        const padding = 8;
         setRect({
-          top: r.top - 8,
-          left: r.left - 8,
-          width: r.width + 16,
-          height: r.height + 16
+          top: r.top - padding,
+          left: r.left - padding,
+          width: r.width + (padding * 2),
+          height: r.height + (padding * 2),
+          bottom: r.bottom + padding
         });
       } else {
-        console.warn(`Element #${targetId} non trouvé.`);
-        // Si élément introuvable (ex: menu fermé), on passe
+        console.warn(`Element #${targetId} introuvable.`);
+        // Si élément pas trouvé, on passe au suivant pour pas bloquer l'app
         handleNext(); 
       }
     };
 
-    const scrollTimer = setTimeout(updatePosition, 300); // Délai un peu plus long pour le scroll
+    // Petit délai pour laisser le scroll se finir avant de calculer le rect
+    const scrollTimer = setTimeout(updatePosition, 300); 
     
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition);
@@ -116,10 +118,10 @@ export default function OnboardingTour() {
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition);
     };
-  }, [stepIndex, lang]);
+  }, [stepIndex]);
 
   const handleNext = () => {
-    if (stepIndex < STEPS_CONTENT[lang].length - 1) {
+    if (stepIndex < TOUR_DATA[lang].length - 1) {
       setStepIndex(prev => prev + 1);
     } else {
       finishTour();
@@ -128,58 +130,38 @@ export default function OnboardingTour() {
 
   const finishTour = () => {
     setStepIndex(-1);
-    localStorage.setItem('has_seen_home_tour_v5', 'true');
+    localStorage.setItem(STORAGE_KEY, 'true');
   };
 
-  // --- RENDU : SÉLECTION DE LANGUE ---
-  if (showLangSelect) {
-    return (
-      <AnimatePresence>
-        <motion.div 
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
-        >
-          <motion.div 
-            initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-            className="bg-[#0f172a] border border-white/10 p-8 rounded-[2rem] w-full max-w-sm text-center shadow-2xl"
-          >
-            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
-              <Languages size={32} className="text-emerald-500" />
-            </div>
-            <h2 className="text-xl font-black italic uppercase text-white mb-2">Bienvenue / Byenveni</h2>
-            <p className="text-slate-400 text-xs mb-8">Choisissez votre langue pour la visite guidée.<br/>Chwazi lang ou pou vizit la.</p>
-            
-            <div className="space-y-3">
-              <button onClick={() => startTour('fr')} className="w-full py-4 bg-emerald-500 text-black rounded-xl font-black uppercase tracking-widest active:scale-95 transition-all">
-                Français 🇫🇷
-              </button>
-              <button onClick={() => startTour('ht')} className="w-full py-4 bg-slate-800 text-white border border-white/5 rounded-xl font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-slate-700">
-                Kreyòl 🇭🇹
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
+  const toggleLang = () => {
+    setLang(prev => prev === 'fr' ? 'ht' : 'fr');
+  };
 
-  // --- RENDU : TOUR ---
   if (stepIndex === -1 || !rect) return null;
 
-  const currentStep = STEPS_CONTENT[lang][stepIndex];
-  const isLastStep = stepIndex === STEPS_CONTENT[lang].length - 1;
+  const currentStep = TOUR_DATA[lang][stepIndex];
+  const isLastStep = stepIndex === TOUR_DATA[lang].length - 1;
 
-  // LOGIQUE DE POSITIONNEMENT (RESPONSIVE)
-  // Si l'élément est dans la moitié basse de l'écran, on met la bulle AU-DESSUS.
+  // --- LOGIQUE INTELLIGENTE DE POSITIONNEMENT ---
+  // Si l'élément est dans la moitié basse de l'écran (> 55% de la hauteur), on met la bulle AU-DESSUS.
   const isTooltipAbove = rect.top > window.innerHeight * 0.55;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none font-sans">
         
-        {/* 1. FOCUS RING */}
+        {/* A. FOND SOMBRE (FOCUS) */}
+        {/* On utilise un clip-path inversé ou un box-shadow géant pour assombrir le reste */}
         <motion.div
-          className="absolute rounded-2xl shadow-[0_0_0_9999px_rgba(2,6,23,0.90)]" // Fond très sombre pour focus
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        />
+
+        {/* B. LE SPOTLIGHT (L'anneau lumineux autour de l'élément) */}
+        <motion.div
+          className="absolute rounded-2xl pointer-events-none"
           initial={false}
           animate={{
             top: rect.top,
@@ -187,66 +169,90 @@ export default function OnboardingTour() {
             width: rect.width,
             height: rect.height,
           }}
-          transition={{ type: "spring", stiffness: 80, damping: 25 }}
+          transition={{ type: "spring", stiffness: 80, damping: 20 }}
         >
-            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.6)]"></div>
+            {/* Bordure animée et effet de lueur */}
+            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.6)] animate-pulse"></div>
+            {/* Effet "Ping" pour attirer l'attention */}
+            <div className="absolute -inset-4 border border-emerald-500/30 rounded-3xl animate-ping opacity-20"></div>
         </motion.div>
 
-        {/* 2. LA BULLE D'INFO */}
+        {/* C. LA CARTE D'INFO (TOOLTIP) */}
         <motion.div
-          key={stepIndex}
-          initial={{ opacity: 0, y: isTooltipAbove ? 10 : -10, scale: 0.95 }}
+          key={stepIndex} // Clé unique pour forcer l'animation à chaque étape
+          initial={{ opacity: 0, y: isTooltipAbove ? 20 : -20, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.3 }}
-          className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-80 mx-auto"
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-[340px] mx-auto z-[101]"
           style={{
-            // Centrage horizontal sur l'élément si écran large, sinon marge standard mobile
-            left: window.innerWidth > 768 ? rect.left + (rect.width/2) - 160 : 16, 
+            // Centrage horizontal (avec limites pour mobile)
+            left: window.innerWidth > 768 ? rect.left + (rect.width/2) - 170 : 16, 
+            right: window.innerWidth > 768 ? 'auto' : 16,
             
-            // Positionnement Vertical
-            top: !isTooltipAbove ? rect.top + rect.height + 20 : 'auto',
-            bottom: isTooltipAbove ? window.innerHeight - rect.top + 20 : 'auto',
+            // Positionnement Vertical Dynamique
+            // Si Above: On colle le bas de la bulle au haut de l'élément (avec marge)
+            // Si Below: On colle le haut de la bulle au bas de l'élément (avec marge)
+            top: !isTooltipAbove ? rect.bottom + 20 : 'auto',
+            bottom: isTooltipAbove ? (window.innerHeight - rect.top) + 20 : 'auto',
           }}
         >
-          <div className="bg-[#0f172a] border border-emerald-500/30 p-5 rounded-[1.5rem] shadow-2xl relative">
+          <div className="bg-[#0f172a] border border-emerald-500/30 p-5 rounded-[1.8rem] shadow-2xl relative overflow-hidden">
             
-            {/* Flèche indicative */}
-            <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/30 transform rotate-45 ${isTooltipAbove ? '-bottom-2.5 border-l-0 border-t-0 border-r border-b' : '-top-2.5'}`}></div>
+            {/* Fond décoratif subtil */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 blur-3xl -z-10 rounded-full"></div>
 
-            {/* En-tête */}
-            <div className="flex justify-between items-start mb-3 relative z-10">
+            {/* Flèche indicative (Triangle CSS) */}
+            <div 
+                className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/30 transform rotate-45 
+                ${isTooltipAbove ? '-bottom-2.5 border-l-0 border-t-0 border-r border-b' : '-top-2.5'}`}
+            ></div>
+
+            {/* --- HEADER : Titre + Langue + Fermer --- */}
+            <div className="flex justify-between items-start mb-4 relative z-10">
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-black text-xs font-black shadow-lg shadow-emerald-500/20">
+                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 text-black text-xs font-black shadow-lg shadow-emerald-500/20">
                         {stepIndex + 1}
                     </div>
                     <h3 className="text-sm font-black italic uppercase tracking-wider text-white">{currentStep.title}</h3>
                 </div>
-                <button onClick={finishTour} className="p-1 bg-white/5 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
-                    <X size={14} />
-                </button>
+                
+                <div className="flex items-center gap-2">
+                    {/* Switch Langue */}
+                    <button 
+                        onClick={toggleLang}
+                        className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-[9px] font-bold text-emerald-400 border border-emerald-500/20 transition-colors"
+                    >
+                        <Globe size={10} />
+                        {lang === 'fr' ? 'HT' : 'FR'}
+                    </button>
+
+                    <button onClick={finishTour} className="p-1 bg-white/5 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                        <X size={16} />
+                    </button>
+                </div>
             </div>
 
-            {/* Description */}
-            <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium border-l-2 border-white/10 pl-3">
+            {/* --- CONTENU --- */}
+            <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium pl-2 border-l-2 border-emerald-500/20">
                 {currentStep.desc}
             </p>
 
-            {/* Footer / Contrôles */}
+            {/* --- FOOTER : Progression + Bouton --- */}
             <div className="flex justify-between items-center">
                 {/* Points de progression */}
                 <div className="flex gap-1.5">
-                    {STEPS_CONTENT[lang].map((_, i) => (
-                        <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === stepIndex ? 'w-6 bg-emerald-500' : 'w-1.5 bg-white/10'}`} />
+                    {TOUR_DATA[lang].map((_, i) => (
+                        <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === stepIndex ? 'w-6 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'w-1.5 bg-white/10'}`} />
                     ))}
                 </div>
 
                 <button 
                     onClick={handleNext}
-                    className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-400 transition-all shadow-lg active:scale-95"
+                    className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-400 transition-all shadow-lg active:scale-95 group"
                 >
-                    {isLastStep ? (lang === 'fr' ? "C'EST PARTI !" : "AN ALE !") : (lang === 'fr' ? "SUIVANT" : "KONTINYE")} 
-                    {isLastStep ? <Check size={14}/> : <ChevronRight size={14}/>}
+                    {isLastStep ? (lang === 'fr' ? "C'EST PARTI !" : "AN ALE !") : (lang === 'fr' ? "SUIVANT" : "KONTINYE")}
+                    {isLastStep ? <Check size={14}/> : <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform"/>}
                 </button>
             </div>
           </div>
@@ -256,3 +262,4 @@ export default function OnboardingTour() {
     </AnimatePresence>
   );
 }
+
