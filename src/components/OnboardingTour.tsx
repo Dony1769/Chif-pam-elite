@@ -52,7 +52,7 @@ const TOUR_DATA = {
 };
 
 // Clé de version pour forcer le redémarrage chez les anciens utilisateurs
-const STORAGE_KEY = 'has_seen_home_tour_v5'; 
+const STORAGE_KEY = 'has_seen_home_tour_v6'; 
 
 export default function OnboardingTour() {
   const [stepIndex, setStepIndex] = useState<number>(-1);
