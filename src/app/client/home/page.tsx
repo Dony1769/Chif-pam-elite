@@ -234,7 +234,13 @@ export default function ClientHome() {
           <span className="text-[8px] font-black uppercase italic tracking-tighter">Support</span>
         </Link>
 
-        <NavLink href="/client/profile" icon={<UserIcon size={22}/>} label="Compte" active={pathname === '/client/profile'} />
+        <NavLink 
+  id="nav-profile" // <--- AJOUTER CECI
+  href="/client/profile" 
+  icon={<UserIcon size={22}/>} 
+  label="Compte" 
+  active={pathname === '/client/profile'} 
+/>
       </nav>
     </div>
   );
@@ -266,7 +272,7 @@ function GameRow({ href, icon, title, desc, players }: any) {
     );
 }
 
-function NavLink({ href, icon, label, active }: any) {
+function NavLink({ href, icon, label, active, id }: any) {
     return (
       <Link href={href} className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
         {icon}
