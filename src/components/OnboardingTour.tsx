@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, Check, Globe } from 'lucide-react';
+import { X, ChevronRight, Check, Languages } from 'lucide-react';
 
-// --- CONTENU MULTILINGUE ---
+// --- CONTENU DU TOUR (Français & Kreyòl) ---
 const STEPS_CONTENT = {
   fr: [
     { 
@@ -24,97 +24,89 @@ const STEPS_CONTENT = {
     { 
       target: "nav-profile", 
       title: "FINANCES & COMPTE", 
-      desc: "C'est ici que ça se passe ! Pour effectuer un DÉPÔT ou un RETRAIT, accédez maintenant à votre Profil (Compte)." 
+      desc: "C'est ici que ça se passe ! Pour effectuer un DÉPÔT ou un RETRAIT, cliquez ici pour accéder à votre Profil." 
     }
   ],
   ht: [
     { 
       target: "balance-card", 
       title: "RESOUS OU YO", 
-      desc: "Sa se motè jwèt ou! Jeton CP pou jwe ak balans Goud (HTG) ou. Ou ka konvèti CP ou yo la a." 
+      desc: "Men motè jwèt ou a! Jetons CP pou jwe ak balans Goud (HTG) ou. Ou ka konvèti CP ou yo la a." 
     },
     { 
       target: "market-btn", 
-      title: "BOUTIK ELITE", 
-      desc: "Wout kout pou achte pakèt CP oswa chanje dyaman ou yo rapid." 
+      title: "BOUTIK ELIT", 
+      desc: "Chemen kout pou achte pakèt CP rapid oswa chanje dyaman ou yo." 
     },
     { 
       target: "challenges-section", 
       title: "ZÒN MISYON", 
-      desc: "Se la aksyon an ye. Chwazi yon defi, bat skò a epi ranpòte miz la." 
+      desc: "Se la tout aksyon an ye. Chwazi yon defi, kraze skò a epi ranpòte miz la." 
     },
     { 
       target: "nav-profile", 
       title: "FINANS & KONT", 
-      desc: "Se la bagay yo pase! Pou fè yon DEPOT oswa yon RETRÈ, ale nan Profil ou (Kont) kounye a." 
+      desc: "Se la tout bagay regle! Pou fè yon DEPÒT oswa yon RETRÈ, klike la a pou ale sou Pwofil ou." 
     }
   ]
 };
 
 export default function OnboardingTour() {
-  const [isActive, setIsActive] = useState(false);
+  const [stepIndex, setStepIndex] = useState<number>(-1);
   const [showLangSelect, setShowLangSelect] = useState(false);
   const [lang, setLang] = useState<'fr' | 'ht'>('fr');
-  const [stepIndex, setStepIndex] = useState<number>(0);
   const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number } | null>(null);
   
-  // 1. Démarrage automatique (v4 pour reset chez tout le monde)
+  // Démarrage automatique (v5 pour reset chez tout le monde)
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem('has_seen_home_tour_v4'); 
+    const hasSeenTour = localStorage.getItem('has_seen_home_tour_v5'); 
     if (!hasSeenTour) {
-      // Petit délai pour laisser le site charger
-      const timer = setTimeout(() => {
-        setShowLangSelect(true); // On commence par le choix de langue
-      }, 1500); 
+      // On lance d'abord le choix de langue après un petit délai
+      const timer = setTimeout(() => setShowLangSelect(true), 1000); 
       return () => clearTimeout(timer);
     }
   }, []);
 
-  // 2. Gestion du choix de langue
-  const selectLanguage = (selectedLang: 'fr' | 'ht') => {
+  // Lancer le tour après choix de langue
+  const startTour = (selectedLang: 'fr' | 'ht') => {
     setLang(selectedLang);
     setShowLangSelect(false);
-    setIsActive(true); // Lance le tour
     setStepIndex(0);
   };
 
-  // 3. Calcul de la position de l'élément cible
+  // Calcul de la position
   useEffect(() => {
-    if (!isActive) {
+    if (stepIndex === -1 || stepIndex >= STEPS_CONTENT[lang].length) {
         setRect(null);
         return;
     }
 
     const updatePosition = () => {
-      const steps = STEPS_CONTENT[lang];
-      if (stepIndex >= steps.length) return;
-
-      const targetId = steps[stepIndex].target;
+      const targetId = STEPS_CONTENT[lang][stepIndex].target;
       const element = document.getElementById(targetId);
 
       if (element) {
-        // Scroll intelligent : 'center' pour le haut, 'end' pour le bas (menu)
-        // Si c'est l'étape 3 ou 4 (Défis ou Profil), on scroll vers le bas
-        const blockPosition = stepIndex >= 2 ? 'center' : 'center';
+        // Scroll intelligent : Si c'est les dernières étapes (3 ou 4), on scroll en bas
+        const blockPosition = stepIndex >= 2 ? 'center' : 'center'; 
+        // Note: pour le nav-profile (step 3/index 3), 'center' ou 'end' marche bien
         
         element.scrollIntoView({ behavior: 'smooth', block: blockPosition });
 
         const r = element.getBoundingClientRect();
         setRect({
-          top: r.top - 8, 
+          top: r.top - 8,
           left: r.left - 8,
           width: r.width + 16,
           height: r.height + 16
         });
       } else {
-        // Si l'élément n'est pas trouvé (ex: id manquant), on passe
         console.warn(`Element #${targetId} non trouvé.`);
+        // Si élément introuvable (ex: menu fermé), on passe
         handleNext(); 
       }
     };
 
-    // Petit délai pour laisser le temps au scroll de se faire
-    const scrollTimer = setTimeout(updatePosition, 300); 
+    const scrollTimer = setTimeout(updatePosition, 300); // Délai un peu plus long pour le scroll
     
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition);
@@ -124,7 +116,7 @@ export default function OnboardingTour() {
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition);
     };
-  }, [stepIndex, isActive, lang]);
+  }, [stepIndex, lang]);
 
   const handleNext = () => {
     if (stepIndex < STEPS_CONTENT[lang].length - 1) {
@@ -135,60 +127,59 @@ export default function OnboardingTour() {
   };
 
   const finishTour = () => {
-    setIsActive(false);
-    setRect(null);
-    localStorage.setItem('has_seen_home_tour_v4', 'true');
+    setStepIndex(-1);
+    localStorage.setItem('has_seen_home_tour_v5', 'true');
   };
 
-  // --- RENDU : SÉLECTEUR DE LANGUE ---
+  // --- RENDU : SÉLECTION DE LANGUE ---
   if (showLangSelect) {
     return (
       <AnimatePresence>
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
+        >
           <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }} 
-            animate={{ scale: 1, opacity: 1 }} 
-            className="bg-[#0f172a] border border-emerald-500/30 p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center"
+            initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+            className="bg-[#0f172a] border border-white/10 p-8 rounded-[2rem] w-full max-w-sm text-center shadow-2xl"
           >
             <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
-              <Globe className="text-emerald-500" size={32} />
+              <Languages size={32} className="text-emerald-500" />
             </div>
-            <h2 className="text-2xl font-black italic uppercase text-white mb-2">BIENVENUE</h2>
-            <p className="text-slate-400 text-xs mb-8">Choisissez votre langue / Chwazi lang ou</p>
+            <h2 className="text-xl font-black italic uppercase text-white mb-2">Bienvenue / Byenveni</h2>
+            <p className="text-slate-400 text-xs mb-8">Choisissez votre langue pour la visite guidée.<br/>Chwazi lang ou pou vizit la.</p>
             
             <div className="space-y-3">
-              <button onClick={() => selectLanguage('fr')} className="w-full py-4 bg-white text-black rounded-xl font-black uppercase tracking-widest hover:bg-emerald-400 transition-all active:scale-95">
-                FRANÇAIS 🇫🇷
+              <button onClick={() => startTour('fr')} className="w-full py-4 bg-emerald-500 text-black rounded-xl font-black uppercase tracking-widest active:scale-95 transition-all">
+                Français 🇫🇷
               </button>
-              <button onClick={() => selectLanguage('ht')} className="w-full py-4 bg-slate-800 text-white border border-white/10 rounded-xl font-black uppercase tracking-widest hover:border-emerald-500 transition-all active:scale-95">
-                KREYÒL 🇭🇹
+              <button onClick={() => startTour('ht')} className="w-full py-4 bg-slate-800 text-white border border-white/5 rounded-xl font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-slate-700">
+                Kreyòl 🇭🇹
               </button>
             </div>
           </motion.div>
-        </div>
+        </motion.div>
       </AnimatePresence>
-    );
+    )
   }
 
-  // --- RENDU : LE TOUR ---
-  if (!isActive || !rect) return null;
+  // --- RENDU : TOUR ---
+  if (stepIndex === -1 || !rect) return null;
 
-  const steps = STEPS_CONTENT[lang];
-  const currentStep = steps[stepIndex];
-  const isLastStep = stepIndex === steps.length - 1;
+  const currentStep = STEPS_CONTENT[lang][stepIndex];
+  const isLastStep = stepIndex === STEPS_CONTENT[lang].length - 1;
 
-  // LOGIQUE RESPONSIVE AMÉLIORÉE POUR LA POSITION DE LA BULLE
-  // Si l'élément est dans la moitié basse de l'écran (> 50% hauteur), on met la bulle AU-DESSUS.
-  // Cela corrige le problème pour les étapes 3 (Défis) et 4 (Profil).
-  const isTooltipAbove = rect.top > window.innerHeight * 0.5;
+  // LOGIQUE DE POSITIONNEMENT (RESPONSIVE)
+  // Si l'élément est dans la moitié basse de l'écran, on met la bulle AU-DESSUS.
+  const isTooltipAbove = rect.top > window.innerHeight * 0.55;
 
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none">
         
-        {/* 1. FOCUS RING (Le carré lumineux autour de l'élément) */}
+        {/* 1. FOCUS RING */}
         <motion.div
-          className="absolute rounded-2xl shadow-[0_0_0_9999px_rgba(2,6,23,0.85)]" // Fond sombre
+          className="absolute rounded-2xl shadow-[0_0_0_9999px_rgba(2,6,23,0.90)]" // Fond très sombre pour focus
           initial={false}
           animate={{
             top: rect.top,
@@ -196,38 +187,32 @@ export default function OnboardingTour() {
             width: rect.width,
             height: rect.height,
           }}
-          transition={{ type: "spring", stiffness: 80, damping: 20 }}
+          transition={{ type: "spring", stiffness: 80, damping: 25 }}
         >
-            {/* Bordure animée */}
-            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.4)]"></div>
+            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl animate-pulse shadow-[0_0_30px_rgba(16,185,129,0.6)]"></div>
         </motion.div>
 
         {/* 2. LA BULLE D'INFO */}
         <motion.div
           key={stepIndex}
-          initial={{ opacity: 0, y: isTooltipAbove ? 20 : -20, scale: 0.95 }}
+          initial={{ opacity: 0, y: isTooltipAbove ? 10 : -10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.3 }}
           className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-80 mx-auto"
           style={{
-            // Centrage horizontal (sauf si sur desktop on veut le coller à l'élément)
-            left: window.innerWidth > 768 ? Math.min(Math.max(16, rect.left + (rect.width/2) - 160), window.innerWidth - 336) : 16,
+            // Centrage horizontal sur l'élément si écran large, sinon marge standard mobile
+            left: window.innerWidth > 768 ? rect.left + (rect.width/2) - 160 : 16, 
             
             // Positionnement Vertical
-            // Si above : on le place au-dessus du rect (top = auto, bottom = distance du bas)
-            top: isTooltipAbove ? 'auto' : rect.top + rect.height + 20,
-            bottom: isTooltipAbove ? (window.innerHeight - rect.top) + 20 : 'auto',
+            top: !isTooltipAbove ? rect.top + rect.height + 20 : 'auto',
+            bottom: isTooltipAbove ? window.innerHeight - rect.top + 20 : 'auto',
           }}
         >
-          <div className="bg-[#0f172a] border border-emerald-500/40 p-5 rounded-[1.5rem] shadow-2xl relative">
+          <div className="bg-[#0f172a] border border-emerald-500/30 p-5 rounded-[1.5rem] shadow-2xl relative">
             
-            {/* Flèche indicative (Triangle) */}
-            <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/40 transform rotate-45 ${
-                isTooltipAbove 
-                ? '-bottom-2.5 border-l-0 border-t-0 border-r border-b' // Flèche pointe vers le bas
-                : '-top-2.5' // Flèche pointe vers le haut
-            }`}></div>
+            {/* Flèche indicative */}
+            <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/30 transform rotate-45 ${isTooltipAbove ? '-bottom-2.5 border-l-0 border-t-0 border-r border-b' : '-top-2.5'}`}></div>
 
             {/* En-tête */}
             <div className="flex justify-between items-start mb-3 relative z-10">
@@ -251,7 +236,7 @@ export default function OnboardingTour() {
             <div className="flex justify-between items-center">
                 {/* Points de progression */}
                 <div className="flex gap-1.5">
-                    {steps.map((_, i) => (
+                    {STEPS_CONTENT[lang].map((_, i) => (
                         <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === stepIndex ? 'w-6 bg-emerald-500' : 'w-1.5 bg-white/10'}`} />
                     ))}
                 </div>
@@ -271,4 +256,3 @@ export default function OnboardingTour() {
     </AnimatePresence>
   );
 }
-
