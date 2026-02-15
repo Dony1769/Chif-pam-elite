@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, Check, Languages, Globe } from 'lucide-react';
+import { X, ChevronRight, Check, Globe } from 'lucide-react';
 
 // --- CONFIGURATION DU CONTENU (BILINGUE) ---
 const TOUR_DATA = {
@@ -51,25 +51,25 @@ const TOUR_DATA = {
   ]
 };
 
-// Clé de version pour forcer le redémarrage chez les anciens utilisateurs
-const STORAGE_KEY = 'has_seen_home_tour_v6'; 
+// Nouvelle version pour forcer la mise à jour chez tout le monde
+const STORAGE_KEY = 'has_seen_home_tour_v7'; 
 
 export default function OnboardingTour() {
   const [stepIndex, setStepIndex] = useState<number>(-1);
-  const [lang, setLang] = useState<'fr' | 'ht'>('fr'); // Langue par défaut
+  const [lang, setLang] = useState<'fr' | 'ht'>('fr');
   const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number, bottom: number } | null>(null);
   
-  // 1. Démarrage automatique (Reset pour tout le monde via v5)
+  // 1. Démarrage automatique
   useEffect(() => {
     const hasSeenTour = localStorage.getItem(STORAGE_KEY); 
     if (!hasSeenTour) {
-      // Délai pour laisser le temps au DOM de se charger (surtout sur mobile lent)
-      const timer = setTimeout(() => setStepIndex(0), 1200);
+      // Délai un peu plus long pour s'assurer que le layout est stable
+      const timer = setTimeout(() => setStepIndex(0), 1500);
       return () => clearTimeout(timer);
     }
   }, []);
 
-  // 2. Calculer la position et scroller vers l'élément
+  // 2. Calculer la position et scroller
   useEffect(() => {
     if (stepIndex === -1) {
         setRect(null);
@@ -77,22 +77,21 @@ export default function OnboardingTour() {
     }
 
     const updatePosition = () => {
-      // On utilise les données FR pour cibler les IDs (les IDs sont les mêmes peu importe la langue)
       const targetId = TOUR_DATA['fr'][stepIndex]?.target;
       if (!targetId) return finishTour();
 
       const element = document.getElementById(targetId);
 
       if (element) {
-        // Scroll intelligent : 'center' pour le haut, 'end' pour le bas (menu)
-        const blockPosition = stepIndex >= 2 ? 'end' : 'center'; // Pour step 2, 3 (index 2, 3) on scroll en bas
+        // Pour les étapes 2 et 3 (Mission et Compte), on scroll bien en bas pour être sûr
+        const blockPosition = stepIndex >= 2 ? 'end' : 'center';
         
         element.scrollIntoView({ behavior: 'smooth', block: blockPosition });
 
         const r = element.getBoundingClientRect();
         
-        // On ajoute un padding dynamique
-        const padding = 8;
+        // Padding esthétique autour de l'élément ciblé
+        const padding = 6;
         setRect({
           top: r.top - padding,
           left: r.left - padding,
@@ -101,13 +100,11 @@ export default function OnboardingTour() {
           bottom: r.bottom + padding
         });
       } else {
-        console.warn(`Element #${targetId} introuvable.`);
-        // Si élément pas trouvé, on passe au suivant pour pas bloquer l'app
+        // Fallback si élément introuvable
         handleNext(); 
       }
     };
 
-    // Petit délai pour laisser le scroll se finir avant de calculer le rect
     const scrollTimer = setTimeout(updatePosition, 300); 
     
     window.addEventListener('resize', updatePosition);
@@ -142,24 +139,25 @@ export default function OnboardingTour() {
   const currentStep = TOUR_DATA[lang][stepIndex];
   const isLastStep = stepIndex === TOUR_DATA[lang].length - 1;
 
-  // --- LOGIQUE INTELLIGENTE DE POSITIONNEMENT ---
-  // Si l'élément est dans la moitié basse de l'écran (> 55% de la hauteur), on met la bulle AU-DESSUS.
-  const isTooltipAbove = rect.top > window.innerHeight * 0.55;
+  // --- LOGIQUE DE POSITIONNEMENT INTELLIGENTE ---
+  // Règle absolue : Si c'est l'étape 2 (Mission) ou 3 (Compte), on affiche TOUJOURS au-dessus.
+  // Sinon, on calcule si on est dans la partie basse de l'écran.
+  const forceAbove = stepIndex >= 2; 
+  const isTooltipAbove = forceAbove || rect.top > window.innerHeight * 0.6;
 
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none font-sans">
         
-        {/* A. FOND SOMBRE (FOCUS) */}
-        {/* On utilise un clip-path inversé ou un box-shadow géant pour assombrir le reste */}
+        {/* A. FOND SOMBRE */}
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
         />
 
-        {/* B. LE SPOTLIGHT (L'anneau lumineux autour de l'élément) */}
+        {/* B. LE SPOTLIGHT (Zone lumineuse) */}
         <motion.div
           className="absolute rounded-2xl pointer-events-none"
           initial={false}
@@ -171,47 +169,45 @@ export default function OnboardingTour() {
           }}
           transition={{ type: "spring", stiffness: 80, damping: 20 }}
         >
-            {/* Bordure animée et effet de lueur */}
-            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.6)] animate-pulse"></div>
-            {/* Effet "Ping" pour attirer l'attention */}
-            <div className="absolute -inset-4 border border-emerald-500/30 rounded-3xl animate-ping opacity-20"></div>
+            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl shadow-[0_0_40px_rgba(16,185,129,0.5)] animate-pulse"></div>
         </motion.div>
 
         {/* C. LA CARTE D'INFO (TOOLTIP) */}
         <motion.div
-          key={stepIndex} // Clé unique pour forcer l'animation à chaque étape
-          initial={{ opacity: 0, y: isTooltipAbove ? 20 : -20, scale: 0.9 }}
+          key={stepIndex}
+          initial={{ opacity: 0, y: isTooltipAbove ? 20 : -20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
           className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-[340px] mx-auto z-[101]"
           style={{
-            // Centrage horizontal (avec limites pour mobile)
+            // Centrage horizontal
             left: window.innerWidth > 768 ? rect.left + (rect.width/2) - 170 : 16, 
             right: window.innerWidth > 768 ? 'auto' : 16,
             
-            // Positionnement Vertical Dynamique
-            // Si Above: On colle le bas de la bulle au haut de l'élément (avec marge)
-            // Si Below: On colle le haut de la bulle au bas de l'élément (avec marge)
+            // Positionnement Vertical
+            // Si Above : On se place au-dessus du TOP de l'élément - la hauteur estimée de la bulle
             top: !isTooltipAbove ? rect.bottom + 20 : 'auto',
+            
+            // Pour le placement "bottom", on utilise une valeur fixe par rapport au haut de l'élément cible
             bottom: isTooltipAbove ? (window.innerHeight - rect.top) + 20 : 'auto',
           }}
         >
-          <div className="bg-[#0f172a] border border-emerald-500/30 p-5 rounded-[1.8rem] shadow-2xl relative overflow-hidden">
+          <div className="bg-[#0f172a] border border-emerald-500/40 p-5 rounded-[1.8rem] shadow-2xl relative overflow-hidden">
             
-            {/* Fond décoratif subtil */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 blur-3xl -z-10 rounded-full"></div>
+            {/* Background Effect */}
+            <div className="absolute -right-10 -top-10 w-32 h-32 bg-emerald-500/10 blur-[50px] rounded-full pointer-events-none"></div>
 
-            {/* Flèche indicative (Triangle CSS) */}
+            {/* Flèche indicative */}
             <div 
-                className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/30 transform rotate-45 
+                className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/40 transform rotate-45 
                 ${isTooltipAbove ? '-bottom-2.5 border-l-0 border-t-0 border-r border-b' : '-top-2.5'}`}
             ></div>
 
-            {/* --- HEADER : Titre + Langue + Fermer --- */}
+            {/* HEADER */}
             <div className="flex justify-between items-start mb-4 relative z-10">
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 text-black text-xs font-black shadow-lg shadow-emerald-500/20">
+                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 text-black text-xs font-black shadow-lg shadow-emerald-500/30">
                         {stepIndex + 1}
                     </div>
                     <h3 className="text-sm font-black italic uppercase tracking-wider text-white">{currentStep.title}</h3>
@@ -233,17 +229,16 @@ export default function OnboardingTour() {
                 </div>
             </div>
 
-            {/* --- CONTENU --- */}
-            <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium pl-2 border-l-2 border-emerald-500/20">
+            {/* CONTENU TEXTE */}
+            <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium pl-3 border-l-2 border-emerald-500/30">
                 {currentStep.desc}
             </p>
 
-            {/* --- FOOTER : Progression + Bouton --- */}
+            {/* FOOTER */}
             <div className="flex justify-between items-center">
-                {/* Points de progression */}
                 <div className="flex gap-1.5">
                     {TOUR_DATA[lang].map((_, i) => (
-                        <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === stepIndex ? 'w-6 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'w-1.5 bg-white/10'}`} />
+                        <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === stepIndex ? 'w-6 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'w-1.5 bg-white/10'}`} />
                     ))}
                 </div>
 
