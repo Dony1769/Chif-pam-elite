@@ -1,23 +1,23 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronRight, Check } from 'lucide-react';
 
 const STEPS = [
   { 
     target: "balance-card", 
-    title: "VOS RESSOURCES", 
-    desc: "C'est votre tableau de bord financier. Consultez vos Jetons CP pour jouer et votre solde Gourdes (HTG) pour les retraits." 
+    title: "VOTRE CARBURANT", 
+    desc: "Voici vos Jetons CP. C'est la monnaie pour jouer. Si vous gagnez, utilisez le bouton 'CONVERTIR' pour transformer vos CP en Gourdes (HTG)." 
   },
   { 
     target: "market-btn", 
-    title: "BOUTIQUE ELITE", 
-    desc: "Besoin de plus de puissance ? Échangez vos Diamants ou achetez des packs de CP ici." 
+    title: "BOUTIQUE CP", 
+    desc: "C'est ici qu'on recharge. Achetez des packs de CP ou échangez vos diamants contre des jetons de jeu." 
   },
   { 
     target: "challenges-section", 
-    title: "ZONE DE MISSION", 
-    desc: "Participez aux défis quotidiens pour grimper dans le classement et gagner des récompenses exclusives." 
+    title: "L'ARÈNE", 
+    desc: "C'est ici que l'action se passe. Choisissez un jeu (Quiz, Crash, etc.), misez vos CP et tentez de multiplier vos gains !" 
   }
 ];
 
@@ -27,10 +27,11 @@ export default function OnboardingTour() {
   
   // Démarrage automatique si pas encore vu
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem('has_seen_home_tour_v2'); // v2 pour forcer le nouveau tour
+    // J'ai mis 'v3' pour que tu puisses revoir le tour même si tu avais déjà vu la v2
+    const hasSeenTour = localStorage.getItem('has_seen_home_tour_v3'); 
     if (!hasSeenTour) {
       // Petit délai pour laisser le DOM se construire complètement
-      const timer = setTimeout(() => setStepIndex(0), 800);
+      const timer = setTimeout(() => setStepIndex(0), 1000);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -61,12 +62,15 @@ export default function OnboardingTour() {
       }
     };
 
-    updatePosition();
+    // Petit délai pour laisser le scroll se finir avant de calculer le rect
+    const timer = setTimeout(updatePosition, 300);
     
     // Recalcul si la fenêtre change de taille
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition);
+    
     return () => {
+        clearTimeout(timer);
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition);
     };
@@ -82,7 +86,7 @@ export default function OnboardingTour() {
 
   const finishTour = () => {
     setStepIndex(-1);
-    localStorage.setItem('has_seen_home_tour_v2', 'true');
+    localStorage.setItem('has_seen_home_tour_v3', 'true');
   };
 
   if (stepIndex === -1 || !rect) return null;
@@ -91,6 +95,7 @@ export default function OnboardingTour() {
   const isLastStep = stepIndex === STEPS.length - 1;
 
   // Détermine si la bulle doit être en haut ou en bas de l'élément focus
+  // Si l'élément est dans la moitié basse de l'écran, on met la bulle au-dessus
   const isTooltipBelow = rect.top < window.innerHeight / 2;
 
   return (
@@ -98,7 +103,6 @@ export default function OnboardingTour() {
       <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none">
         
         {/* 1. LE SPOTLIGHT (L'élément le plus important) */}
-        {/* On utilise un box-shadow géant pour assombrir tout SAUF la zone cible */}
         <motion.div
           className="absolute rounded-3xl border-2 border-emerald-500/50 shadow-[0_0_0_9999px_rgba(0,0,0,0.85)]"
           initial={false}
@@ -108,7 +112,7 @@ export default function OnboardingTour() {
             width: rect.width,
             height: rect.height,
           }}
-          transition={{ type: "spring", stiffness: 80, damping: 20 }}
+          transition={{ type: "spring", stiffness: 60, damping: 20 }}
         >
             {/* Effet "Pulse" autour du focus */}
             <div className="absolute inset-0 rounded-3xl animate-pulse ring-4 ring-emerald-500/20"></div>
@@ -120,31 +124,32 @@ export default function OnboardingTour() {
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.3 }}
-          className="absolute pointer-events-auto left-0 right-0 mx-auto w-full max-w-xs"
+          transition={{ duration: 0.3, delay: 0.1 }}
+          className="absolute pointer-events-auto left-0 right-0 mx-auto w-full max-w-xs px-4"
           style={{
             // Positionnement dynamique
             top: isTooltipBelow ? rect.top + rect.height + 20 : 'auto',
             bottom: !isTooltipBelow ? window.innerHeight - rect.top + 20 : 'auto',
           }}
         >
-          <div className="bg-slate-900/90 backdrop-blur-xl border border-white/10 p-5 rounded-[1.5rem] shadow-2xl relative">
-            {/* Flèche du tooltip (Purement esthétique) */}
+          <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[1.5rem] shadow-2xl relative">
+            
+            {/* Flèche du tooltip */}
             <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900 border-l border-t border-white/10 transform rotate-45 ${isTooltipBelow ? '-top-2.5' : '-bottom-2.5 border-l-0 border-t-0 border-r border-b'}`}></div>
 
             <div className="flex justify-between items-start mb-3 relative z-10">
                 <div className="flex items-center gap-2">
-                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-black text-[10px] font-black">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-black text-[10px] font-black shadow-lg shadow-emerald-500/20">
                         {stepIndex + 1}
                     </span>
                     <h3 className="text-sm font-black italic uppercase tracking-wider text-white">{currentStep.title}</h3>
                 </div>
-                <button onClick={finishTour} className="text-slate-500 hover:text-white transition-colors">
+                <button onClick={finishTour} className="text-slate-500 hover:text-white transition-colors p-1 active:scale-90">
                     <X size={16} />
                 </button>
             </div>
 
-            <p className="text-slate-300 text-xs leading-relaxed mb-5 font-medium relative z-10">
+            <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium relative z-10">
                 {currentStep.desc}
             </p>
 
@@ -158,9 +163,9 @@ export default function OnboardingTour() {
 
                 <button 
                     onClick={handleNext}
-                    className="bg-white text-black px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-400 transition-all shadow-lg active:scale-95"
+                    className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-400 transition-all shadow-lg active:scale-95"
                 >
-                    {isLastStep ? "TERMINER" : "SUIVANT"} 
+                    {isLastStep ? "C'EST PARTI !" : "SUIVANT"} 
                     {isLastStep ? <Check size={14}/> : <ChevronRight size={14}/>}
                 </button>
             </div>
