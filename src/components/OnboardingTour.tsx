@@ -6,18 +6,18 @@ import { X, ChevronRight, Check } from 'lucide-react';
 const STEPS = [
   { 
     target: "balance-card", 
-    title: "VOTRE CARBURANT", 
-    desc: "Voici vos Jetons CP. C'est la monnaie pour jouer. Si vous gagnez, utilisez le bouton 'CONVERTIR' pour transformer vos CP en Gourdes (HTG)." 
+    title: "VOS PORTEFEUILLES", 
+    desc: "Voici votre tableau de bord. À gauche vos CP pour jouer, à droite vos Gourdes (HTG). Vous pouvez convertir vos CP en argent ici." 
   },
   { 
     target: "market-btn", 
-    title: "BOUTIQUE CP", 
-    desc: "C'est ici qu'on recharge. Achetez des packs de CP ou échangez vos diamants contre des jetons de jeu." 
+    title: "BOUTIQUE ELITE", 
+    desc: "Cliquez ici pour acheter des packs de Jetons CP ou pour accéder aux offres spéciales." 
   },
   { 
     target: "challenges-section", 
-    title: "L'ARÈNE", 
-    desc: "C'est ici que l'action se passe. Choisissez un jeu (Quiz, Crash, etc.), misez vos CP et tentez de multiplier vos gains !" 
+    title: "ARENA & DÉFIS", 
+    desc: "C'est ici que l'action se passe. Rejoignez les défis à la une pour gagner de gros lots." 
   }
 ];
 
@@ -25,13 +25,12 @@ export default function OnboardingTour() {
   const [stepIndex, setStepIndex] = useState<number>(-1);
   const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number } | null>(null);
   
-  // Démarrage automatique si pas encore vu
+  // Démarrage automatique si pas encore vu (Version 3 pour forcer la maj)
   useEffect(() => {
-    // J'ai mis 'v3' pour que tu puisses revoir le tour même si tu avais déjà vu la v2
     const hasSeenTour = localStorage.getItem('has_seen_home_tour_v3'); 
     if (!hasSeenTour) {
-      // Petit délai pour laisser le DOM se construire complètement
-      const timer = setTimeout(() => setStepIndex(0), 1000);
+      // Délai un peu plus long pour s'assurer que tout est chargé (animations d'entrée etc.)
+      const timer = setTimeout(() => setStepIndex(0), 1500);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -48,29 +47,30 @@ export default function OnboardingTour() {
       const element = document.getElementById(targetId);
 
       if (element) {
-        // Scroll fluide vers l'élément
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Scroll fluide et centré vers l'élément
+        element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
 
         const r = element.getBoundingClientRect();
-        // On ajoute un peu de padding (10px) autour de l'élément pour le focus
+        // Padding dynamique selon la taille de l'élément pour ne pas être trop serré
+        const padding = 10;
+        
         setRect({
-          top: r.top - 10,
-          left: r.left - 10,
-          width: r.width + 20,
-          height: r.height + 20
+          top: r.top - padding,
+          left: r.left - padding,
+          width: r.width + (padding * 2),
+          height: r.height + (padding * 2)
         });
       }
     };
 
     // Petit délai pour laisser le scroll se finir avant de calculer le rect
-    const timer = setTimeout(updatePosition, 300);
+    const scrollTimer = setTimeout(updatePosition, 100);
     
-    // Recalcul si la fenêtre change de taille
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition);
     
     return () => {
-        clearTimeout(timer);
+        clearTimeout(scrollTimer);
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition);
     };
@@ -94,17 +94,17 @@ export default function OnboardingTour() {
   const currentStep = STEPS[stepIndex];
   const isLastStep = stepIndex === STEPS.length - 1;
 
-  // Détermine si la bulle doit être en haut ou en bas de l'élément focus
+  // Logique intelligente pour placer la bulle (Haut ou Bas)
   // Si l'élément est dans la moitié basse de l'écran, on met la bulle au-dessus
   const isTooltipBelow = rect.top < window.innerHeight / 2;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none touch-none">
         
-        {/* 1. LE SPOTLIGHT (L'élément le plus important) */}
+        {/* 1. LE SPOTLIGHT (L'effet sombre avec le trou) */}
         <motion.div
-          className="absolute rounded-3xl border-2 border-emerald-500/50 shadow-[0_0_0_9999px_rgba(0,0,0,0.85)]"
+          className="absolute rounded-3xl border-2 border-emerald-500/50 shadow-[0_0_0_9999px_rgba(2,6,23,0.85)]"
           initial={false}
           animate={{
             top: rect.top,
@@ -114,7 +114,7 @@ export default function OnboardingTour() {
           }}
           transition={{ type: "spring", stiffness: 60, damping: 20 }}
         >
-            {/* Effet "Pulse" autour du focus */}
+            {/* Effet "Pulse" pour attirer l'attention */}
             <div className="absolute inset-0 rounded-3xl animate-pulse ring-4 ring-emerald-500/20"></div>
         </motion.div>
 
@@ -125,39 +125,41 @@ export default function OnboardingTour() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="absolute pointer-events-auto left-0 right-0 mx-auto w-full max-w-xs px-4"
+          className="absolute pointer-events-auto left-4 right-4 mx-auto w-auto max-w-sm"
           style={{
             // Positionnement dynamique
             top: isTooltipBelow ? rect.top + rect.height + 20 : 'auto',
             bottom: !isTooltipBelow ? window.innerHeight - rect.top + 20 : 'auto',
           }}
         >
-          <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[1.5rem] shadow-2xl relative">
-            
-            {/* Flèche du tooltip */}
-            <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900 border-l border-t border-white/10 transform rotate-45 ${isTooltipBelow ? '-top-2.5' : '-bottom-2.5 border-l-0 border-t-0 border-r border-b'}`}></div>
+          <div className="bg-[#0f172a] border border-emerald-500/20 p-5 rounded-[1.5rem] shadow-2xl relative overflow-hidden">
+            {/* Fond subtil */}
+            <div className="absolute inset-0 bg-emerald-500/5 pointer-events-none" />
 
+            {/* Header */}
             <div className="flex justify-between items-start mb-3 relative z-10">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-black text-[10px] font-black shadow-lg shadow-emerald-500/20">
                         {stepIndex + 1}
                     </span>
                     <h3 className="text-sm font-black italic uppercase tracking-wider text-white">{currentStep.title}</h3>
                 </div>
-                <button onClick={finishTour} className="text-slate-500 hover:text-white transition-colors p-1 active:scale-90">
-                    <X size={16} />
+                <button onClick={finishTour} className="text-slate-500 hover:text-white transition-colors p-1 bg-white/5 rounded-full active:scale-90">
+                    <X size={14} />
                 </button>
             </div>
 
+            {/* Description */}
             <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium relative z-10">
                 {currentStep.desc}
             </p>
 
+            {/* Footer / Actions */}
             <div className="flex justify-between items-center relative z-10">
                 {/* Indicateurs de points */}
                 <div className="flex gap-1.5">
                     {STEPS.map((_, i) => (
-                        <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === stepIndex ? 'w-6 bg-emerald-500' : 'w-1.5 bg-white/20'}`} />
+                        <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === stepIndex ? 'w-6 bg-emerald-500' : 'w-1.5 bg-white/10'}`} />
                     ))}
                 </div>
 
@@ -165,7 +167,7 @@ export default function OnboardingTour() {
                     onClick={handleNext}
                     className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-400 transition-all shadow-lg active:scale-95"
                 >
-                    {isLastStep ? "C'EST PARTI !" : "SUIVANT"} 
+                    {isLastStep ? "C'EST PARTI" : "SUIVANT"} 
                     {isLastStep ? <Check size={14}/> : <ChevronRight size={14}/>}
                 </button>
             </div>
