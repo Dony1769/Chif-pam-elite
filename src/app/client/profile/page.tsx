@@ -7,7 +7,7 @@ import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   User, LogOut, Camera, Loader2, ChevronRight, 
   CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
-  Ticket, Share2, Copy, Gift
+  Ticket, Share2, Copy, Gift, Plus, ArrowDownCircle // Ajout des icônes Plus et ArrowDownCircle
 } from 'lucide-react';
 import { 
   AreaChart, Area, Tooltip, ResponsiveContainer, XAxis, YAxis, ReferenceLine 
@@ -96,7 +96,6 @@ export default function ProfilePage() {
     } catch (err: any) { alert(err.message); } finally { setRedeeming(false); }
   };
 
-  // --- LOGIQUE PARRAINAGE MISE À JOUR ---
   const shareReferral = () => {
     const referralLink = `${window.location.origin}/inscription?ref=${profile?.referral_code}`;
     const text = `Rejoins-moi sur Chif Pam ! Utilise mon lien pour gagner 10 HTG dès ton inscription 🎁 :`;
@@ -140,7 +139,6 @@ export default function ProfilePage() {
   return (
     <main className="min-h-screen bg-[#020617] text-white p-6 pb-32 font-sans overflow-x-hidden">
       
-      {/* ACTIVATION DE LA PUB POPUNDER ICI */}
       <MonetagPopunder />
 
       <div className="max-w-md mx-auto space-y-6">
@@ -172,6 +170,16 @@ export default function ProfilePage() {
             </div>
             <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-500 font-bold">Membre Officiel</span>
           </div>
+        </div>
+
+        {/* --- SECTION DÉPÔT / RETRAIT --- */}
+        <div className="grid grid-cols-2 gap-4">
+          <Link href="/client/finance" className="bg-emerald-500 p-5 rounded-[1.8rem] text-slate-950 flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
+            <Plus size={20} /><span className="text-[9px] font-black italic uppercase tracking-widest">Dépôt</span>
+          </Link>
+          <Link href="/client/finance" className="bg-slate-900/50 p-5 rounded-[1.8rem] border border-white/10 flex flex-col items-center gap-1 active:scale-95 transition-all">
+            <ArrowDownCircle size={20} className="text-rose-500" /><span className="text-[9px] font-black italic uppercase tracking-widest">Retrait</span>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 gap-4">
