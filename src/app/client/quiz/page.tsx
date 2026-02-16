@@ -5,7 +5,7 @@ import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Fil
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- TYPAGE POUR CORRIGER L'ERREUR ---
+// --- TYPAGE ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
 
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
@@ -29,10 +29,10 @@ function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Paramètres Challenge
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
+  // --- ÉTATS ---
   const [profile, setProfile] = useState<any>(null);
   const [betCP, setBetCP] = useState(100);
   const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
@@ -45,15 +45,14 @@ function QuizGameContent() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [multiplier, setMultiplier] = useState(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
-  
-  // Score spécifique pour le challenge
   const [sessionScore, setSessionScore] = useState(0);
-  
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   
-  const timerRef = useRef<any>(null);
+  // --- SÉCURITÉ & REFS CRITIQUES ---
+  const lockedBetRef = useRef<number>(0); // Stocke la mise inviolable
+  const isProcessingRef = useRef<boolean>(false); // Empêche les doubles appels
+  const timerRef = useRef<any>(null); // Gestionnaire de temps
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -90,17 +89,24 @@ function QuizGameContent() {
   };
 
   const start = async () => {
-    if (isProcessing || !profile) return;
-    setIsProcessing(true);
+    if (isProcessingRef.current || !profile) return;
+    
+    // Validation Mise
+    if (betCP < 10 && !challengeId) { alert("Mise minimum 10 CP"); return; }
+    
+    isProcessingRef.current = true; // Verrouillage immédiat
     setStatus('loading');
 
     try {
-      const roundedMise = Math.floor(betCP);
+      const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
+      
+      // 🔒 VERROUILLAGE MISE
+      lockedBetRef.current = finalFee;
 
       // 1. Paiement RPC
       const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
-          p_mise_cp: roundedMise,
+          p_mise_cp: finalFee,
           p_gain_cp: 0,
           p_jeu_nom: challengeId ? `Challenge Quiz: ${challengeId}` : 'Quiz Elite Solo'
       });
@@ -108,13 +114,11 @@ function QuizGameContent() {
       if (payError) throw new Error(payError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Initialisation Challenge (Si applicable)
+      // 2. Initialisation Challenge
       if (challengeId) {
-        // On s'assure que la ligne attempt existe (UPSERT simple)
         await supabase.from('challenge_attempts').upsert({
             challenge_id: challengeId,
             user_id: profile.id,
-            // On ne touche pas au score ici, on l'initialise juste si inexistant
         }, { onConflict: 'challenge_id,user_id' });
       }
 
@@ -129,10 +133,10 @@ function QuizGameContent() {
         return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
       }));
 
-      // 4. Création Session Locale
+      // 4. Création Session
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
-        mise_cp: roundedMise,
+        mise_cp: finalFee,
         difficulty,
         questions_data: processed,
         is_active: true
@@ -147,72 +151,88 @@ function QuizGameContent() {
       setSessionScore(0);
       setTimeLeft(SETTINGS[difficulty].time);
       setStatus('playing');
+      
+      // Déverrouillage pour le jeu
+      isProcessingRef.current = false;
+
     } catch (e: any) {
       alert(e.message);
       setStatus('idle');
-    } finally { setIsProcessing(false); }
+      isProcessingRef.current = false;
+    }
   };
 
   const handleAnswer = (ans: string | null) => {
-    if (showCorrection || status !== 'playing') return;
+    // Si déjà en correction ou verrouillé, on ignore
+    if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
+    
     clearInterval(timerRef.current);
     setSelectedAnswer(ans);
     setShowCorrection(true);
 
     if (ans === questions[currentIndex].correct) {
-      // Points selon difficulté
+      // --- BONNE RÉPONSE ---
       const pointsToAdd = SETTINGS[difficulty].points;
       setSessionScore(prev => prev + pointsToAdd);
 
       const nextM = parseFloat((multiplier + SETTINGS[difficulty].step).toFixed(2));
       setMultiplier(nextM);
       
+      // Délai avant la prochaine question
       setTimeout(() => {
         if (currentIndex < 4) {
           setCurrentIndex(p => p + 1);
           setSelectedAnswer(null);
           setShowCorrection(false);
           setTimeLeft(SETTINGS[difficulty].time);
-        } else { finalizeGame(true); }
+        } else { 
+          // C'était la dernière question -> VICTOIRE FINALE
+          finalizeGame(true); 
+        }
       }, 1500);
     } else {
-      finalizeGame(false);
+      // --- MAUVAISE RÉPONSE ---
+      // Délai pour montrer la correction rouge
+      setTimeout(() => {
+          finalizeGame(false);
+      }, 1500);
     }
   };
 
+  // --- FIN DE PARTIE SÉCURISÉE ---
   const finalizeGame = async (isWin: boolean) => {
-    if (!gameId) return;
-    setIsProcessing(true);
+    // 🛡️ ANTI DOUBLE-APPEL (Empêche Cashout + Timer 0 en même temps)
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
     
-    // Le score final à envoyer (accumulé durant la partie)
-    // Astuce: si c'est la dernière question, sessionScore n'est pas encore mis à jour dans le state
-    // donc on recalcule le total théorique pour être sûr
-    let finalSessionPoints = sessionScore;
-    if (isWin && currentIndex === 4) {
-        // C'était la dernière question et elle était juste, on s'assure d'avoir les points
-        // Note: handleAnswer l'a déjà fait via setSessionScore, mais pour être sûr de la valeur immédiate :
-        // On utilisera la valeur du state qui sera à jour au prochain render, ou on fait confiance à l'état actuel si handleAnswer a fini.
-        // Pour simplifier, on utilise sessionScore qui est mis à jour dans handleAnswer AVANT le timeout de 1500ms qui appelle finalizeGame.
-    }
+    if (!gameId) return;
+    
+    clearInterval(timerRef.current);
 
-    const gainCP = challengeId ? 0 : (isWin ? Math.floor(betCP * multiplier) : 0);
+    // 🔒 UTILISATION DE LA MISE SÉCURISÉE
+    const secureBet = lockedBetRef.current;
+    
+    // Calcul du gain
+    // Si isWin = true (soit fin du quiz, soit cashout manuel réussi)
+    // Si challengeId, pas de gain CP
+    const gainCP = challengeId ? 0 : (isWin ? Math.floor(secureBet * multiplier) : 0);
 
     try {
         if (challengeId) {
-            // ENVOI DU SCORE AU CHALLENGE
             await supabase.rpc('increment_challenge_score', {
                 p_user_id: profile.id,
                 p_challenge_id: challengeId,
-                p_score: sessionScore // On envoie le score accumulé
+                p_score: sessionScore 
             });
         } else {
-            // GAIN SOLO
-            await supabase.rpc('jouer_partie_cp', {
-                p_user_id: profile.id,
-                p_mise_cp: 0,
-                p_gain_cp: gainCP,
-                p_jeu_nom: isWin ? 'Quiz Victory' : 'Quiz Defeat'
-            });
+            if (gainCP > 0) {
+                await supabase.rpc('jouer_partie_cp', {
+                    p_user_id: profile.id,
+                    p_mise_cp: 0,
+                    p_gain_cp: gainCP,
+                    p_jeu_nom: 'Quiz Victory'
+                });
+            }
         }
 
         await supabase.from('quiz_games').update({ 
@@ -225,17 +245,19 @@ function QuizGameContent() {
     } catch (e: any) {
         console.error(e);
     } finally {
-        setIsProcessing(false);
+        isProcessingRef.current = false;
         setShowCorrection(false);
         init(); 
     }
   };
 
+  // TIMER LOGIC
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => setTimeLeft(p => Math.max(0, parseFloat((p - 0.1).toFixed(1)))), 100);
     } else if (timeLeft <= 0 && status === 'playing' && !showCorrection) {
-      handleAnswer(null);
+      // TEMPS ÉCOULÉ = PERDU
+      handleAnswer(null); 
     }
     return () => clearInterval(timerRef.current);
   }, [timeLeft, status, showCorrection]);
@@ -284,7 +306,6 @@ function QuizGameContent() {
                 </div>
 
                 <div className="flex gap-2">
-                    {/* ICI LA CORRECTION PRINCIPALE : TYPAGE ET CASTING */}
                     {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
                         <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-4 rounded-xl border text-[8px] font-bold transition-all ${difficulty === d ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                             {d.toUpperCase()} <br/> <span className="text-[6px] opacity-50">+{SETTINGS[d].points} PTS</span>
@@ -302,14 +323,18 @@ function QuizGameContent() {
                     <input 
                       type="number" 
                       value={betCP} 
-                      disabled={!!challengeId}
+                      disabled={!!challengeId} // Input désactivé si challenge
                       onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
                       className={`bg-transparent text-left outline-none w-full text-5xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
                     />
                 </div>
                 
-                <button onClick={start} disabled={isProcessing} className={`w-full py-7 rounded-[2.5rem] text-xl font-black italic shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all ${challengeId ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                  {isProcessing ? <Loader2 className="animate-spin mx-auto"/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
+                <button 
+                    onClick={start} 
+                    disabled={isProcessingRef.current} 
+                    className={`w-full py-7 rounded-[2.5rem] text-xl font-black italic shadow-[0_20px_40px_rgba(5,150,105,0.3)] active:scale-95 transition-all ${challengeId ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}
+                >
+                  {isProcessingRef.current ? <Loader2 className="animate-spin mx-auto"/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
                 </button>
               </>
             )}
@@ -323,9 +348,14 @@ function QuizGameContent() {
                         {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
                     </p>
                 </div>
+                
+                {/* BOUTON CASH OUT (ACTIVÉ SI MULTIPLICATEUR > 1.2 ET PAS DE CHALLENGE) */}
                 {!challengeId && multiplier > 1.2 && (
-                    <button onClick={() => finalizeGame(true)} className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20">
-                        <Wallet size={14}/> ENCAISSER {Math.floor(betCP * multiplier)} CP
+                    <button 
+                        onClick={() => finalizeGame(true)} 
+                        className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20 active:scale-95 transition-transform"
+                    >
+                        <Wallet size={14}/> ENCAISSER {Math.floor(lockedBetRef.current * multiplier)} CP
                     </button>
                 )}
             </div>
@@ -350,7 +380,12 @@ function QuizGameContent() {
                   else style = "opacity-20";
                 }
                 return (
-                  <button key={i} onClick={() => handleAnswer(a)} disabled={showCorrection} className={`p-5 border rounded-2xl text-left transition-all font-black text-[11px] italic ${style}`}>
+                  <button 
+                    key={i} 
+                    onClick={() => handleAnswer(a)} 
+                    disabled={showCorrection || isProcessingRef.current} 
+                    className={`p-5 border rounded-2xl text-left transition-all font-black text-[11px] italic ${style}`}
+                  >
                     {a}
                   </button>
                 );
@@ -372,7 +407,8 @@ function QuizGameContent() {
                     {challengeId ? "POINTS AJOUTÉS AU CLASSEMENT" : "JETONS RÉCUPÉRÉS"}
                 </p>
                 <p className="text-6xl font-black text-white italic tracking-tighter">
-                    {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(betCP * multiplier))} 
+                    {/* On utilise lockedBetRef pour l'affichage final aussi pour être cohérent */}
+                    {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(lockedBetRef.current * multiplier))} 
                     <span className="text-lg text-emerald-500 ml-2 font-black">{challengeId ? 'PTS' : 'CP'}</span>
                 </p>
             </div>
@@ -394,4 +430,3 @@ export default function QuizElite() {
     </Suspense>
   );
 }
-
