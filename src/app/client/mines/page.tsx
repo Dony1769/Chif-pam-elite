@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock, Clock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -10,8 +10,8 @@ export default function MinesElite() {
   const router = useRouter();
   
   // --- ÉTATS ---
-  const [bet, setBet] = useState(100); // Mise en CP
-  const [jetonsCP, setJetonsCP] = useState(0); // Solde CP
+  const [bet, setBet] = useState(100); // Mise en CP (Input UI)
+  const [jetonsCP, setJetonsCP] = useState(0); 
   const [difficulty, setDifficulty] = useState<'facile' | 'intermédiaire' | 'difficile'>('intermédiaire');
   const [mines, setMines] = useState(8);
   const [status, setStatus] = useState<'idle' | 'playing' | 'ended'>('idle');
@@ -27,14 +27,17 @@ export default function MinesElite() {
   const [maintenanceMsg, setMaintenanceMsg] = useState('');
   const [checkingSystem, setCheckingSystem] = useState(true);
 
+  // 🔒 SÉCURITÉ & REFS CRITIQUES
+  const lockedBetRef = useRef<number>(0); // Stocke la mise inviolable au lancement
+  const isProcessingRef = useRef<boolean>(false); // Mutex pour empêcher les doubles appels
+
   // TIMER
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (status === 'playing' && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (timeLeft === 0 && status === 'playing') {
-      // Temps écoulé = On considère ça comme une défaite (bombe)
-      // Mais on applique la logique de sécurité (si < 1.0 on sauve les meubles)
+      // Temps écoulé = Défaite forcée (Bombe simulée)
       handleGameOver(true); 
     }
     return () => clearInterval(timer);
@@ -43,7 +46,6 @@ export default function MinesElite() {
   // INITIALISATION
   useEffect(() => {
     const init = async () => {
-      // User & Solde
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
@@ -53,7 +55,6 @@ export default function MinesElite() {
         router.push('/connexion');
       }
 
-      // Maintenance Check
       const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'mines').maybeSingle();
       if (data && data.is_active === false) {
         setIsMaintenance(true);
@@ -72,20 +73,27 @@ export default function MinesElite() {
   // --- CALCUL DU MULTIPLICATEUR ---
   // Base 0.5 + Incrément selon difficulté
   const getMultiplier = (revealedCount = revealed.length) => {
-    const steps = { facile: 0.05, intermédiaire: 0.1, difficile: 0.2 };
+    const steps = { facile: 0.20, intermédiaire: 0.35, difficile: 0.50 };
     return parseFloat((0.5 + (revealedCount * steps[difficulty])).toFixed(2));
   };
 
   const start = async () => {
-    if (isMaintenance || !userId) return;
+    if (isProcessingRef.current || isMaintenance || !userId) return;
     if (bet < 10 || bet > jetonsCP || loading) return;
     
     setLoading(true);
+    isProcessingRef.current = true; // Verrouillage temporaire pendant l'init
+
     try {
+      const finalBet = Math.floor(bet);
+      
+      // 🔒 VERROUILLAGE DÉFINITIF DE LA MISE
+      lockedBetRef.current = finalBet;
+
       // 1. Transaction RPC : DÉBIT MISE CP
       const { data: ok, error } = await supabase.rpc('jouer_partie_cp', { 
           p_user_id: userId,
-          p_mise_cp: Math.floor(bet),
+          p_mise_cp: finalBet,
           p_gain_cp: 0,
           p_jeu_nom: 'Mines Bet'
       });
@@ -93,20 +101,21 @@ export default function MinesElite() {
       if (error || !ok.success) {
         alert("Solde insuffisant !");
         setLoading(false);
+        isProcessingRef.current = false;
         return;
       }
 
-      setJetonsCP(prev => prev - bet); // Update visuel
+      setJetonsCP(prev => prev - finalBet); 
 
-      // 2. Génération Mines
+      // 2. Génération Mines (Côté client pour la démo, idéalement côté serveur)
       const pos = Array.from({ length: 25 }, (_, i) => i)
         .sort(() => Math.random() - 0.5)
         .slice(0, mines);
       
-      // 3. Création partie
+      // 3. Création partie DB
       const { data: game, error: gameErr } = await supabase.from('mines_games').insert([{
         user_id: userId,
-        bet_amount: bet,
+        bet_amount: finalBet,
         mines_count: mines,
         mine_positions: pos,
         difficulty_level: difficulty,
@@ -120,18 +129,22 @@ export default function MinesElite() {
       setRevealed([]);
       setTimeLeft(20);
       setStatus('playing');
+      
+      // Déverrouillage pour le jeu
+      isProcessingRef.current = false;
 
     } catch (err) {
       alert("Erreur technique.");
+      isProcessingRef.current = false;
     } finally { setLoading(false); }
   };
 
   const clickTile = (i: number) => {
-    if (status !== 'playing' || revealed.includes(i)) return;
+    if (status !== 'playing' || revealed.includes(i) || isProcessingRef.current) return;
     
     // BOOM (Mine touchée)
     if (minePositions.includes(i)) {
-      handleGameOver(true); // true = forced loss (bombe)
+      handleGameOver(true); // true = forced loss
       return;
     }
     
@@ -139,23 +152,30 @@ export default function MinesElite() {
     setRevealed(prev => [...prev, i]);
   };
 
-  // --- FIN DE PARTIE ---
-  // isBombHit = true si on a touché une mine ou temps écoulé
-  // isBombHit = false si on encaisse manuellement (Cashout)
+  // --- FIN DE PARTIE SÉCURISÉE ---
   const handleGameOver = async (isBombHit: boolean) => {
+    // 🛡️ ANTI DOUBLE-APPEL
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
     if (!gameId) return;
     
+    // Calcul basé sur l'état actuel
     const currentMult = getMultiplier();
+    
+    // 🔒 UTILISATION DE LA MISE SÉCURISÉE (Pas l'input)
+    const secureBet = lockedBetRef.current;
+    
     let winAmount = 0;
 
     if (!isBombHit) {
-        // ENCAISSEMENT MANUEL (Succès)
-        winAmount = Math.floor(bet * currentMult);
+        // ENCAISSEMENT MANUEL (Succès Normal)
+        winAmount = Math.floor(secureBet * currentMult);
     } else {
-        // ECHEC (Bombe ou Temps)
+        // ÉCHEC (Bombe ou Temps)
         if (currentMult <= 1.0) {
             // ZONE SÉCURITÉ : On sauve les meubles (Encaissement auto)
-            winAmount = Math.floor(bet * currentMult);
+            winAmount = Math.floor(secureBet * currentMult);
         } else {
             // ZONE DANGER : Perte totale
             winAmount = 0;
@@ -164,27 +184,37 @@ export default function MinesElite() {
 
     setStatus('ended');
 
-    // Transaction Gain (si > 0)
-    if (winAmount > 0) {
-        await supabase.rpc('jouer_partie_cp', {
-            p_user_id: userId,
-            p_mise_cp: 0,
-            p_gain_cp: winAmount,
-            p_jeu_nom: isBombHit ? 'Mines Safety Cashout' : 'Mines Win'
-        });
-        setJetonsCP(prev => prev + winAmount);
-    }
+    try {
+        // Transaction Gain (si > 0)
+        if (winAmount > 0) {
+            await supabase.rpc('jouer_partie_cp', {
+                p_user_id: userId,
+                p_mise_cp: 0,
+                p_gain_cp: winAmount,
+                p_jeu_nom: isBombHit ? 'Mines Safety Cashout' : 'Mines Win'
+            });
+            setJetonsCP(prev => prev + winAmount);
+        }
 
-    // Fermeture session DB
-    await supabase.from('mines_games').update({ 
-        is_active: false,
-        payout: winAmount,
-        status: winAmount > 0 ? 'won' : 'lost'
-    }).eq('id', gameId);
+        // Fermeture session DB
+        await supabase.from('mines_games').update({ 
+            is_active: false,
+            payout: winAmount,
+            status: winAmount > 0 ? 'won' : 'lost'
+        }).eq('id', gameId);
+
+    } catch (error) {
+        console.error("Erreur clôture:", error);
+    } finally {
+        // On laisse le statut 'ended' mais on déverrouille pour permettre "Rejouer"
+        isProcessingRef.current = false;
+    }
   };
 
   const cashout = async () => {
-    if (status !== 'playing' || revealed.length < 1 || loading) return; // Min 1 case pour encaisser
+    // Min 1 case pour encaisser
+    if (status !== 'playing' || revealed.length < 1 || loading) return; 
+    
     setLoading(true);
     try {
         await handleGameOver(false); // false = cashout volontaire
@@ -255,7 +285,8 @@ export default function MinesElite() {
             </div>
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
               <p className="text-[8px] text-slate-500 mb-1 flex items-center justify-center gap-1"><Zap size={10}/> GAIN</p>
-              <p className="text-lg text-white font-bold">{Math.floor(bet * currentMult)}</p>
+              {/* Affichage basé sur la mise sécurisée */}
+              <p className="text-lg text-white font-bold">{Math.floor(lockedBetRef.current * currentMult)}</p>
             </div>
             <div className={`p-4 rounded-2xl border text-center transition-all ${timeLeft <= 5 ? 'bg-rose-500/20 border-rose-500 animate-pulse' : 'bg-white/5 border-white/5'}`}>
               <p className="text-[8px] text-slate-500 mb-1 flex items-center justify-center gap-1"><Clock size={10}/> TEMPS</p>
@@ -273,7 +304,7 @@ export default function MinesElite() {
               value={bet} 
               onChange={(e) => setBet(Number(e.target.value))}
               disabled={status === 'playing'}
-              className="bg-transparent flex-1 outline-none text-2xl text-emerald-500 font-bold placeholder-emerald-900"
+              className="bg-transparent flex-1 outline-none text-2xl text-emerald-500 font-bold placeholder-emerald-900 disabled:opacity-50"
             />
           </div>
 
@@ -303,7 +334,7 @@ export default function MinesElite() {
             <button
               key={i}
               onClick={() => clickTile(i)}
-              disabled={status !== 'playing'}
+              disabled={status !== 'playing' || isProcessingRef.current}
               className={`aspect-square rounded-2xl flex items-center justify-center transition-all border-2 relative overflow-hidden ${
                 revealed.includes(i) 
                 ? 'bg-emerald-500/10 border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
