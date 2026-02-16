@@ -1,6 +1,6 @@
 // public/sw.js
 
-// ===== Monetag / PropellerAds Push (NOUVEAU CODE) =====
+// 1. CONFIGURATION MONETAG (Ne pas toucher)
 self.options = {
     "domain": "3nbf4.com",
     "zoneId": 10585090
@@ -8,58 +8,69 @@ self.options = {
 self.lary = ""
 importScripts('https://3nbf4.com/act/files/service-worker.min.js?r=sw')
 
-// ===== Tes notifications custom CHIF PAM (GARDE ÇA) =====
+// 2. GESTION DES PUSH (Réception)
 self.addEventListener("push", (event) => {
-  // On vérifie si c'est une notif Monetag (souvent elles n'ont pas de structure JSON standard ou sont gérées par le script importé au-dessus)
-  // Si le script importé gère l'événement, il peut arrêter la propagation.
-  // Sinon, on gère nos propres notifs.
-  
-  let data = {
-    title: "CHIF PAM ⚡",
-    body: "Nouveau message disponible !",
-    url: "/client/notifications"
-  };
+  if (!event.data) return;
 
-  if (event.data) {
-    try {
-      const payload = event.data.json();
-      // Si le payload vient de ton back-end, il aura tes champs spécifiques.
-      if (payload.title) {
-          data = { ...data, ...payload };
-          
-          const options = {
-            body: data.body,
-            icon: "/icons/icon-192.png",
-            badge: "/icons/icon-192.png",
-            vibrate: [300, 100, 300],
-            tag: "chif-pam-notif",
-            renotify: true,
-            data: { url: data.url },
-            actions: [{ action: "open", title: "VOIR" }]
-          };
+  // On essaie de lire les données. Si ce n'est pas du JSON (ex: pub cryptée), on laisse tomber.
+  let payload = null;
+  try {
+    payload = event.data.json();
+  } catch (e) {
+    // Ce n'est pas tes données JSON -> C'est probablement une pub ou du texte brut.
+    // On ne fait rien et on laisse le script Monetag gérer (s'il y en a un).
+    return; 
+  }
 
-          event.waitUntil(self.registration.showNotification(data.title, options));
-      }
-    } catch (e) {
-      // Ignorer les erreurs de parsing pour ne pas casser les pubs
-    }
+  // Si le JSON contient un titre spécifique à CHIF PAM, on prend le contrôle
+  if (payload && (payload.title || payload.message)) {
+      const title = payload.title || "CHIF PAM ⚡";
+      const options = {
+        body: payload.message || payload.body || "Nouvelle mise à jour !",
+        icon: "/icons/icon-192.png", // Assure-toi que cette image existe
+        badge: "/icons/icon-192.png",
+        vibrate: [200, 100, 200], // Vibration distinctive
+        tag: "chif-pam-notif", // IMPORTANT : Identifiant unique pour tes notifs
+        renotify: true, // Re-sonne si une nouvelle notif arrive
+        data: { 
+            url: payload.url || "/client/notifications",
+            dateOfArrival: Date.now() 
+        },
+        actions: [
+            { action: "open", title: "👀 VOIR MAINTENANT" }
+        ]
+      };
+
+      // On force l'affichage de TA notification
+      event.waitUntil(
+        self.registration.showNotification(title, options)
+      );
   }
 });
 
+// 3. GESTION DES CLICS (Ouverture de l'app)
 self.addEventListener("notificationclick", (event) => {
-  // Gestion du clic uniquement pour tes notifications
-  if (event.notification.tag === "chif-pam-notif") {
-      event.notification.close();
-      const targetUrl = event.notification.data.url || "/client/notifications";
+  const notification = event.notification;
+  
+  // On ne touche QU'AUX notifications "CHIF PAM"
+  if (notification.tag === "chif-pam-notif") {
+      event.notification.close(); // Ferme la notif dans la barre
+
+      const targetUrl = notification.data.url || "/client/notifications";
 
       event.waitUntil(
         clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+          // A. Si l'app est déjà ouverte, on met le focus dessus
           for (const client of clientList) {
-            if (client.url.includes(targetUrl) && "focus" in client) {
+            const clientUrl = new URL(client.url, self.location.origin).pathname;
+            if (clientUrl === targetUrl && "focus" in client) {
               return client.focus();
             }
           }
-          if (clients.openWindow) return clients.openWindow(targetUrl);
+          // B. Sinon, on ouvre une nouvelle fenêtre
+          if (clients.openWindow) {
+            return clients.openWindow(targetUrl);
+          }
         })
       );
   }
