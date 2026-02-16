@@ -19,22 +19,38 @@ export default function ClientNotifications() {
   const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
+  // --- FONCTION D'ENVOI LOCAL (Quand l'app est ouverte) ---
   const sendNativePush = async (title: string, body: string) => {
-    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    // 1. Vérification basique
+    if (!("Notification" in window)) return;
+    
+    // 2. Si permission refusée, on arrête
+    if (Notification.permission !== "granted") {
+        console.warn("Permission notif refusée");
+        return;
+    }
+
     try {
+      // 3. On attend que le SW soit PRÊT (Crucial)
       const swReg = await navigator.serviceWorker.ready;
-      const nOptions: any = {
+      
+      if (!swReg) {
+          console.error("Service Worker non trouvé");
+          return;
+      }
+
+      // 4. On demande au SW d'afficher la notif
+      await swReg.showNotification(title, {
         body: body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
-        vibrate: [300, 100, 300],
-        tag: "chif-pam-notif",
+        vibrate: [200, 100, 200],
+        tag: "chif-pam-notif", // Même tag que dans le SW pour que le clic marche
         renotify: true,
         data: { url: "/client/notifications" }
-      };
-      await swReg.showNotification(title, nOptions);
+      });
     } catch (err) {
-      console.error("Échec notification native:", err);
+      console.error("Erreur affichage notif:", err);
     }
   };
 
@@ -42,15 +58,18 @@ export default function ClientNotifications() {
     fetchAllData();
     checkPushSubscription();
 
+    // RADAR TEMPS RÉEL (Fonctionne seulement app ouverte)
     const channel = supabase.channel('notif_radar_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         const n = payload.new;
         setNotifications(prev => [n, ...prev]);
-        sendNativePush(n.title || "CHIF PAM ⚡", n.message || n.content);
+        // Déclenche la notif native immédiatement
+        sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle info");
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
         const c = payload.new;
         setLiveChallenges(prev => [c, ...prev]);
+        // Déclenche la notif native immédiatement
         sendNativePush("NOUVEAU DÉFI 🔥", c.title);
       })
       .subscribe();
@@ -62,10 +81,12 @@ export default function ClientNotifications() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/connexion');
+      
       const [notifsRes, challengesRes] = await Promise.all([
         supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('challenges').select('*').eq('is_active', true).order('created_at', { ascending: false })
       ]);
+      
       setNotifications(notifsRes.data || []);
       setLiveChallenges(challengesRes.data || []);
     } finally { setLoading(false); }
@@ -73,28 +94,52 @@ export default function ClientNotifications() {
 
   const checkPushSubscription = async () => {
     if ('serviceWorker' in navigator) {
+      // Vérifie simplement si on a déjà une souscription valide
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      setPushEnabled(!!sub);
+      setPushEnabled(!!sub && Notification.permission === "granted");
     }
   };
 
   const togglePush = async () => {
     setIsRegistering(true);
     try {
+      // 1. Demande Explicite (Pop-up navigateur)
       const permission = await Notification.requestPermission();
+      
       if (permission === "granted") {
         const reg = await navigator.serviceWorker.ready;
+        
+        // 2. Abonnement au serveur de Push (Google/Apple)
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
         });
+
+        // 3. Sauvegarde en Base de Données
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) await supabase.from('push_subscriptions').upsert({ user_id: user.id, subscription: sub.toJSON() });
-        sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Vous recevrez vos alertes ici.");
-        setPushEnabled(true);
+        if (user) {
+            const { error } = await supabase.from('push_subscriptions').upsert({ 
+                user_id: user.id, 
+                subscription: sub.toJSON() 
+            }, { onConflict: 'subscription' }); // Évite les doublons exacts
+            
+            if (!error) {
+                sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar est actif.");
+                setPushEnabled(true);
+            } else {
+                alert("Erreur sauvegarde abonnement");
+            }
+        }
+      } else {
+        alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
       }
-    } finally { setIsRegistering(false); }
+    } catch (e) {
+        console.error(e);
+        alert("Erreur technique lors de l'abonnement.");
+    } finally { 
+        setIsRegistering(false); 
+    }
   };
 
   const urlBase64ToUint8Array = (bs: string) => {
@@ -103,7 +148,7 @@ export default function ClientNotifications() {
     return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
   };
 
-  // --- LOGIQUE FILTRES AMÉLIORÉE POUR CP ---
+  // --- RESTE DU CODE (FILTRES & RENDER) INCHANGÉ ---
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
@@ -115,11 +160,9 @@ export default function ClientNotifications() {
       link: '/client/arena'
     }));
 
-    // Adaptation aux colonnes 'message' ou 'content' de ta table
     const normalizedNotifs = notifications.map(n => ({
       ...n,
-      content: n.message || n.content,
-      // Détecte si c'est une victoire via les émojis du nouveau trigger
+      content: n.content || n.message,
       is_victory: n.title?.includes('VIC') || n.title?.includes('🥇') || n.title?.includes('🥈') || n.title?.includes('🥉') || n.message?.includes('CP')
     }));
 
