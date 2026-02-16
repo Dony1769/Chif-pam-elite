@@ -34,7 +34,10 @@ export default function CrashElite() {
   const startTimeRef = useRef<number | null>(null);
   const crashAtRef = useRef<number>(0);
   const gameBoxRef = useRef<HTMLDivElement>(null);
-  const isCollectingRef = useRef<boolean>(false);
+  
+  // 🔒 SÉCURITÉ REFS
+  const lockedBetRef = useRef<number>(0); // Mise inviolable
+  const isProcessingRef = useRef<boolean>(false); // Verrou anti-double appel
 
   useEffect(() => {
     const init = async () => {
@@ -71,10 +74,12 @@ export default function CrashElite() {
     return () => ctx.revert();
   }, []);
 
+  // --- FONCTION ENCAISSER SÉCURISÉE ---
   const collect = useCallback(async (forcedMult?: number) => {
-    if (status !== 'running' || !gameId || loading || isCollectingRef.current || !userId) return;
+    // 🛡️ SÉCURITÉ : Si déjà en cours de traitement ou pas en jeu, on bloque
+    if (status !== 'running' || !gameId || loading || isProcessingRef.current || !userId) return;
     
-    isCollectingRef.current = true;
+    isProcessingRef.current = true; // VERROUILLAGE
     setLoading(true);
 
     if (requestRef.current) {
@@ -83,7 +88,10 @@ export default function CrashElite() {
     }
     
     const finalMult = forcedMult || parseFloat(multRef.current.toFixed(2));
-    const winAmount = Math.floor(bet * finalMult); 
+    
+    // 🔒 UTILISATION DE LA MISE VERROUILLÉE (Pas l'input)
+    const secureBet = lockedBetRef.current;
+    const winAmount = Math.floor(secureBet * finalMult); 
 
     try {
       const { data: result, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
@@ -108,15 +116,14 @@ export default function CrashElite() {
       alert("Erreur de synchronisation.");
     } finally {
       setLoading(false);
-      isCollectingRef.current = false;
+      isProcessingRef.current = false; // DÉVERROUILLAGE (Fin de partie)
     }
-  }, [status, gameId, loading, userId, bet]);
+  }, [status, gameId, loading, userId]); // Note: bet retiré des dépendances car on utilise lockedBetRef
 
   const gameLoop = useCallback((time: number) => {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
     
-    // Animation de montée (0.5 -> 1.0 -> Infini)
     const currentMult = 0.5 * Math.pow(Math.E, 0.08 * elapsed); 
     
     if (currentMult >= crashAtRef.current) {
@@ -146,16 +153,21 @@ export default function CrashElite() {
     if (bet > jetonsCP || bet < 10 || loading || status === 'running') return;
     
     setLoading(true);
+    isProcessingRef.current = false; // Reset sécurité pour nouvelle partie
     setStatus('idle');
     setMult(0.5); 
     multRef.current = 0.5;
     startTimeRef.current = null;
-    isCollectingRef.current = false;
 
     try {
+      const finalBet = Math.floor(bet);
+      
+      // 🔒 VERROUILLAGE MISE
+      lockedBetRef.current = finalBet;
+
       const { data: ok, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: userId,
-          p_mise_cp: Math.floor(bet),
+          p_mise_cp: finalBet,
           p_gain_cp: 0,
           p_jeu_nom: 'Crash Bet'
       });
@@ -166,24 +178,21 @@ export default function CrashElite() {
         return;
       }
 
-      setJetonsCP(prev => prev - bet); 
+      setJetonsCP(prev => prev - finalBet); 
 
       // --- ALGORITHME DU CRASH POINT (55% House Edge à 1.00x) ---
       const result = Math.random();
       
       if (result < 0.55) {
-        // 55% de chance de CRASH INSTANTANÉ (1.00x)
         crashAtRef.current = 1.00;
       } else {
-        // Les 45% restants suivent la courbe normale
-        // On normalise le résultat restant (0.55 à 1.0) vers (0.0 à 1.0)
         const remainingProb = (result - 0.55) / 0.45; 
         crashAtRef.current = parseFloat((0.99 / (1 - remainingProb)).toFixed(2));
       }
 
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
         user_id: userId,
-        bet_amount: Number(bet),
+        bet_amount: finalBet,
         crash_point: crashAtRef.current, 
         status: 'playing'
       }).select().single();
@@ -232,7 +241,6 @@ export default function CrashElite() {
           <ChevronLeft size={22} />
         </button>
         
-        {/* SOLDE CP */}
         <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
             <Coins size={16} className="text-emerald-500" />
             <span className="text-emerald-500 font-black tracking-tighter">{Math.floor(jetonsCP).toLocaleString()} CP</span>
@@ -246,7 +254,6 @@ export default function CrashElite() {
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <div className="absolute bottom-0 w-full flex justify-center items-end">
-             {/* Animation de la pousse */}
              <motion.div style={{ height: `${Math.min((mult - 0.5) * 200, 280)}px` }} className="w-4 bg-gradient-to-t from-emerald-800 to-emerald-400 rounded-t-full relative">
                 {mult > 1.2 && <SproutLeaf side="left" top="20%" />}
                 {mult > 1.5 && <SproutLeaf side="right" top="40%" />}
@@ -265,7 +272,8 @@ export default function CrashElite() {
             {status === 'collected' && (
               <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="win-display absolute inset-0 bg-emerald-500/20 backdrop-blur-md flex items-center justify-center z-20">
                 <div className="bg-emerald-500 text-black px-10 py-5 rounded-full font-black text-3xl shadow-2xl">
-                   +{Math.floor(bet * mult)} CP
+                   {/* Affichage basé sur la mise sécurisée */}
+                   +{Math.floor(lockedBetRef.current * mult)} CP
                 </div>
               </motion.div>
             )}
@@ -288,7 +296,7 @@ export default function CrashElite() {
                 value={bet} 
                 onChange={e => setBet(Number(e.target.value))} 
                 disabled={status === 'running'} 
-                className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-emerald-500/50" 
+                className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-emerald-500/50 transition-colors disabled:opacity-50" 
               />
             </div>
             <div className="space-y-2">
@@ -299,7 +307,7 @@ export default function CrashElite() {
                 value={autoCashout} 
                 onChange={e => setAutoCashout(Number(e.target.value))} 
                 disabled={status === 'running'} 
-                className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-amber-500/50" 
+                className="w-full bg-black/50 p-4 rounded-2xl border border-white/5 outline-none text-xl font-bold text-center focus:border-amber-500/50 transition-colors disabled:opacity-50" 
               />
             </div>
           </div>
@@ -307,10 +315,10 @@ export default function CrashElite() {
           {status === 'running' ? (
             <button 
                 onClick={() => collect()} 
-                disabled={loading} 
-                className="w-full py-6 bg-amber-500 text-black rounded-[2rem] text-2xl font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                disabled={loading || isProcessingRef.current} 
+                className="w-full py-6 bg-amber-500 text-black rounded-[2rem] text-2xl font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-80"
             >
-                {loading ? <Loader2 className="animate-spin" /> : `STOP @ ${Math.floor(bet * mult)} CP`}
+                {loading ? <Loader2 className="animate-spin" /> : `STOP @ ${Math.floor(lockedBetRef.current * mult)} CP`}
             </button>
           ) : (
             <button 
