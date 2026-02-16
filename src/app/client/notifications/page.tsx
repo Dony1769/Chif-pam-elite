@@ -22,11 +22,10 @@ export default function ClientNotifications() {
   // --- FONCTION D'ENVOI LOCAL (Quand l'app est ouverte) ---
   const sendNativePush = async (title: string, body: string) => {
     // 1. Vérification basique
-    if (!("Notification" in window)) return;
+    if (typeof window === 'undefined' || !("Notification" in window)) return;
     
     // 2. Si permission refusée, on arrête
     if (Notification.permission !== "granted") {
-        console.warn("Permission notif refusée");
         return;
     }
 
@@ -39,16 +38,18 @@ export default function ClientNotifications() {
           return;
       }
 
-      // 4. On demande au SW d'afficher la notif
-      await swReg.showNotification(title, {
+      // 4. CORRECTION ICI : On type l'objet en 'any' pour autoriser 'vibrate'
+      const options: any = {
         body: body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
-        vibrate: [200, 100, 200],
-        tag: "chif-pam-notif", // Même tag que dans le SW pour que le clic marche
+        vibrate: [200, 100, 200], // TypeScript ne bloquera plus cette ligne
+        tag: "chif-pam-notif",
         renotify: true,
         data: { url: "/client/notifications" }
-      });
+      };
+
+      await swReg.showNotification(title, options);
     } catch (err) {
       console.error("Erreur affichage notif:", err);
     }
@@ -93,8 +94,7 @@ export default function ClientNotifications() {
   };
 
   const checkPushSubscription = async () => {
-    if ('serviceWorker' in navigator) {
-      // Vérifie simplement si on a déjà une souscription valide
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       setPushEnabled(!!sub && Notification.permission === "granted");
@@ -104,25 +104,22 @@ export default function ClientNotifications() {
   const togglePush = async () => {
     setIsRegistering(true);
     try {
-      // 1. Demande Explicite (Pop-up navigateur)
       const permission = await Notification.requestPermission();
       
       if (permission === "granted") {
         const reg = await navigator.serviceWorker.ready;
         
-        // 2. Abonnement au serveur de Push (Google/Apple)
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
         });
 
-        // 3. Sauvegarde en Base de Données
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { error } = await supabase.from('push_subscriptions').upsert({ 
                 user_id: user.id, 
                 subscription: sub.toJSON() 
-            }, { onConflict: 'subscription' }); // Évite les doublons exacts
+            }, { onConflict: 'subscription' }); 
             
             if (!error) {
                 sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar est actif.");
@@ -148,7 +145,6 @@ export default function ClientNotifications() {
     return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
   };
 
-  // --- RESTE DU CODE (FILTRES & RENDER) INCHANGÉ ---
   const allAlerts = useMemo(() => {
     const mappedChallenges = liveChallenges.map(c => ({
       id: `challenge-${c.id}`,
@@ -312,3 +308,4 @@ export default function ClientNotifications() {
     </div>
   );
 }
+
