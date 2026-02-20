@@ -11,7 +11,7 @@ const ROWS = 16;
 const PIN_RADIUS = 3;
 const BALL_RADIUS = 6;
 const PYRAMID_TOP = 60;
-const MULTIPLIERS_16 = [1000, 10, 5, 2, 1, 0.5, 0.2, 0.2, 0.1, 0.1, 0.2, 0.5, 1, 2, 5, 10, 1000];
+const MULTIPLIERS_16 = [1000, 15, 5, 2.5, 1.5, 0.5, 0.2, 0.2, 0.1, 0.1, 0.2, 0.5, 1.5, 2.5, 5, 15, 1000];
 
 const COLORS = {
   pins: '#475569',
