@@ -67,7 +67,7 @@ function LaserVaultGame() {
   const [questionsSolved, setQuestionsSolved] = useState(0);
   
   // Paramètres difficulté
-  const [baseSpeed, setBaseSpeed] = useState(4);
+  const [baseSpeed, setBaseSpeed] = useState(3.87);
   const [errorPenalty, setErrorPenalty] = useState(1.0);
 
   // 🔒 SÉCURITÉ & REFS CRITIQUES
@@ -151,7 +151,7 @@ function LaserVaultGame() {
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(0.5); setLaserY(0); setQuestionsSolved(0); setBaseSpeed(4); setErrorPenalty(1.0); setInput("");
+      setMultiplier(0.5); setLaserY(0); setQuestionsSolved(0); setBaseSpeed(3.87); setErrorPenalty(1.0); setInput("");
       generateProblem(0.5); 
       setStatus('playing');
       playSound('beep');
