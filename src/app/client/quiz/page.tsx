@@ -9,9 +9,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
 
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
-  facile: { time: 10, step: 0.15, points: 10 },
-  intermédiaire: { time: 7, step: 0.20, points: 25 },
-  difficile: { time: 4, step: 0.50, points: 50 }
+  facile: { time: 13, step: 0.15, points: 10 },
+  intermédiaire: { time: 9, step: 0.20, points: 25 },
+  difficile: { time: 6, step: 0.50, points: 50 }
 };
 
 const CATEGORIES = [
