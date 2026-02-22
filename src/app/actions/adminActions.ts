@@ -22,9 +22,30 @@ export async function adminResetPassword(targetUserId: string, newPassword: stri
       cookies: {
         get(name: string) { return cookieStore.get(name)?.value },
       },
-    }
-  );
+=======
 
+// On utilise la clé SERVICE_ROLE ici car c'est du code serveur sécurisé
+// Cela permet de contourner toutes les restrictions RLS pour l'admin
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Assurez-vous d'avoir cette variable dans votre .env.local
+);
+
+export async function adminResetPassword(userId: string, newPassword: string) {
+  try {
+    // 1. Mise à jour directe via l'API Admin de Supabase
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password: newPassword }
+    );
+
+    if (error) {
+      console.error("Erreur Reset Password:", error);
+      return { success: false, message: error.message };
+>>>>>>> 7803cbd765003e0c370d6d78b01bc7abe83efa9f
+    }
+
+<<<<<<< HEAD
   try {
     // 1. Vérifier la session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -41,10 +62,10 @@ export async function adminResetPassword(targetUserId: string, newPassword: stri
       .single();
 
     if (!profile || profile.role !== 'admin') {
-      return { success: false, message: "Droits insuffisants." };
+      return { success: false, message: "Droits insuffisants. Vous n'êtes pas administrateur." };
     }
 
-    // 3. Exécution avec le client Admin
+    // 3. Exécution avec le client Admin (Modification du mot de passe)
     const { error } = await supabaseAdmin.auth.admin.updateUserById(
       targetUserId,
       { password: newPassword }
@@ -54,8 +75,14 @@ export async function adminResetPassword(targetUserId: string, newPassword: stri
 
     return { success: true, message: "Mot de passe mis à jour !" };
 
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Erreur inconnue';
-    return { success: false, message };
+  } catch (err: any) {
+    return { success: false, message: err.message };
   }
 }
+=======
+    return { success: true, message: "Mot de passe mis à jour avec succès." };
+  } catch (err: any) {
+    return { success: false, message: "Erreur serveur : " + err.message };
+  }
+}
+>>>>>>> 7803cbd765003e0c370d6d78b01bc7abe83efa9f
