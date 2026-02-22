@@ -1,13 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+// lib/supabase.ts
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = 'https://ohviqihuuoiwmpckifnt.supabase.co'
-const supabaseAnonKey = 'sb_publishable_MxmhGuL4yuXy-GHYjx-K8Q_EpLbmHuO'
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' // Ton vrai token
 
-// Ton client actuel (exporté tel quel pour tes pages "use client")
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
-  }
-})
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
