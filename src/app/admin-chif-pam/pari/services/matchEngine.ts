@@ -32,6 +32,44 @@ function calculateProbabilities(homeAvg: number, awayAvg: number) {
   return { home, draw, away };
 }
 
+// 🔥 NOUVEAU : récupérer 10 derniers matchs d'une équipe
+async function fetchTeamLastMatches(teamId: number) {
+  const res = await fetch(
+    `https://api.football-data.org/v4/teams/${teamId}/matches?status=FINISHED&limit=10`,
+    {
+      headers: {
+        "X-Auth-Token": process.env.FOOTBALL_API_KEY!,
+      },
+    }
+  );
+
+  const data = await res.json();
+  return data.matches || [];
+}
+
+// 🔥 Calcul moyenne buts marqués / encaissés
+function calculateAverages(matches: any[], teamId: number) {
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+
+  for (const match of matches) {
+    const isHome = match.homeTeam.id === teamId;
+
+    if (isHome) {
+      goalsFor += match.score.fullTime.home ?? 0;
+      goalsAgainst += match.score.fullTime.away ?? 0;
+    } else {
+      goalsFor += match.score.fullTime.away ?? 0;
+      goalsAgainst += match.score.fullTime.home ?? 0;
+    }
+  }
+
+  return {
+    avgScored: goalsFor / matches.length || 1,
+    avgConceded: goalsAgainst / matches.length || 1,
+  };
+}
+
 export async function generateDailyMatches() {
   const matches = await fetchTodayMatches();
 
@@ -39,19 +77,29 @@ export async function generateDailyMatches() {
     const homeTeam = match.homeTeam.name;
     const awayTeam = match.awayTeam.name;
 
-    // Moyennes simplifiées provisoires
-    const homeAvg = 1.5;
-    const awayAvg = 1.2;
+    // 🔥 récupération stats réelles
+    const homeLast = await fetchTeamLastMatches(match.homeTeam.id);
+    const awayLast = await fetchTeamLastMatches(match.awayTeam.id);
 
-    const probs = calculateProbabilities(homeAvg, awayAvg);
+    const homeStats = calculateAverages(homeLast, match.homeTeam.id);
+    const awayStats = calculateAverages(awayLast, match.awayTeam.id);
+
+    // 🔥 expected goals dynamique
+    const homeExpected =
+      (homeStats.avgScored + awayStats.avgConceded) / 2;
+
+    const awayExpected =
+      (awayStats.avgScored + homeStats.avgConceded) / 2;
+
+    const probs = calculateProbabilities(homeExpected, awayExpected);
 
     await supabase.from("pari_predictions").insert({
       home_team: homeTeam,
       away_team: awayTeam,
       league: match.competition.name,
       match_date: match.utcDate,
-      expected_goals_home: homeAvg,
-      expected_goals_away: awayAvg,
+      expected_goals_home: homeExpected,
+      expected_goals_away: awayExpected,
       probability_home: probs.home,
       probability_draw: probs.draw,
       probability_away: probs.away,
