@@ -6,26 +6,32 @@ const supabase = createClient(
 );
 
 export default async function HistoriquePage() {
-  const { data } = await supabase
-    .from("pari_predictions")
+  const { data: tickets } = await supabase
+    .from("bets_tickets")
     .select("*")
-    .order("match_date", { ascending: false })
-    .limit(50);
+    .order("created_at", { ascending: false });
+
+  const totalStake = tickets?.reduce((acc, t) => acc + Number(t.stake), 0) || 0;
+  const totalProfit =
+    tickets?.reduce((acc, t) => acc + Number(t.total_profit), 0) || 0;
+
+  const roi = totalStake ? (totalProfit / totalStake) * 100 : 0;
 
   return (
-    <div style={{ padding: "40px" }}>
-      <h1>Historique des prédictions</h1>
+    <div style={{ padding: 40 }}>
+      <h1>Historique des Paris</h1>
 
-      <p>
-        Archive des matchs générés automatiquement par le moteur statistique.
-      </p>
+      <p>Total misé : {totalStake}</p>
+      <p>Profit total : {totalProfit}</p>
+      <p>ROI : {roi.toFixed(2)}%</p>
 
-      {data?.map((match) => (
-        <div key={match.id} style={{ marginBottom: "15px" }}>
-          <strong>
-            {match.home_team} vs {match.away_team}
-          </strong>{" "}
-          - {new Date(match.match_date).toLocaleDateString()}
+      {tickets?.map((ticket) => (
+        <div key={ticket.id} style={{ marginBottom: 20 }}>
+          <p>Type : {ticket.ticket_type}</p>
+          <p>Cote totale : {ticket.total_odds}</p>
+          <p>Mise : {ticket.stake}</p>
+          <p>Status : {ticket.status}</p>
+          <p>Profit : {ticket.total_profit}</p>
         </div>
       ))}
     </div>
