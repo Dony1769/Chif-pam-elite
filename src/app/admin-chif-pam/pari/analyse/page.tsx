@@ -1,7 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { useEffect, useState } from "react";
 
-// Typage TS pour tes matchs
 interface Match {
   id: number;
   home_team: string;
@@ -25,44 +23,35 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export default function AnalysePage() {
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default async function AnalysePage() {
+  const today = new Date().toISOString().split("T")[0];
 
-  useEffect(() => {
-    const fetchMatches = async () => {
-      try {
-        const today = new Date().toISOString().split("T")[0];
-        const { data, error } = await supabase
-          .from("pari_predictions")
-          .select("*")
-          .gte("match_date", today)
-          .order("probability_home", { ascending: false });
+  const { data, error } = await supabase
+    .from("pari_predictions")
+    .select("*")
+    .gte("match_date", today)
+    .order("probability_home", { ascending: false });
 
-        if (error) throw error;
-        setMatches(data as Match[]);
-      } catch (err: any) {
-        setError(err.message || "Erreur lors de la récupération des matchs");
-      } finally {
-        setLoading(false);
-      }
-    };
+  if (error) {
+    return (
+      <div style={{ padding: 40 }}>
+        <h2>Erreur récupération données</h2>
+        <p>{error.message}</p>
+      </div>
+    );
+  }
 
-    fetchMatches();
-  }, []);
-
-  if (loading) return <p style={{ padding: 40 }}>Chargement des matchs…</p>;
-  if (error) return <p style={{ padding: 40, color: "red" }}>{error}</p>;
+  const matches = (data as Match[]) || [];
 
   return (
     <div style={{ padding: "40px" }}>
       <h1>Analyse des matchs du jour</h1>
+
       <p>
         Probabilités calculées via distribution de Poisson avec expected goals dynamiques.
       </p>
 
-      {matches.length === 0 && <p>Aucun match trouvé pour aujourd'hui.</p>}
+      {matches.length === 0 && <p>Aucun match trouvé aujourd’hui.</p>}
 
       {matches.map((match) => (
         <div
@@ -77,32 +66,35 @@ export default function AnalysePage() {
           <h3>
             {match.home_team} vs {match.away_team}
           </h3>
+
           <p>Ligue : {match.league}</p>
 
           <p>
-            Probabilités : Domicile {(match.probability_home * 100).toFixed(1)}% | Nul{" "}
-            {(match.probability_draw * 100).toFixed(1)}% | Extérieur{" "}
-            {(match.probability_away * 100).toFixed(1)}%
+            Probabilités :
+            Domicile {(match.probability_home * 100).toFixed(1)}% |
+            Nul {(match.probability_draw * 100).toFixed(1)}% |
+            Extérieur {(match.probability_away * 100).toFixed(1)}%
           </p>
 
           <p>
-            Expected Goals : {match.expected_goals_home.toFixed(2)} -{" "}
+            Expected Goals :
+            {match.expected_goals_home.toFixed(2)} -
             {match.expected_goals_away.toFixed(2)}
           </p>
 
-          <p>Value détectée : {match.value_detected ? "Oui" : "Non"}</p>
+          <p>
+            Value détectée :
+            {match.value_detected ? " ✅ Oui" : " ❌ Non"}
+          </p>
 
-          {match.value_home !== undefined && (
-            <p>
-              Value bets :{" "}
-              {match.value_home ? "Home " : ""}
-              {match.value_draw ? "Draw " : ""}
-              {match.value_away ? "Away " : ""}
-            </p>
-          )}
+          {match.value_home && <p>🔥 Value Home</p>}
+          {match.value_draw && <p>🔥 Value Draw</p>}
+          {match.value_away && <p>🔥 Value Away</p>}
 
           {match.over25_prob !== undefined && (
-            <p>Probabilité Over 2.5 : {(match.over25_prob * 100).toFixed(1)}%</p>
+            <p>
+              Over 2.5 : {(match.over25_prob * 100).toFixed(1)}%
+            </p>
           )}
         </div>
       ))}
