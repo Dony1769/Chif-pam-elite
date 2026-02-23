@@ -1,3 +1,5 @@
+"use server"; // 🔹 On reste côté serveur pour sécuriser les clés
+
 import { fetchTodayMatches } from "./fetchMatches";
 import { detectValue } from "./valueEngine";
 import { createClient } from "@supabase/supabase-js";
@@ -21,7 +23,6 @@ function poisson(lambda: number, k: number): number {
 // Calcul 1X2
 function calculateProbabilities(homeAvg: number, awayAvg: number) {
   let home = 0, draw = 0, away = 0;
-
   for (let i = 0; i < 6; i++) {
     for (let j = 0; j < 6; j++) {
       const p = poisson(homeAvg, i) * poisson(awayAvg, j);
@@ -30,7 +31,6 @@ function calculateProbabilities(homeAvg: number, awayAvg: number) {
       else away += p;
     }
   }
-
   return { home, draw, away };
 }
 
@@ -63,6 +63,10 @@ function calculateAverages(matches: any[], teamId: number) {
   };
 }
 
+// 🔹 Pondération domicile / extérieur
+const HOME_ADVANTAGE = 1.1; // +10% buts maison
+const AWAY_DISADVANTAGE = 0.9; // -10% buts à l’extérieur
+
 // 🔥 Génération quotidienne
 export async function generateDailyMatches() {
   const matches = await fetchTodayMatches();
@@ -84,9 +88,9 @@ export async function generateDailyMatches() {
     const homeStats = calculateAverages(homeLast, match.homeTeam.id);
     const awayStats = calculateAverages(awayLast, match.awayTeam.id);
 
-    // 🔥 Expected goals dynamiques
-    const homeExpected = (homeStats.avgScored + awayStats.avgConceded) / 2;
-    const awayExpected = (awayStats.avgScored + homeStats.avgConceded) / 2;
+    // 🔹 Expected goals dynamiques pondérés domicile / extérieur
+    const homeExpected = ((homeStats.avgScored * HOME_ADVANTAGE) + awayStats.avgConceded) / 2;
+    const awayExpected = ((awayStats.avgScored * AWAY_DISADVANTAGE) + homeStats.avgConceded) / 2;
 
     const probs = calculateProbabilities(homeExpected, awayExpected);
 
@@ -103,10 +107,10 @@ export async function generateDailyMatches() {
         probability_home: probs.home,
         probability_draw: probs.draw,
         probability_away: probs.away,
-        over25: probs.home + probs.away, // valeur temporaire, update via valueEngine
+        over25: probs.home + probs.away, // temporaire, update via valueEngine
         mental_score_home: 70,
         mental_score_away: 65,
-        value_detected: false, // sera calculé
+        value_detected: false,
         risk_level: "MEDIUM",
       })
       .select("id");
@@ -114,7 +118,7 @@ export async function generateDailyMatches() {
     const matchId = insertedData?.[0]?.id;
     if (!matchId) continue;
 
-    // 🔥 Calcul value réel et Over 2.5
+    // 🔹 Calcul value réel et Over 2.5
     await detectValue(
       matchId,
       homeExpected,
@@ -124,4 +128,4 @@ export async function generateDailyMatches() {
       4.0  // cote Away exemple
     );
   }
-}
+                           }
