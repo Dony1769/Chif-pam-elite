@@ -1,3 +1,5 @@
+"use server"; // ✅ Next.js server component directive
+
 import { fetchTodayMatches } from "./fetchMatches";
 import { detectValue } from "./valueEngine";
 import { createClient } from "@supabase/supabase-js";
@@ -13,26 +15,40 @@ function factorial(n: number): number {
   return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
-// Poisson pour 1X2 / Over
+// Poisson
 function poisson(lambda: number, k: number): number {
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
-// Calcul 1X2
+// Dixon-Coles correction pour matchs serrés (0-0, 1-0, 0-1, 1-1)
+function dixonColesCorrection(i: number, j: number, lambda: number, mu: number): number {
+  if (i === 0 && j === 0) return 0.95;
+  if (i === 0 && j === 1) return 0.95;
+  if (i === 1 && j === 0) return 0.95;
+  if (i === 1 && j === 1) return 0.95;
+  return 1;
+}
+
+// Calcul des probabilités 1X2 corrigées
 function calculateProbabilities(homeAvg: number, awayAvg: number) {
   let home = 0, draw = 0, away = 0;
+
   for (let i = 0; i < 6; i++) {
     for (let j = 0; j < 6; j++) {
-      const p = poisson(homeAvg, i) * poisson(awayAvg, j);
+      const baseProb = poisson(homeAvg, i) * poisson(awayAvg, j);
+      const correction = dixonColesCorrection(i, j, homeAvg, awayAvg);
+      const p = baseProb * correction;
+
       if (i > j) home += p;
       else if (i === j) draw += p;
       else away += p;
     }
   }
+
   return { home, draw, away };
 }
 
-// 🔥 Récupère 10 derniers matchs
+// Récupère 10 derniers matchs
 async function fetchTeamLastMatches(teamId: number) {
   const res = await fetch(
     `https://api.football-data.org/v4/teams/${teamId}/matches?status=FINISHED&limit=10`,
@@ -42,26 +58,25 @@ async function fetchTeamLastMatches(teamId: number) {
   return data.matches || [];
 }
 
-// 🔥 Moyennes buts marqués / encaissés avec pondération forme récente
-function calculateWeightedAverages(matches: any[], teamId: number) {
+// Moyennes buts marqués / encaissés avec pondération forme récente
+function calculateAverages(matches: any[], teamId: number) {
   let goalsFor = 0, goalsAgainst = 0;
   let totalWeight = 0;
 
-  // Poids décroissant pour forme récente (les 5 derniers matchs ont plus d'importance)
-  const weights = matches.map((_, idx) =>
-    1 + Math.max(0, 5 - idx) * 0.2
-  ).reverse(); // Inverse pour que les plus récents soient les plus lourds
-
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
-    const weight = weights[i];
+  // Pondération forme récente : derniers matchs ont plus de poids
+  const weights = [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2]; // 10 derniers matchs
+  for (let idx = 0; idx < matches.length; idx++) {
+    const match = matches[idx];
+    const weight = weights[idx] ?? 1;
     const isHome = match.homeTeam.id === teamId;
 
-    const scored = isHome ? match.score.fullTime.home ?? 0 : match.score.fullTime.away ?? 0;
-    const conceded = isHome ? match.score.fullTime.away ?? 0 : match.score.fullTime.home ?? 0;
-
-    goalsFor += scored * weight;
-    goalsAgainst += conceded * weight;
+    if (isHome) {
+      goalsFor += (match.score.fullTime.home ?? 0) * weight;
+      goalsAgainst += (match.score.fullTime.away ?? 0) * weight;
+    } else {
+      goalsFor += (match.score.fullTime.away ?? 0) * weight;
+      goalsAgainst += (match.score.fullTime.home ?? 0) * weight;
+    }
     totalWeight += weight;
   }
 
@@ -71,21 +86,19 @@ function calculateWeightedAverages(matches: any[], teamId: number) {
   };
 }
 
-// 🔹 Pondération ligues
-const leagueWeights: Record<string, number> = {
-  "Premier League": 1.2,
-  "La Liga": 1.2,
-  "Serie A": 1.15,
-  "Bundesliga": 1.15,
-  "Ligue 1": 1.1,
-  default: 1,
-};
+// Pondération ligue (exemple)
+function leagueWeight(leagueName: string): number {
+  const weights: Record<string, number> = {
+    "Premier League": 1.1,
+    "La Liga": 1.05,
+    "Serie A": 1.0,
+    "Bundesliga": 1.0,
+    "Ligue 1": 0.95,
+  };
+  return weights[leagueName] ?? 1;
+}
 
-// 🔹 Pondération domicile / extérieur
-const HOME_ADV = 1.1;
-const AWAY_DISADV = 0.9;
-
-// 🔥 Génération quotidienne des matchs
+// 🔥 Génération quotidienne
 export async function generateDailyMatches() {
   const matches = await fetchTodayMatches();
 
@@ -93,7 +106,7 @@ export async function generateDailyMatches() {
     const homeTeam = match.homeTeam.name;
     const awayTeam = match.awayTeam.name;
 
-    // 🔹 Cache pour stats
+    // Cache pour stats
     const cachedHome = getTeamStats(match.homeTeam.id);
     const cachedAway = getTeamStats(match.awayTeam.id);
 
@@ -103,16 +116,16 @@ export async function generateDailyMatches() {
     if (!cachedHome) setTeamStats(match.homeTeam.id, homeLast);
     if (!cachedAway) setTeamStats(match.awayTeam.id, awayLast);
 
-    // 🔹 Moyennes pondérées forme récente
-    const homeStats = calculateWeightedAverages(homeLast, match.homeTeam.id);
-    const awayStats = calculateWeightedAverages(awayLast, match.awayTeam.id);
+    const homeStats = calculateAverages(homeLast, match.homeTeam.id);
+    const awayStats = calculateAverages(awayLast, match.awayTeam.id);
 
-    // 🔹 Pondération ligue
-    const leagueWeight = leagueWeights[match.competition.name] ?? leagueWeights.default;
+    // 🔹 Pondération domicile / extérieur + poids ligue
+    const homeAdvantage = 1.1; // 10% avantage domicile
+    const awayDisadvantage = 0.9; // 10% désavantage extérieur
+    const leagueCoef = leagueWeight(match.competition.name);
 
-    // 🔹 Expected goals dynamiques avec pondérations domicile/extérieur + ligue
-    const homeExpected = ((homeStats.avgScored * HOME_ADV) + (awayStats.avgConceded * AWAY_DISADV)) / 2 * leagueWeight;
-    const awayExpected = ((awayStats.avgScored * AWAY_DISADV) + (homeStats.avgConceded * HOME_ADV)) / 2 * leagueWeight;
+    const homeExpected = ((homeStats.avgScored * homeAdvantage) + awayStats.avgConceded) / 2 * leagueCoef;
+    const awayExpected = ((awayStats.avgScored * awayDisadvantage) + homeStats.avgConceded) / 2 * leagueCoef;
 
     const probs = calculateProbabilities(homeExpected, awayExpected);
 
@@ -140,14 +153,14 @@ export async function generateDailyMatches() {
     const matchId = insertedData?.[0]?.id;
     if (!matchId) continue;
 
-    // 🔹 Calcul value réel et Over 2.5
+    // 🔥 Calcul value réel + Over 2.5 avec cotes entrées manuellement
     await detectValue(
       matchId,
       homeExpected,
       awayExpected,
-      1.9, // cote Home exemple
-      3.2, // cote Draw exemple
-      4.0  // cote Away exemple
+      1.9, // cote Home (à entrer manuellement)
+      3.2, // cote Draw
+      4.0  // cote Away
     );
   }
-}
+        }
