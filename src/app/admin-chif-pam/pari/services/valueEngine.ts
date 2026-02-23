@@ -5,28 +5,32 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// ✅ Factorial typé correctement
+// Factorial avec cache pour perf
+const factorialCache: Record<number, number> = {};
 function factorial(n: number): number {
-  return n <= 1 ? 1 : n * factorial(n - 1);
+  if (n <= 1) return 1;
+  if (factorialCache[n]) return factorialCache[n];
+  factorialCache[n] = n * factorial(n - 1);
+  return factorialCache[n];
 }
 
-// Poisson pour calcul Over 2.5 ou 1X2
+// Poisson
 function poisson(lambda: number, k: number): number {
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
-// Calcul probabilité Over 2.5
-function over25Prob(homeExpected: number, awayExpected: number): number {
+// Probabilité Over 2.5
+function over25Prob(home: number, away: number): number {
   let probUnder = 0;
   for (let i = 0; i <= 2; i++) {
     for (let j = 0; j <= 2; j++) {
-      probUnder += poisson(homeExpected, i) * poisson(awayExpected, j);
+      probUnder += poisson(home, i) * poisson(away, j);
     }
   }
-  return 1 - probUnder; // probabilité Over 2.5
+  return 1 - probUnder;
 }
 
-// Détection value
+// Détection Value optimisée
 export async function detectValue(
   matchId: number,
   expectedHome: number,
@@ -35,14 +39,9 @@ export async function detectValue(
   bookmakerDraw: number,
   bookmakerAway: number
 ) {
-  const probs = {
-    home: 0,
-    draw: 0,
-    away: 0,
-  };
-
-  for (let i = 0; i < 6; i++) {
-    for (let j = 0; j < 6; j++) {
+  let probs = { home: 0, draw: 0, away: 0 };
+  for (let i = 0; i <= 5; i++) {
+    for (let j = 0; j <= 5; j++) {
       const p = poisson(expectedHome, i) * poisson(expectedAway, j);
       if (i > j) probs.home += p;
       else if (i === j) probs.draw += p;
@@ -50,21 +49,25 @@ export async function detectValue(
     }
   }
 
-  const valueHome = probs.home > 0 && probs.home * bookmakerHome > 1 ? true : false;
-  const valueDraw = probs.draw > 0 && probs.draw * bookmakerDraw > 1 ? true : false;
-  const valueAway = probs.away > 0 && probs.away * bookmakerAway > 1 ? true : false;
-
   const over25 = over25Prob(expectedHome, expectedAway);
 
-  // 🔥 Sauvegarde dans Supabase
-  await supabase
-    .from("pari_predictions")
-    .update({
-      value_detected: valueHome || valueDraw || valueAway,
-      value_home: valueHome,
-      value_draw: valueDraw,
-      value_away: valueAway,
-      over25_prob: over25,
-    })
-    .eq("id", matchId);
+  const valueThreshold = 0.05; // edge minimal pour valider un value bet
+  const valueHome = probs.home * bookmakerHome - 1 > valueThreshold;
+  const valueDraw = probs.draw * bookmakerDraw - 1 > valueThreshold;
+  const valueAway = probs.away * bookmakerAway - 1 > valueThreshold;
+
+  const roiHome = probs.home * bookmakerHome - 1;
+  const roiDraw = probs.draw * bookmakerDraw - 1;
+  const roiAway = probs.away * bookmakerAway - 1;
+
+  await supabase.from("pari_predictions").update({
+    value_detected: valueHome || valueDraw || valueAway,
+    value_home: valueHome,
+    value_draw: valueDraw,
+    value_away: valueAway,
+    over25_prob: over25,
+    roi_home: roiHome,
+    roi_draw: roiDraw,
+    roi_away: roiAway,
+  }).eq("id", matchId);
 }
