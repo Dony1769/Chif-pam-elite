@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { v4 as uuidv4 } from "uuid";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,6 +34,7 @@ export default function CreateTicketPage() {
   const [stake, setStake] = useState<number>(100);
   const [successMessage, setSuccessMessage] = useState<string>("");
 
+  // ⚡ Fetch matchs du jour
   useEffect(() => {
     async function fetchMatches() {
       const today = new Date().toISOString().split("T")[0];
@@ -61,8 +61,8 @@ export default function CreateTicketPage() {
     fetchMatches();
   }, []);
 
+  // ⚡ Sélection d’un résultat
   const handleSelectOutcome = (matchId: string, outcome: "home" | "draw" | "away") => {
-    // Si déjà sélectionné, on remplace
     setSelections((prev) => {
       const filtered = prev.filter((s) => s.matchId !== matchId);
       return [
@@ -72,12 +72,12 @@ export default function CreateTicketPage() {
     });
   };
 
+  // ⚡ Modification des cotes
   const handleOddsChange = (matchId: string, outcome: "home" | "draw" | "away", value: number) => {
     setOddsInput((prev) => ({
       ...prev,
       [matchId]: { ...prev[matchId], [outcome]: value },
     }));
-    // Mise à jour de la sélection si déjà faite
     setSelections((prev) =>
       prev.map((s) =>
         s.matchId === matchId && s.selectedOutcome === outcome
@@ -87,29 +87,34 @@ export default function CreateTicketPage() {
     );
   };
 
+  // ⚡ Création du ticket simple ou combiné
   const handleCreateTicket = async () => {
     if (selections.length === 0) {
-      alert("Veuillez sélectionner au moins un match pour créer le ticket.");
+      alert("Veuillez sélectionner au moins un match.");
       return;
     }
 
     const totalOdds = selections.reduce((acc, s) => acc * s.odds, 1);
-    const ticketId = uuidv4();
 
-    // Création ticket
-    await supabase.from("bets_tickets").insert({
-      id: ticketId,
-      ticket_type: selections.length > 1 ? "combo" : "single",
-      total_odds: totalOdds,
-      stake,
-      potential_win: stake * totalOdds,
-      status: "pending",
-    });
+    // Insertion ticket
+    const { data: ticket } = await supabase
+      .from("bets_tickets")
+      .insert({
+        ticket_type: selections.length > 1 ? "combo" : "single",
+        total_odds: totalOdds,
+        stake,
+        potential_win: stake * totalOdds,
+        status: "pending",
+      })
+      .select()
+      .single();
 
-    // Création sélections
+    if (!ticket) return;
+
+    // Insertion sélections
     for (const s of selections) {
       await supabase.from("bet_selections").insert({
-        ticket_id: ticketId,
+        ticket_id: ticket.id,
         match_id: s.matchId,
         selected_outcome: s.selectedOutcome,
         odds: s.odds,
@@ -123,54 +128,40 @@ export default function CreateTicketPage() {
   return (
     <div style={{ padding: 40 }}>
       <h1>Créer un Ticket</h1>
+      <p>Sélectionnez vos matchs et entrez les cotes.</p>
 
-      <p>Sélectionnez les matchs et entrez vos cotes.</p>
-
-      <div>
-        {matches.map((match) => (
-          <div key={match.id} style={{ border: "1px solid #ccc", padding: 10, marginBottom: 10 }}>
-            <h3>{match.home_team} vs {match.away_team} ({match.league})</h3>
-            <p>
-              Expected Goals: {match.expected_goals_home.toFixed(2)} - {match.expected_goals_away.toFixed(2)}
-            </p>
-            <div style={{ display: "flex", gap: 10 }}>
-              {(["home", "draw", "away"] as const).map((outcome) => (
-                <div key={outcome}>
-                  <label>
-                    {outcome.toUpperCase()} :{" "}
-                    <input
-                      type="number"
-                      min={1.01}
-                      step={0.01}
-                      value={oddsInput[match.id]?.[outcome] || 1.0}
-                      onChange={(e) =>
-                        handleOddsChange(match.id, outcome, parseFloat(e.target.value))
-                      }
-                    />
-                  </label>
-                  <button
-                    style={{ marginLeft: 5 }}
-                    onClick={() => handleSelectOutcome(match.id, outcome)}
-                  >
-                    Jouer {outcome.toUpperCase()}
-                  </button>
-                </div>
-              ))}
-            </div>
+      {matches.map((match) => (
+        <div key={match.id} style={{ border: "1px solid #ccc", padding: 10, marginBottom: 10 }}>
+          <h3>{match.home_team} vs {match.away_team} ({match.league})</h3>
+          <p>Expected Goals: {match.expected_goals_home.toFixed(2)} - {match.expected_goals_away.toFixed(2)}</p>
+          <div style={{ display: "flex", gap: 10 }}>
+            {(["home", "draw", "away"] as const).map((outcome) => (
+              <div key={outcome}>
+                <label>
+                  {outcome.toUpperCase()} :{" "}
+                  <input
+                    type="number"
+                    min={1.01}
+                    step={0.01}
+                    value={oddsInput[match.id]?.[outcome] || 1.0}
+                    onChange={(e) =>
+                      handleOddsChange(match.id, outcome, parseFloat(e.target.value))
+                    }
+                  />
+                </label>
+                <button style={{ marginLeft: 5 }} onClick={() => handleSelectOutcome(match.id, outcome)}>
+                  Jouer {outcome.toUpperCase()}
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
 
       <div style={{ marginTop: 20 }}>
         <label>
           Mise :{" "}
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={stake}
-            onChange={(e) => setStake(parseFloat(e.target.value))}
-          />
+          <input type="number" min={1} step={1} value={stake} onChange={(e) => setStake(parseFloat(e.target.value))} />
         </label>
       </div>
 
@@ -181,4 +172,4 @@ export default function CreateTicketPage() {
       {successMessage && <p style={{ color: "green", marginTop: 10 }}>{successMessage}</p>}
     </div>
   );
-                            }
+}
