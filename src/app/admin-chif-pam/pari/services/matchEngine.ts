@@ -1,5 +1,3 @@
-"use server"; // 🔹 On reste côté serveur pour sécuriser les clés
-
 import { fetchTodayMatches } from "./fetchMatches";
 import { detectValue } from "./valueEngine";
 import { createClient } from "@supabase/supabase-js";
@@ -44,30 +42,50 @@ async function fetchTeamLastMatches(teamId: number) {
   return data.matches || [];
 }
 
-// 🔥 Moyennes buts marqués / encaissés
-function calculateAverages(matches: any[], teamId: number) {
+// 🔥 Moyennes buts marqués / encaissés avec pondération forme récente
+function calculateWeightedAverages(matches: any[], teamId: number) {
   let goalsFor = 0, goalsAgainst = 0;
-  for (const match of matches) {
+  let totalWeight = 0;
+
+  // Poids décroissant pour forme récente (les 5 derniers matchs ont plus d'importance)
+  const weights = matches.map((_, idx) =>
+    1 + Math.max(0, 5 - idx) * 0.2
+  ).reverse(); // Inverse pour que les plus récents soient les plus lourds
+
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const weight = weights[i];
     const isHome = match.homeTeam.id === teamId;
-    if (isHome) {
-      goalsFor += match.score.fullTime.home ?? 0;
-      goalsAgainst += match.score.fullTime.away ?? 0;
-    } else {
-      goalsFor += match.score.fullTime.away ?? 0;
-      goalsAgainst += match.score.fullTime.home ?? 0;
-    }
+
+    const scored = isHome ? match.score.fullTime.home ?? 0 : match.score.fullTime.away ?? 0;
+    const conceded = isHome ? match.score.fullTime.away ?? 0 : match.score.fullTime.home ?? 0;
+
+    goalsFor += scored * weight;
+    goalsAgainst += conceded * weight;
+    totalWeight += weight;
   }
+
   return {
-    avgScored: goalsFor / matches.length || 1,
-    avgConceded: goalsAgainst / matches.length || 1,
+    avgScored: goalsFor / totalWeight || 1,
+    avgConceded: goalsAgainst / totalWeight || 1,
   };
 }
 
-// 🔹 Pondération domicile / extérieur
-const HOME_ADVANTAGE = 1.1; // +10% buts maison
-const AWAY_DISADVANTAGE = 0.9; // -10% buts à l’extérieur
+// 🔹 Pondération ligues
+const leagueWeights: Record<string, number> = {
+  "Premier League": 1.2,
+  "La Liga": 1.2,
+  "Serie A": 1.15,
+  "Bundesliga": 1.15,
+  "Ligue 1": 1.1,
+  default: 1,
+};
 
-// 🔥 Génération quotidienne
+// 🔹 Pondération domicile / extérieur
+const HOME_ADV = 1.1;
+const AWAY_DISADV = 0.9;
+
+// 🔥 Génération quotidienne des matchs
 export async function generateDailyMatches() {
   const matches = await fetchTodayMatches();
 
@@ -85,12 +103,16 @@ export async function generateDailyMatches() {
     if (!cachedHome) setTeamStats(match.homeTeam.id, homeLast);
     if (!cachedAway) setTeamStats(match.awayTeam.id, awayLast);
 
-    const homeStats = calculateAverages(homeLast, match.homeTeam.id);
-    const awayStats = calculateAverages(awayLast, match.awayTeam.id);
+    // 🔹 Moyennes pondérées forme récente
+    const homeStats = calculateWeightedAverages(homeLast, match.homeTeam.id);
+    const awayStats = calculateWeightedAverages(awayLast, match.awayTeam.id);
 
-    // 🔹 Expected goals dynamiques pondérés domicile / extérieur
-    const homeExpected = ((homeStats.avgScored * HOME_ADVANTAGE) + awayStats.avgConceded) / 2;
-    const awayExpected = ((awayStats.avgScored * AWAY_DISADVANTAGE) + homeStats.avgConceded) / 2;
+    // 🔹 Pondération ligue
+    const leagueWeight = leagueWeights[match.competition.name] ?? leagueWeights.default;
+
+    // 🔹 Expected goals dynamiques avec pondérations domicile/extérieur + ligue
+    const homeExpected = ((homeStats.avgScored * HOME_ADV) + (awayStats.avgConceded * AWAY_DISADV)) / 2 * leagueWeight;
+    const awayExpected = ((awayStats.avgScored * AWAY_DISADV) + (homeStats.avgConceded * HOME_ADV)) / 2 * leagueWeight;
 
     const probs = calculateProbabilities(homeExpected, awayExpected);
 
@@ -107,7 +129,7 @@ export async function generateDailyMatches() {
         probability_home: probs.home,
         probability_draw: probs.draw,
         probability_away: probs.away,
-        over25: probs.home + probs.away, // temporaire, update via valueEngine
+        over25: probs.home + probs.away, // valeur temporaire
         mental_score_home: 70,
         mental_score_away: 65,
         value_detected: false,
@@ -128,4 +150,4 @@ export async function generateDailyMatches() {
       4.0  // cote Away exemple
     );
   }
-                           }
+}
