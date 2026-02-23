@@ -1,7 +1,7 @@
 import { fetchTodayMatches } from "./fetchMatches";
 import { detectValue } from "./valueEngine";
 import { createClient } from "@supabase/supabase-js";
-import { getTeamStats, setTeamStats } from "./cache"; // ← notre cache
+import { getTeamStats, setTeamStats } from "./cache";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +14,7 @@ function factorial(n: number): number {
 }
 
 function poisson(lambda: number, k: number): number {
-  return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(n);
+  return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
 function calculateProbabilities(homeAvg: number, awayAvg: number) {
@@ -79,28 +79,26 @@ export async function generateDailyMatches() {
     const homeTeam = match.homeTeam.name;
     const awayTeam = match.awayTeam.name;
 
-    // 🔹 CACHE : récupérer stats si déjà existantes
+    // 🔹 Utilisation cache pour éviter trop de fetch
     const cachedHome = getTeamStats(match.homeTeam.id);
     const cachedAway = getTeamStats(match.awayTeam.id);
 
     const homeLast = cachedHome ?? await fetchTeamLastMatches(match.homeTeam.id);
     const awayLast = cachedAway ?? await fetchTeamLastMatches(match.awayTeam.id);
 
-    // 🔹 Mettre à jour cache si pas déjà présent
     if (!cachedHome) setTeamStats(match.homeTeam.id, homeLast);
     if (!cachedAway) setTeamStats(match.awayTeam.id, awayLast);
 
-    // Stats réelles
     const homeStats = calculateAverages(homeLast, match.homeTeam.id);
     const awayStats = calculateAverages(awayLast, match.awayTeam.id);
 
-    // Expected goals dynamique
+    // 🔥 Expected goals dynamiques
     const homeExpected = (homeStats.avgScored + awayStats.avgConceded) / 2;
     const awayExpected = (awayStats.avgScored + homeStats.avgConceded) / 2;
 
     const probs = calculateProbabilities(homeExpected, awayExpected);
 
-    // 🔥 Insertion initiale Supabase
+    // 🔹 Insertion initiale Supabase
     const { data: insertedData } = await supabase
       .from("pari_predictions")
       .insert({
@@ -113,10 +111,10 @@ export async function generateDailyMatches() {
         probability_home: probs.home,
         probability_draw: probs.draw,
         probability_away: probs.away,
-        over25: probs.home + probs.away, // temporaire
+        over25: probs.home + probs.away, // temporaire, valeur exacte via valueEngine
         mental_score_home: 70,
         mental_score_away: 65,
-        value_detected: false, // update via valueEngine
+        value_detected: false, // sera mis à jour via valueEngine
         risk_level: "MEDIUM",
       })
       .select("id");
@@ -124,14 +122,14 @@ export async function generateDailyMatches() {
     const matchId = insertedData?.[0]?.id;
     if (!matchId) continue;
 
-    // 🔥 Appel valueEngine pour calcul Value + Over 2.5
+    // 🔥 Appel valueEngine pour calculer Value + Over 2.5 réel
     await detectValue(
       matchId,
       homeExpected,
       awayExpected,
-      1.9, // bookmakerHome exemple
-      3.2, // bookmakerDraw exemple
-      4.0 // bookmakerAway exemple
+      1.9, // exemple cote bookmaker Home
+      3.2, // exemple cote Draw
+      4.0  // exemple cote Away
     );
   }
 }
