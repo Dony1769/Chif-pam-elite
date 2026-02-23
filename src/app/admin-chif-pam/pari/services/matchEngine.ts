@@ -1,6 +1,7 @@
 import { fetchTodayMatches } from "./fetchMatches";
 import { detectValue } from "./valueEngine";
 import { createClient } from "@supabase/supabase-js";
+import { getTeamStats, setTeamStats } from "./cache"; // ← notre cache
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +14,7 @@ function factorial(n: number): number {
 }
 
 function poisson(lambda: number, k: number): number {
-  return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
+  return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(n);
 }
 
 function calculateProbabilities(homeAvg: number, awayAvg: number) {
@@ -78,10 +79,18 @@ export async function generateDailyMatches() {
     const homeTeam = match.homeTeam.name;
     const awayTeam = match.awayTeam.name;
 
-    // Stats réelles
-    const homeLast = await fetchTeamLastMatches(match.homeTeam.id);
-    const awayLast = await fetchTeamLastMatches(match.awayTeam.id);
+    // 🔹 CACHE : récupérer stats si déjà existantes
+    const cachedHome = getTeamStats(match.homeTeam.id);
+    const cachedAway = getTeamStats(match.awayTeam.id);
 
+    const homeLast = cachedHome ?? await fetchTeamLastMatches(match.homeTeam.id);
+    const awayLast = cachedAway ?? await fetchTeamLastMatches(match.awayTeam.id);
+
+    // 🔹 Mettre à jour cache si pas déjà présent
+    if (!cachedHome) setTeamStats(match.homeTeam.id, homeLast);
+    if (!cachedAway) setTeamStats(match.awayTeam.id, awayLast);
+
+    // Stats réelles
     const homeStats = calculateAverages(homeLast, match.homeTeam.id);
     const awayStats = calculateAverages(awayLast, match.awayTeam.id);
 
@@ -104,10 +113,10 @@ export async function generateDailyMatches() {
         probability_home: probs.home,
         probability_draw: probs.draw,
         probability_away: probs.away,
-        over25: probs.home + probs.away, // temporaire, calcul réel sera via valueEngine
+        over25: probs.home + probs.away, // temporaire
         mental_score_home: 70,
         mental_score_away: 65,
-        value_detected: false, // initial, update via valueEngine
+        value_detected: false, // update via valueEngine
         risk_level: "MEDIUM",
       })
       .select("id");
