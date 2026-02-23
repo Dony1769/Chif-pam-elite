@@ -13,19 +13,18 @@ function factorial(n: number): number {
   return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
+// Poisson pour 1X2 / Over
 function poisson(lambda: number, k: number): number {
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
+// Calcul 1X2
 function calculateProbabilities(homeAvg: number, awayAvg: number) {
-  let home = 0;
-  let draw = 0;
-  let away = 0;
+  let home = 0, draw = 0, away = 0;
 
   for (let i = 0; i < 6; i++) {
     for (let j = 0; j < 6; j++) {
       const p = poisson(homeAvg, i) * poisson(awayAvg, j);
-
       if (i > j) home += p;
       else if (i === j) draw += p;
       else away += p;
@@ -35,15 +34,11 @@ function calculateProbabilities(homeAvg: number, awayAvg: number) {
   return { home, draw, away };
 }
 
-// 🔥 Récupère 10 derniers matchs d'une équipe
+// 🔥 Récupère 10 derniers matchs
 async function fetchTeamLastMatches(teamId: number) {
   const res = await fetch(
     `https://api.football-data.org/v4/teams/${teamId}/matches?status=FINISHED&limit=10`,
-    {
-      headers: {
-        "X-Auth-Token": process.env.FOOTBALL_API_KEY!,
-      },
-    }
+    { headers: { "X-Auth-Token": process.env.FOOTBALL_API_KEY! } }
   );
   const data = await res.json();
   return data.matches || [];
@@ -51,9 +46,7 @@ async function fetchTeamLastMatches(teamId: number) {
 
 // 🔥 Moyennes buts marqués / encaissés
 function calculateAverages(matches: any[], teamId: number) {
-  let goalsFor = 0;
-  let goalsAgainst = 0;
-
+  let goalsFor = 0, goalsAgainst = 0;
   for (const match of matches) {
     const isHome = match.homeTeam.id === teamId;
     if (isHome) {
@@ -64,14 +57,13 @@ function calculateAverages(matches: any[], teamId: number) {
       goalsAgainst += match.score.fullTime.home ?? 0;
     }
   }
-
   return {
     avgScored: goalsFor / matches.length || 1,
     avgConceded: goalsAgainst / matches.length || 1,
   };
 }
 
-// 🔥 Génération quotidienne des matchs
+// 🔥 Génération quotidienne
 export async function generateDailyMatches() {
   const matches = await fetchTodayMatches();
 
@@ -79,7 +71,7 @@ export async function generateDailyMatches() {
     const homeTeam = match.homeTeam.name;
     const awayTeam = match.awayTeam.name;
 
-    // 🔹 Utilisation cache pour éviter trop de fetch
+    // 🔹 Cache pour stats
     const cachedHome = getTeamStats(match.homeTeam.id);
     const cachedAway = getTeamStats(match.awayTeam.id);
 
@@ -111,10 +103,10 @@ export async function generateDailyMatches() {
         probability_home: probs.home,
         probability_draw: probs.draw,
         probability_away: probs.away,
-        over25: probs.home + probs.away, // temporaire, valeur exacte via valueEngine
+        over25: probs.home + probs.away, // valeur temporaire, update via valueEngine
         mental_score_home: 70,
         mental_score_away: 65,
-        value_detected: false, // sera mis à jour via valueEngine
+        value_detected: false, // sera calculé
         risk_level: "MEDIUM",
       })
       .select("id");
@@ -122,14 +114,14 @@ export async function generateDailyMatches() {
     const matchId = insertedData?.[0]?.id;
     if (!matchId) continue;
 
-    // 🔥 Appel valueEngine pour calculer Value + Over 2.5 réel
+    // 🔥 Calcul value réel et Over 2.5
     await detectValue(
       matchId,
       homeExpected,
       awayExpected,
-      1.9, // exemple cote bookmaker Home
-      3.2, // exemple cote Draw
-      4.0  // exemple cote Away
+      1.9, // cote Home exemple
+      3.2, // cote Draw exemple
+      4.0  // cote Away exemple
     );
   }
 }
