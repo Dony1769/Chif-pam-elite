@@ -5,46 +5,66 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Calcul Poisson pour Over 2.5
-export function calculateOver25(homeAvg: number, awayAvg: number) {
-  let prob = 0;
-
-  for (let i = 0; i <= 5; i++) {
-    for (let j = 0; j <= 5; j++) {
-      if (i + j > 2) {
-        prob += (Math.pow(homeAvg, i) * Math.exp(-homeAvg) / factorial(i)) *
-                (Math.pow(awayAvg, j) * Math.exp(-awayAvg) / factorial(j));
-      }
-    }
-  }
-  return prob;
-}
-
-function factorial(n: number) {
+// ✅ Factorial typé correctement
+function factorial(n: number): number {
   return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
-// Détecter value bet
-export function detectValue(probReal: number, bookmakerOdd: number, threshold = 0.08) {
-  const implied = 1 / bookmakerOdd; // Cote => probabilité implicite
-  const diff = probReal - implied;
-  return {
-    value: diff > threshold,
-    diff,
-  };
+// Poisson pour calcul Over 2.5 ou 1X2
+function poisson(lambda: number, k: number): number {
+  return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
-// Stocker value dans Supabase
-export async function updateValueBet(matchId: number, probHome: number, probDraw: number, probAway: number, over25: number, odds: {home:number,draw:number,away:number,over25:number}) {
-  const homeValue = detectValue(probHome, odds.home);
-  const drawValue = detectValue(probDraw, odds.draw);
-  const awayValue = detectValue(probAway, odds.away);
-  const overValue = detectValue(over25, odds.over25);
+// Calcul probabilité Over 2.5
+function over25Prob(homeExpected: number, awayExpected: number): number {
+  let probUnder = 0;
+  for (let i = 0; i <= 2; i++) {
+    for (let j = 0; j <= 2; j++) {
+      probUnder += poisson(homeExpected, i) * poisson(awayExpected, j);
+    }
+  }
+  return 1 - probUnder; // probabilité Over 2.5
+}
 
-  await supabase.from("pari_predictions").update({
-    value_home: homeValue.value,
-    value_draw: drawValue.value,
-    value_away: awayValue.value,
-    value_over25: overValue.value
-  }).eq("id", matchId);
+// Détection value
+export async function detectValue(
+  matchId: number,
+  expectedHome: number,
+  expectedAway: number,
+  bookmakerHome: number,
+  bookmakerDraw: number,
+  bookmakerAway: number
+) {
+  const probs = {
+    home: 0,
+    draw: 0,
+    away: 0,
+  };
+
+  for (let i = 0; i < 6; i++) {
+    for (let j = 0; j < 6; j++) {
+      const p = poisson(expectedHome, i) * poisson(expectedAway, j);
+      if (i > j) probs.home += p;
+      else if (i === j) probs.draw += p;
+      else probs.away += p;
+    }
+  }
+
+  const valueHome = probs.home > 0 && probs.home * bookmakerHome > 1 ? true : false;
+  const valueDraw = probs.draw > 0 && probs.draw * bookmakerDraw > 1 ? true : false;
+  const valueAway = probs.away > 0 && probs.away * bookmakerAway > 1 ? true : false;
+
+  const over25 = over25Prob(expectedHome, expectedAway);
+
+  // 🔥 Sauvegarde dans Supabase
+  await supabase
+    .from("pari_predictions")
+    .update({
+      value_detected: valueHome || valueDraw || valueAway,
+      value_home: valueHome,
+      value_draw: valueDraw,
+      value_away: valueAway,
+      over25_prob: over25,
+    })
+    .eq("id", matchId);
 }
