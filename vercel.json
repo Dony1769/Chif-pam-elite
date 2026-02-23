@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/generate-pari",
+      "schedule": "0 13 * * *"
+    }
+  ]
+}
