@@ -1,3 +1,4 @@
+// ⚡ Next.js Server Component (pas de "use client")
 import { createClient } from "@supabase/supabase-js";
 
 interface Match {
@@ -18,6 +19,7 @@ interface Match {
   over25_prob?: number;
 }
 
+// Création du client Supabase côté serveur
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -41,13 +43,12 @@ export default async function AnalysePage() {
     );
   }
 
-  const matches = (data as Match[]) || [];
+  const matches: Match[] = data ?? [];
 
   return (
-    <div style={{ padding: "40px" }}>
-      <h1>Analyse des matchs du jour</h1>
-
-      <p>
+    <div style={{ padding: 40 }}>
+      <h1 style={{ marginBottom: 20 }}>Analyse des matchs du jour</h1>
+      <p style={{ marginBottom: 30 }}>
         Probabilités calculées via distribution de Poisson avec expected goals dynamiques.
       </p>
 
@@ -57,44 +58,35 @@ export default async function AnalysePage() {
         <div
           key={match.id}
           style={{
-            marginBottom: "25px",
-            padding: "15px",
+            marginBottom: 25,
+            padding: 15,
             border: "1px solid #ccc",
-            borderRadius: "8px",
+            borderRadius: 8,
+            background: "#1e293b",
+            color: "white",
           }}
         >
-          <h3>
-            {match.home_team} vs {match.away_team}
-          </h3>
-
+          <h3>{match.home_team} vs {match.away_team}</h3>
           <p>Ligue : {match.league}</p>
 
           <p>
-            Probabilités :
-            Domicile {(match.probability_home * 100).toFixed(1)}% |
-            Nul {(match.probability_draw * 100).toFixed(1)}% |
+            Probabilités : Domicile {(match.probability_home * 100).toFixed(1)}% | 
+            Nul {(match.probability_draw * 100).toFixed(1)}% | 
             Extérieur {(match.probability_away * 100).toFixed(1)}%
           </p>
 
           <p>
-            Expected Goals :
-            {match.expected_goals_home.toFixed(2)} -
-            {match.expected_goals_away.toFixed(2)}
+            Expected Goals : {match.expected_goals_home.toFixed(2)} - {match.expected_goals_away.toFixed(2)}
           </p>
 
-          <p>
-            Value détectée :
-            {match.value_detected ? " ✅ Oui" : " ❌ Non"}
-          </p>
+          <p>Value détectée : {match.value_detected ? "✅ Oui" : "❌ Non"}</p>
 
-          {match.value_home && <p>🔥 Value Home</p>}
-          {match.value_draw && <p>🔥 Value Draw</p>}
-          {match.value_away && <p>🔥 Value Away</p>}
+          {match.value_home && <p style={{ color: "#10b981" }}>🔥 Value Home</p>}
+          {match.value_draw && <p style={{ color: "#facc15" }}>🔥 Value Draw</p>}
+          {match.value_away && <p style={{ color: "#f43f5e" }}>🔥 Value Away</p>}
 
           {match.over25_prob !== undefined && (
-            <p>
-              Over 2.5 : {(match.over25_prob * 100).toFixed(1)}%
-            </p>
+            <p>Over 2.5 : {(match.over25_prob * 100).toFixed(1)}%</p>
           )}
         </div>
       ))}
