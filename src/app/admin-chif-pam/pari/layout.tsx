@@ -1,22 +1,29 @@
+"use client"; // ⚡ IMPORTANT : active le mode client
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import React from "react";
 
-export default function PariLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+export default function PariLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname(); // ✅ fonctionne maintenant
 
-  // Fonction pour mettre en surbrillance le lien actif
-  const isActive = (path: string) => pathname === path;
-
-  const links = [
-    { label: "Dashboard", path: "/pari" },
-    { label: "Analyse", path: "/pari/analyse" },
-    { label: "Psychologie", path: "/pari/psychologie" },
-    { label: "Créer Ticket", path: "/pari/create-ticket" },
-    { label: "Historique", path: "/pari/historique" },
-  ];
+  // Pour styliser le lien actif
+  const linkStyle = (href: string) => ({
+    color: pathname === href ? "#10b981" : "white",
+    textDecoration: "none",
+    padding: "5px 10px",
+    borderRadius: 5,
+    background: pathname === href ? "#1e293b" : "transparent",
+    display: "block",
+  });
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0f172a", color: "white" }}>
+      
       {/* Sidebar */}
       <aside
         style={{
@@ -24,29 +31,16 @@ export default function PariLayout({ children }: { children: React.ReactNode }) 
           padding: 20,
           borderRight: "1px solid #1e293b",
           background: "#0b1220",
-          display: "flex",
-          flexDirection: "column",
         }}
       >
         <h2 style={{ marginBottom: 30 }}>🎯 Betting Engine</h2>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {links.map((link) => (
-            <Link
-              key={link.path}
-              href={link.path}
-              style={{
-                padding: "10px 15px",
-                borderRadius: 8,
-                textDecoration: "none",
-                color: isActive(link.path) ? "#0f172a" : "white",
-                background: isActive(link.path) ? "#38bdf8" : "transparent",
-                transition: "all 0.2s ease",
-              }}
-            >
-              {link.label}
-            </Link>
-          ))}
+          <Link href="/pari" style={linkStyle("/pari")}>Dashboard</Link>
+          <Link href="/pari/analyse" style={linkStyle("/pari/analyse")}>Analyse</Link>
+          <Link href="/pari/psychologie" style={linkStyle("/pari/psychologie")}>Psychologie</Link>
+          <Link href="/pari/create-ticket" style={linkStyle("/pari/create-ticket")}>Créer Ticket</Link>
+          <Link href="/pari/historique" style={linkStyle("/pari/historique")}>Historique</Link>
         </nav>
       </aside>
 
