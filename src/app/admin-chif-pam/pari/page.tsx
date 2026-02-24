@@ -1,3 +1,4 @@
+import Link from "next/link";
 export default function PariDashboard() {
   return (
     <div>
@@ -20,9 +21,10 @@ export default function PariDashboard() {
   );
 }
 
+
 function Card({ title, link }: { title: string; link: string }) {
   return (
-    <a
+    <Link
       href={link}
       style={{
         padding: 20,
@@ -30,9 +32,10 @@ function Card({ title, link }: { title: string; link: string }) {
         borderRadius: 10,
         textDecoration: "none",
         color: "white",
+        display: "block",
       }}
     >
       <h3>{title}</h3>
-    </a>
+    </Link>
   );
 }
