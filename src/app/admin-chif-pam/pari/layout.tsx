@@ -1,3 +1,4 @@
+import Link from "next/link";
 export default function PariLayout({
   children,
 }: {
@@ -18,12 +19,12 @@ export default function PariLayout({
         <h2 style={{ marginBottom: 30 }}>🎯 Betting Engine</h2>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-          <a href="/pari">Dashboard</a>
-          <a href="/pari/analyse">Analyse</a>
-          <a href="/pari/psychologie">Psychologie</a>
-          <a href="/pari/create-ticket">Créer Ticket</a>
-          <a href="/pari/historique">Historique</a>
-        </nav>
+  <Link href="/pari">Dashboard</Link>
+  <Link href="/pari/analyse">Analyse</Link>
+  <Link href="/pari/psychologie">Psychologie</Link>
+  <Link href="/pari/create-ticket">Créer Ticket</Link>
+  <Link href="/pari/historique">Historique</Link>
+</nav>
       </aside>
 
       {/* Content */}
