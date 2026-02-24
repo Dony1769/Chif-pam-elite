@@ -1,25 +1,38 @@
-import { createClient } from "@supabase/supabase-js";
-
-export default async function PariDashboard() {
+export default function PariDashboard() {
   return (
-    <div style={{ padding: "40px" }}>
+    <div>
       <h1>Admin - Système de Paris</h1>
 
-      <p>
-        Cette section génère automatiquement 10 matchs par jour avec analyse
-        statistique (Poisson), score mental et détection de value.
-      </p>
-
-      <ul>
-        <li>Analyse des probabilités</li>
-        <li>Score psychologique des équipes</li>
-        <li>Détection value bet</li>
-        <li>Historique complet</li>
-      </ul>
-
-      <p>
-        Les données sont stockées dans Supabase et protégées par rôle admin.
-      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 20,
+          marginTop: 30,
+        }}
+      >
+        <Card title="Analyse" link="/pari/analyse" />
+        <Card title="Psychologie" link="/pari/psychologie" />
+        <Card title="Créer Ticket" link="/pari/create-ticket" />
+        <Card title="Historique" link="/pari/historique" />
+      </div>
     </div>
+  );
+}
+
+function Card({ title, link }: { title: string; link: string }) {
+  return (
+    <a
+      href={link}
+      style={{
+        padding: 20,
+        background: "#1e293b",
+        borderRadius: 10,
+        textDecoration: "none",
+        color: "white",
+      }}
+    >
+      <h3>{title}</h3>
+    </a>
   );
 }
