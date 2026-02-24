@@ -1,4 +1,3 @@
-import Link from "next/link";
 export default function PariDashboard() {
   return (
     <div>
@@ -21,7 +20,7 @@ export default function PariDashboard() {
   );
 }
 
-
+import Link from "next/link";
 function Card({ title, link }: { title: string; link: string }) {
   return (
     <Link
