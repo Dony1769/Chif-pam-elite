@@ -1,12 +1,17 @@
+"use client"; // ⚡ Next.js client component
+
+import Link from "next/link";
+import React from "react";
+
 export default function PariDashboard() {
   return (
-    <div>
+    <div style={{ padding: 40 }}>
       <h1>Admin - Système de Paris</h1>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
           gap: 20,
           marginTop: 30,
         }}
@@ -20,7 +25,6 @@ export default function PariDashboard() {
   );
 }
 
-import Link from "next/link";
 function Card({ title, link }: { title: string; link: string }) {
   return (
     <Link
@@ -32,9 +36,10 @@ function Card({ title, link }: { title: string; link: string }) {
         textDecoration: "none",
         color: "white",
         display: "block",
+        transition: "all 0.2s",
       }}
     >
-      <h3>{title}</h3>
+      <h3 style={{ margin: 0 }}>{title}</h3>
     </Link>
   );
 }
