@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { supabaseClient } from "@/lib/supabase-client";
-
-const supabase = supabaseClient;
 
 interface BetSelection {
   id: string;
@@ -12,7 +9,7 @@ interface BetSelection {
   match_id: string;
   selected_outcome: "home" | "draw" | "away";
   odds: number;
-  result?: "home" | "draw" | "away"; // optionnel, à remplir si match joué
+  result?: "home" | "draw" | "away";
 }
 
 interface BetTicket {
@@ -33,37 +30,34 @@ export default function HistoriquePage() {
 
   useEffect(() => {
     async function fetchTickets() {
-      // 🔹 Récupère les tickets
-      const { data: ticketsData, error: ticketsError } = await supabase
-        .from("bets_tickets")
-        .select("*")
-        .order("created_at", { ascending: false });
+      try {
+        // 🔹 Récupération tickets
+        const { data: ticketsData, error: ticketsError } = await supabaseClient
+          .from("bets_tickets")
+          .select("*")
+          .order("created_at", { ascending: false });
 
-      if (ticketsError) {
-        console.error("Erreur tickets:", ticketsError.message);
+        if (ticketsError) throw ticketsError;
+
+        // 🔹 Récupération sélections
+        const { data: selectionsData, error: selectionsError } = await supabaseClient
+          .from("bet_selections")
+          .select("*");
+
+        if (selectionsError) throw selectionsError;
+
+        // 🔹 Association sélections → tickets
+        const ticketsWithSelections = ticketsData!.map((ticket) => ({
+          ...ticket,
+          selections: selectionsData!.filter((s) => s.ticket_id === ticket.id),
+        }));
+
+        setTickets(ticketsWithSelections);
+      } catch (error: any) {
+        console.error("Erreur récupération:", error.message);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      // 🔹 Récupère toutes les sélections associées
-      const { data: selectionsData, error: selectionsError } = await supabase
-        .from("bet_selections")
-        .select("*");
-
-      if (selectionsError) {
-        console.error("Erreur sélections:", selectionsError.message);
-        setLoading(false);
-        return;
-      }
-
-      // 🔹 Associe les sélections à leurs tickets
-      const ticketsWithSelections = ticketsData!.map((ticket) => ({
-        ...ticket,
-        selections: selectionsData!.filter((s) => s.ticket_id === ticket.id),
-      }));
-
-      setTickets(ticketsWithSelections);
-      setLoading(false);
     }
 
     fetchTickets();
@@ -71,7 +65,7 @@ export default function HistoriquePage() {
 
   if (loading) return <div style={{ padding: 40 }}>Chargement...</div>;
 
-  // 🔹 Stats globales
+  // 🔹 Statistiques globales
   const totalStake = tickets.reduce((acc, t) => acc + Number(t.stake), 0);
   const totalProfit = tickets.reduce((acc, t) => acc + Number(t.total_profit), 0);
   const roi = totalStake ? (totalProfit / totalStake) * 100 : 0;
@@ -81,30 +75,32 @@ export default function HistoriquePage() {
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>Historique des Paris</h1>
+      <h1 style={{ marginBottom: 20 }}>Historique des Paris</h1>
 
-      <p>Total misé : {totalStake}</p>
-      <p>Profit total : {totalProfit}</p>
-      <p>ROI : {roi.toFixed(2)}%</p>
-      <p>Nombre de paris : {totalBets}</p>
-      <p>Taux de réussite : {winRate.toFixed(2)}%</p>
+      <div style={{ marginBottom: 30 }}>
+        <p>Total misé : <strong>{totalStake}</strong></p>
+        <p>Profit total : <strong>{totalProfit}</strong></p>
+        <p>ROI : <strong>{roi.toFixed(2)}%</strong></p>
+        <p>Nombre de paris : <strong>{totalBets}</strong></p>
+        <p>Taux de réussite : <strong>{winRate.toFixed(2)}%</strong></p>
+      </div>
 
       {tickets.map((ticket) => (
         <div
           key={ticket.id}
           style={{
             marginBottom: 20,
-            padding: 10,
+            padding: 15,
             border: "1px solid #ccc",
-            borderRadius: 6,
+            borderRadius: 8,
+            backgroundColor: "#0f172a",
+            color: "white",
           }}
         >
-          <p>
-            <strong>Ticket :</strong> {ticket.ticket_type.toUpperCase()}
-          </p>
+          <p><strong>Ticket :</strong> {ticket.ticket_type.toUpperCase()}</p>
           <p>Cote totale : {ticket.total_odds}</p>
           <p>Mise : {ticket.stake}</p>
-          <p>Status : {ticket.status}</p>
+          <p>Status : {ticket.status.toUpperCase()}</p>
           <p>Profit : {ticket.total_profit}</p>
           <p>Potentiel gain : {ticket.potential_win}</p>
 
@@ -116,27 +112,20 @@ export default function HistoriquePage() {
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  padding: "4px 0",
+                  marginTop: 4,
+                  padding: "4px 8px",
+                  borderRadius: 4,
                   backgroundColor:
                     sel.result === sel.selected_outcome
-                      ? "#d4edda" // vert si gagné
+                      ? "#065f46" // vert si gagné
                       : sel.result
-                      ? "#f8d7da" // rouge si perdu
-                      : "transparent", // neutre si non joué
-                  borderRadius: 4,
-                  paddingLeft: 6,
-                  paddingRight: 6,
+                      ? "#7f1d1d" // rouge si perdu
+                      : "#1e293b", // neutre si non joué
                 }}
               >
                 <span>Match ID : {sel.match_id}</span>
-                <span>
-                  Sélection : {sel.selected_outcome.toUpperCase()} | Cote :{" "}
-                  {sel.odds}
-                </span>
-                <span>
-                  Résultat :{" "}
-                  {sel.result ? sel.result.toUpperCase() : "Non joué"}
-                </span>
+                <span>Sélection : {sel.selected_outcome.toUpperCase()} | Cote : {sel.odds}</span>
+                <span>Résultat : {sel.result ? sel.result.toUpperCase() : "Non joué"}</span>
               </div>
             ))}
           </div>
