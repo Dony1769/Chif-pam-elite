@@ -261,7 +261,7 @@ export default function PariDashboard() {
             <span className={`text-[10px] ${pathname === '/pari/historique' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Calendrier</span>
           </Link>
 
-          <Link href="/analyse" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
+          <Link href="/admin-chif-pam/pari/analyse" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/analyse' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
               <Search className={`w-6 h-6 ${pathname === '/pari/analyse' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
