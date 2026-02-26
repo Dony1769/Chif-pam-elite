@@ -1,7 +1,8 @@
+// server-supabase.ts
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-// On exporte directement une fonction pour créer le client côté server
+// Export direct d'une fonction avec le nom cohérent pour toutes tes pages
 export function supabaseServer() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
