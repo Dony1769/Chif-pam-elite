@@ -240,28 +240,28 @@ export default function PariDashboard() {
       <nav className={`fixed bottom-0 left-0 right-0 z-50 transition-colors duration-300 pb-safe ${isDark ? 'glass-strong border-t border-white/5' : 'bg-white/90 backdrop-blur-md border-t border-gray-200 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]'}`}>
         <div className="flex items-center justify-around py-2 px-2">
           
-          <Link href="admin-chif-pam/pari/dashboard" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
+          <Link href="/dashboard" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
               <LayoutGrid className={`w-6 h-6 ${pathname === '/pari' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
             <span className={`text-[10px] ${pathname === '/pari' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Libre</span>
           </Link>
 
-          <Link href="admin-chif-pam/pari/create-ticket" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
+          <Link href="/create-ticket" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/create-ticket' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
               <FileText className={`w-6 h-6 ${pathname === '/pari/create-ticket' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
             <span className={`text-[10px] ${pathname === '/pari/create-ticket' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Fiche</span>
           </Link>
 
-          <Link href="admin-chif-pam/pari/historique" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
+          <Link href="/historique" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/historique' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
               <CalendarDays className={`w-6 h-6 ${pathname === '/pari/historique' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
             <span className={`text-[10px] ${pathname === '/pari/historique' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Calendrier</span>
           </Link>
 
-          <Link href="admin-chif-pam/pari/analyse" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
+          <Link href="/analyse" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/analyse' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
               <Search className={`w-6 h-6 ${pathname === '/pari/analyse' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
