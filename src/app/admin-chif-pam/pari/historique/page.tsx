@@ -1,5 +1,5 @@
 import React from 'react';
-import { supabaseServer } from '@/lib/supabase-client';
+import { supabaseClient } from '@/lib/supabase-client';
 import HistoryClient from './HistoryClient';
 
 export const dynamic = 'force-dynamic'; // Force la mise à jour à chaque visite
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'; // Force la mise à jour à chaque visit
 export default async function HistoriquePage() {
   // Récupération des tickets de l'utilisateur avec leurs sélections (Relation One-to-Many)
   // Note: Si RLS est activé, supabase-client ne remontera que les tickets du user connecté
-  const { data: tickets, error } = await supabaseServer
+  const { data: tickets, error } = await supabaseClient
     .from('bets_tickets')
     .select(`
       *,
