@@ -1,5 +1,5 @@
 import React from 'react';
-import { supabase } from '@/lib/server-supabase';
+import { supabaseServer } from '@/lib/server-supabase';
 import TicketBuilder from './TicketBuilder';
 
 export const dynamic = 'force-dynamic'; // Force le rafraîchissement des données
