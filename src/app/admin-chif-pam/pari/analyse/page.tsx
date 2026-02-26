@@ -1,5 +1,5 @@
 import React from 'react';
-import { createServerSupabase } from '@/lib/server-supabase';
+import { SupabaseServer } from '@/lib/server-supabase';
 import { 
   BarChart3, 
   Target, 
@@ -58,7 +58,7 @@ export default async function AnalysePage() {
   const today = new Date().toISOString();
 
   // 2. Requête Supabase Server-Side
-  const { data: matches, error } = await createServerSupabase
+  const { data: matches, error } = await SupabaseServer
   .from('pari_predictions')
   .select('*')
     .gte('match_date', today)
