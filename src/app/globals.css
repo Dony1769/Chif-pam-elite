@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* -----------------------------------------------------------
+   VARIABLES & THÈME DE BASE (CHIF-PAM)
+----------------------------------------------------------- */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -27,6 +30,58 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
+}
+
+/* -----------------------------------------------------------
+   NOUVELLES UTILITAIRES (DASHBOARD PARI / GLASSMORPHISM)
+----------------------------------------------------------- */
+@layer utilities {
+  /* Effets Glassmorphism */
+  .glass {
+    @apply bg-white/5 backdrop-blur-[20px] border border-white/10;
+  }
+  
+  .glass-strong {
+    @apply bg-[#12121a]/80 backdrop-blur-[30px] border border-white/10;
+  }
+  
+  /* Effets Néon */
+  .neon-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-[#00f5ff] via-[#bf00ff] to-[#ff00d4];
+  }
+  
+  .neon-underline {
+    position: relative;
+  }
+  
+  .neon-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, #00f5ff, #bf00ff, #ff00d4);
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(0, 245, 255, 0.5), 0 0 20px rgba(191, 0, 255, 0.3);
+  }
+
+  /* Logique de Swipe (Carousel) */
+  .swipe-container {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+  }
+  
+  .swipe-container::-webkit-scrollbar {
+    display: none; /* Masque la scrollbar spécifiquement pour le carousel */
+  }
+  
+  .swipe-card {
+    scroll-snap-align: center;
+    flex-shrink: 0;
+  }
 }
 
 /* -----------------------------------------------------------
@@ -76,7 +131,9 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Custom Scrollbar pour le look Premium */
+/* -----------------------------------------------------------
+   CUSTOM SCROLLBAR GLOBAL
+----------------------------------------------------------- */
 ::-webkit-scrollbar {
   width: 5px;
 }
