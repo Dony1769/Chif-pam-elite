@@ -119,7 +119,7 @@ export default function PariDashboard() {
         </button>
 
         <Link
-          href="/admin-chifpam/dashboard"
+          href="/admin-chif-pam/dashboard"
           className={`p-2 rounded-full transition-all ${isDarkMode ? "bg-white/10 hover:bg-white/20 text-white" : "bg-slate-200 hover:bg-slate-300 text-slate-900"}`}
         >
           <Home size={20} />
