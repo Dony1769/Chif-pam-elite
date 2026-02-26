@@ -8,7 +8,7 @@ import {
   Target, TrendingUp, Wallet, CheckCircle2, LayoutGrid, Search, FileText 
 } from "lucide-react";
 
-// --- TYPES (Basés sur ton architecture BDD) ---
+// --- TYPES ---
 interface PredictionMatch {
   id: string;
   home_team: string;
@@ -55,45 +55,41 @@ export default function PariDashboard() {
   const swipeContainerRef = useRef<HTMLDivElement>(null);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
 
-  // Gestion du thème
-  useEffect(() => {
-    if (isDark) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-  }, [isDark]);
-
   // Détection du scroll pour les dots du carrousel
   const handleScroll = () => {
     if (!swipeContainerRef.current) return;
     const container = swipeContainerRef.current;
     const scrollPosition = container.scrollLeft;
-    const cardWidth = container.offsetWidth * 0.85; // 85% width based on CSS
+    // On calcule la largeur de la carte + le gap pour trouver l'index
+    const cardWidth = container.offsetWidth * 0.85; 
     const newIndex = Math.round(scrollPosition / cardWidth);
     setActiveCardIndex(newIndex);
   };
 
   return (
-    <div className="h-full font-inter bg-dark-bg text-white overflow-x-hidden min-h-screen pb-24">
+    // CONTENEUR PRINCIPAL : Changement dynamique des couleurs de fond
+    <div className={`h-full font-inter overflow-x-hidden min-h-screen pb-24 transition-colors duration-500 ${isDark ? 'bg-[#0a0a0f] text-white' : 'bg-gray-50 text-gray-900'}`}>
       
-      {/* Background Anime */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-neon-cyan/10 via-transparent to-transparent rounded-full blur-3xl animate-float" />
-        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-neon-purple/10 via-transparent to-transparent rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
+      {/* Background Anime (Visible surtout en mode sombre) */}
+      <div className={`fixed inset-0 pointer-events-none overflow-hidden z-0 transition-opacity duration-500 ${isDark ? 'opacity-100' : 'opacity-30'}`}>
+        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-purple-500/10 via-transparent to-transparent rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
       </div>
 
       {/* --- HEADER --- */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass-strong">
+      <header className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${isDark ? 'glass-strong' : 'bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm'}`}>
         <div className="flex items-center justify-between px-4 py-3">
-          <button onClick={() => setIsDark(!isDark)} className="relative w-12 h-12 rounded-xl glass flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 group">
-            {isDark ? <Moon className="w-6 h-6 text-neon-cyan" /> : <Sun className="w-6 h-6 text-yellow-400" />}
+          <button onClick={() => setIsDark(!isDark)} className={`relative w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${isDark ? 'glass' : 'bg-gray-100'}`}>
+            {isDark ? <Sun className="w-6 h-6 text-yellow-400" /> : <Moon className="w-6 h-6 text-indigo-600" />}
           </button>
           
           <div className="flex flex-col items-center">
-            <span className="font-orbitron text-lg font-bold neon-text tracking-wider">BETIX</span>
+            <span className={`font-orbitron text-lg font-bold tracking-wider ${isDark ? 'neon-text' : 'bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600'}`}>BETIX</span>
             <span className="text-[10px] text-gray-500 tracking-[0.3em]">ANALYTICS</span>
           </div>
 
-          <Link href="/admin-chifpam/dashboard" className="relative w-12 h-12 rounded-xl glass flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 group">
-            <Home className="w-6 h-6 text-white/80 group-hover:text-neon-cyan transition-colors duration-300" />
+          <Link href="/admin-chifpam/dashboard" className={`relative w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${isDark ? 'glass' : 'bg-gray-100'}`}>
+            <Home className={`w-6 h-6 transition-colors duration-300 ${isDark ? 'text-white/80 hover:text-cyan-400' : 'text-gray-600 hover:text-indigo-600'}`} />
           </Link>
         </div>
       </header>
@@ -101,29 +97,34 @@ export default function PariDashboard() {
       {/* --- MAIN CONTENT --- */}
       <main className="relative z-10 flex-1 overflow-y-auto pt-24 px-4 space-y-8">
         
-        {/* CAROUSEL MATCHS (pari_predictions) */}
+        {/* CAROUSEL MATCHS */}
         <section className="animate-slide-in" style={{ animationDelay: '0.1s' }}>
           <div className="mb-6">
-            <h2 className="font-orbitron text-xl font-bold neon-underline inline-block">Match of the day</h2>
+            <h2 className={`font-orbitron text-xl font-bold inline-block ${isDark ? 'neon-underline' : 'border-b-4 border-indigo-500 pb-1'}`}>
+              Match of the day
+            </h2>
           </div>
 
+          {/* CONTENEUR SWIPEABLE (Correction Tailwind) */}
           <div 
             ref={swipeContainerRef}
             onScroll={handleScroll}
-            className="swipe-container flex gap-4 pb-4 -mx-4 px-4"
+            className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 -mx-4 px-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           >
             {TOP_MATCHES.map((match, idx) => (
-              <div key={match.id} className="swipe-card w-[85%] min-w-[280px] max-w-[340px]">
-                <div className={`glass rounded-2xl p-5 ${idx === 0 ? 'animate-glow-pulse' : ''}`}>
+              <div key={match.id} className="snap-center shrink-0 w-[85%] sm:w-[320px] max-w-[340px]">
+                {/* Carte Individuelle */}
+                <div className={`rounded-2xl p-5 transition-colors duration-300 ${isDark ? 'glass ' + (idx === 0 ? 'animate-glow-pulse' : '') : 'bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-gray-100'}`}>
+                  
                   {/* Badge Ligue & Live */}
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-xs">{match.flag}</div>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs ${isDark ? 'bg-white/10' : 'bg-gray-100'}`}>{match.flag}</div>
                     <div>
-                      <p className="text-xs text-gray-400">{match.league}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{match.league}</p>
                     </div>
                     {match.isLive && (
-                      <div className="ml-auto px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
-                        <span className="text-[10px] text-red-400 font-medium">● LIVE</span>
+                      <div className="ml-auto px-2 py-1 rounded-full bg-red-500/10 border border-red-500/20">
+                        <span className="text-[10px] text-red-500 font-bold">● LIVE</span>
                       </div>
                     )}
                   </div>
@@ -131,44 +132,46 @@ export default function PariDashboard() {
                   {/* Equipes */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex flex-col items-center gap-2">
-                      <div className="w-16 h-16 rounded-xl glass flex items-center justify-center font-orbitron font-bold">{match.home_team.substring(0,3).toUpperCase()}</div>
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-orbitron font-bold text-lg ${isDark ? 'glass' : 'bg-gray-50 border border-gray-200'}`}>
+                        {match.home_team.substring(0,3).toUpperCase()}
+                      </div>
                       <span className="text-sm font-semibold">{match.home_team}</span>
                     </div>
+                    
                     <div className="flex flex-col items-center">
-                      <div className="text-2xl font-orbitron font-bold neon-text">VS</div>
-                      <div className="text-xs text-gray-500 mt-1">{match.time}</div>
+                      <div className={`text-2xl font-orbitron font-bold ${isDark ? 'neon-text' : 'text-indigo-600'}`}>VS</div>
+                      <div className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{match.time}</div>
                     </div>
+                    
                     <div className="flex flex-col items-center gap-2">
-                      <div className="w-16 h-16 rounded-xl glass flex items-center justify-center font-orbitron font-bold">{match.away_team.substring(0,3).toUpperCase()}</div>
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-orbitron font-bold text-lg ${isDark ? 'glass' : 'bg-gray-50 border border-gray-200'}`}>
+                        {match.away_team.substring(0,3).toUpperCase()}
+                      </div>
                       <span className="text-sm font-semibold">{match.away_team}</span>
                     </div>
                   </div>
 
                   {/* Cotes */}
                   <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="glass rounded-lg p-2 text-center hover:bg-neon-cyan/10">
-                      <p className="text-[10px] text-gray-500">1</p>
-                      <p className="text-lg font-bold text-neon-cyan">{match.odds.home}</p>
-                    </div>
-                    <div className="glass rounded-lg p-2 text-center hover:bg-neon-purple/10">
-                      <p className="text-[10px] text-gray-500">X</p>
-                      <p className="text-lg font-bold text-white">{match.odds.draw}</p>
-                    </div>
-                    <div className="glass rounded-lg p-2 text-center hover:bg-neon-pink/10">
-                      <p className="text-[10px] text-gray-500">2</p>
-                      <p className="text-lg font-bold text-neon-pink">{match.odds.away}</p>
-                    </div>
+                    {['home', 'draw', 'away'].map((type, i) => (
+                      <div key={type} className={`rounded-lg p-2 text-center transition-colors ${isDark ? 'glass hover:bg-white/10' : 'bg-gray-50 border border-gray-100 hover:bg-indigo-50'}`}>
+                        <p className={`text-[10px] uppercase ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{['1', 'X', '2'][i]}</p>
+                        <p className={`text-lg font-bold ${isDark ? ['text-cyan-400', 'text-white', 'text-pink-400'][i] : 'text-gray-900'}`}>
+                          {match.odds[type as keyof typeof match.odds]}
+                        </p>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Value Bet Detector */}
                   {match.value_detected && (
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-neon-cyan/10 to-neon-purple/10 border border-neon-cyan/20">
+                    <div className={`flex items-center justify-between p-3 rounded-xl border ${isDark ? 'bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border-cyan-500/20' : 'bg-indigo-50 border-indigo-100'}`}>
                       <div className="flex items-center gap-2">
-                        <Target className="w-5 h-5 text-neon-cyan" />
-                        <span className="text-xs text-gray-300">Value: <span className="text-white font-bold">{match.value_detected.pick}</span></span>
+                        <Target className={`w-5 h-5 ${isDark ? 'text-cyan-400' : 'text-indigo-500'}`} />
+                        <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Value: <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{match.value_detected.pick}</span></span>
                       </div>
                       <div className="px-3 py-1 rounded-full bg-green-500/20 border border-green-500/30">
-                        <span className="text-xs text-green-400 font-bold">{match.value_detected.edge} Edge</span>
+                        <span className="text-xs text-green-600 dark:text-green-400 font-bold">{match.value_detected.edge} Edge</span>
                       </div>
                     </div>
                   )}
@@ -182,57 +185,49 @@ export default function PariDashboard() {
             {TOP_MATCHES.map((_, idx) => (
               <div 
                 key={idx} 
-                className={`h-1.5 rounded-full transition-all duration-300 ${activeCardIndex === idx ? 'w-8 bg-gradient-to-r from-neon-cyan to-neon-purple' : 'w-2 bg-white/20'}`} 
+                className={`h-1.5 rounded-full transition-all duration-300 ${activeCardIndex === idx ? (isDark ? 'w-8 bg-gradient-to-r from-cyan-400 to-purple-500' : 'w-8 bg-indigo-500') : (isDark ? 'w-2 bg-white/20' : 'w-2 bg-gray-300')}`} 
               />
             ))}
           </div>
         </section>
 
-        {/* STATS RAPIDES (bets_tickets) */}
+        {/* STATS RAPIDES */}
         <section className="animate-slide-in grid grid-cols-3 gap-3" style={{ animationDelay: '0.2s' }}>
-          <div className="glass rounded-xl p-3 text-center">
-            <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-green-500/20 flex items-center justify-center">
-              <TrendingUp className="text-green-400 w-5 h-5" />
+          {[
+            { label: "ROI Global", value: "+18.5%", icon: TrendingUp, color: "green" },
+            { label: "Winrate", value: "67%", icon: CheckCircle2, color: "blue" },
+            { label: "Bankroll", value: "1,250$", icon: Wallet, color: "purple" }
+          ].map((stat, i) => (
+            <div key={i} className={`rounded-xl p-3 text-center transition-colors duration-300 ${isDark ? 'glass' : 'bg-white shadow-sm border border-gray-100'}`}>
+              <div className={`w-10 h-10 mx-auto mb-2 rounded-lg flex items-center justify-center ${isDark ? `bg-${stat.color}-500/20` : `bg-${stat.color}-100`}`}>
+                <stat.icon className={`w-5 h-5 ${isDark ? `text-${stat.color}-400` : `text-${stat.color}-600`}`} />
+              </div>
+              <p className={`text-xl font-bold ${isDark ? `text-${stat.color}-400` : 'text-gray-900'}`}>{stat.value}</p>
+              <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{stat.label}</p>
             </div>
-            <p className="text-xl font-bold text-green-400">+18.5%</p>
-            <p className="text-[10px] text-gray-500">ROI Global</p>
-          </div>
-          <div className="glass rounded-xl p-3 text-center">
-            <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-neon-cyan/20 flex items-center justify-center">
-              <CheckCircle2 className="text-neon-cyan w-5 h-5" />
-            </div>
-            <p className="text-xl font-bold text-neon-cyan">67%</p>
-            <p className="text-[10px] text-gray-500">Winrate</p>
-          </div>
-          <div className="glass rounded-xl p-3 text-center">
-            <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-neon-purple/20 flex items-center justify-center">
-              <Wallet className="text-neon-purple w-5 h-5" />
-            </div>
-            <p className="text-xl font-bold text-neon-purple">1,250$</p>
-            <p className="text-[10px] text-gray-500">Bankroll</p>
-          </div>
+          ))}
         </section>
 
         {/* LISTE DES LIGUES */}
         <section className="animate-slide-in pb-10" style={{ animationDelay: '0.3s' }}>
           <h3 className="font-orbitron text-lg font-semibold mb-4 flex items-center gap-2">
-            <span className="neon-text">⚽</span> Ligues Disponibles
+            <span className={isDark ? "neon-text" : ""}>⚽</span> Ligues Disponibles
           </h3>
           <div className="space-y-3">
             {LEAGUES.map((league, idx) => (
-              <div key={idx} className="glass rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] hover:border-neon-cyan/30">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${league.color} flex items-center justify-center flex-shrink-0 text-2xl`}>
+              <div key={idx} className={`rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${isDark ? 'glass hover:border-cyan-500/30' : 'bg-white shadow-sm border border-gray-100 hover:border-indigo-300'}`}>
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${league.color} flex items-center justify-center flex-shrink-0 text-2xl shadow-inner`}>
                   {league.flag}
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-semibold text-white">{league.name}</h4>
-                  <p className="text-xs text-gray-500">{league.country} • {league.matches} matchs</p>
+                  <h4 className="font-semibold">{league.name}</h4>
+                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{league.country} • {league.matches} matchs</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/20">
+                  <span className={`text-xs px-2 py-1 rounded-full border ${isDark ? 'bg-green-500/20 text-green-400 border-green-500/20' : 'bg-green-50 text-green-600 border-green-100'}`}>
                     {league.valueCount} Value
                   </span>
-                  <ChevronRight className="w-5 h-5 text-neon-cyan" />
+                  <ChevronRight className={`w-5 h-5 ${isDark ? 'text-cyan-400' : 'text-gray-400'}`} />
                 </div>
               </div>
             ))}
@@ -242,35 +237,35 @@ export default function PariDashboard() {
       </main>
 
       {/* --- BOTTOM NAVIGATION --- */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 glass-strong border-t border-white/5 pb-safe">
+      <nav className={`fixed bottom-0 left-0 right-0 z-50 transition-colors duration-300 pb-safe ${isDark ? 'glass-strong border-t border-white/5' : 'bg-white/90 backdrop-blur-md border-t border-gray-200 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]'}`}>
         <div className="flex items-center justify-around py-2 px-2">
           
           <Link href="/pari" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari' ? 'bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20' : ''}`}>
-              <LayoutGrid className={`w-6 h-6 ${pathname === '/pari' ? 'text-neon-cyan' : 'text-gray-500'}`} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
+              <LayoutGrid className={`w-6 h-6 ${pathname === '/pari' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
-            <span className={`text-[10px] ${pathname === '/pari' ? 'text-neon-cyan font-medium' : 'text-gray-500'}`}>Libre</span>
+            <span className={`text-[10px] ${pathname === '/pari' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Libre</span>
           </Link>
 
           <Link href="/pari/create-ticket" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/create-ticket' ? 'bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20' : ''}`}>
-              <FileText className={`w-6 h-6 ${pathname === '/pari/create-ticket' ? 'text-neon-cyan' : 'text-gray-500'}`} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/create-ticket' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
+              <FileText className={`w-6 h-6 ${pathname === '/pari/create-ticket' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
-            <span className={`text-[10px] ${pathname === '/pari/create-ticket' ? 'text-neon-cyan font-medium' : 'text-gray-500'}`}>Fiche</span>
+            <span className={`text-[10px] ${pathname === '/pari/create-ticket' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Fiche</span>
           </Link>
 
           <Link href="/pari/historique" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/historique' ? 'bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20' : ''}`}>
-              <CalendarDays className={`w-6 h-6 ${pathname === '/pari/historique' ? 'text-neon-cyan' : 'text-gray-500'}`} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/historique' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
+              <CalendarDays className={`w-6 h-6 ${pathname === '/pari/historique' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
-            <span className={`text-[10px] ${pathname === '/pari/historique' ? 'text-neon-cyan font-medium' : 'text-gray-500'}`}>Calendrier</span>
+            <span className={`text-[10px] ${pathname === '/pari/historique' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Calendrier</span>
           </Link>
 
           <Link href="/pari/analyse" className="nav-item flex flex-col items-center gap-1 p-2 rounded-xl">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/analyse' ? 'bg-gradient-to-br from-neon-cyan/20 to-neon-purple/20' : ''}`}>
-              <Search className={`w-6 h-6 ${pathname === '/pari/analyse' ? 'text-neon-cyan' : 'text-gray-500'}`} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pathname === '/pari/analyse' ? (isDark ? 'bg-gradient-to-br from-cyan-500/20 to-purple-500/20' : 'bg-indigo-50') : ''}`}>
+              <Search className={`w-6 h-6 ${pathname === '/pari/analyse' ? (isDark ? 'text-cyan-400' : 'text-indigo-600') : 'text-gray-400'}`} />
             </div>
-            <span className={`text-[10px] ${pathname === '/pari/analyse' ? 'text-neon-cyan font-medium' : 'text-gray-500'}`}>Analyse</span>
+            <span className={`text-[10px] ${pathname === '/pari/analyse' ? (isDark ? 'text-cyan-400 font-medium' : 'text-indigo-600 font-bold') : 'text-gray-400'}`}>Analyse</span>
           </Link>
 
         </div>
@@ -279,7 +274,7 @@ export default function PariDashboard() {
   );
 }
 
-// Composant pour l'icône calendrier (si lucide-react ne l'exporte pas par défaut)
+// Composant pour l'icône calendrier
 function CalendarDays(props: any) {
   return (
     <svg {...props} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
