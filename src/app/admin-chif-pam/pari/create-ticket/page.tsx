@@ -8,7 +8,7 @@ export default async function CreateTicketPage() {
   // Récupération des matchs à venir depuis le serveur
   const today = new Date().toISOString();
   
-  const { data: matches, error } = await supabase
+  const { data: matches, error } = await supabaseServer
     .from('pari_predictions')
     .select('*')
     .gte('match_date', today)
