@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // --- IMPORT DES SERVICES ---
 import { fetchFootballMatches, FootballMatchRaw } from '@/services/fetchFootballMatches';
-import { analyzeMatch, RawMatchData } from '@/services/matchEngine';
+import { analyzeMatch } from '@/services/matchEngine';
 import { evaluateMatchValues } from '@/services/valueEngine';
 
 // --- TYPES ---
