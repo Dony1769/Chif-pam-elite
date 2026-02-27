@@ -1,78 +1,75 @@
-// /services/valueEngine.ts
+// /src/services/valueEngine.ts
 
-export interface EdgeResult {
-  edge_percent: number;
-  isValue: boolean;
+// ============================================================================
+// INTERFACES ET TYPAGE STRICT
+// ============================================================================
+
+export interface ModelProbabilities {
+  /** Probabilité estimée en décimal (entre 0 et 1) */
+  home: number;
+  draw: number;
+  away: number;
 }
 
-/**
- * Calcule l'avantage (Edge) mathématique sur une cote donnée.
- * * @param probability Probabilité estimée par notre modèle (accepte les formats 0.53 ou 53.0)
- * @param odds Cote décimale proposée par le bookmaker (ex: 2.10)
- * @returns Un objet contenant l'edge en pourcentage et l'indicateur de Value Bet.
- */
-export const calculateEdge = (probability: number, odds: number): EdgeResult => {
-  // 1. Sécurisation des données entrantes
-  if (probability < 0 || odds <= 1) {
-    return { edge_percent: 0, isValue: false };
-  }
+export interface BookmakerOdds {
+  /** Cote décimale proposée par le bookmaker (strictement supérieure à 1.00) */
+  home: number;
+  draw: number;
+  away: number;
+}
 
-  // 2. Normalisation de la probabilité en décimale (0 à 1)
-  // Si la probabilité reçue est supérieure à 1, on assume qu'elle est en pourcentage (ex: 53.4)
-  const probDecimal = probability > 1 ? probability / 100 : probability;
+export interface ValueEngineOutput {
+  value_home: boolean;
+  value_draw: boolean;
+  value_away: boolean;
+  value_detected: boolean;
+  edge_home: number;
+  edge_draw: number;
+  edge_away: number;
+}
 
-  // 3. Application de la formule de l'Expected Value
-  const rawEdge = (probDecimal * odds - 1) * 100;
-
-  // 4. Arrondi professionnel à 2 décimales
-  const edgePercent = parseFloat(rawEdge.toFixed(2));
-
-  // 5. Un pari est considéré comme "Value" si l'Edge est strictement supérieur à 0
-  return {
-    edge_percent: edgePercent,
-    isValue: edgePercent > 0,
-  };
-};
+// ============================================================================
+// FONCTION PURE DE DÉTECTION DE VALEUR
+// ============================================================================
 
 /**
- * (Fonction utilitaire bonus)
- * Compare les cotes d'un match entier et met à jour l'objet pour la base de données.
+ * Compare les probabilités d'un modèle mathématique aux cotes d'un bookmaker
+ * pour détecter un avantage statistique (Value Bet).
+ * Fonction pure : conserve la précision native JS sans arrondis.
+ * * @param modelProbabilities Probabilités calculées par le moteur (ex: 0.52)
+ * @param bookmakerOdds Cotes décimales du marché (ex: 2.10)
+ * @returns {ValueEngineOutput} Les edges réels et les drapeaux de détection
  */
-export const evaluateMatchValues = (
-  matchProbs: { home: number; draw: number; away: number },
-  bookmakerOdds: { home: number; draw: number; away: number }
-) => {
-  const homeEdge = calculateEdge(matchProbs.home, bookmakerOdds.home);
-  const drawEdge = calculateEdge(matchProbs.draw, bookmakerOdds.draw);
-  const awayEdge = calculateEdge(matchProbs.away, bookmakerOdds.away);
+export const detectValue = (
+  modelProbabilities: ModelProbabilities,
+  bookmakerOdds: BookmakerOdds
+): ValueEngineOutput => {
+  
+  // 1. Calcul des probabilités implicites (Implied Probability)
+  const impliedHome = 1 / bookmakerOdds.home;
+  const impliedDraw = 1 / bookmakerOdds.draw;
+  const impliedAway = 1 / bookmakerOdds.away;
 
-  // Détection globale si au moins un des trois résultats présente de la valeur
-  const valueDetected = homeEdge.isValue || drawEdge.isValue || awayEdge.isValue;
+  // 2. Calcul de l'avantage (Edge réel)
+  const edgeHome = modelProbabilities.home - impliedHome;
+  const edgeDraw = modelProbabilities.draw - impliedDraw;
+  const edgeAway = modelProbabilities.away - impliedAway;
 
-  // Détermination du meilleur "Pick" (celui avec le plus grand Edge)
-  let bestPick = '';
-  let highestEdge = 0;
+  // 3. Détermination de la valeur (Value Bet si Edge > 0)
+  const valueHome = edgeHome > 0;
+  const valueDraw = edgeDraw > 0;
+  const valueAway = edgeAway > 0;
 
-  if (homeEdge.isValue && homeEdge.edge_percent > highestEdge) {
-    bestPick = 'Home';
-    highestEdge = homeEdge.edge_percent;
-  }
-  if (drawEdge.isValue && drawEdge.edge_percent > highestEdge) {
-    bestPick = 'Draw';
-    highestEdge = drawEdge.edge_percent;
-  }
-  if (awayEdge.isValue && awayEdge.edge_percent > highestEdge) {
-    bestPick = 'Away';
-    highestEdge = awayEdge.edge_percent;
-  }
+  // 4. Synthèse globale (True si au moins un des 3 résultats a de la valeur)
+  const valueDetected = valueHome || valueDraw || valueAway;
 
   return {
-    value_home: homeEdge.isValue,
-    value_draw: drawEdge.isValue,
-    value_away: awayEdge.isValue,
+    value_home: valueHome,
+    value_draw: valueDraw,
+    value_away: valueAway,
     value_detected: valueDetected,
-    best_edge: highestEdge,
-    best_pick: bestPick
+    edge_home: edgeHome,
+    edge_draw: edgeDraw,
+    edge_away: edgeAway,
   };
 };
-
