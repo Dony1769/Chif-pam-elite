@@ -6,7 +6,7 @@ import TicketBuilder from './TicketBuilder';
 export const dynamic = 'force-dynamic'; // Force le rafraîchissement des données
 
 export default async function CreateTicketPage() {
-  const supabase = supabaseServer(); // ✅ on appelle la fonction
+  const supabase = await supabaseServer(); // ✅ on appelle la fonction
 
   const today = new Date().toISOString();
 
