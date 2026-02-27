@@ -10,7 +10,7 @@ import {
   Zap
 } from 'lucide-react';
 
-// --- TYPES DE LA BASE DE DONNÉES ---
+// --- TYPES DE LA BASE DE DONNÉES --
 interface PariPrediction {
   id: string;
   home_team: string;
