@@ -1,5 +1,4 @@
 import React from 'react';
-
 import { supabaseServer } from '@/lib/server-supabase';
 import { 
   BarChart3, 
@@ -55,7 +54,7 @@ const formatDate = (dateString: string) => {
 
 // --- COMPOSANT SERVEUR ---
 export default async function AnalysePage() {
-  const supabase = supabaseServer(); // ✅ on appelle la fonction
+  const supabase = await supabaseServer(); // ✅ on appelle la fonction
 
   const today = new Date().toISOString();
 
