@@ -54,6 +54,7 @@ const formatDate = (dateString: string) => {
 
 // --- COMPOSANT SERVEUR ---
 export default async function AnalysePage() {
+  const supabase = supabaseServer();
   // 1. Définition de la date du jour (UTC)
   const today = new Date().toISOString();
 
