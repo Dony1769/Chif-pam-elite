@@ -62,57 +62,50 @@ export async function GET(request: Request) {
     console.log(`[CRON Orchestrator] Traitement de ${rawMatches.length} matchs via les moteurs...`);
     
     const predictionsToUpsert: PariPredictionInsert[] = rawMatches.map((match) => {
-      // A. Adaptation des données brutes pour le moteur
-      const matchDataForEngine: RawMatchData = {
-        id: match.fixture.id.toString(),
-        home_team: match.teams.home.name,
-        away_team: match.teams.away.name,
-        league: `${match.league.country} - ${match.league.name}`,
-        match_date: match.fixture.date,
-      };
 
-      // B. Calcul des probabilités et Expected Goals
-      const matchProbs = analyzeMatch(matchDataForEngine);
+  // A. Calcul probabilités + xG directement depuis le match brut
+  const matchProbs = analyzeMatch(match);
 
-      // C. Récupération des cotes des bookmakers
-      // ⚠️ ATTENTION : L'API-Sports /fixtures ne renvoie pas les cotes pré-match par défaut.
-      // Il faudrait idéalement un service `fetchBookmakerOdds(match.fixture.id)` ici.
-      // Pour maintenir la chaîne d'orchestration, nous utilisons des cotes de fallback temporaires.
-      const bookmakerOdds = {
-        home: 2.50, // TODO: Remplacer par les vraies cotes
-        draw: 3.20,
-        away: 2.80
-      };
+  // B. Cotes fallback temporaires (à remplacer plus tard)
+  const bookmakerOdds = {
+    home: 2.50,
+    draw: 3.20,
+    away: 2.80
+  };
 
-      // D. Calcul des Edges et détection de Value
-      const valueMetrics = evaluateMatchValues(
-        {
-          home: matchProbs.probability_home,
-          draw: matchProbs.probability_draw,
-          away: matchProbs.probability_away
-        },
-        bookmakerOdds
-      );
+  // ⚠️ IMPORTANT
+  // Si ton matchEngine retourne des % (ex: 52.34)
+  // alors on convertit en décimal ici
+  const modelProbabilities = {
+    home: matchProbs.probability_home / 100,
+    draw: matchProbs.probability_draw / 100,
+    away: matchProbs.probability_away / 100,
+  };
 
-      // E. Assemblage de l'objet final pour la base de données
-      return {
-        id: matchDataForEngine.id,
-        home_team: matchProbs.home_team,
-        away_team: matchProbs.away_team,
-        league: matchProbs.league,
-        match_date: matchProbs.match_date,
-        expected_goals_home: matchProbs.expected_goals_home,
-        expected_goals_away: matchProbs.expected_goals_away,
-        probability_home: matchProbs.probability_home,
-        probability_draw: matchProbs.probability_draw,
-        probability_away: matchProbs.probability_away,
-        over25_prob: matchProbs.over25_prob,
-        value_home: valueMetrics.value_home,
-        value_draw: valueMetrics.value_draw,
-        value_away: valueMetrics.value_away,
-        value_detected: valueMetrics.value_detected,
-      };
-    });
+  const valueMetrics = evaluateMatchValues(
+    modelProbabilities,
+    bookmakerOdds
+  );
+
+  // C. Construction finale pour DB
+  return {
+    id: match.fixture.id.toString(),
+    home_team: match.teams.home.name,
+    away_team: match.teams.away.name,
+    league: `${match.league.country} - ${match.league.name}`,
+    match_date: match.fixture.date,
+    expected_goals_home: matchProbs.expected_goals_home,
+    expected_goals_away: matchProbs.expected_goals_away,
+    probability_home: matchProbs.probability_home,
+    probability_draw: matchProbs.probability_draw,
+    probability_away: matchProbs.probability_away,
+    over25_prob: matchProbs.over25_prob,
+    value_home: valueMetrics.value_home,
+    value_draw: valueMetrics.value_draw,
+    value_away: valueMetrics.value_away,
+    value_detected: valueMetrics.value_detected,
+  };
+});
 
     // 4. CHARGEMENT (Upsert Supabase)
     console.log("[CRON Orchestrator] Insertion/Mise à jour dans Supabase...");
