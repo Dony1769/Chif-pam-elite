@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { supabaseServer } from '@/lib/server-supabase';
 import HistoryClient from './HistoryClient';
 
