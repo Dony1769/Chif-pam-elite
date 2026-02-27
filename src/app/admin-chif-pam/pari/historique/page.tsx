@@ -1,11 +1,11 @@
 import React from 'react';
-import { createServerSupabase } from '@/lib/server-supabase';
+import { supabaseServer } from '@/lib/server-supabase';
 import HistoryClient from './HistoryClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HistoriquePage() {
-  const supabase = await createServerSupabase();
+  const supabase = await supabaseServer();
 
   const { data: tickets, error } = await supabase
     .from('bets_tickets')
