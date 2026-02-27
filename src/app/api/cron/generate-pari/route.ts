@@ -82,7 +82,7 @@ export async function GET(request: Request) {
     away: matchProbs.probability_away / 100,
   };
 
-  const valueMetrics = evaluateMatchValues(
+  const valueMetrics = detectValue(
     modelProbabilities,
     bookmakerOdds
   );
