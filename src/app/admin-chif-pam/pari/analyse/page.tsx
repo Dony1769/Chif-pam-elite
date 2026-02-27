@@ -54,14 +54,13 @@ const formatDate = (dateString: string) => {
 
 // --- COMPOSANT SERVEUR ---
 export default async function AnalysePage() {
-  const supabase = supabaseServer();
-  // 1. Définition de la date du jour (UTC)
+  const supabase = supabaseServer(); // ✅ on appelle la fonction
+
   const today = new Date().toISOString();
 
-  // 2. Requête Supabase Server-Side
   const { data: matches, error } = await supabase
-  .from('pari_predictions')
-  .select('*')
+    .from('pari_predictions')
+    .select('*')
     .gte('match_date', today)
     .order('probability_home', { ascending: false });
 
@@ -72,6 +71,7 @@ export default async function AnalysePage() {
   const predictions: PariPrediction[] = matches || [];
 
   return (
+  
     <div className="min-h-screen bg-[#050508] text-white font-inter pb-32">
       
       {/* Background Ambient Glow */}
