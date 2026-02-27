@@ -1,4 +1,4 @@
-// /src/services/valueEngine.t
+// /src/services/valueEngine.ts
 
 // ============================================================================
 // INTERFACES ET TYPAGE STRICT
