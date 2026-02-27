@@ -15,9 +15,11 @@ interface CreateTicketBody {
 
 export async function POST(request: Request) {
   try {
-    // 1. Vérification de l'authentification & Respect RLS
-    // Supabase va lire les cookies de la requête pour identifier l'utilisateur
-    const { data: { user }, error: authError } = await supabaseServer.auth.getUser();
+    const supabase = await supabaseServer();
+
+    // 1. Vérification Auth
+    const { data: { user }, error: authError } =
+      await supabase.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json(
