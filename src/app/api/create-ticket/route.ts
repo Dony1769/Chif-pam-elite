@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     // 1. Vérification de l'authentification & Respect RLS
     // Supabase va lire les cookies de la requête pour identifier l'utilisateur
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabaseServer.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json(
