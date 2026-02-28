@@ -7,7 +7,7 @@ import {
   Sun, Moon, Home, ChevronRight, 
   Target, TrendingUp, Wallet, CheckCircle2, LayoutGrid, Search, FileText, AlertCircle
 } from "lucide-react";
-import { supabaseServer } from "@/lib/supabase-client";
+import { supabaseClient } from "@/lib/supabase-client";
 
 // ============================================================================
 // TYPES STRICTS
