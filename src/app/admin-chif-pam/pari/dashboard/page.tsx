@@ -124,7 +124,7 @@ export default function PariDashboard() {
         tomorrow.setDate(tomorrow.getDate() + 1);
 
         // 2. Fetch des matchs du jour (pari_predictions)
-        const { data: dbMatches, error: matchError } = await supabase
+        const { data: dbMatches, error: matchError } = await supabaseClient
           .from("pari_predictions")
           .select("*")
           .gte("match_date", today.toISOString())
