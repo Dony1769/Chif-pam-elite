@@ -202,7 +202,7 @@ export default function PariDashboard() {
         });
 
         // 5. Fetch des statistiques globales (bets_tickets)
-        const { data: tickets } = await supabase.from("bets_tickets").select("status, total_profit, stake");
+        const { data: tickets } = await supabaseClient.from("bets_tickets").select("status, total_profit, stake");
         
         let calcRoi = "—";
         let calcWinrate = "—";
