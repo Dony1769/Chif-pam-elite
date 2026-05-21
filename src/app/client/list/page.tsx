@@ -12,7 +12,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- IMPORT DU NOUVEAU BANNER EXOCLICK ---
-import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
 
 // --- TYPES ---
 interface GameConfig {
