@@ -137,8 +137,7 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-[#020617] text-white p-6 pb-32 font-sans overflow-x-hidden">
-      
-      <MonetagPopunder />
+    
 
       <div className="max-w-md mx-auto space-y-6">
         <div className="flex items-center justify-between mb-8">
