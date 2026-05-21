@@ -14,8 +14,7 @@ import {
 } from 'recharts';
 import Link from 'next/link';
 
-// IMPORT DU POPUNDER MONETAG
-import MonetagPopunder from '@/components/ads/MonetagPopunder';
+// IMPORT DU POPUNDER MONETA
 
 const LogoChifPamSmall = () => (
   <svg viewBox="0 0 100 100" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
