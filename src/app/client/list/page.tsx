@@ -106,11 +106,6 @@ export default function GameListPage() {
           />
         </div>
 
-        {/* --- BANNIÈRE PUB EXOCLICK --- */}
-        <div className="w-full overflow-hidden rounded-4xl border border-white/5 shadow-2xl relative min-h-25 flex items-center justify-center bg-black/40">
-            <ExoClickBanner />
-        </div>
-
         {/* Section Favoris */}
         <AnimatePresence>
           {favoriteGames.length > 0 && !search && (
