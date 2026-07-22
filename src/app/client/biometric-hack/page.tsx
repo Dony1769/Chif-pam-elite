@@ -256,7 +256,7 @@ function BiometricGameContent() {
 
       {/* HEADER */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
+        <button onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} className="p-3 bg-white/5 rounded-2xl border border-white/5 active:scale-90 shadow-xl">
           <ChevronLeft size={20}/>
         </button>
         <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
@@ -281,7 +281,7 @@ function BiometricGameContent() {
                         className="bg-transparent text-5xl font-black text-center w-full outline-none text-white focus:text-emerald-400 tracking-tighter" 
                     />
                 </div>
-                <button onClick={startGame} disabled={loading} className="w-full py-6 rounded-[2rem] text-xl font-black bg-emerald-600 text-white shadow-xl active:scale-95 transition-all">
+                <button onClick={startGame} disabled={loading} className="w-full py-6 rounded-4xl text-xl font-black bg-emerald-600 text-white shadow-xl active:scale-95 transition-all">
                     {loading ? <Loader2 className="animate-spin mx-auto" /> : "INITIALISER LE SCAN"}
                 </button>
                 </>
@@ -328,7 +328,7 @@ function BiometricGameContent() {
                   initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                   onClick={() => finalizeGame(false)}
                   disabled={loading}
-                  className="w-full mt-10 py-6 font-black rounded-[2rem] text-xl bg-white text-black shadow-2xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
+                  className="w-full mt-10 py-6 font-black rounded-4xl text-xl bg-white text-black shadow-2xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                 >
                   {loading ? <Loader2 className="animate-spin" /> : <><Zap size={20} fill="black" /> ENCAISSER {Math.floor(betCP * multiplier)} CP</>}
                 </motion.button>
@@ -344,7 +344,7 @@ function BiometricGameContent() {
       {/* RESULTS MODAL */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-100 bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
             <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
                 {status === 'lost' ? <ShieldX size={48} className="text-rose-500" /> : <ShieldCheck size={48} className="text-emerald-500" />}
             </div>
@@ -369,7 +369,7 @@ function BiometricGameContent() {
                     </button>
                 )}
                 
-                <button onClick={() => router.push(challengeId ? '/client/arena' : '/client/home')} className="w-full py-5 bg-white/5 text-slate-400 rounded-[1.8rem] font-black text-sm active:scale-95 transition-all">
+                <button onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} className="w-full py-5 bg-white/5 text-slate-400 rounded-[1.8rem] font-black text-sm active:scale-95 transition-all">
                     QUITTER L'ARÈNE
                 </button>
                 

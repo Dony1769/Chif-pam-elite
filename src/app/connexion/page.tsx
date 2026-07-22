@@ -1,8 +1,11 @@
 "use client";
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, ArrowRight, HelpCircle, ShieldCheck, Gamepad2, Trophy, Lock, ScrollText } from 'lucide-react';
+import { getHomeRouteForRole } from '@/lib/auth-routing';
+import { normalizePhoneInput } from '@/lib/phone';
+import { Loader2, ArrowRight, HelpCircle, ShieldCheck, Trophy, Lock, ScrollText, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
 
 // --- LOGO ---
 const LogoChifPam = ({ className }: { className?: string }) => (
@@ -26,7 +29,7 @@ export default function Connexion() {
 
   // --- LOGIQUE SUPPORT (Gardée intacte car excellente) ---
   const handleSupportRequest = async (reason: string) => {
-    const cleanPhone = phone.trim();
+    const cleanPhone = normalizePhoneInput(phone);
     if (!cleanPhone) {
       alert("Entrez votre numéro pour que le support puisse vous identifier.");
       return;
@@ -36,7 +39,7 @@ export default function Connexion() {
     let clientName = "Non identifié";
 
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .rpc('get_username_by_phone', { phone_input: cleanPhone });
 
       if (data && data.length > 0) {
@@ -67,7 +70,7 @@ export default function Connexion() {
     if (loading) return;
     setLoading(true);
     
-    const cleanPhone = phone.trim();
+    const cleanPhone = normalizePhoneInput(phone);
     const email = `${cleanPhone}@chifpam.ht`;
 
     try {
@@ -90,17 +93,23 @@ export default function Connexion() {
           return;
         }
 
-        const targetPath = cleanPhone === '99999999' ? '/admin-chif-pam/dashboard' : '/client/home';
+        const { data: roleProfile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        const targetPath = getHomeRouteForRole(roleProfile?.role);
         window.location.replace(targetPath);
       }
-    } catch (error: any) {
+    } catch {
       alert("Erreur : Identifiants incorrects ou problème de connexion.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col font-sans overflow-x-hidden">
+    <div className="ds-page text-slate-100 flex flex-col font-sans overflow-x-hidden ds-fade-up">
       
       {/* HEADER SIMPLE */}
       <nav className="p-6 md:px-12 flex justify-between items-center w-full max-w-7xl mx-auto">
@@ -118,14 +127,14 @@ export default function Connexion() {
         <div className="flex-1 text-center md:text-left space-y-8 max-w-lg hidden md:block">
             <div>
                 <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full text-emerald-500 text-[10px] font-black uppercase tracking-widest mb-4">
-                    <Trophy size={12} /> Accès Agent
+                  <Trophy size={12} /> Accès sécurisé
                 </div>
                 <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter leading-none mb-4 text-white">
                     Bon <br/>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500">Retour.</span>
+                  <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-cyan-500">Retour.</span>
                 </h1>
                 <p className="text-slate-400 text-sm leading-relaxed">
-                    Connectez-vous pour accéder à votre tableau de bord, vos missions quotidiennes et retirer vos gains.
+                  Connectez-vous à votre espace personnel pour suivre vos activités, vos récompenses et vos opérations.
                 </p>
             </div>
 
@@ -138,17 +147,17 @@ export default function Connexion() {
                     </div>
                 </div>
                 <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 flex flex-col gap-2">
-                    <Gamepad2 className="text-blue-500" size={24}/>
+                  <Sparkles className="text-blue-500" size={24}/>
                     <div>
-                        <h3 className="font-bold text-white text-xs uppercase">Vos Scores</h3>
-                        <p className="text-[10px] text-slate-500">Sauvegarde Cloud</p>
+                    <h3 className="font-bold text-white text-xs uppercase">Expérience premium</h3>
+                    <p className="text-[10px] text-slate-500">Synchronisation cloud</p>
                     </div>
                 </div>
             </div>
         </div>
 
         {/* PARTIE DROITE : Formulaire de Connexion */}
-        <div className="w-full max-w-md bg-slate-900/80 border border-white/10 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl relative">
+            <DSCard className="w-full max-w-md p-8 rounded-[2.5rem] relative">
             <div className="text-center mb-8 md:hidden">
                 <LogoChifPam className="mb-4 mx-auto items-center" />
                 <h2 className="text-2xl font-black italic text-white uppercase tracking-tight">Connexion</h2>
@@ -162,38 +171,38 @@ export default function Connexion() {
             <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Votre Téléphone</label>
-                    <input 
+                  <DSInput 
                         type="tel" 
                         placeholder="4000 0000" 
                         value={phone} 
                         onChange={(e) => setPhone(e.target.value)} 
                         required 
-                        className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 px-6 text-sm outline-none focus:border-emerald-500/50 transition-all font-bold text-white placeholder:text-slate-700" 
+                    className="py-4 px-6 font-bold" 
                     />
                 </div>
                 
                 <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Mot de passe</label>
                     <div className="relative">
-                        <input 
+                    <DSInput 
                             type="password" 
                             placeholder="••••••••" 
                             value={password} 
                             onChange={(e) => setPassword(e.target.value)} 
                             required 
-                            className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 px-6 text-sm outline-none focus:border-emerald-500/50 transition-all font-bold text-white placeholder:text-slate-700" 
+                      className="py-4 px-6 font-bold" 
                         />
                         <Lock className="absolute right-4 top-4 text-slate-600" size={18}/>
                     </div>
                 </div>
 
-                <button 
+                <DSButton 
                     type="submit" 
                     disabled={loading} 
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-5 rounded-2xl font-black transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 shadow-[0_10px_30px_rgba(16,185,129,0.2)] mt-6 uppercase tracking-widest italic"
+                  className="w-full py-5 mt-6 uppercase tracking-widest italic"
                 >
                     {loading ? <Loader2 className="animate-spin" /> : <><span className="not-italic">SE CONNECTER</span><ArrowRight size={18} /></>}
-                </button>
+                </DSButton>
             </form>
 
             <button 
@@ -204,7 +213,7 @@ export default function Connexion() {
             >
                 <HelpCircle size={14} /><span>Mot de passe oublié ?</span>
             </button>
-        </div>
+            </DSCard>
 
       </main>
 
@@ -214,7 +223,7 @@ export default function Connexion() {
             <p>© 2026 Chif Pam. Tous droits réservés.</p>
             <div className="flex gap-6">
                 <Link href="/legal/confidentialite" className="hover:text-emerald-500 transition-colors">Politique de Confidentialité</Link>
-                <Link href="/legal/conditions" className="hover:text-emerald-500 transition-colors">Conditions d'Utilisation</Link>
+                <Link href="/legal/conditions" className="hover:text-emerald-500 transition-colors">Conditions d&apos;Utilisation</Link>
               <Link href="/legal/mention-legales" className="hover:text-white transition-colors flex items-center gap-1"><ScrollText size={12}/> Mentions Légales</Link>
             </div>
         </div>

@@ -2,11 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { FINANCE_PAYMENT_METHODS, type FinancePaymentMethod } from '@/lib/constants/finance';
+import { ClientFinanceService } from '@/services/client/finance';
 import { 
   ArrowUpCircle, ArrowDownCircle, Upload, Loader2, Clock, 
   Smartphone, ChevronLeft, TrendingUp, Wallet, CheckCircle2, Copy
 } from 'lucide-react';
-import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner"; // <-- Import
+import dynamic from 'next/dynamic';
+
+const AdsterraNativeBanner = dynamic(() => import('@/components/ads/AdsterraNativeBanner'), { ssr: false });
 
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
@@ -20,11 +24,12 @@ const LogoChifPam = ({ className }: { className?: string }) => (
 
 export default function FinancePage() {
   const [view, setView] = useState<'menu' | 'deposit' | 'withdrawal'>('menu');
-  const [method, setMethod] = useState<'MonCash' | 'NatCash' | null>(null);
+  const [method, setMethod] = useState<FinancePaymentMethod | null>(null);
   const [profile, setProfile] = useState<{balance: number, locked_balance: number} | null>(null);
   const [loading, setLoading] = useState(true);
   const [issubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
@@ -38,6 +43,7 @@ export default function FinancePage() {
   const fetchProfile = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
+      setUserId(user.id);
       const { data } = await supabase.from('profiles').select('balance, locked_balance').eq('id', user.id).single();
       setProfile(data);
     }
@@ -46,11 +52,15 @@ export default function FinancePage() {
 
   useEffect(() => {
     fetchProfile();
+  }, [fetchProfile]);
+
+  useEffect(() => {
+    if (!userId) return;
     const sub = supabase.channel('finance-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchProfile())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, () => fetchProfile())
       .subscribe();
     return () => { supabase.removeChannel(sub); };
-  }, [fetchProfile]);
+  }, [fetchProfile, userId]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -64,27 +74,28 @@ export default function FinancePage() {
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Session expirée. Reconnectez-vous.');
+      }
+
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}-${Math.random()}.${fileExt}`;
+      const fileName = `${user.id}-${crypto.randomUUID()}.${fileExt}`;
       const filePath = `proofs/${fileName}`;
       
       const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { error: transError } = await supabase.from('transactions').insert({
-        user_id: user?.id,
-        type: 'deposit',
-        amount: parseFloat(amount),
-        proof_url: filePath,
-        method: method,
-        status: 'pending'
-      });
-      if (transError) throw transError;
+      const result = await ClientFinanceService.submitDeposit(parseFloat(amount), method, filePath);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
 
-      alert("Dépôt envoyé ! Validation en cours.");
+      alert(result.message);
       setView('menu');
       setMethod(null);
-    } catch (err: any) { alert(err.message); } 
+      setAmount('');
+      setFile(null);
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Erreur inconnue'); } 
     finally { setIsSubmitting(false); }
   };
 
@@ -96,27 +107,17 @@ export default function FinancePage() {
     
     setIsSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error: rpcError } = await supabase.rpc('initiate_withdrawal', {
-        user_id_param: user?.id,
-        amount_param: amt
-      });
-      if (rpcError) throw rpcError;
+      const result = await ClientFinanceService.submitWithdrawal(amt, method, phone);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
 
-      const { error: transError } = await supabase.from('transactions').insert({
-        user_id: user?.id,
-        type: 'withdrawal',
-        amount: amt,
-        phone_number: phone,
-        method: method,
-        status: 'pending'
-      });
-      if (transError) throw transError;
-
-      alert("Demande de retrait enregistrée.");
+      alert(result.message);
       setView('menu');
       setMethod(null);
-    } catch (err: any) { alert(err.message); } 
+      setAmount('');
+      setPhone('');
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Erreur inconnue'); } 
     finally { setIsSubmitting(false); }
   };
 
@@ -129,7 +130,20 @@ export default function FinancePage() {
       <div className="max-w-md mx-auto space-y-8 animate-in fade-in duration-500">
         
         <div className="flex items-center justify-between">
-          <button onClick={() => { if (method) setMethod(null); else view === 'menu' ? window.history.back() : setView('menu'); }} className="p-3 bg-slate-900 rounded-2xl border border-white/5 hover:bg-slate-800 transition-all active:scale-90">
+          <button
+            onClick={() => {
+              if (method) {
+                setMethod(null);
+                return;
+              }
+              if (view === 'menu') {
+                window.history.back();
+                return;
+              }
+              setView('menu');
+            }}
+            className="p-3 bg-slate-900 rounded-2xl border border-white/5 hover:bg-slate-800 transition-all active:scale-90"
+          >
             <ChevronLeft size={24} className="text-emerald-500" />
           </button>
           <LogoChifPam />
@@ -140,7 +154,7 @@ export default function FinancePage() {
           <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform"><Wallet size={80} /></div>
           <p className="text-[10px] text-slate-500 tracking-widest mb-2 flex items-center gap-2"><TrendingUp size={12} className="text-emerald-500" /> Solde Disponible</p>
           <h2 className="text-4xl text-emerald-500 mb-4">{availableBalance.toLocaleString()} <span className="text-sm text-white/50">HTG</span></h2>
-          {profile?.locked_balance! > 0 && (
+          {(profile?.locked_balance ?? 0) > 0 && (
             <div className="flex items-center gap-2 text-[10px] text-amber-500 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 animate-pulse">
               <Clock size={14} /> {profile?.locked_balance} HTG bloqués
             </div>
@@ -149,12 +163,12 @@ export default function FinancePage() {
 
         {view === 'menu' && (
           <div className="grid grid-cols-1 gap-4">
-            <button onClick={() => setView('deposit')} className="group p-8 bg-emerald-500 text-slate-950 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
-              <ArrowUpCircle size={36} className="group-hover:translate-y-[-4px] transition-transform" /> <span className="text-lg">Dépôt</span>
+            <button onClick={() => setView('deposit')} className="group p-8 bg-emerald-500 text-slate-950 rounded-4xl flex flex-col items-center gap-3 transition-all hover:bg-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
+              <ArrowUpCircle size={36} className="group-hover:-translate-y-1 transition-transform" /> <span className="text-lg">Dépôt</span>
             </button>
             <div>
-              <button onClick={() => setView('withdrawal')} className="group p-8 bg-slate-900 border border-white/5 rounded-[2rem] flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95">
-                <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-[4px] transition-transform" /> <span className="text-lg">Retrait</span>
+              <button onClick={() => setView('withdrawal')} className="group p-8 bg-slate-900 border border-white/5 rounded-4xl flex flex-col items-center gap-3 transition-all hover:bg-slate-800 active:scale-95">
+                <ArrowDownCircle size={36} className="text-emerald-500 group-hover:translate-y-1 transition-transform" /> <span className="text-lg">Retrait</span>
               </button>
 
               {/* --- Native Banner Adsterra juste sous la case Retrait --- */}
@@ -168,8 +182,8 @@ export default function FinancePage() {
         {(view === 'deposit' || view === 'withdrawal') && !method && (
           <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
             <h3 className="text-center text-emerald-500 text-sm tracking-widest">Choisir le service</h3>
-            {['MonCash', 'NatCash'].map(m => (
-              <button key={m} onClick={() => setMethod(m as any)} className="w-full p-6 bg-slate-900/50 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-slate-800 transition-all">
+            {FINANCE_PAYMENT_METHODS.map(m => (
+              <button key={m} onClick={() => setMethod(m)} className="w-full p-6 bg-slate-900/50 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-slate-800 transition-all">
                 <span className={m === 'MonCash' ? 'text-[#CC1011]' : 'text-emerald-500'}>{m}</span>
                 <Smartphone size={20} className="text-slate-500" />
               </button>

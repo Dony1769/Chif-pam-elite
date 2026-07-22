@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/ios": "^8.1.0",
     "@react-spring/web": "^10.0.3",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.89.0",

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { ADMIN_GAME_CONFIG, type AdminGameId } from '@/lib/constants/admin-games';
+import { AdminMiniGamesService } from '@/services/admin/mini-games';
 import { 
   Target, TrendingUp, ShieldAlert, ArrowLeft, Loader2, 
   Dna, Brain, Lock, Layers, Box, Zap, Play, Pause, RefreshCw
@@ -15,6 +17,26 @@ interface GameStats {
   isActive: boolean;
 }
 
+type DashboardGameRow = {
+  bet_amount?: number | null;
+  multiplier?: number | null;
+  final_multiplier?: number | null;
+  is_won?: boolean | null;
+  status?: string | null;
+};
+
+type GameSetting = {
+  game_id: string;
+  is_active: boolean;
+};
+
+type GameCardProps = {
+  id: AdminGameId;
+  title: string;
+  color: string;
+  icon: React.ComponentType<{ size?: number; className?: string; fill?: string }>;
+};
+
 export default function AdminMiniGames() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -25,25 +47,14 @@ export default function AdminMiniGames() {
   const fetchAllGamesData = async () => {
     try {
       setLoading(true);
-      const { data: settings } = await supabase.from('game_settings').select('*');
-
-      const config = [
-        { id: 'mines', table: 'mines_games' },
-        { id: 'crash', table: 'crash_games' },
-        { id: 'biometric', table: 'biometric_games' },
-        { id: 'vault', table: 'vault_games' },
-        { id: 'quiz', table: 'quiz_games' },
-        { id: 'plinko', table: 'plinko_games' },
-        { id: 'glass', table: 'glass_games' },
-        { id: 'elevator', table: 'elevator_games' },
-      ];
+      const { data: settings } = await supabase.from('game_settings').select('*').returns<GameSetting[]>();
 
       const results: { [key: string]: GameStats } = {};
       let totalV = 0;
       let totalP = 0;
 
-      for (const item of config) {
-        const { data, error } = await supabase.from(item.table).select('*');
+      for (const item of ADMIN_GAME_CONFIG) {
+        const { data, error } = await supabase.from(item.table).select('*').returns<DashboardGameRow[]>();
         
         if (error) {
           results[item.id] = { volume: 0, profit: 0, count: 0, isActive: true };
@@ -110,25 +121,23 @@ export default function AdminMiniGames() {
   const toggleGameStatus = async (gameId: string, currentStatus: boolean) => {
     setUpdating(gameId);
     try {
-      const { error } = await supabase
-        .from('game_settings')
-        .update({ is_active: !currentStatus })
-        .eq('game_id', gameId);
-
-      if (error) throw error;
+      const result = await AdminMiniGamesService.toggleStatus(gameId, currentStatus);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
       
       setGames(prev => ({
         ...prev,
         [gameId]: { ...prev[gameId], isActive: !currentStatus }
       }));
-    } catch (err) {
-      alert("Erreur de mise à jour");
+    } catch (err: unknown) {
+      alert("Erreur de mise à jour: " + (err instanceof Error ? err.message : 'Erreur inconnue'));
     } finally {
       setUpdating(null);
     }
   };
 
-  const GameCard = ({ id, title, icon: Icon, color }: any) => {
+  const GameCard = ({ id, title, icon: Icon, color }: GameCardProps) => {
     const s = games[id] || { volume: 0, profit: 0, count: 0, isActive: true };
     return (
       <div className={`relative p-6 rounded-[2.5rem] bg-slate-900/50 border transition-all ${s.isActive ? 'border-white/5' : 'border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.1)]'}`}>
@@ -195,7 +204,7 @@ export default function AdminMiniGames() {
 
       {/* STATS GLOBALES */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
-        <div className="lg:col-span-2 bg-gradient-to-br from-emerald-500 to-emerald-600 p-10 rounded-[3rem] text-slate-950 shadow-2xl shadow-emerald-500/20">
+        <div className="lg:col-span-2 bg-linear-to-br from-emerald-500 to-emerald-600 p-10 rounded-[3rem] text-slate-950 shadow-2xl shadow-emerald-500/20">
           <p className="font-bold opacity-80 mb-2 italic">Profit Net Consolidé</p>
           <h2 className="text-6xl md:text-8xl font-black tracking-tighter">
             {globalStats.totalProfit.toLocaleString()} <span className="text-2xl opacity-80 italic font-light">HTG</span>
@@ -209,14 +218,28 @@ export default function AdminMiniGames() {
 
       {/* GRILLE DES JEUX */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <GameCard id="mines" title="Mines" icon={Target} color="text-rose-500" />
-        <GameCard id="crash" title="Crash" icon={Zap} color="text-emerald-500" />
-        <GameCard id="biometric" title="Biometric" icon={Dna} color="text-blue-500" />
-        <GameCard id="vault" title="Vault" icon={Lock} color="text-amber-500" />
-        <GameCard id="quiz" title="Quiz" icon={Brain} color="text-purple-500" />
-        <GameCard id="plinko" title="Plinko" icon={Layers} color="text-orange-500" />
-        <GameCard id="glass" title="Glass" icon={Box} color="text-cyan-500" />
-        <GameCard id="elevator" title="Elevator" icon={TrendingUp} color="text-indigo-500" />
+        {ADMIN_GAME_CONFIG.map((game) => {
+          const iconMap: Record<AdminGameId, GameCardProps['icon']> = {
+            mines: Target,
+            crash: Zap,
+            biometric: Dna,
+            vault: Lock,
+            quiz: Brain,
+            plinko: Layers,
+            glass: Box,
+            elevator: TrendingUp,
+          };
+
+          return (
+            <GameCard
+              key={game.id}
+              id={game.id}
+              title={game.title}
+              color={game.color}
+              icon={iconMap[game.id]}
+            />
+          );
+        })}
       </div>
 
       {/* FOOTER */}

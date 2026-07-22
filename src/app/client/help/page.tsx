@@ -100,7 +100,7 @@ export default function HelpPage() {
 
         {/* SECTION 3 : SÉCURITÉ */}
         <HelpSection icon={<ShieldCheck className="text-emerald-500" />} title="Sécurité & Fraude">
-          <div className="bg-rose-500/5 p-5 rounded-[2rem] border border-rose-500/10 space-y-3">
+          <div className="bg-rose-500/5 p-5 rounded-4xl border border-rose-500/10 space-y-3">
             <div className="flex items-center gap-2 text-rose-500">
               <Info size={16} />
               <span className="text-[10px] tracking-widest uppercase">Tolérance Zéro :</span>

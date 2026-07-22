@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { APP_ROUTES, isAdminRole } from "@/lib/auth-routing";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [authorized, setAuthorized] = useState(false);
@@ -9,14 +10,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const ADMIN_ID = "9e141172-93db-4df4-a72b-47b89211b46e";
-
-      if (!user || user.id !== ADMIN_ID) {
-        router.replace("/connexion");
-      } else {
-        setAuthorized(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace(APP_ROUTES.login);
+        return;
       }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (!profile || !isAdminRole(profile.role)) {
+        router.replace(APP_ROUTES.clientHome);
+        return;
+      }
+
+      setAuthorized(true);
     };
     checkAdmin();
   }, [router]);

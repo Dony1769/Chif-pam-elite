@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronRight, Check, Globe } from 'lucide-react';
 
@@ -8,56 +8,71 @@ const TOUR_DATA = {
   fr: [
     { 
       target: "balance-card", 
-      title: "VOS RESSOURCES", 
-      desc: "Voici votre moteur de jeu ! Vos Jetons CP pour jouer et votre solde Gourdes (HTG). Convertissez vos CP ici." 
+      title: "VOTRE TABLEAU DE BORD", 
+      desc: "Suivez vos points d'engagement (CP) et votre solde principal (HTG). Cet espace centralise vos ressources et vos transferts." 
     },
     { 
       target: "market-btn", 
-      title: "BOUTIQUE ELITE", 
-      desc: "Le raccourci rapide pour acheter des packs de CP ou échanger vos diamants." 
+      title: "OFFRES & RÉCOMPENSES", 
+      desc: "Accédez rapidement au marketplace pour activer des packs, avantages et bonus communautaires." 
     },
     { 
       target: "challenges-section", 
-      title: "ZONE DE MISSION", 
-      desc: "C'est le cœur de l'action. Choisissez un défi, battez le score et remportez la mise." 
+      title: "EXPÉRIENCES ACTIVES", 
+      desc: "Découvrez les expériences recommandées du moment et progressez à votre rythme." 
     },
     { 
       target: "nav-profile", // Cible le bouton Compte en bas
-      title: "DÉPÔT & RETRAIT", 
-      desc: "C'est ici maintenant ! Pour recharger votre compte ou retirer vos gains, cliquez sur votre Profil." 
+      title: "COMPTE & OPÉRATIONS", 
+      desc: "Depuis votre profil, gérez vos informations, vos opérations financières et vos paramètres personnels." 
     }
   ],
   ht: [
     { 
       target: "balance-card", 
-      title: "RESOUSE OU YO", 
-      desc: "Sa se motè jwèt ou ! Jeton CP pou jwe ak balans Goud (HTG) ou. Ou ka konvèti CP ou yo la." 
+      title: "TABLO KONTWÒL OU", 
+      desc: "W ap jwenn pwen angajman ou (CP) ak balans prensipal ou (HTG) la. Tout mouvman yo santre isit." 
     },
     { 
       target: "market-btn", 
-      title: "BOUTIK ELIT", 
-      desc: "Chemen kout pou achte pake CP oswa chanje dyaman ou yo." 
+      title: "OF AK REKONPANS", 
+      desc: "Aksè rapid pou aktive pake yo ak benefis kominote a." 
     },
     { 
       target: "challenges-section", 
-      title: "ZÒN MISYON", 
-      desc: "Se la aksyon an ye. Chwazi yon defi, bat skò a epi ranpòte lajan an." 
+      title: "EKSPERYANS AKTIF", 
+      desc: "Dekouvri eksperyans yo epi avanse sou pwòp rit ou." 
     },
     { 
       target: "nav-profile", 
-      title: "DEPÒT & RETRÈ", 
-      desc: "Se la sa ye kounye a! Pou mete lajan sou kont ou oswa fè retrè, klike sou Pwofil ou anba a." 
+      title: "KONT AK OPERASYON", 
+      desc: "Nan pwofil ou a, ou jere enfòmasyon pèsonèl ak operasyon finans ou yo." 
     }
   ]
 };
 
-// Clé v9 pour forcer le reset chez tout le monde
-const STORAGE_KEY = 'has_seen_home_tour_v9'; 
+// Clé v10 pour forcer le reset chez tout le monde
+const STORAGE_KEY = 'has_seen_home_tour_v10'; 
 
 export default function OnboardingTour() {
   const [stepIndex, setStepIndex] = useState<number>(-1);
   const [lang, setLang] = useState<'fr' | 'ht'>('fr'); 
   const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number, bottom: number } | null>(null);
+
+  const finishTour = useCallback(() => {
+    setStepIndex(-1);
+    localStorage.setItem(STORAGE_KEY, 'true');
+  }, []);
+
+  const handleNext = useCallback(() => {
+    setStepIndex((prev) => {
+      if (prev < TOUR_DATA[lang].length - 1) {
+        return prev + 1;
+      }
+      localStorage.setItem(STORAGE_KEY, 'true');
+      return -1;
+    });
+  }, [lang]);
   
   // 1. Démarrage automatique avec délai de sécurité
   useEffect(() => {
@@ -119,20 +134,7 @@ export default function OnboardingTour() {
     }, 100); // Vérifie toutes les 100ms
 
     return () => clearInterval(findElementInterval);
-  }, [stepIndex]);
-
-  const handleNext = () => {
-    if (stepIndex < TOUR_DATA[lang].length - 1) {
-      setStepIndex(prev => prev + 1);
-    } else {
-      finishTour();
-    }
-  };
-
-  const finishTour = () => {
-    setStepIndex(-1);
-    localStorage.setItem(STORAGE_KEY, 'true');
-  };
+  }, [finishTour, handleNext, stepIndex]);
 
   const toggleLang = () => {
     setLang(prev => prev === 'fr' ? 'ht' : 'fr');
@@ -152,7 +154,7 @@ export default function OnboardingTour() {
   return (
     <AnimatePresence>
       {/* Z-Index 100 pour passer au dessus du menu fixe */}
-      <div className="fixed inset-0 z-[100] overflow-hidden pointer-events-none font-sans">
+      <div className="fixed inset-0 z-100 overflow-hidden pointer-events-none font-sans">
         
         {/* A. FOND SOMBRE */}
         <motion.div
@@ -184,7 +186,7 @@ export default function OnboardingTour() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-[340px] mx-auto z-[101]"
+          className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-85 mx-auto z-101"
           style={{
             left: window.innerWidth > 768 ? rect.left + (rect.width/2) - 170 : 16, 
             right: window.innerWidth > 768 ? 'auto' : 16,

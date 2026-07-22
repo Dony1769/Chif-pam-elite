@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User, MessageSquare, Bell, Search } from 'lucide-react'
+import { AdminChatService } from '@/services/admin/chat'
 
 export default function AdminChat() {
   const [users, setUsers] = useState<any[]>([])
@@ -54,8 +55,10 @@ export default function AdminChat() {
 
   // 2. Gestion de la lecture
   const markRead = async (uid: string) => {
-    await supabase.from('messages').update({ is_read_by_admin: true }).eq('user_id', uid).eq('is_admin_message', false)
-    setUsers(prev => prev.map(u => u.id === uid ? { ...u, unread: 0 } : u))
+    const result = await AdminChatService.markMessagesRead(uid)
+    if (result.success) {
+      setUsers(prev => prev.map(u => u.id === uid ? { ...u, unread: 0 } : u))
+    }
   }
 
   useEffect(() => {
@@ -83,13 +86,10 @@ export default function AdminChat() {
     e.preventDefault()
     if (!reply.trim() || !selectedUser) return
     const txt = reply; setReply('')
-    await supabase.from('messages').insert({ 
-        content: txt, 
-        user_id: selectedUser.id, 
-        is_admin_message: true, 
-        is_read_by_admin: true,
-        is_read_by_client: false // Le client recevra une notification (non lu pour lui)
-    })
+    const result = await AdminChatService.sendReply(selectedUser.id, txt)
+    if (!result.success) {
+      setReply(txt)
+    }
   }
 
   return (
@@ -153,7 +153,7 @@ export default function AdminChat() {
 
               {messages.map(m => (
                 <div key={m.id} className={`flex ${m.is_admin_message ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-top-1 duration-300`}>
-                   <div className={`p-5 rounded-[2rem] max-w-lg text-sm font-bold shadow-2xl border ${
+                   <div className={`p-5 rounded-4xl max-w-lg text-sm font-bold shadow-2xl border ${
                      m.is_admin_message 
                      ? 'bg-emerald-500 text-slate-950 rounded-tr-none border-emerald-400' 
                      : 'bg-slate-900 text-emerald-50 border-white/5 rounded-tl-none'

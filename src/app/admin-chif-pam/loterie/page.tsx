@@ -5,9 +5,23 @@ import { supabase } from '@/lib/supabase';
 import { 
   Dices, Loader2, ShieldCheck, Zap, Users, Lock, AlertTriangle
 } from 'lucide-react';
+import { LOTTERY_MOMENTS } from '@/lib/constants/lottery';
+import { AdminLotteryService } from '@/services/admin/lottery';
+
+type Tirage = {
+  id: string;
+  moment: string;
+  chiffre_gagnant: string;
+  multiplicateur: number;
+  status: string;
+};
+
+type MiseAmount = {
+  montant: number;
+};
 
 export default function AdminLoterie() {
-  const [currentTirage, setCurrentTirage] = useState<any>(null);
+  const [currentTirage, setCurrentTirage] = useState<Tirage | null>(null);
   const [multiplicateur, setMultiplicateur] = useState(10);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -38,7 +52,8 @@ export default function AdminLoterie() {
         const { data: mises } = await supabase
           .from('mises')
           .select('montant')
-          .eq('tirage_id', tirage.id);
+          .eq('tirage_id', tirage.id)
+          .returns<MiseAmount[]>();
         
         if (mises) {
           const total = mises.reduce((sum, m) => sum + Number(m.montant), 0);
@@ -73,28 +88,16 @@ export default function AdminLoterie() {
     isActionInProgress.current = true;
 
     try {
-      const numGagnant = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-      const pool = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'))
-        .filter(n => n !== numGagnant)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 9);
-      const grilleVisible = [...pool, numGagnant].sort(() => Math.random() - 0.5);
-
-      const { data, error } = await supabase.from('tirages').insert([{
-        moment: moment,
-        chiffre_gagnant: numGagnant,
-        chiffres_visibles: grilleVisible,
-        multiplicateur: Number(multiplicateur),
-        status: 'ouvert'
-      }]).select().single();
-
-      if (error) throw error;
+      const result = await AdminLotteryService.openSession(moment, Number(multiplicateur));
+      if (!result.success) {
+        throw new Error(result.message);
+      }
       
       // Mise à jour immédiate de l'interface après le clic réussi
-      setCurrentTirage(data);
-      alert(`Session ${moment} ouverte avec succès !`);
-    } catch (err: any) {
-      alert("Erreur lors de l'ouverture : " + err.message);
+      await fetchAdminData();
+      alert(result.message);
+    } catch (err: unknown) {
+      alert("Erreur lors de l'ouverture : " + (err instanceof Error ? err.message : 'Erreur inconnue'));
     } finally {
       setIsProcessing(false);
       isActionInProgress.current = false;
@@ -108,33 +111,20 @@ export default function AdminLoterie() {
 
     setIsProcessing(true);
     isActionInProgress.current = true;
-    const tid = currentTirage.id;
 
     try {
-      // 1. Fermer le tirage
-      await supabase.from('tirages').update({ status: 'termine' }).eq('id', tid);
-
-      // 2. Traiter les mises
-      const { data: mises } = await supabase.from('mises').select('*').eq('tirage_id', tid).eq('status', 'en_attente');
-
-      if (mises && mises.length > 0) {
-        for (const mise of mises) {
-          const gagne = mise.chiffre_choisi === currentTirage.chiffre_gagnant;
-          const gain = gagne ? (Number(mise.montant) * Number(mise.multiplicateur_moment)) : 0;
-          await supabase.from('mises').update({ status: gagne ? 'gagné' : 'perdu', gain_reel: gain }).eq('id', mise.id);
-          if (gagne && gain > 0) {
-            await supabase.rpc('increment_balance', { user_id: mise.user_id, amount: gain });
-          }
-        }
+      const result = await AdminLotteryService.closeSession(currentTirage.id);
+      if (!result.success) {
+        throw new Error(result.message);
       }
 
       // 3. Reset TOTAL
       setCurrentTirage(null);
       setStats({ totalMises: 0, totalMontant: 0 });
-      alert("Session fermée manuellement. Tout est en ordre.");
+      alert(result.message);
       
-    } catch (err: any) {
-      alert("Erreur lors de la clôture : " + err.message);
+    } catch (err: unknown) {
+      alert("Erreur lors de la clôture : " + (err instanceof Error ? err.message : 'Erreur inconnue'));
     } finally {
       setIsProcessing(false);
       isActionInProgress.current = false;
@@ -170,7 +160,7 @@ export default function AdminLoterie() {
           {/* GAUCHE : SESSIONS */}
           <div className="bg-slate-900/40 p-6 rounded-4xl border border-white/5 space-y-4">
             <h3 className="text-xs text-slate-500 flex items-center gap-2"><Zap size={14}/> Actions Manuelles</h3>
-            {['Matin', 'Midi', 'Après-Midi', 'Soir'].map((m) => (
+            {LOTTERY_MOMENTS.map((m) => (
               <button
                 key={m}
                 disabled={!!currentTirage || isProcessing}

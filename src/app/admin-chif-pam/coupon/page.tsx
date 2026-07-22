@@ -1,7 +1,9 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Ticket, Plus, Trash2, Power, Loader2 } from 'lucide-react';
+import { validatePositiveAmount, validateRequiredText } from '@/lib/validation';
+import { AdminCouponsService } from '@/services/admin/coupons';
+import { Ticket, Plus, Power, Loader2 } from 'lucide-react';
 
 export default function AdminCoupons() {
   const [coupons, setCoupons] = useState<any[]>([]);
@@ -18,16 +20,42 @@ export default function AdminCoupons() {
 
   const createCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const codeCheck = validateRequiredText(code, 'Le code', 40);
+    if (!codeCheck.ok) {
+      alert(codeCheck.message || 'Code invalide.');
+      return;
+    }
+
+    const parsedAmount = parseFloat(amount);
+    const amountCheck = validatePositiveAmount(parsedAmount, 'Le montant');
+    if (!amountCheck.ok) {
+      alert(amountCheck.message || 'Montant invalide.');
+      return;
+    }
+
     setLoading(true);
-    await supabase.from('coupons').insert([{ code: code.toUpperCase(), amount: parseFloat(amount) }]);
-    setCode(''); setAmount('');
-    fetchCoupons();
+
+    const result = await AdminCouponsService.create(code, parsedAmount);
+    if (!result.success) {
+      alert('Erreur lors de la création : ' + result.message);
+      setLoading(false);
+      return;
+    }
+
+    setCode('');
+    setAmount('');
+    await fetchCoupons();
     setLoading(false);
   };
 
   const toggleStatus = async (id: string, currentStatus: boolean) => {
-    await supabase.from('coupons').update({ is_active: !currentStatus }).eq('id', id);
-    fetchCoupons();
+    const result = await AdminCouponsService.toggleStatus(id, currentStatus);
+    if (!result.success) {
+      alert('Erreur de mise à jour : ' + result.message);
+      return;
+    }
+    await fetchCoupons();
   };
 
   return (

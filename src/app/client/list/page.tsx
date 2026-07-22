@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Search, Heart, Zap, Layers, Target, Grid, 
   Fingerprint, Brain, Lock, ChevronLeft, Star,
-  Home, Gamepad2, Ticket, MessageSquare, User,
+  Home, Gamepad2, MessageSquare, User,
   Users, LucideIcon, ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,33 +28,30 @@ interface GameConfig {
 
 // --- CONFIGURATION DES JEUX ---
 const GAMES: GameConfig[] = [
-  { id: 'crash', name: "CROISSANCE", desc: "Anticipez la courbe", path: "/client/crash", icon: Zap, iconColor: "text-amber-400", color: "from-amber-500/20", players: "1,248", category: "Multiplicateur" },
-  { id: 'squidglass', name: "SQUID GLASS", desc: "Le pont de la survie", path: "/client/squidglass", icon: Layers, iconColor: "text-rose-500", color: "from-rose-500/20", players: "942", category: "Agilité" },
-  { id: 'plinko', name: "PLINKO ELITE", desc: "Multiplicateurs en cascade", path: "/client/plinko", icon: Target, iconColor: "text-blue-400", color: "from-blue-500/20", players: "1,105", category: "Hasard" },
-  { id: 'mines', name: "MINES", desc: "Gestion du risque", path: "/client/mines", icon: Grid, iconColor: "text-emerald-500", color: "from-emerald-500/20", players: "856", category: "Stratégie" },
-  { id: 'biometric', name: "BIOMETRIC HACK", desc: "Agilité visuelle", path: "/client/biometric-hack", icon: Fingerprint, iconColor: "text-cyan-400", color: "from-cyan-500/20", players: "652", category: "Réflexes" },
-  { id: 'quiz', name: "CHIF QUIZ", desc: "Connaissances", path: "/client/quiz", icon: Brain, iconColor: "text-purple-400", color: "from-purple-500/20", players: "3,012", category: "Savoir" },
-  { id: 'laser', name: "LASER VAULT", desc: "Précision", path: "/client/laser-vault", icon: Lock, iconColor: "text-orange-500", color: "from-orange-500/20", players: "2,094", category: "Précision" }
+  { id: 'crash', name: "Signal Growth", desc: "Lecture de tendance", path: "/client/crash", icon: Zap, iconColor: "text-amber-400", color: "from-amber-500/20", players: "1,248", category: "Analyse" },
+  { id: 'squidglass', name: "Squid Glass", desc: "Décision séquentielle", path: "/client/squidglass", icon: Layers, iconColor: "text-rose-500", color: "from-rose-500/20", players: "942", category: "Agilité" },
+  { id: 'plinko', name: "Plinko Matrix", desc: "Simulation dynamique", path: "/client/plinko", icon: Target, iconColor: "text-blue-400", color: "from-blue-500/20", players: "1,105", category: "Exploration" },
+  { id: 'mines', name: "Mines Grid", desc: "Choix progressifs", path: "/client/mines", icon: Grid, iconColor: "text-emerald-500", color: "from-emerald-500/20", players: "856", category: "Stratégie" },
+  { id: 'biometric', name: "Biometric Lab", desc: "Agilité visuelle", path: "/client/biometric-hack", icon: Fingerprint, iconColor: "text-cyan-400", color: "from-cyan-500/20", players: "652", category: "Réflexes" },
+  { id: 'quiz', name: "Quiz Insights", desc: "Connaissance active", path: "/client/quiz", icon: Brain, iconColor: "text-purple-400", color: "from-purple-500/20", players: "3,012", category: "Savoir" },
+  { id: 'laser', name: "Laser Vault", desc: "Précision adaptative", path: "/client/laser-vault", icon: Lock, iconColor: "text-orange-500", color: "from-orange-500/20", players: "2,094", category: "Précision" }
 ];
 
 export default function GameListPage() {
   const router = useRouter();
   const pathname = usePathname();
   const [search, setSearch] = useState("");
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-    const saved = localStorage.getItem('fav_games');
-    if (saved) {
-        try {
-            setFavorites(JSON.parse(saved));
-        } catch (e) {
-            console.error("Erreur lecture favoris", e);
-        }
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const saved = window.localStorage.getItem('fav_games');
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error('Erreur lecture favoris', e);
+      return [];
     }
-  }, []);
+  });
 
   const toggleFavorite = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -75,10 +72,8 @@ export default function GameListPage() {
     [favorites]
   );
 
-  if (!isMounted) return null;
-
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-sans select-none overflow-x-hidden pb-32">
+    <div className="ds-page text-white font-sans select-none overflow-x-hidden pb-32 ds-fade-up">
       
       {/* Top Bar Fixe */}
       <div className="sticky top-0 z-40 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between shadow-lg shadow-black/20">
@@ -89,7 +84,7 @@ export default function GameListPage() {
           <ChevronLeft size={20} className="text-white" />
         </button>
         <h1 className="text-lg font-black italic tracking-tighter uppercase">
-          ELITE <span className="text-emerald-500">GAMES</span>
+          EXPERIENCE <span className="text-emerald-400">HUB</span>
         </h1>
         <div className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
           <Star size={18} className="text-emerald-500" />
@@ -104,13 +99,17 @@ export default function GameListPage() {
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-500 transition-colors" size={18} />
           <input 
             type="text"
-            placeholder="RECHERCHER UN DÉFI..."
+            placeholder="RECHERCHER UNE EXPÉRIENCE..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-slate-900/80 border border-white/10 rounded-2xl py-4 pl-14 pr-4 outline-none focus:border-emerald-500/50 transition-all text-xs font-bold tracking-widest uppercase text-white placeholder:text-slate-600 relative z-10"
           />
         </div>
 
+        {/* --- BANNIÈRE PUB EXOCLICK --- */}
+        <div className="w-full overflow-hidden rounded-4xl border border-white/5 shadow-2xl relative min-h-25 flex items-center justify-center bg-black/40">
+            <ExoClickBanner />
+        </div>
 
         {/* Section Favoris */}
         <AnimatePresence>
@@ -122,14 +121,14 @@ export default function GameListPage() {
               className="space-y-4"
             >
               <h2 className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase flex items-center gap-2 pl-2">
-                <Heart size={12} className="fill-rose-500 text-rose-500" /> Vos Favoris
+                <Heart size={12} className="fill-rose-500 text-rose-500" /> Vos sélections
               </h2>
               <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 no-scrollbar snap-x">
                 {favoriteGames.map(game => (
                   <motion.div 
                     key={`fav-${game.id}`}
                     onClick={() => router.push(game.path)}
-                    className="min-w-[160px] snap-center bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 p-5 rounded-[2rem] relative active:scale-95 transition-transform shadow-lg"
+                    className="min-w-40 snap-center bg-linear-to-br from-slate-800 to-slate-900 border border-white/10 p-5 rounded-4xl relative active:scale-95 transition-transform shadow-lg"
                   >
                     <div className={`mb-4 w-10 h-10 rounded-full flex items-center justify-center bg-black/40 border border-white/5`}>
                       <game.icon size={20} className={game.iconColor} />
@@ -153,7 +152,7 @@ export default function GameListPage() {
         {/* Grille de tous les jeux */}
         <section className="space-y-4">
           <h2 className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase pl-2">
-            {search ? `Résultats (${filteredGames.length})` : "Bibliothèque Complète"}
+            {search ? `Résultats (${filteredGames.length})` : "Catalogue d'expériences"}
           </h2>
           
           <div className="grid grid-cols-1 gap-4">
@@ -164,11 +163,11 @@ export default function GameListPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
                 onClick={() => router.push(game.path)}
-                className="group relative bg-[#0f172a]/60 border border-white/5 rounded-[2rem] p-4 flex items-center gap-5 active:scale-[0.98] transition-all overflow-hidden hover:border-emerald-500/30 hover:bg-[#0f172a]"
+                className="group relative bg-[#0f172a]/60 border border-white/5 rounded-4xl p-4 flex items-center gap-5 active:scale-[0.98] transition-all overflow-hidden hover:border-emerald-500/30 hover:bg-[#0f172a]"
               >
-                <div className={`absolute inset-0 bg-gradient-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+                <div className={`absolute inset-0 bg-linear-to-r ${game.color} to-transparent opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
                 
-                <div className="w-16 h-16 rounded-[1.5rem] bg-black border border-white/10 flex items-center justify-center shrink-0 z-10 shadow-lg group-hover:scale-105 transition-transform">
+                <div className="w-16 h-16 rounded-3xl bg-black border border-white/10 flex items-center justify-center shrink-0 z-10 shadow-lg group-hover:scale-105 transition-transform">
                   <game.icon size={28} className={game.iconColor} />
                 </div>
                 
@@ -203,11 +202,11 @@ export default function GameListPage() {
       </main>
 
       {/* Barre de Navigation Basse */}
-      <nav className="fixed bottom-0 inset-x-0 bg-[#020617]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 pb-8 rounded-t-[2rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+      <nav className="fixed bottom-0 inset-x-0 bg-[#020617]/90 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-50 pb-8 rounded-t-4xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
         <NavIcon href="/client/home" icon={<Home size={22} />} label="ACCUEIL" active={pathname === '/client/home'} />
-        <NavIcon href="/client/list" icon={<Gamepad2 size={22} />} label="JEUX" active={pathname === '/client/list'} />
-        <NavIcon href="/client/market" icon={<ShoppingBag size={22} />} label="SHOP" active={pathname === '/client/market'} />
-        <NavIcon href="/client/chat" icon={<MessageSquare size={22} />} label="CHAT" active={pathname === '/client/chat'} />
+        <NavIcon href="/client/list" icon={<Gamepad2 size={22} />} label="EXPLORER" active={pathname === '/client/list'} />
+        <NavIcon href="/client/market" icon={<ShoppingBag size={22} />} label="OFFRES" active={pathname === '/client/market'} />
+        <NavIcon href="/client/chat" icon={<MessageSquare size={22} />} label="COMMUNAUTÉ" active={pathname === '/client/chat'} />
         <NavIcon href="/client/profile" icon={<User size={22} />} label="PROFIL" active={pathname === '/client/profile'} />
       </nav>
     </div>

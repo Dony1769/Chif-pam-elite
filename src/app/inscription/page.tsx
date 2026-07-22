@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
+import { normalizePhoneInput } from '@/lib/phone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   UserCircle, Phone, Lock, ArrowRight, 
@@ -45,7 +46,7 @@ function SignupForm() {
     e.preventDefault();
     setError('');
     
-    const cleanPhone = phone.trim().replace(/\s/g, '');
+    const cleanPhone = normalizePhoneInput(phone);
     if (cleanPhone.length < 8) return setError("Numéro trop court");
     if (password.length < 6) return setError("Mot de passe : 6 caractères min.");
 
@@ -190,7 +191,7 @@ export default function Inscription() {
                 </div>
                 <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter leading-none mb-4 text-white">
                     Rejoignez <br/>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500">L'Élite.</span>
+                    <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-cyan-500">L'Élite.</span>
                 </h1>
                 <p className="text-slate-400 text-sm leading-relaxed">
                     Créez votre compte sécurisé pour sauvegarder vos scores, participer aux classements nationaux et convertir vos compétences en récompenses réelles.

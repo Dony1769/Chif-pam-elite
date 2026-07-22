@@ -1,7 +1,15 @@
 // lib/supabase.ts
 import { createBrowserClient } from '@supabase/ssr'
 
-const supabaseUrl = 'https://ohviqihuuoiwmpckifnt.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' // Ton vrai token
+function requireEnv(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY'): string {
+	const value = process.env[name];
+	if (!value) {
+		throw new Error(`Missing required environment variable: ${name}`);
+	}
+	return value;
+}
+
+const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
+const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)

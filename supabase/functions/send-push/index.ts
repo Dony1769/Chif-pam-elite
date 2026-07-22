@@ -6,6 +6,21 @@ import webpush from "https://esm.sh/web-push@3.6.7"
 // Cette ligne magique empêche Next.js de planter s'il regarde le fichier
 declare const Deno: any;
 
+type PushRequestPayload = {
+  user_id?: string;
+  title?: string;
+  body?: string;
+  url?: string;
+};
+
+function getRequiredEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) {
+    throw new Error(`Missing environment variable: ${name}`);
+  }
+  return value;
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -17,17 +32,25 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { user_id, title, body, url } = await req.json()
+    const payload = (await req.json()) as PushRequestPayload
+    const { user_id, title, body, url } = payload
+
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "user_id is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     webpush.setVapidDetails(
       "mailto:jeanguidonyguillaume1@gmail.com",
-      Deno.env.get("NEXT_PUBLIC_VAPID_PUBLIC_KEY")!,
-      Deno.env.get("VAPID_PRIVATE_KEY")!
+      getRequiredEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY"),
+      getRequiredEnv("VAPID_PRIVATE_KEY")
     )
 
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SERVICE_ROLE_KEY")!
+      getRequiredEnv("SUPABASE_URL"),
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || getRequiredEnv("SERVICE_ROLE_KEY")
     )
 
     const { data: pushData, error: dbError } = await supabaseAdmin
@@ -56,8 +79,9 @@ Deno.serve(async (req: Request) => {
       status: 200,
     })
 
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return new Response(JSON.stringify({ error: message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     })

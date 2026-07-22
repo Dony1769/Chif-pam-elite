@@ -4,11 +4,34 @@
    VARIABLES & THÈME DE BASE (CHIF-PAM)
 ----------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  /* Couleurs Chif-Pam */
-  --chif-emerald: #10b981;
-  --chif-dark: #020617;
+  --bg-0: #05070b;
+  --bg-1: #090d14;
+  --surface-1: rgba(15, 20, 30, 0.82);
+  --surface-2: rgba(20, 27, 39, 0.72);
+  --surface-3: rgba(255, 255, 255, 0.04);
+
+  --fg-1: #f3f7ff;
+  --fg-2: #b8c3d6;
+  --fg-3: #8a95a8;
+  --fg-4: #657084;
+
+  --accent: #6ee7c8;
+  --accent-contrast: #031412;
+  --accent-border: rgba(110, 231, 200, 0.35);
+  --accent-ring: rgba(110, 231, 200, 0.2);
+  --accent-glow: rgba(110, 231, 200, 0.24);
+
+  --danger: #f43f5e;
+  --warning: #f59e0b;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --elevation-1: 0 12px 36px rgba(2, 8, 20, 0.46);
+  --elevation-2: 0 22px 60px rgba(2, 8, 20, 0.55);
+
+  --background: var(--bg-0);
+  --foreground: var(--fg-1);
 }
 
 @theme inline {
@@ -20,16 +43,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #020617; /* Ajusté pour correspondre à votre page connexion */
-    --foreground: #ededed;
+    --background: var(--bg-0);
+    --foreground: var(--fg-1);
   }
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(110, 231, 200, 0.12), transparent 60%),
+    radial-gradient(1000px 700px at 110% -30%, rgba(120, 168, 255, 0.14), transparent 56%),
+    linear-gradient(145deg, var(--bg-1), var(--bg-0));
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "Space Grotesk", "Avenir Next", "SF Pro Text", sans-serif;
   overflow-x: hidden;
+  min-height: 100vh;
 }
 
 /* -----------------------------------------------------------
@@ -88,42 +115,89 @@ body {
    ANIMATIONS CHIF-PAM (SYSTÈME DE VIE & UX)
 ----------------------------------------------------------- */
 
-/* 1. SKELETON LOADER (Point n°1 du rapport : Lenteur) */
-@keyframes shimmer {
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 231, 200, 0.4) transparent;
+}
+
+.ds-page {
+  min-height: 100vh;
+  color: var(--fg-1);
+}
+
+.ds-container {
+  width: min(1120px, 100% - 2rem);
+  margin-inline: auto;
+}
+
+.ds-surface {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1.5rem;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--elevation-1);
+}
+
+.ds-title {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.ds-eyebrow {
+  font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.ds-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: ds-shimmer 1.4s infinite linear;
+}
+
+.ds-focus {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+@keyframes ds-shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
-.skeleton {
-  background: linear-gradient(90deg, #0f172a 25%, #1e293b 50%, #0f172a 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite linear;
-  border-radius: 0.5rem;
+@keyframes ds-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
-/* 2. EFFET DE VIE SUR LES CHIFFRES (Point n°3 du rapport) */
-.number-glow {
-  transition: all 0.3s ease;
+.ds-fade-up {
+  animation: ds-fade-up 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.number-glow:active {
-  transform: scale(0.95);
-  filter: brightness(1.2);
-}
-
-/* 3. ANIMATION DU LOGO (Point n°4 du rapport) */
-@keyframes logo-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.4)); }
-  50% { opacity: 0.8; transform: scale(0.98); filter: drop-shadow(0 0 15px rgba(16, 185, 129, 0.6)); }
+@keyframes ds-soft-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(110, 231, 200, 0.18); }
+  50% { box-shadow: 0 0 0 8px rgba(110, 231, 200, 0); }
 }
 
 .logo-animate {
-  animation: logo-pulse 3s infinite ease-in-out;
+  animation: ds-soft-pulse 2.4s infinite;
 }
 
-/* 4. TRANSITIONS DE PAGES LÉGÈRES */
 .page-fade-in {
-  animation: fadeIn 0.4s ease-out;
+  animation: ds-fade-up 0.32s ease-out;
 }
 
 @keyframes fadeIn {
@@ -135,15 +209,15 @@ body {
    CUSTOM SCROLLBAR GLOBAL
 ----------------------------------------------------------- */
 ::-webkit-scrollbar {
-  width: 5px;
+  width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(110, 231, 200, 0.55), rgba(80, 147, 255, 0.38));
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #10b981;
+  background: linear-gradient(180deg, rgba(110, 231, 200, 0.8), rgba(80, 147, 255, 0.56));
 }

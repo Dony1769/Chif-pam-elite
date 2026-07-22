@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-// IMPORT DE LA SERVER ACTION CRÉÉE CI-DESSUS
-import { adminResetPassword } from '@/app/actions/adminActions'; 
+import { validateBalance, validatePassword } from '@/lib/validation';
+import { AdminUsersService } from '@/services/admin/users';
 import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare, Key } from 'lucide-react';
 
 interface UserProfile {
@@ -40,14 +40,15 @@ export default function AdminUsers() {
     const newPass = prompt(`Nouveau mot de passe pour @${username || 'cet utilisateur'} :`);
     
     if (!newPass) return;
-    if (newPass.length < 6) {
-      alert("Le mot de passe doit contenir au moins 6 caractères.");
+    const passwordCheck = validatePassword(newPass);
+    if (!passwordCheck.ok) {
+      alert(passwordCheck.message || 'Mot de passe invalide.');
       return;
     }
 
     try {
       // Appel sécurisé au serveur
-      const result = await adminResetPassword(id, newPass);
+      const result = await AdminUsersService.resetPassword(id, newPass);
 
       if (result.success) {
         alert("✅ " + result.message);
@@ -60,26 +61,39 @@ export default function AdminUsers() {
     }
   };
 
-  // ... (Le reste de vos fonctions toggleBan et adjustBalance reste inchangé) ...
-
   const toggleBan = async (id: string, currentStatus: boolean) => {
     let banReason = null;
     if (!currentStatus) {
       banReason = prompt("Motif du blocage :");
       if (banReason === null) return;
     }
-    const { error } = await supabase.from('profiles').update({ 
-      is_banned: !currentStatus,
-      ban_reason: !currentStatus ? (banReason || "Non spécifié") : null 
-    }).eq('id', id);
-    if (!error) fetchUsers();
+
+    const result = await AdminUsersService.setBanStatus(id, !currentStatus, banReason);
+    if (!result.success) {
+      alert('❌ Erreur : ' + result.message);
+      return;
+    }
+
+    await fetchUsers();
   };
 
   const adjustBalance = async (id: string) => {
     const newBalance = prompt("Entrez le nouveau solde total (HTG) :");
-    if (newBalance !== null && !isNaN(Number(newBalance))) {
-      const { error } = await supabase.from('profiles').update({ balance: Number(newBalance) }).eq('id', id);
-      if (!error) fetchUsers();
+    if (newBalance !== null) {
+      const parsed = Number(newBalance);
+      const balanceCheck = validateBalance(parsed);
+      if (!balanceCheck.ok) {
+        alert(balanceCheck.message || 'Montant invalide.');
+        return;
+      }
+
+      const result = await AdminUsersService.setBalance(id, parsed);
+      if (!result.success) {
+        alert('❌ Erreur : ' + result.message);
+        return;
+      }
+
+      await fetchUsers();
     }
   };
 

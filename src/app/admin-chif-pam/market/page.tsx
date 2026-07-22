@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { AdminMarketService } from '@/services/admin/market';
 
 interface PackForm {
     nom: string;
@@ -37,10 +38,10 @@ export default function AdminMarket() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const { error } = await supabase.from('boutique_packs').insert([form]);
-        
-        if (error) {
-            alert("Erreur lors de l'ajout : " + error.message);
+        const result = await AdminMarketService.createPack(form);
+
+        if (!result.success) {
+            alert("Erreur lors de l'ajout : " + result.message);
         } else {
             setForm({ nom: '', prix_htg: 0, jetons_quantite: 0, bonus_star_pourcent: 0 });
             fetchPacks();
@@ -48,17 +49,22 @@ export default function AdminMarket() {
     };
 
     const toggleStatus = async (id: string, currentStatus: boolean) => {
-        const { error } = await supabase
-            .from('boutique_packs')
-            .update({ active: !currentStatus })
-            .eq('id', id);
-        if (!error) fetchPacks();
+        const result = await AdminMarketService.togglePackStatus(id, currentStatus);
+        if (!result.success) {
+            alert("Erreur de mise à jour : " + result.message);
+            return;
+        }
+        fetchPacks();
     };
 
     const deletePack = async (id: string) => {
         if (confirm("Supprimer définitivement ce pack ?")) {
-            const { error } = await supabase.from('boutique_packs').delete().eq('id', id);
-            if (!error) fetchPacks();
+            const result = await AdminMarketService.deletePack(id);
+            if (!result.success) {
+                alert("Erreur de suppression : " + result.message);
+                return;
+            }
+            fetchPacks();
         }
     };
 
@@ -73,7 +79,7 @@ export default function AdminMarket() {
 
             {/* Formulaire stylisé */}
             <section className="mb-12">
-                <form onSubmit={handleSubmit} className="bg-[#0a1219] border border-white/5 p-6 rounded-[2rem] shadow-2xl">
+                <form onSubmit={handleSubmit} className="bg-[#0a1219] border border-white/5 p-6 rounded-4xl shadow-2xl">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-500 uppercase ml-2">Nom du Pack</label>

@@ -1,5 +1,32 @@
 // public/sw.js
 
+const CACHE_VERSION = "chifpam-static-v1";
+const RUNTIME_CACHE = "chifpam-runtime-v1";
+const PRECACHE_URLS = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE_URLS)).catch(() => undefined)
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_VERSION && key !== RUNTIME_CACHE)
+          .map((key) => caches.delete(key))
+      )
+    )
+  );
+  if (self.registration.navigationPreload) {
+    event.waitUntil(self.registration.navigationPreload.enable());
+  }
+  self.clients.claim();
+});
+
 // 1. CONFIGURATION MONETAG
 // ⚠️ ATTENTION : Si ce script échoue, tout le SW plante. C'est le risque des régies pubs.
 self.options = {
@@ -12,6 +39,58 @@ try {
 } catch (e) {
     console.warn("Monetag script failed to load", e);
 }
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  const isHttp = url.protocol === "http:" || url.protocol === "https:";
+  const isSameOrigin = url.origin === self.location.origin;
+  const isSupabase = url.hostname.includes("supabase.co");
+  const isApi = url.pathname.startsWith("/api/");
+  const isAdOrAnalytics =
+    url.hostname.includes("googlesyndication") ||
+    url.hostname.includes("google-analytics") ||
+    url.hostname.includes("magsrv.com") ||
+    url.hostname.includes("effectivegatecpm.com") ||
+    url.hostname.includes("3nbf4.com");
+
+  if (!isHttp || isSupabase || isApi || isAdOrAnalytics) return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      (async () => {
+        try {
+          const preloadResponse = await event.preloadResponse;
+          if (preloadResponse) return preloadResponse;
+          const networkResponse = await fetch(request);
+          const cache = await caches.open(RUNTIME_CACHE);
+          cache.put(request, networkResponse.clone());
+          return networkResponse;
+        } catch {
+          const cached = await caches.match(request);
+          return cached || caches.match("/");
+        }
+      })()
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      const networkFetch = fetch(request)
+        .then((response) => {
+          if (response && response.status === 200 && isSameOrigin) {
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+          }
+          return response;
+        })
+        .catch(() => cached);
+      return cached || networkFetch;
+    })
+  );
+});
 
 // 2. GESTION DES PUSH (Venant du Serveur / Edge Function)
 // Ce code s'exécute quand l'app est FERMÉE et qu'un serveur envoie un push

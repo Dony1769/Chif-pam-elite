@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Shield, Flame, BellOff, Coins } from 'lucide-react';
@@ -8,15 +8,51 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type FilterType = 'TOUT' | 'VICTOIRES' | 'DÉFIS' | 'SYSTÈME';
 
-const VAPID_PUBLIC_KEY = "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
+type NotificationRow = {
+  id: string;
+  title: string | null;
+  content: string | null;
+  message: string | null;
+  created_at: string;
+  is_read: boolean;
+  link?: string | null;
+};
+
+type ChallengeRow = {
+  id: string;
+  title: string;
+  prize_pool_cp: number;
+  created_at: string;
+};
+
+type AlertItem = {
+  id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  is_challenge: boolean;
+  is_victory: boolean;
+  link?: string;
+};
+
+type NotificationOptionsWithVibrate = NotificationOptions & {
+  vibrate?: number[];
+  renotify?: boolean;
+  data?: { url: string };
+};
+
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
 
 export default function ClientNotifications() {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [liveChallenges, setLiveChallenges] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [liveChallenges, setLiveChallenges] = useState<ChallengeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('TOUT');
   const [pushEnabled, setPushEnabled] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isTabVisible, setIsTabVisible] = useState(true);
   const router = useRouter();
 
   // --- FONCTION D'ENVOI LOCAL (Quand l'app est ouverte) ---
@@ -38,12 +74,11 @@ export default function ClientNotifications() {
           return;
       }
 
-      // 4. CORRECTION ICI : On type l'objet en 'any' pour autoriser 'vibrate'
-      const options: any = {
+      const options: NotificationOptionsWithVibrate = {
         body: body,
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
-        vibrate: [200, 100, 200], // TypeScript ne bloquera plus cette ligne
+        vibrate: [200, 100, 200],
         tag: "chif-pam-notif",
         renotify: true,
         data: { url: "/client/notifications" }
@@ -55,51 +90,74 @@ export default function ClientNotifications() {
     }
   };
 
-  useEffect(() => { 
+  const fetchAllData = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.push('/connexion');
+      setUserId(user.id);
+
+      const [notifsRes, challengesRes] = await Promise.all([
+        supabase
+          .from('notifications')
+          .select('id, title, content, message, created_at, is_read, link')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('challenges')
+          .select('id, title, prize_pool_cp, created_at')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+      ]);
+
+      setNotifications((notifsRes.data || []) as NotificationRow[]);
+      setLiveChallenges((challengesRes.data || []) as ChallengeRow[]);
+    } finally { setLoading(false); }
+  }, [router]);
+
+  const checkPushSubscription = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setPushEnabled(!!sub && Notification.permission === "granted");
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabVisible(document.visibilityState === 'visible');
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
     fetchAllData();
     checkPushSubscription();
+  }, [checkPushSubscription, fetchAllData]);
+
+  useEffect(() => {
+    if (!userId || !isTabVisible) return;
 
     // RADAR TEMPS RÉEL (Fonctionne seulement app ouverte)
     const channel = supabase.channel('notif_radar_sync')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-        const n = payload.new;
-        setNotifications(prev => [n, ...prev]);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload) => {
+        const n = payload.new as NotificationRow;
+        setNotifications(prev => [n, ...prev.filter((item) => item.id !== n.id)]);
         // Déclenche la notif native immédiatement
         sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle info");
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, (payload) => {
-        const c = payload.new;
-        setLiveChallenges(prev => [c, ...prev]);
+        const c = payload.new as ChallengeRow;
+        setLiveChallenges(prev => [c, ...prev.filter((item) => item.id !== c.id)]);
         // Déclenche la notif native immédiatement
         sendNativePush("NOUVEAU DÉFI 🔥", c.title);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  const fetchAllData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/connexion');
-      
-      const [notifsRes, challengesRes] = await Promise.all([
-        supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('challenges').select('*').eq('is_active', true).order('created_at', { ascending: false })
-      ]);
-      
-      setNotifications(notifsRes.data || []);
-      setLiveChallenges(challengesRes.data || []);
-    } finally { setLoading(false); }
-  };
-
-  const checkPushSubscription = async () => {
-    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      setPushEnabled(!!sub && Notification.permission === "granted");
-    }
-  };
+  }, [isTabVisible, userId]);
 
   const togglePush = async () => {
     setIsRegistering(true);
@@ -145,21 +203,31 @@ export default function ClientNotifications() {
     return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
   };
 
-  const allAlerts = useMemo(() => {
-    const mappedChallenges = liveChallenges.map(c => ({
+  const allAlerts = useMemo<AlertItem[]>(() => {
+    const mappedChallenges: AlertItem[] = liveChallenges.map((c) => ({
       id: `challenge-${c.id}`,
       title: `NOUVEAU DÉFI : ${c.title}`,
       content: `Récompense : ${c.prize_pool_cp} CP. Bonne chance !`,
       created_at: c.created_at,
       is_read: false,
       is_challenge: true,
-      link: '/client/arena'
+      is_victory: false,
+      link: '/client/challenges'
     }));
 
-    const normalizedNotifs = notifications.map(n => ({
+    const normalizedNotifs: AlertItem[] = notifications.map((n) => ({
       ...n,
-      content: n.content || n.message,
-      is_victory: n.title?.includes('VIC') || n.title?.includes('🥇') || n.title?.includes('🥈') || n.title?.includes('🥉') || n.message?.includes('CP')
+      title: n.title || 'ALERTE',
+      content: n.content || n.message || 'Nouvelle information',
+      is_challenge: false,
+      link: n.link ?? undefined,
+      is_victory: Boolean(
+        n.title?.includes('VIC') ||
+        n.title?.includes('🥇') ||
+        n.title?.includes('🥈') ||
+        n.title?.includes('🥉') ||
+        n.message?.includes('CP')
+      )
     }));
 
     return [...mappedChallenges, ...normalizedNotifs].sort((a, b) => 
@@ -203,8 +271,7 @@ export default function ClientNotifications() {
             <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">RADAR_ACTIF_SYNCHRONISÉ</p>
           </div>
           <button onClick={async () => {
-             const { data: { user } } = await supabase.auth.getUser();
-             if (user) await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id);
+             if (userId) await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
              setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
           }} className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-500">
             <CheckCheck size={20} />
@@ -245,11 +312,11 @@ export default function ClientNotifications() {
                 layout
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className={`relative p-6 rounded-[2rem] border overflow-hidden cursor-pointer transition-all ${
+                className={`relative p-6 rounded-4xl border overflow-hidden cursor-pointer transition-all ${
                   n.is_challenge 
-                  ? 'bg-gradient-to-br from-blue-900/30 to-black border-blue-500/50' 
+                  ? 'bg-linear-to-br from-blue-900/30 to-black border-blue-500/50' 
                   : n.is_victory 
-                  ? 'bg-gradient-to-br from-emerald-900/40 via-black to-black border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                  ? 'bg-linear-to-br from-emerald-900/40 via-black to-black border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
                   : n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-slate-900/40 border-white/10'
                 }`}
                 onClick={() => n.link && router.push(n.link)}

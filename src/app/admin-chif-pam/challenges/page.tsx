@@ -1,28 +1,73 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation'; 
 import { Plus, Trash2, Loader2, ShieldCheck, Target, Users, Coins, BarChart3, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AdminChallengesService } from '@/services/admin/challenges';
+import { DEFAULT_ADMIN_CHALLENGE_FORM, type AdminChallengeForm, type ChallengeGameType } from '@/lib/constants/challenges';
+import { computeChallengePrizePool } from '@/validators/challenges';
 
 export default function AdminArena() {
   const router = useRouter(); 
+
+  type ChallengeAttempt = {
+    user_id: string;
+    attempts_count: number | null;
+    total_score: number | null;
+  };
+
+  type Challenge = {
+    id: string;
+    title: string;
+    game_type: string;
+    entry_fee_cp_base: number;
+    prize_pool_cp: number;
+    max_participants: number;
+    is_active: boolean;
+    challenge_attempts?: ChallengeAttempt[];
+  };
   
-  const [challenges, setChallenges] = useState<any[]>([]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ 
-    title: '', 
-    game_type: 'quiz', 
-    entry_fee_cp_base: 100,
-    prize_pool_cp: 0, 
-    max_participants: 50, 
-    ends_at: '' 
-  });
+  const [form, setForm] = useState<AdminChallengeForm>({ ...DEFAULT_ADMIN_CHALLENGE_FORM });
+
+  const readChallenges = useCallback(async () => {
+    return supabase
+      .from('challenges')
+      .select('*, challenge_attempts(user_id, attempts_count, total_score)')
+      .order('created_at', { ascending: false });
+  }, []);
+
+  const fetchChallenges = useCallback(async () => {
+    const { data, error } = await readChallenges();
+
+    if (error) {
+      console.error(error);
+    }
+
+    setChallenges(((data || []) as Challenge[]));
+    setLoading(false);
+  }, [readChallenges]);
 
   // 1. Chargement initial et Realtime
   useEffect(() => { 
-    fetchChallenges();
+    let mounted = true;
+
+    const load = async () => {
+      const { data, error } = await readChallenges();
+      if (!mounted) return;
+
+      if (error) {
+        console.error(error);
+      }
+
+      setChallenges(((data || []) as Challenge[]));
+      setLoading(false);
+    };
+
+    load();
 
     // Ecoute les changements sur challenge_attempts pour mettre à jour les compteurs en direct
     const channel = supabase.channel('admin_arena_sync')
@@ -30,60 +75,63 @@ export default function AdminArena() {
         event: '*', 
         schema: 'public', 
         table: 'challenge_attempts' 
-      }, () => {
-        fetchChallenges();
+      }, async () => {
+        const { data, error } = await readChallenges();
+        if (!mounted) return;
+
+        if (error) {
+          console.error(error);
+          return;
+        }
+
+        setChallenges(((data || []) as Challenge[]));
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  // 2. Calcul automatique de la cagnotte (70% du total théorique)
-  useEffect(() => {
-    const totalCPBrut = form.entry_fee_cp_base * form.max_participants;
-    const netPrizeCP = Math.floor(totalCPBrut * 0.70);
-    setForm(prev => ({ ...prev, prize_pool_cp: netPrizeCP }));
-  }, [form.entry_fee_cp_base, form.max_participants]);
-
-  const fetchChallenges = async () => {
-    const { data, error } = await supabase
-      .from('challenges')
-      .select('*, challenge_attempts(user_id, attempts_count, total_score)')
-      .order('created_at', { ascending: false });
-    
-    if (error) console.error(error);
-    setChallenges(data || []);
-    setLoading(false);
-  };
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [readChallenges]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!form.ends_at) return alert("Date d'expiration requise");
-    
-    const { error } = await supabase.from('challenges').insert([{ 
-      ...form, 
-      ends_at: new Date(form.ends_at).toISOString(),
-      is_active: true 
-    }]);
-    
-    if (error) {
-      alert("Erreur RLS ou Base : " + error.message);
-    } else {
+
+    const result = await AdminChallengesService.create({
+      title: form.title,
+      game_type: form.game_type,
+      entry_fee_cp_base: form.entry_fee_cp_base,
+      max_participants: form.max_participants,
+      ends_at: form.ends_at,
+    });
+
+    if (result.success) {
       setShowModal(false);
       fetchChallenges();
+    } else {
+      alert("Erreur RLS ou Base : " + result.message);
     }
   };
 
   const closeChallenge = async (id: string) => {
     if(!confirm("CLÔTURER LA MISSION ? Elle ne sera plus jouable.")) return;
-    const { error } = await supabase.from('challenges').update({ is_active: false }).eq('id', id);
-    if(!error) fetchChallenges();
+    const result = await AdminChallengesService.close(id);
+    if (result.success) {
+      fetchChallenges();
+      return;
+    }
+    alert("Erreur de clôture : " + result.message);
   };
 
   const deleteChallenge = async (id: string) => {
     if(!confirm("SUPPRIMER DÉFINITIVEMENT ? Toutes les tentatives liées seront perdues.")) return;
-    const { error } = await supabase.from('challenges').delete().eq('id', id);
-    if(!error) fetchChallenges();
+    const result = await AdminChallengesService.delete(id);
+    if (result.success) {
+      fetchChallenges();
+      return;
+    }
+    alert("Erreur de suppression : " + result.message);
   };
 
   if (loading) return (
@@ -113,7 +161,7 @@ export default function AdminArena() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {challenges.map((ch) => {
           const uniquePlayers = ch.challenge_attempts?.length || 0;
-          const totalSessions = ch.challenge_attempts?.reduce((acc: number, curr: any) => acc + (curr.attempts_count || 0), 0) || 0;
+          const totalSessions = ch.challenge_attempts?.reduce((acc, curr) => acc + (curr.attempts_count || 0), 0) || 0;
           
           return (
             <motion.div 
@@ -192,7 +240,7 @@ export default function AdminArena() {
       {/* MODAL : CRÉATION DE MISSION */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-2xl">
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-2xl">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
@@ -214,7 +262,7 @@ export default function AdminArena() {
               
               <div className="space-y-4">
                 <div className="space-y-2">
-                    <p className="text-[9px] text-slate-500 ml-2 uppercase">Titre de l'opération</p>
+                    <p className="text-[9px] text-slate-500 ml-2 uppercase">Titre de l&apos;opération</p>
                     <input 
                       required 
                       placeholder="EX: QUIZ DES LÉGENDES" 
@@ -228,7 +276,7 @@ export default function AdminArena() {
                     <p className="text-[9px] text-slate-500 ml-2 uppercase">Moteur de jeu</p>
                     <select 
                       className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none font-bold italic" 
-                      onChange={e => setForm({...form, game_type: e.target.value})}
+                      onChange={e => setForm({...form, game_type: e.target.value as ChallengeGameType})}
                     >
                         <option value="quiz">QUIZ ELITE</option>
                         <option value="biometric">BIOMETRIC HACK</option>
@@ -254,7 +302,14 @@ export default function AdminArena() {
                       type="number" 
                       value={form.entry_fee_cp_base} 
                       className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none text-center font-black" 
-                      onChange={e => setForm({...form, entry_fee_cp_base: Number(e.target.value)})} 
+                      onChange={e => {
+                        const nextEntryFee = Number(e.target.value);
+                        setForm({
+                          ...form,
+                          entry_fee_cp_base: nextEntryFee,
+                          prize_pool_cp: computeChallengePrizePool(nextEntryFee, form.max_participants),
+                        });
+                      }} 
                     />
                   </div>
                   <div className="space-y-2">
@@ -273,7 +328,14 @@ export default function AdminArena() {
                       type="number" 
                       value={form.max_participants} 
                       className="w-full bg-black border border-white/5 p-5 rounded-2xl outline-none text-center font-black" 
-                      onChange={e => setForm({...form, max_participants: Number(e.target.value)})} 
+                      onChange={e => {
+                        const nextMaxParticipants = Number(e.target.value);
+                        setForm({
+                          ...form,
+                          max_participants: nextMaxParticipants,
+                          prize_pool_cp: computeChallengePrizePool(form.entry_fee_cp_base, nextMaxParticipants),
+                        });
+                      }} 
                     />
                   </div>
                 </div>
@@ -281,7 +343,7 @@ export default function AdminArena() {
 
               <button 
                 type="submit" 
-                className="w-full py-6 bg-emerald-600 text-black rounded-[2rem] font-black text-xl hover:bg-emerald-400 transition-all uppercase shadow-[0_15px_30px_rgba(16,185,129,0.3)] flex items-center justify-center gap-3"
+                className="w-full py-6 bg-emerald-600 text-black rounded-4xl font-black text-xl hover:bg-emerald-400 transition-all uppercase shadow-[0_15px_30px_rgba(16,185,129,0.3)] flex items-center justify-center gap-3"
               >
                 DÉPLOYER LA MISSION <Zap size={20} fill="black" />
               </button>

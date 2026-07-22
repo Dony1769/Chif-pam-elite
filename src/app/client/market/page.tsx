@@ -109,7 +109,7 @@ export default function MarketPage() {
                                     initial={{ opacity: 0, scale: 0.95 }} 
                                     animate={{ opacity: 1, scale: 1 }} 
                                     exit={{ opacity: 0, scale: 0.95 }}
-                                    className={`relative group overflow-hidden border rounded-[2rem] p-6 transition-all duration-300 hover:-translate-y-1 ${
+                                    className={`relative group overflow-hidden border rounded-4xl p-6 transition-all duration-300 hover:-translate-y-1 ${
                                         activeTab === 'diamonds' ? 'bg-blue-950/20 border-blue-500/20 hover:border-blue-500/50' : 'bg-slate-900/40 border-white/5 hover:border-emerald-500/30'
                                     }`}
                                 >
@@ -150,7 +150,7 @@ export default function MarketPage() {
                 {/* --- INTÉGRATION PUBLICITÉ ADSTERRA --- */}
                 <div className="border-t border-white/5 pt-8">
                     <p className="text-center text-[10px] text-slate-600 font-black uppercase tracking-widest mb-4">Sponsorisé</p>
-                    <div className="bg-black/20 rounded-2xl overflow-hidden min-h-[100px] flex items-center justify-center">
+                    <div className="bg-black/20 rounded-2xl overflow-hidden min-h-25 flex items-center justify-center">
                         <AdsterraNativeBanner />
                     </div>
                 </div>

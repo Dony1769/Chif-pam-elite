@@ -19,22 +19,51 @@ export function useAuth() {
     };
 
     useEffect(() => {
-        fetchProfile();
+        let isMounted = true;
+        let channel: ReturnType<typeof supabase.channel> | null = null;
 
-        // Écouter les changements en temps réel sur la table profiles
-        const channel = supabase
-            .channel('profile_updates')
-            .on('postgres_changes', 
-                { event: 'UPDATE', schema: 'public', table: 'profiles' }, 
-                (payload) => {
-                    if (userProfile && payload.new.id === userProfile.id) {
-                        setUserProfile(payload.new);
+        const bootstrap = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (!user) {
+                if (isMounted) setLoading(false);
+                return;
+            }
+
+            const { data } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            if (isMounted) {
+                setUserProfile(data);
+                setLoading(false);
+            }
+
+            // Écouter seulement les updates du profil utilisateur courant
+            channel = supabase
+                .channel(`profile_updates_${user.id}`)
+                .on(
+                    'postgres_changes',
+                    { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+                    (payload) => {
+                        if (isMounted) {
+                            setUserProfile(payload.new);
+                        }
                     }
-                }
-            )
-            .subscribe();
+                )
+                .subscribe();
+        };
 
-        return () => { supabase.removeChannel(channel); };
+        bootstrap();
+
+        return () => {
+            isMounted = false;
+            if (channel) {
+                supabase.removeChannel(channel);
+            }
+        };
     }, []);
 
     return { userProfile, loading, refreshProfile: fetchProfile };

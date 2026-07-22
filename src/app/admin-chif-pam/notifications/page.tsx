@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Send, Bell, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { AdminNotificationsService } from '@/services/admin/notifications';
+import { Send, Bell, CheckCircle2, Loader2 } from 'lucide-react';
 
 export default function AdminNotifications() {
   const [title, setTitle] = useState('');
@@ -18,41 +18,26 @@ export default function AdminNotifications() {
     
     setLoading(true);
     try {
-      // 1. Récupérer tous les utilisateurs
-      const { data: users, error: userError } = await supabase.from('profiles').select('id');
-      if (userError) throw userError;
-
-      if (users && users.length > 0) {
-        // 2. Préparer les notifications pour la base de données
-        const payload = users.map(u => ({
-          user_id: u.id,
-          title: title.toUpperCase(),
-          content: message,
-          is_read: false,
-          type: 'system' // Ajout du type pour la cohérence
-        }));
-
-        // 3. Insérer en masse (batch insert)
-        const { error: insertError } = await supabase.from('notifications').insert(payload);
-        if (insertError) throw insertError;
-
-        // 4. Envoyer les Push Notifications (Web Push)
-        // On ne bloque pas l'interface si le push échoue, c'est un bonus
-        try {
-            await fetch('/api/push', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ title, message }),
-            });
-        } catch (pushError) {
-            console.error("Erreur envoi push (non bloquant):", pushError);
-        }
-
-        setSent(true);
-        setTitle(''); 
-        setMessage('');
-        setTimeout(() => setSent(false), 3000);
+      const result = await AdminNotificationsService.broadcast(title, message);
+      if (!result.success) {
+        throw new Error(result.message);
       }
+
+      // Push non bloquant conservé côté client
+      try {
+        await fetch('/api/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, message }),
+        });
+      } catch (pushError) {
+        console.error("Erreur envoi push (non bloquant):", pushError);
+      }
+
+      setSent(true);
+      setTitle('');
+      setMessage('');
+      setTimeout(() => setSent(false), 3000);
     } catch (error: any) {
       console.error("Erreur de diffusion:", error);
       alert("Erreur: " + (error.message || "Impossible de diffuser"));
@@ -67,7 +52,7 @@ export default function AdminNotifications() {
         <Bell className="text-emerald-500" size={32} /> DIFFUSION GÉNÉRALE
       </h1>
       
-      <form onSubmit={handleBroadcast} className="bg-slate-900/50 backdrop-blur-sm p-8 rounded-[2rem] border border-white/5 space-y-6 shadow-2xl">
+      <form onSubmit={handleBroadcast} className="bg-slate-900/50 backdrop-blur-sm p-8 rounded-4xl border border-white/5 space-y-6 shadow-2xl">
         <div className="space-y-2">
            <label className="text-[10px] text-emerald-500 ml-4 font-black uppercase tracking-widest">Titre du message</label>
            <input 

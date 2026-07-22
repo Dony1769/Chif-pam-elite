@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { AdminTransactionsService } from '@/services/admin/transactions';
 import { 
   CheckCircle2, XCircle, Clock, 
   ArrowUpCircle, ArrowDownCircle, 
@@ -60,31 +61,17 @@ export default function AdminDemandes() {
     if (!confirm(`${actionText} cette transaction de ${trans.amount} HTG ?`)) return;
     
     setProcessingId(trans.id);
-    let note = "";
+    let note = '';
     if (status === 'rejected') {
       note = prompt("Raison du refus :") || "Demande refusée par l'admin";
     }
 
     try {
-      if (trans.type === 'deposit' && status === 'approved') {
-        await supabase.rpc('increment_balance', { user_id: trans.user_id, amount: trans.amount });
-      } 
-      else if (trans.type === 'withdrawal') {
-        if (status === 'rejected') {
-          await supabase.rpc('refund_withdrawal', { user_id_param: trans.user_id, amount_param: trans.amount });
-        } else {
-          const newLocked = Math.max(0, (trans.profiles?.locked_balance || 0) - trans.amount);
-          await supabase.from('profiles').update({ locked_balance: newLocked }).eq('id', trans.user_id);
-        }
+      const result = await AdminTransactionsService.process(trans.id, status, note);
+      if (!result.success) {
+        throw new Error(result.message);
       }
-
-      const { error: finalError } = await supabase
-        .from('transactions')
-        .update({ status: status, admin_note: note, processed_at: new Date().toISOString() })
-        .eq('id', trans.id);
-
-      if (finalError) throw finalError;
-      fetchTransactions();
+      await fetchTransactions();
     } catch (err: any) {
       alert("Erreur système : " + err.message);
     } finally {
@@ -149,7 +136,7 @@ export default function AdminDemandes() {
         {/* LISTE DES TRANSACTIONS FILTRÉES */}
         <div className="grid gap-4">
           {filteredTransactions.map((t) => (
-            <div key={t.id} className={`bg-slate-900/40 backdrop-blur-md border ${t.status === 'pending' ? 'border-emerald-500/20' : 'border-white/5'} p-6 rounded-[2rem] flex flex-col xl:flex-row justify-between items-center gap-6 transition-all hover:bg-slate-900/60`}>
+            <div key={t.id} className={`bg-slate-900/40 backdrop-blur-md border ${t.status === 'pending' ? 'border-emerald-500/20' : 'border-white/5'} p-6 rounded-4xl flex flex-col xl:flex-row justify-between items-center gap-6 transition-all hover:bg-slate-900/60`}>
               
               <div className="flex items-center gap-6 flex-1 w-full">
                 <div className={`p-4 rounded-2xl ${t.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>

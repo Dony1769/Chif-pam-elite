@@ -1,17 +1,40 @@
 // client/challenges/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { Loader2, ChevronLeft, Coins } from "lucide-react";
 import { motion } from "framer-motion";
-import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
-import ExoOutstream from "@/components/ads/ExoOutstream";
+import dynamic from 'next/dynamic';
+
+const AdsterraNativeBanner = dynamic(() => import('@/components/ads/AdsterraNativeBanner'), { ssr: false });
+const ExoOutstream = dynamic(() => import('@/components/ads/ExoOutstream'), { ssr: false });
+
+type ChallengeAttempt = {
+  user_id: string;
+  total_score: number | null;
+  attempts_count: number | null;
+};
+
+type ChallengeItem = {
+  id: string;
+  title: string;
+  prize_pool_cp: number;
+  entry_fee_cp_base: number;
+  game_type: 'quiz' | 'biometric' | 'vault';
+  challenge_attempts: ChallengeAttempt[] | null;
+};
+
+type Profile = {
+  id: string;
+  jetons_cp: number;
+  vip_status: 'free' | 'weekly' | 'monthly' | null;
+};
 
 export default function ArenaPage() {
-  const [challenges, setChallenges] = useState<any[]>([]);
-  const [profile, setProfile] = useState<any>(null);
+  const [challenges, setChallenges] = useState<ChallengeItem[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [entryLoading, setEntryLoading] = useState<string | null>(null);
 
@@ -21,9 +44,36 @@ export default function ArenaPage() {
   const [showAdsterraNativeBanner, setShowAdsterraNativeBanner] = useState(false); // S'active après l'interstitiel
 
   const router = useRouter();
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchData = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return router.push("/connexion");
+
+    const [pRes, cRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, jetons_cp, vip_status")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("challenges")
+        .select("id, title, prize_pool_cp, entry_fee_cp_base, game_type, challenge_attempts (user_id, total_score, attempts_count)")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    setProfile(pRes.data);
+    setChallenges(cRes.data || []);
+    setLoading(false);
+  }, [router]);
 
   useEffect(() => {
-    fetchData();
+    const bootstrapTimer = setTimeout(() => {
+      void fetchData();
+    }, 0);
 
     // ⚡ Supabase realtime
     const channel = supabase
@@ -31,7 +81,14 @@ export default function ArenaPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "challenge_attempts" },
-        () => fetchData()
+        () => {
+          if (refreshTimerRef.current) {
+            clearTimeout(refreshTimerRef.current);
+          }
+          refreshTimerRef.current = setTimeout(() => {
+            void fetchData();
+          }, 800);
+        }
       )
       .subscribe();
 
@@ -40,29 +97,13 @@ export default function ArenaPage() {
 
     return () => {
       supabase.removeChannel(channel);
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      clearTimeout(bootstrapTimer);
       clearTimeout(timer);
     };
-  }, []);
-
-  const fetchData = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return router.push("/connexion");
-
-    const [pRes, cRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single(),
-      supabase
-        .from("challenges")
-        .select(`*, challenge_attempts (user_id, total_score, attempts_count)`)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false }),
-    ]);
-
-    setProfile(pRes.data);
-    setChallenges(cRes.data || []);
-    setLoading(false);
-  };
+  }, [fetchData]);
 
   const calculateEntryFeeCP = (baseCP: number) => {
     if (profile?.vip_status === "monthly") return Math.floor(baseCP * 0.7);
@@ -70,7 +111,8 @@ export default function ArenaPage() {
     return baseCP;
   };
 
-  const handleEntry = async (challenge: any, fee: number) => {
+  const handleEntry = async (challenge: ChallengeItem, fee: number) => {
+    if (!profile) return;
     if (profile.jetons_cp < fee) return alert("Pas assez de CP");
     setEntryLoading(challenge.id);
 
@@ -89,14 +131,14 @@ export default function ArenaPage() {
         { onConflict: "challenge_id,user_id" }
       );
 
-      const routes: any = {
+      const routes: Record<ChallengeItem['game_type'], string> = {
         quiz: "quiz",
         biometric: "biometric-hack",
         vault: "laser-vault",
       };
       router.push(`/client/${routes[challenge.game_type]}?challengeId=${challenge.id}`);
-    } catch (err: any) {
-      alert("Erreur: " + err.message);
+    } catch (err: unknown) {
+      alert(`Erreur: ${err instanceof Error ? err.message : 'Inconnue'}`);
       setEntryLoading(null);
     }
   };
@@ -112,7 +154,7 @@ export default function ArenaPage() {
     <>
       {/* 🔥 INTERSTITIAL (Apparait au dessus de tout) */}
       {showInterstitial && (
-        <div className="fixed inset-0 bg-black z-[9999] flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black z-9999 flex flex-col items-center justify-center p-4">
           <div className="w-full max-w-md">
              <ExoOutstream />
           </div>
@@ -148,7 +190,7 @@ export default function ArenaPage() {
         </div>
 
         {/* Solde Card */}
-        <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-[2rem] border border-white/10">
+        <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-4xl border border-white/10">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500">
               <Coins size={20} />
@@ -166,7 +208,7 @@ export default function ArenaPage() {
             const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
             const participants = ch.challenge_attempts?.length || 0;
             const myScore =
-              ch.challenge_attempts?.find((a: any) => a.user_id === profile.id)?.total_score || 0;
+              ch.challenge_attempts?.find((a: ChallengeAttempt) => a.user_id === profile?.id)?.total_score || 0;
 
             return (
               <motion.div key={ch.id} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 shadow-lg">
@@ -183,7 +225,7 @@ export default function ArenaPage() {
                 </div>
                 <button
                   onClick={() => handleEntry(ch, fee)}
-                  disabled={profile?.jetons_cp < fee || entryLoading === ch.id}
+                  disabled={(profile?.jetons_cp ?? 0) < fee || entryLoading === ch.id}
                   className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30 active:scale-95 transition-all"
                 >
                   {entryLoading === ch.id ? <Loader2 className="animate-spin mx-auto" /> : `ENTRER (${fee} CP)`}
@@ -198,7 +240,7 @@ export default function ArenaPage() {
           <div className="mt-10 mb-6 w-full flex flex-col items-center animate-in slide-in-from-bottom-10 fade-in duration-700">
             <p className="text-[9px] text-slate-600 mb-2 tracking-[0.3em]">SPONSOR</p>
             {/* Conteneur Responsive qui évite le débordement horizontal */}
-            <div className="w-full max-w-[350px] overflow-hidden rounded-2xl bg-black/20 border border-white/5 p-1">
+            <div className="w-full max-w-87.5 overflow-hidden rounded-2xl bg-black/20 border border-white/5 p-1">
                <AdsterraNativeBanner />
             </div>
           </div>
