@@ -10,6 +10,7 @@ import {
   Users, LucideIcon, ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ExoClickBanner from '@/components/ads/ExoClickBanner';
 
 // --- IMPORT DU NOUVEAU BANNER EXOCLICK ---
 
