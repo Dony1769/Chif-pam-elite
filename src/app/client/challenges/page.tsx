@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { Loader2, ChevronLeft, Coins } from "lucide-react";
+import { Loader2, ChevronLeft, Coins, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import dynamic from 'next/dynamic';
 
@@ -152,20 +152,19 @@ export default function ArenaPage() {
 
   return (
     <>
-      {/* 🔥 INTERSTITIAL (Apparait au dessus de tout) */}
       {showInterstitial && (
-        <div className="fixed inset-0 bg-black z-9999 flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black p-4">
           <div className="w-full max-w-md">
-             <ExoOutstream />
+            <ExoOutstream />
           </div>
 
           {canCloseInterstitial && (
             <button
               onClick={() => {
                 setShowInterstitial(false);
-                setShowAdsterraNativeBanner(true); // Active la pub du bas une fois l'interstitiel fermé
+                setShowAdsterraNativeBanner(true);
               }}
-              className="mt-8 bg-emerald-500 text-black px-8 py-4 rounded-2xl text-lg font-bold animate-pulse shadow-[0_0_20px_rgba(16,185,129,0.5)]"
+              className="mt-8 rounded-2xl bg-emerald-500 px-8 py-4 text-lg font-bold text-black shadow-[0_0_20px_rgba(16,185,129,0.5)] animate-pulse"
             >
               ACCÉDER À L’APPLICATION
             </button>
@@ -173,79 +172,124 @@ export default function ArenaPage() {
         </div>
       )}
 
-      {/* 🌟 CONTENU PRINCIPAL */}
-      <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase pb-32 overflow-x-hidden">
-        
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={() => router.push("/client/home")}
-            className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all"
-          >
-            <ChevronLeft size={24} />
-          </button>
-          <h1 className="text-4xl tracking-tighter">
-            ARENA <span className="text-emerald-500">MISSIONS</span>
-          </h1>
-        </div>
-
-        {/* Solde Card */}
-        <div className="flex justify-between items-center mb-10 bg-white/5 p-5 rounded-4xl border border-white/10">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500">
-              <Coins size={20} />
+      <div className="min-h-screen overflow-x-hidden bg-[#020617] pb-28 text-white">
+        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+          <header className="mb-6 flex items-center gap-3">
+            <button
+              onClick={() => router.push("/client/home")}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 transition active:scale-90"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Arenas premium</p>
+              <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+                Missions <span className="text-emerald-500">& défis</span>
+              </h1>
             </div>
-            <div>
-              <p className="text-[8px] text-slate-500 tracking-widest">SOLDE CP</p>
-              <p className="text-xl text-emerald-500">{profile?.jetons_cp?.toLocaleString()} CP</p>
-            </div>
-          </div>
-        </div>
+          </header>
 
-        {/* Liste des Défis */}
-        <div className="space-y-6">
-          {challenges.map((ch) => {
-            const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
-            const participants = ch.challenge_attempts?.length || 0;
-            const myScore =
-              ch.challenge_attempts?.find((a: ChallengeAttempt) => a.user_id === profile?.id)?.total_score || 0;
-
-            return (
-              <motion.div key={ch.id} className="bg-slate-900/40 border border-white/5 rounded-[2.5rem] p-6 shadow-lg">
-                <div className="flex justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg">{ch.title}</h3>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      {participants} PARTICIPANTS | SCORE: {myScore}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl text-emerald-500">{ch.prize_pool_cp} CP</p>
-                  </div>
+          <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-[2rem] border border-emerald-500/20 bg-linear-to-br from-emerald-500/10 via-slate-900/70 to-slate-950 p-5 shadow-[0_20px_60px_rgba(16,185,129,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Solde CP</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-300">{profile?.jetons_cp?.toLocaleString()} CP</p>
                 </div>
-                <button
-                  onClick={() => handleEntry(ch, fee)}
-                  disabled={(profile?.jetons_cp ?? 0) < fee || entryLoading === ch.id}
-                  className="w-full py-5 bg-white text-black rounded-3xl font-black disabled:opacity-30 active:scale-95 transition-all"
-                >
-                  {entryLoading === ch.id ? <Loader2 className="animate-spin mx-auto" /> : `ENTRER (${fee} CP)`}
-                </button>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* 💵 ZONE PUBLICITÉ RENTABLE (En bas de page) */}
-        {showAdsterraNativeBanner && (
-          <div className="mt-10 mb-6 w-full flex flex-col items-center animate-in slide-in-from-bottom-10 fade-in duration-700">
-            <p className="text-[9px] text-slate-600 mb-2 tracking-[0.3em]">SPONSOR</p>
-            {/* Conteneur Responsive qui évite le débordement horizontal */}
-            <div className="w-full max-w-87.5 overflow-hidden rounded-2xl bg-black/20 border border-white/5 p-1">
-               <AdsterraNativeBanner />
+                <div className="rounded-2xl bg-emerald-500/10 p-3 text-emerald-300">
+                  <Coins size={22} />
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Réduction VIP</p>
+                  <p className="mt-2 text-lg font-black text-white">{profile?.vip_status === "monthly" ? "30%" : profile?.vip_status === "weekly" ? "15%" : "0%"}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Mode entrée</p>
+                  <p className="mt-2 text-lg font-black text-white">Rapide & fluide</p>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
 
+            <div className="rounded-[2rem] border border-white/10 bg-slate-900/75 p-5">
+              <div className="flex items-center gap-2 text-emerald-300">
+                <Sparkles size={18} />
+                <p className="text-[10px] uppercase tracking-[0.35em]">Pourquoi c’est premium</p>
+              </div>
+              <ul className="mt-4 space-y-2 text-sm leading-7 text-slate-300">
+                <li>• Rejoignez un défi avec une entrée ajustée selon votre statut VIP.</li>
+                <li>• Suivez votre score et votre position en temps réel.</li>
+                <li>• Accédez à des jackpots plus attractifs sans changer votre logique métier.</li>
+              </ul>
+            </div>
+          </section>
+
+          <div className="mt-6 space-y-4">
+            {challenges.map((ch) => {
+              const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
+              const participants = ch.challenge_attempts?.length || 0;
+              const myScore =
+                ch.challenge_attempts?.find((a: ChallengeAttempt) => a.user_id === profile?.id)?.total_score || 0;
+
+              return (
+                <motion.div
+                  key={ch.id}
+                  className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/75 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-emerald-200">
+                        <Sparkles size={14} />
+                        {ch.game_type}
+                      </div>
+                      <h3 className="mt-3 text-lg font-black tracking-tight text-white">{ch.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        Participez, accumulez des points et tentez le jackpot CP.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Jackpot</p>
+                      <p className="mt-1 text-xl font-black text-emerald-400">{ch.prize_pool_cp} CP</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Participants</p>
+                      <p className="mt-2 text-lg font-black text-white">{participants}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Votre score</p>
+                      <p className="mt-2 text-lg font-black text-white">{myScore}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Entrée</p>
+                      <p className="mt-2 text-lg font-black text-white">{fee} CP</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleEntry(ch, fee)}
+                    disabled={(profile?.jetons_cp ?? 0) < fee || entryLoading === ch.id}
+                    className="mt-5 w-full rounded-3xl bg-white px-5 py-4 font-black text-slate-950 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    {entryLoading === ch.id ? <Loader2 className="mx-auto animate-spin" /> : `ENTRER (${fee} CP)`}
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {showAdsterraNativeBanner && (
+            <div className="mt-8 flex w-full flex-col items-center">
+              <p className="mb-2 text-[9px] tracking-[0.3em] text-slate-600">SPONSOR</p>
+              <div className="w-full max-w-87.5 overflow-hidden rounded-2xl border border-white/5 bg-black/20 p-1">
+                <AdsterraNativeBanner />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

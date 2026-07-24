@@ -12,6 +12,7 @@ import {
   Loader2,
   ArrowDownCircle,
   Sparkles,
+  Crown,
 } from 'lucide-react';
 import { fetchDailyMissions, canClaimMission, formatMissionProgress, type MissionItem, type RewardType } from '@/services/missionService';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -261,54 +262,59 @@ export default function RewardsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-6xl px-6 py-8">
-        <div className="relative overflow-hidden rounded-4xl border border-emerald-500/10 bg-linear-to-br from-slate-950/95 via-slate-900 to-slate-950/70 px-8 py-10 shadow-2xl shadow-emerald-500/10">
+    <main className="min-h-screen bg-slate-950 pb-28 text-slate-100">
+      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+        <div className="relative overflow-hidden rounded-[2rem] border border-emerald-500/15 bg-linear-to-br from-slate-950/95 via-slate-900/80 to-slate-950/70 px-5 py-6 shadow-[0_20px_60px_rgba(16,185,129,0.08)] sm:px-7 sm:py-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.15),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.12),transparent_30%)]" />
-          <div className="relative grid gap-8 lg:grid-cols-[1.35fr_0.65fr] lg:items-center">
+          <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-3 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-[11px] uppercase tracking-[0.35em] text-emerald-200">
-                <Sparkles size={18} /> Premium Mission Center
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.35em] text-emerald-200">
+                <Sparkles size={16} /> Premium Mission Center
               </div>
-              <h1 className="text-4xl font-black text-white sm:text-5xl">Centre de Mission</h1>
-              <p className="max-w-2xl text-sm leading-7 text-slate-300">Réalisez vos missions exclusives, collectez des récompenses rares et débloquez des bonus VIP en un seul endroit. L’aventure commence ici.</p>
+              <div className="space-y-2">
+                <h1 className="text-3xl font-black text-white sm:text-4xl">Centre de Mission</h1>
+                <p className="max-w-2xl text-sm leading-7 text-slate-300">Passez d’un bonus quotidien à une expérience premium organisée autour de vos missions, récompenses et progression VIP.</p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-3">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">CP total</p>
-                  <p className="mt-3 text-3xl font-black text-white">{(profile?.jetons_cp || 0).toLocaleString()}</p>
+                  <p className="mt-2 text-2xl font-black text-white">{(profile?.jetons_cp || 0).toLocaleString()}</p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-3">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Diamants</p>
-                  <p className="mt-3 text-3xl font-black text-white">{(profile?.diamonds || 0).toLocaleString()}</p>
+                  <p className="mt-2 text-2xl font-black text-white">{(profile?.diamonds || 0).toLocaleString()}</p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-3">
                   <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">XP</p>
-                  <p className="mt-3 text-3xl font-black text-white">{(profile?.xp || 0).toLocaleString()}</p>
+                  <p className="mt-2 text-2xl font-black text-white">{(profile?.xp || 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 rounded-4xl border border-white/10 bg-slate-950/80 p-6 shadow-xl shadow-slate-950/20">
-              <div className="flex items-center justify-between gap-3">
+            <div className="grid gap-3 rounded-[1.6rem] border border-white/10 bg-slate-950/80 p-4 shadow-xl shadow-slate-950/20">
+              <div className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-white/10 bg-white/5 p-4">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Missions complétées</p>
-                  <p className="mt-2 text-4xl font-black text-white">{completedMissions}/{userTasks.length}</p>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Progression</p>
+                  <p className="mt-1 text-3xl font-black text-white">{completedMissions}/{userTasks.length}</p>
                 </div>
-                <div className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-emerald-500/10 text-emerald-200">
-                  <Trophy size={24} />
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-200">
+                  <Trophy size={20} />
                 </div>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                <p className="font-black uppercase tracking-[0.35em] text-slate-400">Progression mensuelle</p>
-                <p className="mt-3">Surveillez votre calendrier de récompenses et réclamez votre avantage quotidien.</p>
+              <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                <div className="flex items-center gap-2 text-amber-200">
+                  <Crown size={16} />
+                  <p className="text-[10px] uppercase tracking-[0.35em]">Bonus VIP</p>
+                </div>
+                <p className="mt-2">Votre calendrier de récompenses s’ouvre maintenant avec une lecture plus claire et plus rapide.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Jours réclamés</p>
-                  <p className="mt-2 text-3xl font-black text-white">{claimedDays.length}</p>
+                <div className="rounded-[1.2rem] border border-white/10 bg-slate-900/80 p-3 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Jours</p>
+                  <p className="mt-2 text-2xl font-black text-white">{claimedDays.length}</p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-4 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Missions actives</p>
-                  <p className="mt-2 text-3xl font-black text-white">{userTasks.length}</p>
+                <div className="rounded-[1.2rem] border border-white/10 bg-slate-900/80 p-3 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Actives</p>
+                  <p className="mt-2 text-2xl font-black text-white">{userTasks.length}</p>
                 </div>
               </div>
             </div>
@@ -328,7 +334,7 @@ export default function RewardsPage() {
               </div>
             </div>
 
-            <div className="rounded-4xl border border-white/10 bg-slate-950/80 p-4">
+            <div className="rounded-[1.6rem] border border-white/10 bg-slate-950/80 p-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {rewardsConfig.map((day) => (
                   <CalendarDay key={day.day_number} day={day} />
@@ -370,7 +376,7 @@ export default function RewardsPage() {
                   className="space-y-4"
                 >
                   <p className="text-sm leading-7 text-slate-400">Réclamez votre bonus jour après jour pour construire un agenda de récompenses stable et exclusif.</p>
-                  <div className="rounded-4xl border border-white/10 bg-slate-950/80 p-5">
+                  <div className="rounded-[1.6rem] border border-white/10 bg-slate-950/80 p-5">
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-center">
                         <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Aujourd’hui</p>

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Coins, Gem, Sparkles, ShoppingBag, Loader2 } from 'lucide-react';
+import { ChevronLeft, Coins, Gem, Sparkles, ShoppingBag, Loader2, ArrowRight, ShieldCheck, Zap, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- IMPORT DE TA PUBLICITÉ ---
@@ -64,19 +64,31 @@ export default function MarketPage() {
     );
 
     if (loading) return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-        <Loader2 className="animate-spin text-emerald-500" />
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_40%),_#020617] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/10 bg-slate-900/60 px-8 py-6 shadow-[0_0_60px_rgba(16,185,129,0.12)]">
+          <Loader2 className="animate-spin text-emerald-500" size={24} />
+          <p className="text-sm text-slate-300">Chargement de la boutique…</p>
+        </div>
       </div>
     );
 
+    const formatAmount = (value: number | string | null | undefined) => {
+        const numericValue = Number(value ?? 0);
+        return Number.isFinite(numericValue) ? numericValue.toLocaleString() : '0';
+    };
+
     return (
-        <div className="min-h-screen bg-[#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
-            {/* Header Sticky */}
-            <div className="sticky top-0 z-30 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-4">
-                <div className="flex justify-between items-center max-w-6xl mx-auto">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.14),_transparent_40%),_#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
+            <div className="sticky top-0 z-30 border-b border-white/10 bg-[#020617]/85 backdrop-blur-xl">
+                <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
                     <div className="flex items-center gap-3">
-                        <button onClick={() => router.back()} className="p-2 bg-white/5 rounded-xl active:scale-90"><ChevronLeft/></button>
-                        <h1 className="text-lg font-black italic uppercase tracking-tighter">BOUTIQUE <span className="text-emerald-500">ELITE</span></h1>
+                        <button onClick={() => router.back()} className="rounded-2xl border border-white/10 bg-white/5 p-2.5 transition active:scale-90 hover:bg-white/10">
+                            <ChevronLeft size={18} />
+                        </button>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Boutique</p>
+                            <h1 className="text-lg font-black italic uppercase tracking-tighter">Elite <span className="text-emerald-500">Marketplace</span></h1>
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <CurrencyBadge value={profile?.jetons_cp} icon={<Coins size={12}/>} color="text-emerald-500" />
@@ -85,58 +97,106 @@ export default function MarketPage() {
                 </div>
             </div>
 
-            <div className="max-w-6xl mx-auto p-4">
-                
-                {/* Navigation Onglets */}
-                <div className="flex p-1 bg-white/5 rounded-2xl mb-8 border border-white/5">
+            <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
+                <motion.div
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-900/85 via-slate-900/70 to-emerald-950/40 p-5 shadow-[0_0_70px_rgba(16,185,129,0.08)]"
+                >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.24),_transparent_32%)]" />
+                    <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="max-w-2xl">
+                            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-300">
+                                <Sparkles size={12} />
+                                Offre premium
+                            </div>
+                            <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white sm:text-3xl">
+                                Débloquez votre prochaine puissance
+                            </h2>
+                            <p className="mt-2 text-sm leading-6 text-slate-300">
+                                Choisissez un pack adapté à votre rythme de jeu et profitez d’un accès plus fluide à la progression.
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:min-w-[240px]">
+                            <MiniStat label="Solde CP" value={profile?.jetons_cp} icon={<Coins size={14} />} accent="text-emerald-400" />
+                            <MiniStat label="Diamants" value={profile?.diamonds} icon={<Gem size={14} />} accent="text-blue-400" />
+                        </div>
+                    </div>
+                </motion.div>
+
+                <div className="flex flex-wrap gap-2 rounded-[22px] border border-white/10 bg-white/5 p-1.5">
                     <TabButton active={activeTab === 'htg'} onClick={() => setActiveTab('htg')} label="Jetons CP" icon={<Coins size={16}/>} />
                     <TabButton active={activeTab === 'diamonds'} onClick={() => setActiveTab('diamonds')} label="Échange Diamants" icon={<Gem size={16}/>} />
                 </div>
 
-                {/* Liste Packs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <AnimatePresence mode='popLayout'>
                         {filteredPacks.length === 0 ? (
-                            <motion.div initial={{opacity:0}} animate={{opacity:1}} className="col-span-full text-center py-20 opacity-50 italic flex flex-col items-center">
-                                <ShoppingBag size={40} className="mb-2"/>
-                                <p>Aucun pack disponible dans cette catégorie</p>
+                            <motion.div initial={{opacity:0}} animate={{opacity:1}} className="col-span-full flex flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 bg-slate-900/40 px-6 py-20 text-center">
+                                <div className="mb-3 rounded-full border border-white/10 bg-white/5 p-3">
+                                    <ShoppingBag size={28} className="text-slate-400" />
+                                </div>
+                                <h3 className="text-lg font-black uppercase tracking-wider text-slate-200">Aucun pack disponible</h3>
+                                <p className="mt-2 max-w-md text-sm text-slate-400">Cette catégorie est temporairement vide. Revenez bientôt pour découvrir de nouvelles offres.</p>
                             </motion.div>
                         ) : (
                             filteredPacks.map((pack) => (
-                                <motion.div 
-                                    key={pack.id} 
+                                <motion.div
+                                    key={pack.id}
                                     layout
-                                    initial={{ opacity: 0, scale: 0.95 }} 
-                                    animate={{ opacity: 1, scale: 1 }} 
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    className={`relative group overflow-hidden border rounded-4xl p-6 transition-all duration-300 hover:-translate-y-1 ${
-                                        activeTab === 'diamonds' ? 'bg-blue-950/20 border-blue-500/20 hover:border-blue-500/50' : 'bg-slate-900/40 border-white/5 hover:border-emerald-500/30'
+                                    initial={{ opacity: 0, scale: 0.96 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.96 }}
+                                    className={`group relative overflow-hidden rounded-[24px] border p-5 shadow-[0_18px_45px_rgba(2,6,23,0.35)] transition-all duration-300 hover:-translate-y-1 ${
+                                        activeTab === 'diamonds' ? 'border-blue-500/20 bg-gradient-to-br from-blue-950/30 via-slate-900/80 to-slate-900/80 hover:border-blue-500/45' : 'border-white/10 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-emerald-950/25 hover:border-emerald-500/25'
                                     }`}
                                 >
-                                    <div className="relative z-10 flex flex-col items-center text-center">
-                                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
-                                            activeTab === 'diamonds' ? 'bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.2)]' : 'bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.2)]'
-                                        }`}>
-                                            <Sparkles size={24} className={activeTab === 'diamonds' ? 'text-blue-400' : 'text-emerald-400'} />
+                                    <div className={`absolute inset-x-0 top-0 h-1 ${activeTab === 'diamonds' ? 'bg-gradient-to-r from-blue-400 to-cyan-400' : 'bg-gradient-to-r from-emerald-400 to-cyan-400'}`} />
+                                    <div className="relative z-10 flex flex-col gap-4">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Pack premium</p>
+                                                <h4 className="mt-1 text-lg font-black italic uppercase tracking-wider text-white">{pack.nom}</h4>
+                                            </div>
+                                            <div className={`rounded-full border p-2 ${activeTab === 'diamonds' ? 'border-blue-400/20 bg-blue-500/10 text-blue-300' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'}`}>
+                                                <Zap size={14} />
+                                            </div>
                                         </div>
-                                        
-                                        <h4 className="text-xs font-black italic uppercase text-slate-300 mb-1 tracking-widest">{pack.nom}</h4>
-                                        <p className="text-3xl font-black italic text-white tracking-tighter mb-6">
-                                            {pack.jetons_quantite.toLocaleString()} <span className="text-[10px] text-slate-500 font-bold not-italic">CP</span>
-                                        </p>
 
-                                        <button 
+                                        <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+                                            <p className="text-3xl font-black italic tracking-tighter text-white">
+                                                {formatAmount(pack.jetons_quantite)} <span className="text-[10px] font-bold not-italic text-slate-500">CP</span>
+                                            </p>
+                                            <p className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+                                                <TrendingUp size={14} className={activeTab === 'diamonds' ? 'text-blue-400' : 'text-emerald-400'} />
+                                                Progression rapide et fluide
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2 text-left text-[11px] text-slate-400">
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                                <p className="font-semibold text-white">{formatAmount(pack.prix_htg)} HTG</p>
+                                                <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">Prix</p>
+                                            </div>
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                                <p className="font-semibold text-white">Instantané</p>
+                                                <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">Livraison</p>
+                                            </div>
+                                        </div>
+
+                                        <button
                                             onClick={() => handlePurchase(pack, activeTab)}
                                             disabled={buying === pack.id}
-                                            className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all ${
-                                                activeTab === 'diamonds' 
-                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20 hover:bg-blue-500' 
-                                                : 'bg-white text-black shadow-lg shadow-white/10 hover:bg-emerald-400'
+                                            className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[10px] font-black uppercase tracking-[0.3em] transition-all active:scale-95 ${
+                                                activeTab === 'diamonds'
+                                                    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-900/25 hover:brightness-110'
+                                                    : 'bg-gradient-to-r from-white to-emerald-300 text-slate-950 shadow-lg shadow-white/10 hover:brightness-105'
                                             }`}
                                         >
                                             {buying === pack.id ? <Loader2 className="animate-spin" size={14}/> : (
                                                 <>
-                                                    {pack.prix_htg.toLocaleString()} {activeTab === 'diamonds' ? '💎' : 'HTG'}
+                                                    {formatAmount(pack.prix_htg)} {activeTab === 'diamonds' ? '💎' : 'HTG'}
+                                                    <ArrowRight size={14} />
                                                 </>
                                             )}
                                         </button>
@@ -147,30 +207,46 @@ export default function MarketPage() {
                     </AnimatePresence>
                 </div>
 
-                {/* --- INTÉGRATION PUBLICITÉ ADSTERRA --- */}
-                <div className="border-t border-white/5 pt-8">
-                    <p className="text-center text-[10px] text-slate-600 font-black uppercase tracking-widest mb-4">Sponsorisé</p>
-                    <div className="bg-black/20 rounded-2xl overflow-hidden min-h-25 flex items-center justify-center">
+                <div className="rounded-[28px] border border-white/10 bg-slate-900/50 p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Sponsorisé</p>
+                            <p className="mt-1 text-sm text-slate-300">Profitez d’un contenu premium tout en continuant votre expérience.</p>
+                        </div>
+                        <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 p-2.5 text-emerald-300">
+                            <ShieldCheck size={16} />
+                        </div>
+                    </div>
+                    <div className="flex min-h-[120px] items-center justify-center overflow-hidden rounded-[22px] border border-white/10 bg-black/20">
                         <AdsterraNativeBanner />
                     </div>
                 </div>
-
             </div>
         </div>
     );
 }
 
 const CurrencyBadge = ({ value, icon, color }: any) => (
-    <div className={`bg-slate-900 border border-white/10 px-3 py-1.5 rounded-lg flex items-center gap-2 ${color}`}>
-        <span className="font-black italic text-xs">{value?.toLocaleString() || 0}</span>
+    <div className={`flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-1.5 ${color}`}>
+        <span className="text-[11px] font-black italic">{(value ?? 0).toLocaleString()}</span>
         {icon}
     </div>
 );
 
 const TabButton = ({ active, onClick, label, icon }: any) => (
-    <button onClick={onClick} className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wide transition-all ${
-        active ? 'bg-slate-800 text-white shadow-md border border-white/10' : 'text-slate-500 hover:text-white'
+    <button onClick={onClick} className={`flex flex-1 items-center justify-center gap-2 rounded-[16px] px-3 py-3.5 text-[11px] font-black uppercase tracking-[0.25em] transition-all ${
+        active ? 'bg-slate-800 text-white shadow-md border border-white/10' : 'text-slate-500 hover:bg-white/5 hover:text-white'
     }`}>
         {icon} {label}
     </button>
+);
+
+const MiniStat = ({ label, value, icon, accent }: any) => (
+    <div className="rounded-[18px] border border-white/10 bg-slate-950/60 p-3">
+        <div className={`mb-2 inline-flex rounded-full border border-white/10 bg-white/5 p-1.5 ${accent}`}>
+            {icon}
+        </div>
+        <p className="text-[9px] uppercase tracking-[0.3em] text-slate-500">{label}</p>
+        <p className="mt-1 text-sm font-black text-white">{(value ?? 0).toLocaleString()}</p>
+    </div>
 );

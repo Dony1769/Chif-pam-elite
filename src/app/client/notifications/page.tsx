@@ -12,7 +12,7 @@ type NotificationRow = {
   id: string;
   title: string | null;
   content: string | null;
-  message: string | null;
+  message?: string | null;
   created_at: string;
   is_read: boolean;
   link?: string | null;
@@ -99,7 +99,7 @@ export default function ClientNotifications() {
       const [notifsRes, challengesRes] = await Promise.all([
         supabase
           .from('notifications')
-          .select('id, title, content, message, created_at, is_read, link')
+          .select('id, title, content, created_at, is_read')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -108,6 +108,10 @@ export default function ClientNotifications() {
           .eq('is_active', true)
           .order('created_at', { ascending: false })
       ]);
+
+      if (notifsRes.error) {
+        console.error('notifications list query failed', notifsRes.error);
+      }
 
       setNotifications((notifsRes.data || []) as NotificationRow[]);
       setLiveChallenges((challengesRes.data || []) as ChallengeRow[]);

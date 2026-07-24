@@ -13,7 +13,7 @@ export const ChatService = {
   async fetchMessages(userId: string, limit = 30, before?: string): Promise<ChatMessage[]> {
     let query = supabase
       .from('messages')
-      .select('*')
+      .select('id, user_id, content, created_at, is_admin_message, is_read_by_admin, is_read_by_client')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit)

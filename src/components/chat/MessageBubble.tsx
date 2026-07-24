@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import type { ChatMessage } from '@/types/chat'
 import { motion } from 'framer-motion'
 import MessageImage from './MessageImage'
@@ -10,57 +10,75 @@ type Props = {
   message: ChatMessage
 }
 
-export default function MessageBubble({ message }: Props) {
+const MessageBubble = React.memo(function MessageBubble({ message }: Props) {
   const isAdmin = message.is_admin_message
 
-  const bubbleClasses = isAdmin
-    ? 'bg-slate-900 border border-white/5 text-emerald-50 rounded-tl-none'
-    : 'bg-emerald-500 border border-emerald-400 text-slate-950 rounded-tr-none'
+  const bubbleClasses = useMemo(
+    () =>
+      isAdmin
+        ? 'bg-slate-900 border border-white/5 text-emerald-50 rounded-tl-none'
+        : 'bg-emerald-500 border border-emerald-400 text-slate-950 rounded-tr-none',
+    [isAdmin],
+  )
 
   const content = message.content || ''
-  const imageMarker = content.match(/__img\|([^\s]+)__/)
-  const fileMarker = content.match(/__file\|([^\|]+)\|([^\|]+)\|([^\s]+)__/)
-  const replyMarker = content.match(/__reply\|([^\|]+)\|([^_]+)__/)
-  const isImage = Boolean(imageMarker) || /(https?:.*\.(?:png|jpg|jpeg|gif|webp))$/i.test(content)
-  const isFile = Boolean(fileMarker) || /(https?:.*\.(?:pdf|docx|zip))$/i.test(content)
-  const replyData = replyMarker ? { id: replyMarker[1], snippet: replyMarker[2] } : null
+  const parsedContent = useMemo(() => {
+    const imageMarker = content.match(/__img\|([^\s]+)__/)
+    const fileMarker = content.match(/__file\|([^\|]+)\|([^\|]+)\|([^\s]+)__/)
+    const replyMarker = content.match(/__reply\|([^\|]+)\|([^_]+)__/)
+
+    return {
+      imageUrl: imageMarker ? imageMarker[1] : null,
+      fileUrl: fileMarker ? fileMarker[1] : null,
+      isImage: Boolean(imageMarker) || /(https?:.*\.(?:png|jpg|jpeg|gif|webp))$/i.test(content),
+      isFile: Boolean(fileMarker) || /(https?:.*\.(?:pdf|docx|zip))$/i.test(content),
+      replyData: replyMarker ? { id: replyMarker[1], snippet: replyMarker[2] } : null,
+    }
+  }, [content])
+
+  const { imageUrl, fileUrl, isImage, isFile, replyData } = parsedContent
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(content)
 
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(content)
     } catch (err) {
       console.error('Copy failed', err)
     }
-  }
+  }, [content])
 
-  const handleReply = () => {
+  const handleReply = useCallback(() => {
     const event = new CustomEvent('chat:reply', { detail: { message } })
     window.dispatchEvent(event)
-  }
+  }, [message])
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setEditing(true)
-  }
+  }, [])
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = useCallback(async () => {
     try {
       await ChatService.editMessage(message.id, editText)
       setEditing(false)
     } catch (err) {
       console.error('Edit failed', err)
     }
-  }
+  }, [editText, message.id])
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!confirm('Supprimer ce message ?')) return
     try {
       await ChatService.deleteMessage(message.id)
     } catch (err) {
       console.error('Delete failed', err)
     }
-  }
+  }, [message.id])
+
+  const displayTime = useMemo(
+    () => new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    [message.created_at],
+  )
 
   return (
     <motion.div
@@ -77,9 +95,9 @@ export default function MessageBubble({ message }: Props) {
       )}
 
       {isImage ? (
-        <MessageImage src={imageMarker ? imageMarker[1] : content} alt="image" />
+        <MessageImage src={imageUrl ?? content} alt="image" />
       ) : isFile ? (
-        <MessageFile url={fileMarker ? fileMarker[1] : content} />
+        <MessageFile url={fileUrl ?? content} />
       ) : editing ? (
         <div>
           <textarea
@@ -118,10 +136,10 @@ export default function MessageBubble({ message }: Props) {
       </div>
 
       <div className="flex items-center justify-between gap-4 mt-2">
-        <p className="text-[10px] opacity-50 font-black uppercase tracking-tighter">
-          {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </p>
+        <p className="text-[10px] opacity-50 font-black uppercase tracking-tighter">{displayTime}</p>
       </div>
     </motion.div>
   )
-}
+})
+
+export default MessageBubble

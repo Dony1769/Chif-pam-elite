@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell,
-  MessagesSquare, Home, Gamepad2,
+  Home, Gamepad2,
   Lock, Trophy,
   Activity, ChevronRight, Brain, Fingerprint,
   Menu, X, Crown, ShieldCheck, Gift, Sparkles,
@@ -226,6 +226,10 @@ export default function ClientHome() {
           <div className="space-y-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-amber-200">
+                  <Crown size={14} />
+                  {profile?.vip_status && profile.vip_status !== 'free' ? 'VIP actif' : 'Accès standard'}
+                </div>
                 <DSHeader
                   eyebrow="Espace client"
                   title={`Bienvenue, @${profile?.username}`}
@@ -248,7 +252,7 @@ export default function ClientHome() {
             </div>
 
             <DSPanel className="grid gap-4 xl:grid-cols-[1.45fr_0.9fr]">
-              <DSCard className="relative overflow-hidden p-6">
+              <DSCard className={`relative overflow-hidden p-6 ${profile?.vip_status && profile.vip_status !== 'free' ? 'border-amber-400/30 bg-gradient-to-br from-amber-400/10 via-slate-950/80 to-emerald-400/10' : ''}`}>
                 <div className="absolute inset-y-0 right-0 flex items-center opacity-10">
                   <Coins size={96} className="text-emerald-500" />
                 </div>
@@ -349,53 +353,6 @@ export default function ClientHome() {
           </div>
         </div>
       </div>
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-4 py-4 grid grid-cols-6 gap-2 z-50 rounded-t-[28px] shadow-[0_-20px_46px_rgba(0,0,0,.65)]">
-
-        <NavLink
-          href="/client/home"
-          icon={<Home size={22} />}
-          label="Accueil"
-          active={pathname === "/client/home"}
-        />
-
-        <NavLink
-          href="/client/list"
-          icon={<Gamepad2 size={22} />}
-          label="Explorer"
-          active={pathname === "/client/list"}
-        />
-
-        <NavLink
-          href="/client/rewards"
-          icon={<Gift size={22} />}
-          label="Mission"
-          active={pathname === "/client/rewards"}
-        />
-
-        <NavLink
-          href="/client/market"
-          icon={<Sparkles size={22} />}
-          label="Offres"
-          active={pathname === "/client/market"}
-        />
-
-        <NavLink
-          href="/client/chat"
-          icon={<MessagesSquare size={22} />}
-          label="Chat"
-          active={pathname === "/client/chat"}
-          badge={unreadChat}
-        />
-
-        <NavLink
-          href="/client/vip"
-          icon={<Crown size={22} />}
-          label="VIP"
-          active={pathname === "/client/vip"}
-        />
-
-      </nav>
     </DSPage>
   );
 }
@@ -448,32 +405,4 @@ function GameRow({
     );
 }
 
-function NavLink({
-  href,
-  icon,
-  label,
-  active,
-  badge,
-  id,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-  badge?: number | string;
-  id?: string;
-}) {
-    return (
-      <Link id={id} href={href} className={`relative flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
-        <div className="relative">
-          {icon}
-          {badge ? (
-            <span className="absolute -right-2 -top-2 inline-flex min-h-[1rem] min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[9px] font-black text-white">
-              {badge}
-            </span>
-          ) : null}
-        </div>
-        <span className="text-[8px] font-black uppercase italic tracking-tighter">{label}</span>
-      </Link>
-    );
-}
+

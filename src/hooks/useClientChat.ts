@@ -6,6 +6,30 @@ import { ChatService } from '@/services/chat'
 import type { ChatMessage } from '@/types/chat'
 
 const PAGE_SIZE = 30
+const CLIENT_CHAT_CACHE_KEY = 'client-chat-messages-v1'
+const CACHE_TTL_MS = 10_000
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { value: T; ts: number }
+    if (Date.now() - parsed.ts > CACHE_TTL_MS) return null
+    return parsed.value
+  } catch {
+    return null
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify({ value, ts: Date.now() }))
+  } catch {
+    // ignore cache write failures
+  }
+}
 
 export function useClientChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -38,12 +62,22 @@ export function useClientChat() {
 
   const fetchInitialMessages = useCallback(async (uid: string) => {
     pendingMessageRef.current = null
+
+    const cachedMessages = readSessionCache<ChatMessage[]>(CLIENT_CHAT_CACHE_KEY)
+    if (cachedMessages) {
+      const ordered = [...cachedMessages].reverse()
+      setMessages(ordered)
+      messageIdsRef.current = new Set(ordered.map((message) => message.id))
+      setHasMore(cachedMessages.length === PAGE_SIZE)
+    }
+
     try {
       const data = await ChatService.fetchMessages(uid, PAGE_SIZE)
       const ordered = [...data].reverse()
       setMessages(ordered)
       messageIdsRef.current = new Set(ordered.map((message) => message.id))
       setHasMore(data.length === PAGE_SIZE)
+      writeSessionCache(CLIENT_CHAT_CACHE_KEY, data)
     } catch (error) {
       console.error('Échec du chargement des messages:', error)
     }
@@ -89,8 +123,10 @@ export function useClientChat() {
       }
 
       setUserId(currentUser.id)
-      await fetchInitialMessages(currentUser.id)
-      await markAllAsRead()
+      await Promise.all([
+        fetchInitialMessages(currentUser.id),
+        ChatService.markAdminMessagesReadForClient(currentUser.id),
+      ])
 
       if (!mounted) return
       setLoading(false)
@@ -127,7 +163,7 @@ export function useClientChat() {
     }
   }, [fetchInitialMessages, markAllAsRead, mergeMessages])
 
-  const sendMessage = async (message: string) => {
+  const sendMessage = useCallback(async (message: string) => {
     const trimmedText = message.trim()
     if (!trimmedText || !userId) return
 
@@ -155,7 +191,7 @@ export function useClientChat() {
       pendingMessageRef.current = null
       setText(message)
     }
-  }
+  }, [setText, userId])
 
   return {
     messages,

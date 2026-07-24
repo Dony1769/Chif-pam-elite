@@ -15,7 +15,7 @@ type Props = {
   onSelect: (id: string) => void
 }
 
-export default function ConversationList({ users, selectedId, onSelect }: Props) {
+const ConversationList = React.memo(function ConversationList({ users, selectedId, onSelect }: Props) {
   const sorted = useMemo(() => [...users].sort((a, b) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime()), [users])
 
   return (
@@ -25,4 +25,6 @@ export default function ConversationList({ users, selectedId, onSelect }: Props)
       ))}
     </div>
   )
-}
+})
+
+export default ConversationList

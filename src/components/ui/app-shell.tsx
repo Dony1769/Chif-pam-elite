@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode } from "react";
 import {
+  ArrowLeft,
   Bell,
   ChevronRight,
   Crown,
-  Gamepad2,
+  Gift,
   Home,
   LayoutDashboard,
   MessageSquare,
@@ -23,7 +25,7 @@ import { cn } from "@/lib/cn";
 type ShellNavItem = {
   href: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 };
 
 const adminItems: ShellNavItem[] = [
@@ -38,7 +40,7 @@ const adminItems: ShellNavItem[] = [
 
 const clientItems: ShellNavItem[] = [
   { href: "/client/home", label: "Accueil", icon: <Home size={18} /> },
-  { href: "/client/list", label: "Explorer", icon: <Gamepad2 size={18} /> },
+  { href: "/client/rewards", label: "Récompenses", icon: <Gift size={18} /> },
   { href: "/client/challenges", label: "Défis", icon: <Shield size={18} /> },
   { href: "/client/market", label: "Offres", icon: <ShoppingBag size={18} /> },
   { href: "/client/chat", label: "Chat", icon: <MessageSquare size={18} /> },
@@ -54,11 +56,11 @@ function BrandMark() {
   );
 }
 
-function ShellNav({ items }: { items: ShellNavItem[] }) {
+function ShellNav({ items, compact = false }: { items: ShellNavItem[]; compact?: boolean }) {
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-2">
+    <nav className={cn(compact ? "flex items-center justify-between gap-2" : "space-y-2") }>
       {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -67,16 +69,26 @@ function ShellNav({ items }: { items: ShellNavItem[] }) {
             key={item.href}
             href={item.href}
             className={cn(
-              "group relative flex items-center gap-3 overflow-hidden rounded-2xl border px-3.5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] transition-all duration-300",
+              compact
+                ? "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all duration-300"
+                : "group relative flex items-center gap-3 overflow-hidden rounded-2xl border px-3.5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] transition-all duration-300",
               active
-                ? "border-(--accent-border) bg-linear-to-r from-emerald-300/18 via-cyan-300/10 to-transparent text-(--fg-1) shadow-[0_14px_35px_rgba(45,205,164,0.2)]"
-                : "border-white/8 bg-white/2 text-(--fg-3) hover:border-white/18 hover:bg-white/4 hover:text-(--fg-2)"
+                ? compact
+                  ? "bg-emerald-400/15 text-emerald-200 shadow-[0_10px_25px_rgba(16,185,129,0.2)]"
+                  : "border-(--accent-border) bg-linear-to-r from-emerald-300/18 via-cyan-300/10 to-transparent text-(--fg-1) shadow-[0_14px_35px_rgba(45,205,164,0.2)]"
+                : compact
+                  ? "bg-white/4 text-(--fg-4) hover:bg-white/8 hover:text-(--fg-2)"
+                  : "border-white/8 bg-white/2 text-(--fg-3) hover:border-white/18 hover:bg-white/4 hover:text-(--fg-2)"
             )}
           >
-            <span className={cn("transition-transform duration-300", active ? "text-(--accent)" : "group-hover:scale-105")}>{item.icon}</span>
-            <span className="flex-1">{item.label}</span>
-            <ChevronRight size={14} className={cn("transition-transform duration-300", active ? "translate-x-0 text-(--accent)" : "-translate-x-1 opacity-30 group-hover:translate-x-0 group-hover:opacity-80")} />
-            {active ? <span className="absolute inset-y-2 left-1 w-0.5 rounded-full bg-(--accent)" /> : null}
+            <span className={cn("transition-transform duration-300", active ? "text-(--accent)" : compact ? "opacity-85" : "group-hover:scale-105")}>{item.icon}</span>
+            <span className="leading-none">{item.label}</span>
+            {!compact && (
+              <>
+                <ChevronRight size={14} className={cn("transition-transform duration-300", active ? "translate-x-0 text-(--accent)" : "-translate-x-1 opacity-30 group-hover:translate-x-0 group-hover:opacity-80")} />
+                {active ? <span className="absolute inset-y-2 left-1 w-0.5 rounded-full bg-(--accent)" /> : null}
+              </>
+            )}
           </Link>
         );
       })}
@@ -100,7 +112,20 @@ function SectionHeadline({ role }: { role: "admin" | "client" }) {
   );
 }
 
-function DesktopShell({ children, role, items }: { children: React.ReactNode; role: "admin" | "client"; items: ShellNavItem[] }) {
+function DesktopShell({ children, role, items }: { children: ReactNode; role: "admin" | "client"; items: ShellNavItem[] }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isClient = role === "client";
+  const showBackButton = isClient && pathname !== "/client/home";
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/client/home");
+  };
+
   return (
     <div className="relative min-h-screen text-(--fg-1)">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -156,14 +181,35 @@ function DesktopShell({ children, role, items }: { children: React.ReactNode; ro
           </footer>
         </div>
       </div>
+
+      {isClient ? (
+        <>
+          <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-3 pt-2 md:hidden">
+            <div className="mx-auto flex max-w-md items-center justify-between rounded-[28px] border border-white/12 bg-slate-950/85 px-2 py-2 shadow-[0_24px_65px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+              <ShellNav items={items} compact />
+            </div>
+          </div>
+
+          {showBackButton ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="fixed bottom-24 right-4 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/25 bg-slate-950/85 text-emerald-200 shadow-[0_16px_40px_rgba(16,185,129,0.2)] backdrop-blur-xl transition hover:scale-105 md:bottom-6 md:right-6"
+              aria-label="Retour"
+            >
+              <ArrowLeft size={18} />
+            </button>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
 
-export function AdminAppShell({ children }: { children: React.ReactNode }) {
+export function AdminAppShell({ children }: { children: ReactNode }) {
   return <DesktopShell role="admin" items={adminItems}>{children}</DesktopShell>;
 }
 
-export function ClientAppShell({ children }: { children: React.ReactNode }) {
+export function ClientAppShell({ children }: { children: ReactNode }) {
   return <DesktopShell role="client" items={clientItems}>{children}</DesktopShell>;
 }
