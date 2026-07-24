@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';  
 import { Loader2 } from 'lucide-react';  
 import { APP_ROUTES, isAdminRole } from '@/lib/auth-routing';
+import { ClientAppShell } from '@/components/ui/app-shell';
   
 export default function ClientLayout({ children }: { children: React.ReactNode }) {  
   const router = useRouter();  
@@ -41,11 +42,19 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   
   if (loading) {  
     return (  
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">  
-        <Loader2 className="animate-spin text-emerald-500" size={32} />  
+      <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#020617]">  
+        <div className="pointer-events-none absolute -left-32 -top-40 h-96 w-96 rounded-full bg-emerald-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-48 -right-28 h-104 w-104 rounded-full bg-cyan-300/15 blur-3xl" />
+        <div className="glass-strong z-10 flex items-center gap-3 rounded-3xl px-6 py-5 shadow-[0_24px_60px_rgba(2,8,20,0.52)]">
+          <Loader2 className="animate-spin text-emerald-300" size={26} />
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-(--fg-4)">Client session</p>
+            <p className="text-sm font-semibold text-(--fg-2)">Initialisation premium...</p>
+          </div>
+        </div>
       </div>  
     );  
   }  
   
-  return <>{children}</>;  
+  return <ClientAppShell>{children}</ClientAppShell>;  
 }  

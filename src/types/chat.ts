@@ -1,12 +1,12 @@
-export type MessageType = 'text' | 'image' | 'audio';
-
 export interface ChatMessage {
   id: string;
-  conversation_id: string;
-  sender_type: 'user' | 'admin';
-  type: MessageType;
+  user_id: string;
   content: string;
   created_at: string;
+  is_admin_message: boolean;
+  is_read_by_admin: boolean;
+  is_read_by_client: boolean;
+  conversation_id?: string | null;
 }
 
 export interface Conversation {

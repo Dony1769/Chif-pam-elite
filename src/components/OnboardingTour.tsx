@@ -1,258 +1,190 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, Check, Globe } from 'lucide-react';
 
-// --- CONFIGURATION DU CONTENU (BILINGUE) ---
-const TOUR_DATA = {
-  fr: [
-    { 
-      target: "balance-card", 
-      title: "VOTRE TABLEAU DE BORD", 
-      desc: "Suivez vos points d'engagement (CP) et votre solde principal (HTG). Cet espace centralise vos ressources et vos transferts." 
-    },
-    { 
-      target: "market-btn", 
-      title: "OFFRES & RÉCOMPENSES", 
-      desc: "Accédez rapidement au marketplace pour activer des packs, avantages et bonus communautaires." 
-    },
-    { 
-      target: "challenges-section", 
-      title: "EXPÉRIENCES ACTIVES", 
-      desc: "Découvrez les expériences recommandées du moment et progressez à votre rythme." 
-    },
-    { 
-      target: "nav-profile", // Cible le bouton Compte en bas
-      title: "COMPTE & OPÉRATIONS", 
-      desc: "Depuis votre profil, gérez vos informations, vos opérations financières et vos paramètres personnels." 
-    }
-  ],
-  ht: [
-    { 
-      target: "balance-card", 
-      title: "TABLO KONTWÒL OU", 
-      desc: "W ap jwenn pwen angajman ou (CP) ak balans prensipal ou (HTG) la. Tout mouvman yo santre isit." 
-    },
-    { 
-      target: "market-btn", 
-      title: "OF AK REKONPANS", 
-      desc: "Aksè rapid pou aktive pake yo ak benefis kominote a." 
-    },
-    { 
-      target: "challenges-section", 
-      title: "EKSPERYANS AKTIF", 
-      desc: "Dekouvri eksperyans yo epi avanse sou pwòp rit ou." 
-    },
-    { 
-      target: "nav-profile", 
-      title: "KONT AK OPERASYON", 
-      desc: "Nan pwofil ou a, ou jere enfòmasyon pèsonèl ak operasyon finans ou yo." 
-    }
-  ]
-};
+import { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowRight, Check, Crown, Globe, ShieldCheck, Sparkles } from 'lucide-react';
 
-// Clé v10 pour forcer le reset chez tout le monde
-const STORAGE_KEY = 'has_seen_home_tour_v10'; 
+const STORAGE_KEY = 'client_home_onboarding_v2';
+
+const STEPS = [
+  {
+    title: "Bienvenue dans CHIF PAM",
+    subtitle: "Une expérience immersive de progression, missions et récompenses.",
+    features: [
+      { label: "Missions guidées", description: "Des objectifs clairs pour lancer votre aventure." },
+      { label: "Aperçu vivant", description: "Le hub en direct, vos progrès et vos gains." },
+      { label: "Transitions fluides", description: "Animations premiums sans surcharge." },
+    ],
+  },
+  {
+    title: "Débloquez des missions premium",
+    subtitle: "Engagez-vous, gagnez des points et débloquez chaque palier.",
+    features: [
+      { label: "Progression interactive", description: "Suivez vos étapes comme dans un jeu." },
+      { label: "Objectifs quotidiens", description: "Chaînes d’actions claires pour avancer." },
+      { label: "Bonus VIP", description: "Avantages exclusifs pour les meilleurs joueurs." },
+    ],
+  },
+  {
+    title: "Aperçu de la plateforme",
+    subtitle: "Un cockpit riche en défis, places de marché et communauté.",
+    features: [
+      { label: "Expériences actives", description: "Des mini-jeux et challenges à explorer." },
+      { label: "Marketplace réactive", description: "Accédez rapidement aux offres en un clic." },
+      { label: "Chat dynamique", description: "Connexion instantanée à votre communauté." },
+    ],
+  },
+  {
+    title: "Prêt pour le premier défi ?",
+    subtitle: "L’expérience vous attend. Commencez maintenant et gardez le cap.",
+    features: [
+      { label: "Suivi en temps réel", description: "Vos statistiques deviennent visibles dès maintenant." },
+      { label: "Ciné́matique légère", description: "Effets d’ambiance, onboarding maîtrisé." },
+      { label: "Expérience mémorable", description: "Un accompagnement haut de gamme dès l’ouverture." },
+    ],
+  },
+];
+
+const indicators = ['Mission', 'Progression', 'Aperçu', 'Action'];
 
 export default function OnboardingTour() {
-  const [stepIndex, setStepIndex] = useState<number>(-1);
-  const [lang, setLang] = useState<'fr' | 'ht'>('fr'); 
-  const [rect, setRect] = useState<{ top: number, left: number, width: number, height: number, bottom: number } | null>(null);
+  const [activeStep, setActiveStep] = useState<number>(-1);
 
-  const finishTour = useCallback(() => {
-    setStepIndex(-1);
-    localStorage.setItem(STORAGE_KEY, 'true');
-  }, []);
-
-  const handleNext = useCallback(() => {
-    setStepIndex((prev) => {
-      if (prev < TOUR_DATA[lang].length - 1) {
-        return prev + 1;
-      }
-      localStorage.setItem(STORAGE_KEY, 'true');
-      return -1;
-    });
-  }, [lang]);
-  
-  // 1. Démarrage automatique avec délai de sécurité
   useEffect(() => {
-    const hasSeenTour = localStorage.getItem(STORAGE_KEY); 
-    if (!hasSeenTour) {
-      // On attend 1.5s que l'interface principale soit bien chargée
-      const timer = setTimeout(() => setStepIndex(0), 1500); 
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  // 2. Moteur de recherche d'élément (Radar)
-  useEffect(() => {
-    if (stepIndex === -1) {
-        setRect(null);
-        return;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== 'dismissed') {
+      const timer = window.setTimeout(() => setActiveStep(0), 600);
+      return () => window.clearTimeout(timer);
     }
 
-    const targetId = TOUR_DATA['fr'][stepIndex]?.target;
-    if (!targetId) return finishTour();
+    return undefined;
+  }, []);
 
-    let attempts = 0;
-    const maxAttempts = 30; // Essaie pendant 3 secondes (30 * 100ms)
+  const current = useMemo(() => STEPS[activeStep] ?? STEPS[0], [activeStep]);
+  const isLastStep = activeStep === STEPS.length - 1;
 
-    const findElementInterval = setInterval(() => {
-        const element = document.getElementById(targetId);
+  const handleNext = () => {
+    if (isLastStep) {
+      localStorage.setItem(STORAGE_KEY, 'dismissed');
+      setActiveStep(-1);
+      return;
+    }
 
-        if (element) {
-            // ÉLÉMENT TROUVÉ !
-            clearInterval(findElementInterval);
-            
-            // Scroll intelligent
-            // Pour le dernier élément (menu bas), on scroll juste vers le bas sans forcer le centrage
-            const blockPosition = stepIndex >= 3 ? 'end' : 'center';
-            
-            element.scrollIntoView({ behavior: 'smooth', block: blockPosition });
-
-            const r = element.getBoundingClientRect();
-            
-            // Marge dynamique
-            const padding = stepIndex >= 3 ? 4 : 8; // Marge plus petite pour le menu
-            
-            setRect({
-                top: r.top - padding,
-                left: r.left - padding,
-                width: r.width + (padding * 2),
-                height: r.height + (padding * 2),
-                bottom: r.bottom + padding
-            });
-        } else {
-            // PAS ENCORE TROUVÉ, ON RÉESSAYE
-            attempts++;
-            if (attempts >= maxAttempts) {
-                console.warn(`Element #${targetId} introuvable après 3s. Passage à la suite.`);
-                clearInterval(findElementInterval);
-                handleNext(); // Abandon et suite
-            }
-        }
-    }, 100); // Vérifie toutes les 100ms
-
-    return () => clearInterval(findElementInterval);
-  }, [finishTour, handleNext, stepIndex]);
-
-  const toggleLang = () => {
-    setLang(prev => prev === 'fr' ? 'ht' : 'fr');
+    setActiveStep((value) => Math.min(value + 1, STEPS.length - 1));
   };
 
-  if (stepIndex === -1 || !rect) return null;
+  const handleSkip = () => {
+    localStorage.setItem(STORAGE_KEY, 'dismissed');
+    setActiveStep(-1);
+  };
 
-  const currentStep = TOUR_DATA[lang][stepIndex];
-  const isLastStep = stepIndex === TOUR_DATA[lang].length - 1;
-
-  // --- LOGIQUE DE POSITIONNEMENT INTELLIGENTE ---
-  // Si on est à l'étape 4 (index 3) ou si l'élément est bas, on force l'affichage AU-DESSUS
-  const isMenuStep = stepIndex === 3; // L'étape du profil
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const isTooltipAbove = isMenuStep || spaceBelow < 260 || rect.top > window.innerHeight * 0.6;
+  if (activeStep === -1) return null;
 
   return (
     <AnimatePresence>
-      {/* Z-Index 100 pour passer au dessus du menu fixe */}
-      <div className="fixed inset-0 z-100 overflow-hidden pointer-events-none font-sans">
-        
-        {/* A. FOND SOMBRE */}
+      <motion.div
+        className="fixed inset-0 z-[1000] flex items-center justify-center px-4 py-6 md:px-8"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
         <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
+          className="absolute inset-0 bg-slate-950/95 backdrop-blur-xl"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
         />
 
-        {/* B. FOCUS RING */}
         <motion.div
-          className="absolute rounded-2xl pointer-events-none"
-          initial={false}
-          animate={{
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-          }}
-          transition={{ type: "spring", stiffness: 120, damping: 25 }}
-        >
-            <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl shadow-[0_0_40px_rgba(16,185,129,0.6)] animate-pulse"></div>
-        </motion.div>
+          className="pointer-events-none absolute left-0 top-0 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl"
+          animate={{ x: [0, 20, 0], y: [0, -12, 0] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        />
 
-        {/* C. LA BULLE D'INFO */}
         <motion.div
-          key={stepIndex} 
-          initial={{ opacity: 0, y: isTooltipAbove ? 20 : -20, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          className="absolute pointer-events-auto left-4 right-4 md:left-auto md:right-auto md:w-85 mx-auto z-101"
-          style={{
-            left: window.innerWidth > 768 ? rect.left + (rect.width/2) - 170 : 16, 
-            right: window.innerWidth > 768 ? 'auto' : 16,
-            // Si c'est le menu, on décale un peu plus vers le haut (30px) pour ne pas coller au doigt
-            top: !isTooltipAbove ? rect.bottom + 20 : 'auto',
-            bottom: isTooltipAbove ? (window.innerHeight - rect.top) + (isMenuStep ? 30 : 20) : 'auto',
-          }}
+          className="pointer-events-none absolute right-0 bottom-0 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl"
+          animate={{ x: [0, -18, 0], y: [0, 14, 0] }}
+          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        />
+
+        <motion.div
+          key={activeStep}
+          className="relative z-10 w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-950/95 shadow-[0_30px_90px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+          initial={{ y: 24, opacity: 0, scale: 0.97 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          exit={{ y: -20, opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
         >
-          <div className="bg-[#0f172a] border border-emerald-500/30 p-5 rounded-[1.8rem] shadow-2xl relative overflow-hidden">
-            
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-3xl -z-10 rounded-full"></div>
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-cyan-400 to-violet-500" />
 
-            <div 
-                className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-[#0f172a] border-l border-t border-emerald-500/30 transform rotate-45 
-                ${isTooltipAbove ? '-bottom-2.5 border-l-0 border-t-0 border-r border-b' : '-top-2.5'}`}
-            ></div>
+          <div className="relative p-6 sm:p-8 lg:p-10">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.35em] text-emerald-400/80">Onboarding</span>
+                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white">{current.title}</h2>
+                <p className="max-w-2xl text-sm leading-6 text-slate-300">{current.subtitle}</p>
+              </div>
 
-            {/* En-tête */}
-            <div className="flex justify-between items-start mb-4 relative z-10">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 text-black text-xs font-black shadow-lg shadow-emerald-500/20">
-                        {stepIndex + 1}
-                    </div>
-                    <h3 className="text-sm font-black italic uppercase tracking-wider text-white">{currentStep.title}</h3>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                    <button 
-                        onClick={toggleLang}
-                        className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-[9px] font-bold text-emerald-400 border border-emerald-500/20 transition-colors"
-                    >
-                        <Globe size={10} />
-                        {lang === 'fr' ? 'HT' : 'FR'}
-                    </button>
-
-                    <button onClick={finishTour} className="p-1 bg-white/5 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
-                        <X size={16} />
-                    </button>
-                </div>
+              <button
+                type="button"
+                onClick={handleSkip}
+                className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.35em] text-slate-200 transition hover:border-emerald-400/50 hover:bg-white/10"
+              >
+                Ignorer
+              </button>
             </div>
 
-            {/* Texte */}
-            <p className="text-slate-300 text-xs leading-relaxed mb-6 font-medium pl-2 border-l-2 border-emerald-500/20">
-                {currentStep.desc}
-            </p>
-
-            {/* Footer */}
-            <div className="flex justify-between items-center">
-                <div className="flex gap-1.5">
-                    {TOUR_DATA[lang].map((_, i) => (
-                        <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i === stepIndex ? 'w-6 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'w-1.5 bg-white/10'}`} />
-                    ))}
-                </div>
-
-                <button 
-                    onClick={handleNext}
-                    className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-400 transition-all shadow-lg active:scale-95 group"
+            <div className="mt-8 grid gap-4 lg:grid-cols-3">
+              {current.features.map((feature) => (
+                <motion.div
+                  key={feature.label}
+                  className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-[inset_0_0_1px_rgba(255,255,255,0.04)]"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35 }}
                 >
-                    {isLastStep ? (lang === 'fr' ? "C'EST PARTI !" : "AN ALE !") : (lang === 'fr' ? "SUIVANT" : "KONTINYE")}
-                    {isLastStep ? <Check size={14}/> : <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform"/>}
-                </button>
+                  <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300">
+                    {feature.label === 'Missions guidées' && <Sparkles size={20} />}
+                    {feature.label === 'Aperçu vivant' && <Crown size={20} />}
+                    {feature.label === 'Progression interactive' && <ArrowRight size={20} />}
+                    {feature.label === 'Objectifs quotidiens' && <ShieldCheck size={20} />}
+                    {feature.label === 'Bonus VIP' && <Crown size={20} />}
+                    {feature.label === 'Expériences actives' && <Sparkles size={20} />}
+                    {feature.label === 'Marketplace réactive' && <ArrowRight size={20} />}
+                    {feature.label === 'Chat dynamique' && <Globe size={20} />}
+                    {feature.label === 'Suivi en temps réel' && <Check size={20} />}
+                    {feature.label === 'Ciné́matique légère' && <Sparkles size={20} />}
+                    {feature.label === 'Expérience mémorable' && <Crown size={20} />}
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-[0.25em] text-white">{feature.label}</h3>
+                  <p className="mt-3 text-[12px] leading-6 text-slate-400">{feature.description}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2">
+                {indicators.map((label, index) => (
+                  <div
+                    key={label}
+                    className={`rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.35em] ${index === activeStep ? 'bg-emerald-400 text-slate-950 shadow-[0_0_16px_rgba(16,185,129,0.25)]' : 'bg-white/5 text-slate-400'}`}
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNext}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-400 px-6 py-3 text-[11px] font-black uppercase tracking-[0.35em] text-slate-950 shadow-[0_15px_30px_rgba(16,185,129,0.32)] transition hover:scale-[1.01] active:scale-[0.98]"
+              >
+                {isLastStep ? 'Je commence' : 'Suivant'}
+                <ArrowRight size={16} />
+              </button>
             </div>
           </div>
         </motion.div>
-
-      </div>
+      </motion.div>
     </AnimatePresence>
   );
 }

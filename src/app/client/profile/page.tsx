@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
-  User, LogOut, Camera, Loader2, ChevronRight, 
+  User, LogOut, Loader2, ChevronRight, 
   CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
   Ticket, Share2, Copy, Gift, Plus, ArrowDownCircle // Ajout des icônes Plus et ArrowDownCircle
 } from 'lucide-react';
@@ -13,6 +13,7 @@ import {
   AreaChart, Area, Tooltip, ResponsiveContainer, XAxis, YAxis, ReferenceLine 
 } from 'recharts';
 import Link from 'next/link';
+import { DSCard, DSButton, DSInput, DSLoader } from '@/components/ui/primitives';
 
 // IMPORT DU POPUNDER MONETA
 
@@ -26,21 +27,22 @@ const LogoChifPamSmall = () => (
 export default function ProfilePage() {
   const router = useRouter();
   const { isInstallable, install } = usePWAInstall();
-  const [profile, setProfile] = useState<any>(null);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
+  type Profile = { id: string; username?: string | null; referral_code?: string | null; jetons_cp?: number; };
+  type ChartPoint = { name: string; gain: number };
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [updating, setUpdating] = useState<boolean>(false);
   const [stats, setStats] = useState({ deposits: 0, withdrawals: 0, netBalance: 0 });
   const [couponCode, setCouponCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  useEffect(() => {
-    fetchCompleteData();
-  }, []);
+  
 
-  const fetchCompleteData = async () => {
+  const fetchCompleteData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
@@ -52,9 +54,13 @@ export default function ProfilePage() {
       processPerformanceData(transactions || [], mises || []);
     }
     setLoading(false);
-  };
+  }, []);
 
-  const processPerformanceData = (trans: any[], mises: any[]) => {
+  useEffect(() => {
+    fetchCompleteData();
+  }, [fetchCompleteData]);
+
+  const processPerformanceData = (trans: { created_at: string; type: string; amount: number }[], mises: { created_at: string; montant: number; status?: string }[]) => {
     const dailyData: { [key: string]: number } = {};
     let totalDep = 0; let totalWith = 0; let netRunningBalance = 0;
     trans.forEach(t => {
@@ -92,11 +98,11 @@ export default function ProfilePage() {
       alert(`Succès ! +${coupon.amount} HTG ajoutés à votre compte. 🎉`);
       setCouponCode('');
       fetchCompleteData();
-    } catch (err: any) { alert(err.message); } finally { setRedeeming(false); }
+    } catch (err: unknown) { alert((err as Error).message); } finally { setRedeeming(false); }
   };
 
   const shareReferral = () => {
-    const referralLink = `${window.location.origin}/inscription?ref=${profile?.referral_code}`;
+    const referralLink = `${window.location.origin}/inscription?ref=${profile?.referral_code ?? ''}`;
     const text = `Rejoins-moi sur Chif Pam ! Utilise mon lien pour gagner 10 HTG dès ton inscription 🎁 :`;
     
     if (navigator.share) {
@@ -121,12 +127,12 @@ export default function ProfilePage() {
       alert("Profil mis à jour avec succès !");
       fetchCompleteData();
       setNewPassword('');
-    } catch (error: any) { alert("Erreur: " + error.message); } finally { setUpdating(false); }
+    } catch (error: unknown) { alert("Erreur: " + (error as Error).message); } finally { setUpdating(false); }
   };
 
   const handleLogout = async () => {
     try { await supabase.auth.signOut(); window.location.replace('/connexion'); } 
-    catch (error) { window.location.href = '/connexion'; }
+    catch { window.location.href = '/connexion'; }
   };
 
   if (loading) return (
@@ -153,7 +159,7 @@ export default function ProfilePage() {
 
         {isInstallable && (
           <button onClick={install} className="w-full p-4 rounded-2xl bg-emerald-500 text-black text-xs tracking-widest font-black uppercase">
-            Installer l’application
+            Installer l&apos;application
           </button>
         )}
         
@@ -172,21 +178,27 @@ export default function ProfilePage() {
 
         {/* --- SECTION DÉPÔT / RETRAIT --- */}
         <div className="grid grid-cols-2 gap-4">
-          <Link href="/client/finance" className="bg-emerald-500 p-5 rounded-[1.8rem] text-slate-950 flex flex-col items-center gap-1 active:scale-95 transition-all shadow-xl shadow-emerald-500/10">
-            <Plus size={20} /><span className="text-[9px] font-black italic uppercase tracking-widest">Dépôt</span>
+          <Link href="/client/finance">
+            <DSButton variant="primary" className="w-full flex flex-col items-center gap-1 py-6">
+              <Plus size={20} />
+              <span className="text-[9px] font-black italic uppercase tracking-widest">Dépôt</span>
+            </DSButton>
           </Link>
-          <Link href="/client/finance" className="bg-slate-900/50 p-5 rounded-[1.8rem] border border-white/10 flex flex-col items-center gap-1 active:scale-95 transition-all">
-            <ArrowDownCircle size={20} className="text-rose-500" /><span className="text-[9px] font-black italic uppercase tracking-widest">Retrait</span>
+          <Link href="/client/finance">
+            <DSButton variant="secondary" className="w-full flex flex-col items-center gap-1 py-6">
+              <ArrowDownCircle size={20} className="text-rose-500" />
+              <span className="text-[9px] font-black italic uppercase tracking-widest">Retrait</span>
+            </DSButton>
           </Link>
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 p-6 rounded-[2rem] text-white relative overflow-hidden shadow-lg shadow-emerald-500/20">
+          <DSCard className="bg-gradient-to-br from-emerald-600 to-emerald-800 p-6 rounded-[2rem] text-white relative overflow-hidden shadow-lg shadow-emerald-500/20">
             <div className="absolute top-0 right-0 p-4 opacity-20"><Gift size={80} /></div>
             <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-2">Votre Code Parrain</p>
             <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-3xl font-black tracking-tighter">{profile?.referral_code || "LOADING..."}</h2>
-              <button onClick={() => {navigator.clipboard.writeText(profile?.referral_code); alert("Code copié !");}} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors">
+              <h2 className="text-3xl font-black tracking-tighter">{profile?.referral_code || 'LOADING...'}</h2>
+              <button onClick={() => { navigator.clipboard.writeText(profile?.referral_code ?? ''); alert('Code copié !'); }} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors">
                 <Copy size={16} />
               </button>
             </div>
@@ -194,18 +206,20 @@ export default function ProfilePage() {
             <button onClick={shareReferral} className="w-full py-3 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-transform active:scale-95">
               <Share2 size={14} /> Partager mon lien
             </button>
-          </div>
+          </DSCard>
 
-          <div className="bg-slate-900 border border-white/10 p-6 rounded-[2rem] space-y-3">
+          <DSCard className="p-6 rounded-[2rem] space-y-3">
             <div className="flex items-center gap-2 text-emerald-500 mb-1">
               <Ticket size={18} />
               <p className="text-[10px] font-black uppercase tracking-widest">Code Promo</p>
             </div>
             <div className="flex gap-2">
-              <input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="ENTREZ LE CODE" className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs font-bold outline-none focus:border-emerald-500/50 placeholder:text-slate-600 uppercase"/>
-              <button onClick={handleRedeemCoupon} disabled={redeeming || !couponCode} className="px-4 bg-emerald-500 text-black rounded-xl font-black text-[10px] disabled:opacity-50">{redeeming ? <Loader2 className="animate-spin" size={14}/> : "VALIDER"}</button>
+              <DSInput value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="ENTREZ LE CODE" className="flex-1 uppercase" />
+              <DSButton onClick={handleRedeemCoupon} disabled={redeeming || !couponCode} variant="success" size="sm">
+                {redeeming ? <DSLoader label="..." /> : 'Valider'}
+              </DSButton>
             </div>
-          </div>
+          </DSCard>
         </div>
 
         <button onClick={async () => { if (!("Notification" in window)) return alert("Notifications non supportées"); const permission = await Notification.requestPermission(); if (permission === "granted") { navigator.serviceWorker.ready.then(swReg => { swReg.showNotification("ChifPam", { body: "Notifications activées ! ✅", icon: "/icons/icon-192.png" }); }); alert("Notifications activées ✅"); } }} className="w-full p-4 rounded-2xl bg-slate-900/40 border border-white/10 text-xs tracking-widest uppercase font-bold text-slate-400 hover:bg-slate-800 transition-colors">Activer les notifications</button>
@@ -225,7 +239,7 @@ export default function ProfilePage() {
 
         <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] p-6 shadow-2xl relative overflow-hidden">
           <div className="mb-6 relative z-10">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 mb-1 font-bold">Bilan d'activité</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 mb-1 font-bold">Bilan d&apos;activité</p>
             <h2 className={`text-4xl font-black ${stats.netBalance >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{stats.netBalance.toLocaleString()} HTG</h2>
           </div>
           <div className="h-40 w-full -ml-4 relative z-10">
@@ -252,14 +266,22 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="bg-slate-900/50 border border-white/5 rounded-[2.5rem] p-6 space-y-4">
+        <DSCard className="p-6 space-y-4 rounded-[2.5rem]">
           <div className="flex items-center gap-2 mb-2"><Shield size={16} className="text-emerald-500" /><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sécurité du Compte</h3></div>
           <div className="space-y-4">
-            <div className="space-y-1"><label className="text-[9px] uppercase text-slate-500 ml-4 font-bold tracking-widest">Identifiant</label><input type="text" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-sm font-bold text-white"/></div>
-            <div className="space-y-1"><label className="text-[9px] uppercase text-slate-500 ml-4 font-bold tracking-widest">Modifier mot de passe</label><input type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full bg-slate-950 border border-white/5 p-4 rounded-2xl outline-none focus:border-emerald-500/50 transition-all text-sm font-bold text-white"/></div>
-            <button onClick={handleUpdateProfile} disabled={updating} className="w-full bg-emerald-500 text-slate-950 p-4 rounded-2xl font-black text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50">{updating ? <Loader2 className="animate-spin" size={16} /> : <><Save size={16} /> ENREGISTRER</>}</button>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase text-slate-500 ml-4 font-bold tracking-widest">Identifiant</label>
+              <DSInput type="text" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase text-slate-500 ml-4 font-bold tracking-widest">Modifier mot de passe</label>
+              <DSInput type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            </div>
+            <DSButton onClick={handleUpdateProfile} disabled={updating} variant="success" size="md" className="w-full flex items-center justify-center gap-2">
+              {updating ? <DSLoader label="..." /> : <><Save size={16} /> ENREGISTRER</>}
+            </DSButton>
           </div>
-        </div>
+        </DSCard>
 
         <button onClick={handleLogout} className="w-full p-5 bg-rose-500/5 border border-rose-500/10 rounded-3xl flex justify-between items-center group hover:bg-rose-500/10 transition-all active:scale-95">
           <div className="flex items-center gap-4">

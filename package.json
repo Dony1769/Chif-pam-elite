@@ -26,6 +26,7 @@
     "next": "^16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-window": "^2.3.0",
     "recharts": "^3.6.0",
     "web-push": "^3.6.7"
   },

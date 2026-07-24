@@ -5,15 +5,16 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell,
-  MessagesSquare, Home, Gamepad2, History, 
-  User as UserIcon, Lock, Trophy,
+  MessagesSquare, Home, Gamepad2,
+  Lock, Trophy,
   Activity, ChevronRight, Brain, Fingerprint,
   Menu, X, Crown, ShieldCheck, Gift, Sparkles,
-  RefreshCw, Coins, ShoppingCart
+  Coins, Star, ArrowDownCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
+import { DSButton, DSCard, DSHeader, DSPage, DSPanel } from '@/components/ui/primitives';
 
 // Vos composants personnalisés
 const OnboardingTour = dynamic(() => import('@/components/OnboardingTour'), { ssr: false });
@@ -33,6 +34,7 @@ export default function ClientHome() {
     balance: number;
     vip_status: string | null;
     login_streak: number | null;
+    rank?: string;
   };
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -146,39 +148,72 @@ export default function ClientHome() {
     if (!profile || profile.jetons_cp < 100) return alert("Minimum 100 CP pour convertir");
     
     setIsConverting(true);
-    const { error } = await supabase.rpc('convertir_cp_en_htg', {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('convert_cp: attempt', { authUserId: user?.id, profileId: profile.id, p_montant_cp: Math.floor(profile.jetons_cp) });
+
+      const { error, data } = await supabase.rpc('convertir_cp_en_htg', {
         p_user_id: profile.id,
         p_montant_cp: Math.floor(profile.jetons_cp)
-    });
+      });
 
-    if (error) alert(error.message);
-    else playPing();
-    setIsConverting(false);
+      if (error) {
+        console.error('convert_cp: rpc error', { error, data, authUserId: user?.id, payload: { p_user_id: profile.id, p_montant_cp: Math.floor(profile.jetons_cp) } });
+        alert(error.message);
+      } else {
+        console.log('convert_cp: success', { data });
+        playPing();
+      }
+    } catch (err) {
+      console.error('convert_cp: unexpected error', err);
+      alert('Erreur inattendue lors de la conversion.');
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Activity className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="ds-page text-white font-black italic uppercase pb-32 overflow-x-hidden relative ds-fade-up">
-      
-      {/* INTEGRATION DU POP-UP ONBOARDING */}
+    <DSPage className="text-white font-black italic uppercase pb-32 overflow-x-hidden relative ds-fade-up">
       <OnboardingTour />
-      
-      
+
       <AnimatePresence>
         {isMenuOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsMenuOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-60"/>
-            <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', damping: 20 }} className="fixed top-0 left-0 h-full w-[80%] bg-slate-950 z-70 border-r border-white/5 p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-10"><LogoSmall /><button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full"><X size={20}/></button></div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-60"
+            />
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 20 }}
+              className="fixed top-0 left-0 h-full w-[80%] bg-slate-950 z-70 border-r border-white/5 p-6 shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-10">
+                <LogoSmall />
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full">
+                  <X size={20} />
+                </button>
+              </div>
               <div className="space-y-2">
-                <MenuLink href="/client/rewards" icon={<Gift className="text-pink-500"/>} label="Récompenses & Objectifs" badge={(profile?.login_streak ?? 0) > 0 ? "!" : ""} />
-                <MenuLink href="/client/vip" icon={<Crown className="text-amber-500"/>} label="Abonnement VIP" />
-                <MenuLink href="/client/challenges" icon={<ShieldCheck className="text-emerald-500"/>} label="Parcours actifs" badge={activeChallengesCount} />
-                <MenuLink href="/client/market" icon={<Sparkles className="text-purple-500"/>} label="Marketplace" />
-                <MenuLink href="/client/rank" icon={<Trophy className="text-blue-500"/>} label="Classement communauté" />
+                <MenuLink href="/client/rewards" icon={<Gift className="text-pink-500" />} label="Centre de Mission" badge={(profile?.login_streak ?? 0) > 0 ? '!' : ''} />
+                <MenuLink href="/client/vip" icon={<Crown className="text-amber-500" />} label="Abonnement VIP" />
+                <MenuLink href="/client/challenges" icon={<ShieldCheck className="text-emerald-500" />} label="Parcours actifs" badge={activeChallengesCount} />
+                <MenuLink href="/client/market" icon={<Sparkles className="text-purple-500" />} label="Marketplace" />
+                <MenuLink href="/client/rank" icon={<Trophy className="text-blue-500" />} label="Classement communauté" />
                 <div className="pt-10 border-t border-white/5 mt-10">
-                    <button onClick={() => supabase.auth.signOut().then(() => router.push('/'))} className="text-slate-500 text-[10px] tracking-widest uppercase font-black">Déconnexion</button>
+                  <button
+                    onClick={() => supabase.auth.signOut().then(() => router.push('/'))}
+                    className="text-slate-500 text-[10px] tracking-widest uppercase font-black"
+                  >
+                    Déconnexion
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -186,110 +221,182 @@ export default function ClientHome() {
         )}
       </AnimatePresence>
 
-      <div className="p-6 space-y-6">
-        {/* Header avec Panier et Cloche */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsMenuOpen(true)} className="relative p-2 bg-white/5 rounded-xl border border-white/5 active:scale-95 transition-all">
-                <Menu size={24} className="text-emerald-500" />
-            </button>
-            <h1 className="text-lg tracking-tighter italic uppercase font-black">Bienvenue, <span className="text-emerald-400">@{profile?.username}</span></h1>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Link href="/client/market" id="market-btn" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
-                <ShoppingCart size={20} className="text-emerald-500" />
-            </Link>
-            
-            <Link href="/client/notifications" className="relative p-2 bg-white/5 rounded-full border border-white/5 active:scale-90 transition-all">
-                <Bell size={20} className={globalNotificationCount > 0 ? "text-emerald-500" : "text-slate-500"} />
-                {globalNotificationCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                        <span className="relative inline-flex rounded-full h-4 w-4 bg-(--accent) text-(--accent-contrast) items-center justify-center text-[8px] font-black">{globalNotificationCount}</span>
-                    </span>
-                )}
-            </Link>
-          </div>
-        </div>
-
-        {/* --- DOUBLE BALANCE CARD --- */}
-        <div className="space-y-4" id="balance-card">
-          {/* Main Wallet */}
-          <div className="ds-surface rounded-4xl p-6 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Coins size={80} className="text-emerald-500" />
-            </div>
-            <div className="relative z-10">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[9px] text-emerald-400 font-black tracking-[0.3em] mb-1">POINTS DE PARTICIPATION (CP)</p>
-                  <h2 className="text-4xl font-black italic tracking-tighter text-white">
-                    {(profile?.jetons_cp || 0).toLocaleString()}
-                  </h2>
-                </div>
-                <button 
-                  onClick={handleQuickConvert}
-                  disabled={isConverting || (profile?.jetons_cp || 0) < 100}
-                  className="bg-(--accent) text-(--accent-contrast) px-4 py-2 rounded-xl text-[10px] font-black flex items-center gap-2 active:scale-90 disabled:opacity-30 transition-all shadow-[0_10px_26px_var(--accent-glow)]"
+      <div className="space-y-6 p-6">
+        <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <DSHeader
+                  eyebrow="Espace client"
+                  title={`Bienvenue, @${profile?.username}`}
+                  description="Explorez vos gains, défis et récompenses depuis un tableau de bord premium."
+                />
+              </div>
+              <div className="flex flex-wrap gap-3 items-center justify-start lg:justify-end">
+                <button
+                  onClick={() => setIsMenuOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.25em] text-emerald-300 transition hover:bg-white/10"
                 >
-                  <RefreshCw size={14} className={isConverting ? "animate-spin" : ""} /> TRANSFÉRER
+                  <Menu size={16} />
+                  Menu
                 </button>
+                <Link href="/client/notifications" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-200 transition hover:bg-white/10">
+                  <Bell size={16} />
+                  {globalNotificationCount > 0 ? `${globalNotificationCount} alertes` : 'Notifications'}
+                </Link>
               </div>
             </div>
+
+            <DSPanel className="grid gap-4 xl:grid-cols-[1.45fr_0.9fr]">
+              <DSCard className="relative overflow-hidden p-6">
+                <div className="absolute inset-y-0 right-0 flex items-center opacity-10">
+                  <Coins size={96} className="text-emerald-500" />
+                </div>
+                <div className="relative z-10">
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-emerald-300 mb-3">POINTS DE PARTICIPATION (CP)</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-5xl font-black tracking-tighter text-white">{(profile?.jetons_cp || 0).toLocaleString()}</p>
+                      <p className="mt-2 text-sm text-(--fg-3)">Vos crédits de participation sont prêts à être convertis.</p>
+                    </div>
+                    <DSButton
+                      onClick={handleQuickConvert}
+                      disabled={isConverting || (profile?.jetons_cp || 0) < 100}
+                      variant="success"
+                      size="sm"
+                      className="mt-2 sm:mt-0"
+                    >
+                      {isConverting ? 'Conversion...' : 'Transférer'}
+                    </DSButton>
+                  </div>
+                </div>
+              </DSCard>
+
+              <DSCard className="p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Solde principal (HTG)</p>
+                    <p className="mt-2 text-3xl font-black text-white">{(profile?.balance || 0).toLocaleString()}</p>
+                  </div>
+                  {profile?.vip_status !== 'free' && (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-amber-500/15 text-amber-300">
+                      <Crown size={24} />
+                    </div>
+                  )}
+                </div>
+              </DSCard>
+            </DSPanel>
+
+            <DSPanel>
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Expériences recommandées</p>
+                  <p className="mt-2 text-sm text-(--fg-3)">Sélectionnez une mission immersive pour progresser rapidement.</p>
+                </div>
+                <Link href="/client/list" className="text-[10px] uppercase tracking-[0.35em] text-emerald-300 transition hover:text-emerald-200">
+                  Voir tout
+                </Link>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <GameRow href="/client/quiz" icon={<Brain className="text-blue-500" />} title="Quiz Insights" desc="Progression cognitive" players="3 012 joueurs" />
+                <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500" />} title="Laser Vault" desc="Réactivité & précision" players="2 094 joueurs" />
+                <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500" />} title="Biometric Lab" desc="Mémoire adaptative" players="652 joueurs" />
+              </div>
+            </DSPanel>
           </div>
 
-          {/* Secondary Wallet */}
-          <div className="ds-surface rounded-4xl p-5 flex justify-between items-center px-8">
-            <div>
-              <p className="text-[8px] text-slate-500 font-black tracking-widest mb-1 uppercase">Solde principal (HTG)</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black italic">{(profile?.balance || 0).toLocaleString()}</span>
-                <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">HTG</span>
+          <div className="space-y-6">
+            <DSCard className="space-y-5 p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Progrès</p>
+                  <p className="mt-1 text-lg font-black text-white">Statut du compte</p>
+                </div>
+                <div className="rounded-3xl bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.35em] text-emerald-300">
+                  {activeChallengesCount} défis actifs
+                </div>
               </div>
-            </div>
-            {profile?.vip_status !== 'free' && (
-              <div className="text-amber-500">
-                <Crown size={20} />
+              <div className="grid gap-3">
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[9px] uppercase tracking-[0.35em] text-slate-500">Messages non lus</p>
+                  <p className="mt-2 text-2xl font-black text-white">{unreadChat}</p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[9px] uppercase tracking-[0.35em] text-slate-500">Alertes</p>
+                  <p className="mt-2 text-2xl font-black text-white">{globalNotificationCount}</p>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
+            </DSCard>
 
-        {/* Expériences */}
-        <div className="space-y-4" id="challenges-section">
-          <h3 className="text-[10px] text-slate-500 tracking-[0.3em] px-2 font-black italic uppercase">Expériences recommandées</h3>
-          <div className="space-y-3 pb-10">
-            <GameRow href="/client/quiz" icon={<Brain className="text-blue-500"/>} title="Quiz Insights" desc="Progression cognitive" players="3,012" />
-            <GameRow href="/client/laser-vault" icon={<Lock className="text-indigo-500"/>} title="Laser Vault" desc="Réactivité & précision" players="2,094" />
-            <GameRow href="/client/biometric-hack" icon={<Fingerprint className="text-emerald-500"/>} title="Biometric Lab" desc="Mémoire adaptative" players="652" />
+            <DSCard className="space-y-5 p-6">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Actions rapides</p>
+              <div className="grid gap-3">
+                <Link
+                  href="/client/market"
+                  className="inline-flex w-full items-center justify-center rounded-[var(--radius-md)] border border-(--border-subtle) bg-(--surface-2) px-5 py-3 text-sm font-semibold uppercase tracking-[0.09em] text-(--fg-1) transition hover:border-(--border-strong)"
+                >
+                  Accès au marché
+                </Link>
+                <Link
+                  href="/client/profile"
+                  className="inline-flex w-full items-center justify-center rounded-[var(--radius-md)] border border-transparent bg-transparent px-5 py-3 text-sm font-semibold uppercase tracking-[0.09em] text-(--fg-2) transition hover:bg-(--surface-2)"
+                >
+                  Mon profil
+                </Link>
+              </div>
+            </DSCard>
           </div>
         </div>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/88 backdrop-blur-3xl border-t border-white/5 px-8 py-6 flex justify-between items-center z-50 rounded-t-5xl shadow-[0_-20px_46px_rgba(0,0,0,0.65)]">
-        <NavLink href="/client/home" icon={<Home size={22}/>} label="Accueil" active={pathname === '/client/home'} />
-        <NavLink href="/client/list" icon={<Gamepad2 size={22}/>} label="Explorer" active={pathname === '/client/list'} />
-        <NavLink href="/client/history" icon={<History size={22}/>} label="Historique" active={pathname === '/client/history'} />
-        
-        <Link href="/client/chat" className={`relative flex flex-col items-center gap-1.5 transition-all ${pathname === '/client/chat' ? 'text-emerald-400' : 'text-slate-600'}`}>
-          <div className="relative">
-            <MessagesSquare size={22} className={unreadChat > 0 ? "animate-bounce text-emerald-500" : ""} />
-            {unreadChat > 0 && (
-                <span className="absolute -top-2 -right-2 bg-emerald-500 text-slate-950 h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-black">{unreadChat}</span>
-            )}
-          </div>
-          <span className="text-[8px] font-black uppercase italic tracking-tighter">Communauté</span>
-        </Link>
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-3xl border-t border-white/5 px-4 py-4 grid grid-cols-6 gap-2 z-50 rounded-t-[28px] shadow-[0_-20px_46px_rgba(0,0,0,.65)]">
 
-        <NavLink 
-  id="nav-profile" // <--- AJOUTER CECI
-  href="/client/profile" 
-  icon={<UserIcon size={22}/>} 
-  label="Compte" 
-  active={pathname === '/client/profile'} 
-/>
+        <NavLink
+          href="/client/home"
+          icon={<Home size={22} />}
+          label="Accueil"
+          active={pathname === "/client/home"}
+        />
+
+        <NavLink
+          href="/client/list"
+          icon={<Gamepad2 size={22} />}
+          label="Explorer"
+          active={pathname === "/client/list"}
+        />
+
+        <NavLink
+          href="/client/rewards"
+          icon={<Gift size={22} />}
+          label="Mission"
+          active={pathname === "/client/rewards"}
+        />
+
+        <NavLink
+          href="/client/market"
+          icon={<Sparkles size={22} />}
+          label="Offres"
+          active={pathname === "/client/market"}
+        />
+
+        <NavLink
+          href="/client/chat"
+          icon={<MessagesSquare size={22} />}
+          label="Chat"
+          active={pathname === "/client/chat"}
+          badge={unreadChat}
+        />
+
+        <NavLink
+          href="/client/vip"
+          icon={<Crown size={22} />}
+          label="VIP"
+          active={pathname === "/client/vip"}
+        />
+
       </nav>
-    </div>
+    </DSPage>
   );
 }
 
@@ -346,18 +453,27 @@ function NavLink({
   icon,
   label,
   active,
+  badge,
   id,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
+  badge?: number | string;
   id?: string;
 }) {
     return (
-      <Link id={id} href={href} className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
-        {icon}
+      <Link id={id} href={href} className={`relative flex flex-col items-center gap-1.5 transition-all ${active ? 'text-emerald-400 scale-110' : 'text-slate-600'}`}>
+        <div className="relative">
+          {icon}
+          {badge ? (
+            <span className="absolute -right-2 -top-2 inline-flex min-h-[1rem] min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[9px] font-black text-white">
+              {badge}
+            </span>
+          ) : null}
+        </div>
         <span className="text-[8px] font-black uppercase italic tracking-tighter">{label}</span>
       </Link>
     );
-        }
+}
