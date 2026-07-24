@@ -9,7 +9,7 @@ import { ChatService } from '@/services/chat'
 type Props = {
   text: string
   setText: (v: string) => void
-  sendMessage: (e: React.FormEvent<HTMLFormElement>) => Promise<void>
+  sendMessage: (message: string) => Promise<void>
   // optional target user id for admin -> used for broadcasting typing/presence
   targetUserId?: string | null
 }
@@ -22,9 +22,7 @@ export default function MessageInput({ text, setText, sendMessage, targetUserId 
   const typingTimeout = useRef<number | null>(null)
   const [replyTo, setReplyTo] = useState<{ id: string; snippet: string } | null>(null)
 
-  const submitWithPreview = async (event?: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLInputElement> | React.MouseEvent<HTMLButtonElement>) => {
-    event?.preventDefault?.()
-
+  const buildMessage = () => {
     let final = text
     if (preview) {
       const lower = (previewName || '').toLowerCase()
@@ -37,34 +35,22 @@ export default function MessageInput({ text, setText, sendMessage, targetUserId 
     if (replyTo) {
       final = `__reply|${replyTo.id}|${replyTo.snippet}__\n${final}`
     }
+    return final
+  }
 
-    setText(final)
-    setTimeout(() => {
-      const syntheticEvent = {
-        preventDefault: () => {},
-        stopPropagation: () => {},
-        currentTarget: null,
-        target: null,
-        bubbles: false,
-        cancelable: false,
-        defaultPrevented: false,
-        eventPhase: 0,
-        isTrusted: false,
-        nativeEvent: null,
-        timeStamp: Date.now(),
-        type: 'submit',
-        isDefaultPrevented: () => false,
-        isPropagationStopped: () => false,
-        persist: () => {},
-        getModifierState: () => false,
-      } as React.FormEvent<HTMLFormElement>
+  const handleSend = async () => {
+    const final = buildMessage().trim()
+    if (!final) return
 
-      void sendMessage(syntheticEvent)
-    }, 50)
-
-    setPreview(null)
-    setPreviewName(null)
-    setReplyTo(null)
+    try {
+      await sendMessage(final)
+    } catch (error) {
+      console.error('Erreur à l’envoi du message', error)
+    } finally {
+      setPreview(null)
+      setPreviewName(null)
+      setReplyTo(null)
+    }
   }
 
   useEffect(() => {
@@ -146,7 +132,7 @@ export default function MessageInput({ text, setText, sendMessage, targetUserId 
         <input value={text} onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault()
-            void submitWithPreview(event)
+            void handleSend()
           }
         }} onChange={(e) => {
           setText(e.target.value)
@@ -156,7 +142,7 @@ export default function MessageInput({ text, setText, sendMessage, targetUserId 
           typingTimeout.current = window.setTimeout(() => sendTyping(false), 1500)
         }} placeholder="Écris un message..." className="flex-1 bg-transparent outline-none p-3 rounded-2xl border border-white/6" />
 
-        <button type="button" onClick={() => void submitWithPreview()} className="px-4 py-2 bg-emerald-500 rounded-2xl text-slate-950 hover:scale-105 transition-transform">
+        <button type="button" onClick={() => void handleSend()} className="px-4 py-2 bg-emerald-500 rounded-2xl text-slate-950 hover:scale-105 transition-transform">
           <Send />
         </button>
       </div>

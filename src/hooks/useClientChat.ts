@@ -12,14 +12,12 @@ export function useClientChat() {
   const messageIdsRef = useRef<Set<string>>(new Set())
   const pendingMessageRef = useRef<ChatMessage | null>(null)
   const [text, setTextState] = useState('')
-  const textRef = useRef(text)
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
 
   const setText = useCallback((value: string) => {
-    textRef.current = value
     setTextState(value)
   }, [])
 
@@ -79,10 +77,6 @@ export function useClientChat() {
   }, [userId])
 
   useEffect(() => {
-    textRef.current = text
-  }, [text])
-
-  useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null
     let mounted = true
 
@@ -133,9 +127,8 @@ export function useClientChat() {
     }
   }, [fetchInitialMessages, markAllAsRead, mergeMessages])
 
-  const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const trimmedText = textRef.current.trim()
+  const sendMessage = async (message: string) => {
+    const trimmedText = message.trim()
     if (!trimmedText || !userId) return
 
     const optimisticMessage: ChatMessage = {
@@ -160,7 +153,7 @@ export function useClientChat() {
       setMessages((prev) => prev.filter((message) => message.id !== optimisticMessage.id))
       messageIdsRef.current.delete(optimisticMessage.id)
       pendingMessageRef.current = null
-      setText(trimmedText)
+      setText(message)
     }
   }
 

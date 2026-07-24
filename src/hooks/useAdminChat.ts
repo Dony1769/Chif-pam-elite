@@ -10,20 +10,14 @@ export function useAdminChat(selectedUserId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const messageIdsRef = useRef<Set<string>>(new Set())
   const [reply, setReplyState] = useState('')
-  const replyRef = useRef(reply)
   const [users, setUsers] = useState<Array<{ id: string; username?: string | null; phone?: string | null; unread: number; last_at: string }>>([])
   const [loading, setLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
 
   const setReply = useCallback((value: string) => {
-    replyRef.current = value
     setReplyState(value)
   }, [])
-
-  useEffect(() => {
-    replyRef.current = reply
-  }, [reply])
 
   useEffect(() => {
     let mounted = true
@@ -163,17 +157,16 @@ export function useAdminChat(selectedUserId: string | null) {
     }
   }
 
-  const sendReply = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!reply.trim() || !selectedUserId) return
+  const sendReply = async (message: string) => {
+    const trimmedMessage = message.trim()
+    if (!trimmedMessage || !selectedUserId) return
 
-    const content = replyRef.current.trim()
     setReply('')
 
-    const result = await AdminChatService.sendReply(selectedUserId, content)
+    const result = await AdminChatService.sendReply(selectedUserId, trimmedMessage)
     if (!result.success) {
       console.error('Impossible d’envoyer la réponse :', result.message)
-      setReply(content)
+      setReply(message)
     }
   }
 

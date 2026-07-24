@@ -74,34 +74,38 @@ export default function Connexion() {
     const email = `${cleanPhone}@chifpam.ht`;
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const authResult = await supabase.auth.signInWithPassword({ email, password });
+      if (authResult.error) throw authResult.error;
 
-      if (data?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_banned, ban_reason')
-          .eq('id', data.user.id)
-          .maybeSingle();
-
-        if (profile?.is_banned) {
-          await supabase.auth.signOut();
-          setLoading(false);
-          if (confirm(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des règles."}\nContacter le support ?`)) {
-            handleSupportRequest('banni');
-          }
-          return;
-        }
-
-        const { data: roleProfile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .maybeSingle();
-
-        const targetPath = getHomeRouteForRole(roleProfile?.role);
-        window.location.replace(targetPath);
+      const user = authResult.data?.user;
+      const session = authResult.data?.session;
+      if (!user || !session) {
+        throw new Error("Impossible d'établir la session après connexion.");
       }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_banned, ban_reason')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile?.is_banned) {
+        await supabase.auth.signOut();
+        setLoading(false);
+        if (confirm(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des règles."}\nContacter le support ?`)) {
+          handleSupportRequest('banni');
+        }
+        return;
+      }
+
+      const { data: roleProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const targetPath = getHomeRouteForRole(roleProfile?.role);
+      window.location.replace(targetPath);
     } catch {
       alert("Erreur : Identifiants incorrects ou problème de connexion.");
       setLoading(false);
