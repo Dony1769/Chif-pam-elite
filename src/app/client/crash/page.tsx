@@ -9,9 +9,17 @@ import {
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
+import { resolveGameEconomy } from '@/lib/game-economy';
+import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
 // IMPORT DE LA PUBLICITÉ
 import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
+
+const triggerHaptic = () => {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate([8, 20, 8]);
+  }
+};
 
 export default function CrashElite() {
   const router = useRouter();
@@ -91,7 +99,17 @@ export default function CrashElite() {
     
     // 🔒 UTILISATION DE LA MISE VERROUILLÉE (Pas l'input)
     const secureBet = lockedBetRef.current;
-    const winAmount = Math.floor(secureBet * finalMult); 
+    const economy = resolveGameEconomy({
+      gameId: 'crash',
+      bet: secureBet,
+      multiplier: finalMult,
+      difficulty: 'intermédiaire',
+      autoCashout: finalMult,
+      bonusMultiplier: 1,
+      jackpotMultiplier: 1,
+      specialEventMultiplier: 1
+    });
+    const winAmount = economy.payout; 
 
     try {
       const { data: result, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
@@ -150,6 +168,7 @@ export default function CrashElite() {
 
   const start = async () => {
     if (isMaintenance || !userId) return;
+    triggerHaptic();
     if (bet > jetonsCP || bet < 10 || loading || status === 'running') return;
     
     setLoading(true);
@@ -180,15 +199,18 @@ export default function CrashElite() {
 
       setJetonsCP(prev => prev - finalBet); 
 
-      // --- ALGORITHME DU CRASH POINT (55% House Edge à 1.00x) ---
       const result = Math.random();
-      
-      if (result < 0.55) {
-        crashAtRef.current = 1.00;
-      } else {
-        const remainingProb = (result - 0.55) / 0.45; 
-        crashAtRef.current = parseFloat((0.99 / (1 - remainingProb)).toFixed(2));
-      }
+      const economy = resolveGameEconomy({
+        gameId: 'crash',
+        bet: finalBet,
+        difficulty: 'intermédiaire',
+        multiplier: 1,
+        randomValue: result,
+        bonusMultiplier: 1,
+        jackpotMultiplier: 1,
+        specialEventMultiplier: 1
+      });
+      crashAtRef.current = Number((economy.metadata.crashPoint as number) ?? 1.0);
 
       const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
         user_id: userId,
@@ -212,7 +234,7 @@ export default function CrashElite() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white flex flex-col items-center p-4 font-sans select-none overflow-hidden relative">
+    <NeonGameShell accent="amber" className="min-h-screen p-4 font-sans select-none">
       <div className="crash-overlay fixed inset-0 bg-rose-600 opacity-0 pointer-events-none z-50" />
 
       {/* OVERLAY MAINTENANCE */}
@@ -236,21 +258,21 @@ export default function CrashElite() {
         )}
       </AnimatePresence>
 
-      <div className="w-full max-w-lg flex justify-between items-center mb-6">
-        <button onClick={() => router.push('/client/list')} className="p-3 bg-white/5 rounded-xl border border-white/10 active:scale-90 transition-all">
+      <div className="mb-6 flex w-full max-w-lg items-center justify-between">
+        <button onClick={() => router.push('/client/list')} className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.16)] active:scale-90 transition-all">
           <ChevronLeft size={22} />
         </button>
         
-        <div className="flex items-center gap-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
-            <Coins size={16} className="text-emerald-500" />
-            <span className="text-emerald-500 font-black tracking-tighter">{Math.floor(jetonsCP).toLocaleString()} CP</span>
+        <div className="flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-4 py-2">
+            <Coins size={16} className="text-amber-300" />
+            <span className="font-black tracking-tighter text-amber-200">{Math.floor(jetonsCP).toLocaleString()} CP</span>
         </div>
       </div>
 
       <main className="w-full max-w-lg space-y-4">
         
         {/* --- ZONE DE JEU (GAME BOX) --- */}
-        <div ref={gameBoxRef} className="game-box relative h-80 bg-[#0a0a0f] rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center overflow-hidden shadow-2xl">
+        <div ref={gameBoxRef} className="game-box relative flex h-80 flex-col items-center justify-center overflow-hidden rounded-[2.5rem] border border-amber-400/20 bg-slate-950/70 shadow-[0_0_60px_rgba(245,158,11,0.14)]">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <div className="absolute bottom-0 w-full flex justify-center items-end">
@@ -262,10 +284,10 @@ export default function CrashElite() {
           </div>
 
           <div className="relative z-10 flex flex-col items-center">
-            <span className={`text-7xl font-black tracking-tighter ${status === 'crashed' ? 'text-rose-500' : 'text-emerald-400'}`}>
-              {mult.toFixed(2)}<span className="text-2xl ml-1">x</span>
+            <span className={`text-7xl font-black tracking-tighter ${status === 'crashed' ? 'text-rose-400' : 'text-amber-300'}`}>
+              <AnimatedCounter value={Number(mult.toFixed(2))} suffix="x" className="text-7xl" accent="amber" />
             </span>
-            {status === 'running' && <div className="text-[10px] font-bold text-white/30 tracking-[0.4em] uppercase animate-pulse">En cours...</div>}
+            {status === 'running' && <div className="text-[10px] font-bold uppercase tracking-[0.4em] text-white/30 animate-pulse">En cours...</div>}
           </div>
 
           <AnimatePresence>
@@ -281,13 +303,13 @@ export default function CrashElite() {
         </div>
 
         {/* 🧠 ZONE PUB SÉCURISÉE */}
-        <div className="w-full overflow-hidden rounded-2xl border border-white/5 bg-black/20 relative min-h-[80px] flex items-center justify-center">
+        <div className="relative flex min-h-[80px] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/20">
             <p className="absolute top-1 right-2 text-[6px] text-slate-600 font-black uppercase tracking-widest z-0">SPONSOR</p>
             <ExoClickBanner />
         </div>
 
         {/* --- PANNEAU DE CONTRÔLE --- */}
-        <div className="bg-[#0d0d12] p-6 rounded-[2.5rem] border border-white/5 space-y-5 shadow-2xl relative z-10">
+        <div className="relative z-10 space-y-5 rounded-[2.5rem] border border-white/10 bg-slate-950/65 p-6 shadow-[0_0_40px_rgba(245,158,11,0.1)]">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Coins size={10} /> Mise (CP)</label>
@@ -312,11 +334,13 @@ export default function CrashElite() {
             </div>
           </div>
 
+          <ProgressBar value={Math.min(100, (mult > 0.5 ? (mult - 0.5) / 2.5 : 0) * 100)} max={100} label="Moteur de chute" accent="amber" />
+
           {status === 'running' ? (
             <button 
                 onClick={() => collect()} 
                 disabled={loading || isProcessingRef.current} 
-                className="w-full py-6 bg-amber-500 text-black rounded-[2rem] text-2xl font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-80"
+                className="flex w-full items-center justify-center gap-2 rounded-[2rem] bg-gradient-to-r from-amber-400 to-orange-500 py-6 text-2xl font-black text-black shadow-[0_0_30px_rgba(245,158,11,0.25)] transition-all active:scale-95 disabled:opacity-80"
             >
                 {loading ? <Loader2 className="animate-spin" /> : `STOP @ ${Math.floor(lockedBetRef.current * mult)} CP`}
             </button>
@@ -324,14 +348,14 @@ export default function CrashElite() {
             <button 
                 onClick={start} 
                 disabled={loading || isMaintenance || bet > jetonsCP} 
-                className={`w-full py-6 rounded-[2rem] text-2xl font-black shadow-lg active:scale-95 transition-all ${status === 'crashed' ? 'bg-rose-600 text-white' : 'bg-emerald-500 text-black'}`}
+                className={`w-full rounded-[2rem] py-6 text-2xl font-black shadow-lg transition-all active:scale-95 ${status === 'crashed' ? 'bg-rose-600 text-white' : 'bg-gradient-to-r from-amber-400 to-emerald-500 text-black'}`}
             >
               {loading ? <Loader2 className="animate-spin mx-auto" /> : (status === 'crashed' ? "REJOUER" : "LANCER")}
             </button>
           )}
         </div>
       </main>
-    </div>
+    </NeonGameShell>
   );
 }
 

@@ -10,7 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, Ticket, ClipboardList,
-  Target, AlertCircle, ChevronRight
+  Target, AlertCircle, ChevronRight, BarChart3
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -144,6 +144,7 @@ export default function AdminDashboard() {
           </div>
           <nav className="space-y-2">
             <SidebarLink href="/admin-chif-pam/dashboard" icon={<LayoutDashboard size={20}/>} label="Dashboard" active={pathname.includes('dashboard')} />
+            <SidebarLink href="/admin-chif-pam/analytics" icon={<BarChart3 size={20}/>} label="Analytics" active={pathname.includes('analytics')} />
             <SidebarLink href="/admin-chif-pam/challenges" icon={<Dices size={20}/>} label="Gestion Défi" active={pathname.includes('challenges')} />
             <SidebarLink href="/admin-chif-pam/coupon" icon={<Ticket size={20}/>} label="Gestion Coupons" active={pathname.includes('coupon')} />
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
@@ -227,6 +228,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
             <div className="space-y-4">
                <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
+               <ActionCard href="/admin-chif-pam/analytics" label="Analytics & Économie" count="NEW" icon={<BarChart3 size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
                <ActionCard href="/admin-chif-pam/challenges" label="Gestion des défis" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
                <ActionCard href="/admin-chif-pam/mini-jeux" label="Audit Mini-Jeux" icon={<Target size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
                <ActionCard href="/admin-chif-pam/coupon" label="Coupons & Promos" icon={<Ticket size={24}/>} color="bg-indigo-600" textColor="text-white" />

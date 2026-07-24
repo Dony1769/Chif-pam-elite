@@ -15,6 +15,7 @@ import {
   Crown,
 } from 'lucide-react';
 import { fetchDailyMissions, canClaimMission, formatMissionProgress, type MissionItem, type RewardType } from '@/services/missionService';
+import { getDailyReward, getMonthlyReward, getWeeklyReward, resolveMissionReward, type EconomyRewardType } from '@/lib/game-economy';
 import { motion, AnimatePresence } from 'framer-motion';
 import ExoClickBanner from '@/components/ads/ExoClickBanner';
 
@@ -111,6 +112,7 @@ export default function RewardsPage() {
     setClaiming(true);
 
     try {
+      const reward = getDailyReward(todayDayNumber, 1);
       const { data, error } = await supabase.rpc('claim_calendar_reward', { p_user_id: profile.id });
       if (error) throw error;
       if (!data?.success) {
@@ -118,9 +120,9 @@ export default function RewardsPage() {
       } else {
         setProfile(prev => prev ? {
           ...prev,
-          jetons_cp: data.new_cp,
-          diamonds: data.new_diamonds,
-          xp: data.new_xp,
+          jetons_cp: reward?.rewardType === 'cp' ? (prev.jetons_cp || 0) + (reward.rewardAmount || 0) : prev.jetons_cp,
+          diamonds: reward?.rewardType === 'diamonds' ? (prev.diamonds || 0) + (reward.rewardAmount || 0) : prev.diamonds,
+          xp: reward?.rewardType === 'xp' ? (prev.xp || 0) + (reward.rewardAmount || 0) : prev.xp,
         } : prev);
         setClaimedDays(prev => [...prev, todayDayNumber]);
         new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3').play().catch(() => {});
@@ -155,10 +157,16 @@ export default function RewardsPage() {
 
       if (error) throw error;
 
+      const resolvedReward = resolveMissionReward({
+        id: mission.id,
+        title: mission.title,
+        reward_amount: mission.reward_amount,
+        reward_type: mission.reward_type,
+      });
       const updates: Partial<ProfileData> = {};
-      if (mission.reward_type === 'cp') updates.jetons_cp = (profile.jetons_cp || 0) + mission.reward_amount;
-      else if (mission.reward_type === 'diamonds') updates.diamonds = (profile.diamonds || 0) + mission.reward_amount;
-      else if (mission.reward_type === 'xp') updates.xp = (profile.xp || 0) + mission.reward_amount;
+      if (resolvedReward.type === 'cp') updates.jetons_cp = (profile.jetons_cp || 0) + resolvedReward.amount;
+      else if (resolvedReward.type === 'diamonds') updates.diamonds = (profile.diamonds || 0) + resolvedReward.amount;
+      else if (resolvedReward.type === 'xp') updates.xp = (profile.xp || 0) + resolvedReward.amount;
 
       const { error: profileError } = await supabase
         .from('profiles')
@@ -205,7 +213,7 @@ export default function RewardsPage() {
             <p className="mt-1 text-sm font-black text-white">{day.title}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-slate-200">
-            +{day.reward_amount} {day.reward_type.toUpperCase()}
+            +{getDailyReward(day.day_number, 1, day.reward_amount)?.rewardAmount ?? day.reward_amount} {((getDailyReward(day.day_number, 1, day.reward_amount)?.rewardType ?? day.reward_type) as EconomyRewardType).toUpperCase()}
           </div>
         </div>
         <div className="text-xs text-slate-400">{isClaimed ? 'Réclamé' : isToday ? 'Disponible aujourd’hui' : isDisabled ? 'Bloqué' : 'À venir'}</div>
@@ -231,7 +239,7 @@ export default function RewardsPage() {
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-2">
             <div className="rounded-3xl border border-white/10 bg-white/5 px-3 py-2 text-xs uppercase tracking-[0.25em] text-slate-200">
-              +{mission.reward_amount} {reward.label}
+              +{resolveMissionReward({ id: mission.id, title: mission.title, reward_amount: mission.reward_amount, reward_type: mission.reward_type }).amount} {reward.label}
             </div>
             <div className="text-xs text-slate-400">
               {formatMissionProgress(mission)}

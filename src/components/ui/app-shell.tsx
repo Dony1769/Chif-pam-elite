@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode } from "react";
 import {
   ArrowLeft,
+  BarChart3,
   Bell,
   ChevronRight,
   Crown,
@@ -30,6 +31,7 @@ type ShellNavItem = {
 
 const adminItems: ShellNavItem[] = [
   { href: "/admin-chif-pam/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
+  { href: "/admin-chif-pam/analytics", label: "Analytics", icon: <BarChart3 size={18} /> },
   { href: "/admin-chif-pam/challenges", label: "Défis", icon: <Trophy size={18} /> },
   { href: "/admin-chif-pam/coupon", label: "Coupons", icon: <Ticket size={18} /> },
   { href: "/admin-chif-pam/demandes", label: "Demandes", icon: <Wallet size={18} /> },

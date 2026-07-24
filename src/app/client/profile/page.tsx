@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import Link from 'next/link';
 import { DSCard, DSButton, DSInput, DSLoader } from '@/components/ui/primitives';
+import { computeGamePassSummary, createGamePassHistoryEntry, GAME_PASS_AVATARS } from '@/lib/game-pass';
 
 // IMPORT DU POPUNDER MONETA
 
@@ -27,7 +28,7 @@ const LogoChifPamSmall = () => (
 export default function ProfilePage() {
   const router = useRouter();
   const { isInstallable, install } = usePWAInstall();
-  type Profile = { id: string; username?: string | null; referral_code?: string | null; jetons_cp?: number; };
+  type Profile = { id: string; username?: string | null; referral_code?: string | null; jetons_cp?: number; xp?: number; level?: number; badge?: string; title?: string; rank?: string; avatar?: string; history?: Array<{ id: string; label: string; detail: string; created_at: string }>; play_time_minutes?: number; max_combo?: number; favorite_game?: string; public_profile?: boolean; };
   type ChartPoint = { name: string; gain: number };
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -39,6 +40,10 @@ export default function ProfilePage() {
   const [redeeming, setRedeeming] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [gamePassTitle, setGamePassTitle] = useState('Voyageur');
+  const [gamePassFavorite, setGamePassFavorite] = useState('Mines');
+  const [gamePassPublic, setGamePassPublic] = useState(true);
+  const [gamePassAvatar, setGamePassAvatar] = useState<(typeof GAME_PASS_AVATARS)[number]>(GAME_PASS_AVATARS[0]);
 
   
 
@@ -48,9 +53,34 @@ export default function ProfilePage() {
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     const { data: transactions } = await supabase.from('transactions').select('amount, type, created_at, status').eq('user_id', user.id).eq('status', 'approved');
     const { data: mises } = await supabase.from('mises').select('montant, status, created_at').eq('user_id', user.id);
+    const storedGamePass = typeof window !== 'undefined' ? (() => {
+      try { return JSON.parse(localStorage.getItem('game-pass') || 'null'); } catch { return null; }
+    })() : null;
     if (prof) {
-      setProfile(prof);
-      setNewUsername(prof.username || '');
+      const resolvedProfile = prof as Profile;
+      const computed = computeGamePassSummary(resolvedProfile.xp || storedGamePass?.xp || 0, resolvedProfile.title || storedGamePass?.title || 'Voyageur');
+      const mergedProfile: Profile = {
+        ...resolvedProfile,
+        ...storedGamePass,
+        xp: computed.xp,
+        level: computed.level,
+        badge: resolvedProfile.badge || storedGamePass?.badge || computed.badge,
+        title: resolvedProfile.title || storedGamePass?.title || computed.title,
+        rank: resolvedProfile.rank || storedGamePass?.rank || computed.rank,
+        avatar: resolvedProfile.avatar || storedGamePass?.avatar || GAME_PASS_AVATARS[0],
+        history: resolvedProfile.history || storedGamePass?.history || [createGamePassHistoryEntry('Bienvenue', 'Compte créé')],
+        play_time_minutes: resolvedProfile.play_time_minutes || storedGamePass?.play_time_minutes || 0,
+        max_combo: resolvedProfile.max_combo || storedGamePass?.max_combo || 0,
+        favorite_game: resolvedProfile.favorite_game || storedGamePass?.favorite_game || 'Mines',
+        public_profile: resolvedProfile.public_profile ?? storedGamePass?.public_profile ?? true,
+      };
+      setProfile(mergedProfile);
+      setNewUsername(resolvedProfile.username || '');
+      setGamePassTitle(mergedProfile.title || 'Voyageur');
+      setGamePassFavorite(mergedProfile.favorite_game || 'Mines');
+      setGamePassPublic(mergedProfile.public_profile ?? true);
+      setGamePassAvatar((mergedProfile.avatar as (typeof GAME_PASS_AVATARS)[number]) || GAME_PASS_AVATARS[0]);
+      if (typeof window !== 'undefined') localStorage.setItem('game-pass', JSON.stringify(mergedProfile));
       processPerformanceData(transactions || [], mises || []);
     }
     setLoading(false);
@@ -118,8 +148,37 @@ export default function ProfilePage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { error: profError } = await supabase.from('profiles').update({ username: newUsername }).eq('id', user.id);
-      if (profError) throw profError;
+      const nextProfile: Profile = {
+        ...(profile || {} as Profile),
+        username: newUsername,
+        title: gamePassTitle,
+        favorite_game: gamePassFavorite,
+        public_profile: gamePassPublic,
+        avatar: gamePassAvatar,
+        xp: profile?.xp || 0,
+        level: profile?.level || 1,
+        badge: profile?.badge || 'Novice',
+        rank: profile?.rank || 'Bronze',
+        history: profile?.history || [createGamePassHistoryEntry('Profil mis à jour', 'Mise à jour du Game Pass')],
+      };
+      setProfile(nextProfile);
+      if (typeof window !== 'undefined') localStorage.setItem('game-pass', JSON.stringify(nextProfile));
+      try {
+        const { error: profError } = await supabase.from('profiles').update({
+          username: newUsername,
+          title: gamePassTitle,
+          favorite_game: gamePassFavorite,
+          public_profile: gamePassPublic,
+          avatar: gamePassAvatar,
+          xp: nextProfile.xp || 0,
+          level: nextProfile.level || 1,
+          badge: nextProfile.badge || 'Novice',
+          rank: nextProfile.rank || 'Bronze',
+        }).eq('id', user.id);
+        if (profError) throw profError;
+      } catch (dbError) {
+        console.warn('Game Pass update fell back to local storage', dbError);
+      }
       if (newPassword.length >= 6) {
         const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
         if (authError) throw authError;
@@ -165,7 +224,7 @@ export default function ProfilePage() {
 
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-emerald-400/20 bg-gradient-to-br from-emerald-500/20 via-slate-950 to-cyan-500/15 shadow-[0_0_35px_rgba(16,185,129,0.18)]">
-                <User size={38} className="text-emerald-300" />
+                <span className="text-4xl">{profile?.avatar || GAME_PASS_AVATARS[0]}</span>
                 <div className="absolute bottom-1 right-1 rounded-full border border-emerald-400/20 bg-emerald-500/20 p-1.5">
                   <Crown size={14} className="text-amber-300" />
                 </div>
@@ -175,7 +234,30 @@ export default function ProfilePage() {
                   <h1 className="text-2xl font-black uppercase italic tracking-tight">@{profile?.username}</h1>
                   <CheckCircle2 size={16} className="text-emerald-500" />
                 </div>
-                <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-400">Membre Officiel</span>
+                <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-400">{profile?.title || 'Voyageur'} • {profile?.rank || 'Bronze'}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-[1.7rem] border border-cyan-500/10 bg-slate-900/60 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">Game Pass</p>
+                  <p className="text-lg font-black italic text-white">{profile?.badge || 'Novice'}</p>
+                </div>
+                <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-emerald-300">
+                  Lv {profile?.level || 1}
+                </div>
+              </div>
+              <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.24em] text-slate-400">
+                <span>XP</span>
+                <span>{profile?.xp || 0} pts</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full border border-white/10 bg-white/5">
+                <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style={{ width: `${Math.min(100, ((profile?.xp || 0) % 300) / 3)}%` }} />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[9px] uppercase tracking-[0.24em] text-slate-500">Temps de jeu</p><p className="mt-1 font-black text-white">{profile?.play_time_minutes || 0} min</p></div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[9px] uppercase tracking-[0.24em] text-slate-500">Combo max</p><p className="mt-1 font-black text-white">{profile?.max_combo || 0}</p></div>
               </div>
             </div>
 
@@ -273,7 +355,7 @@ export default function ProfilePage() {
         </div>
 
         <DSCard className="rounded-[2.3rem] p-6">
-          <div className="mb-2 flex items-center gap-2"><Shield size={16} className="text-emerald-500" /><h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Sécurité du Compte</h3></div>
+          <div className="mb-2 flex items-center gap-2"><Shield size={16} className="text-emerald-500" /><h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Sécurité & Game Pass</h3></div>
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="ml-4 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Identifiant</label>
@@ -283,6 +365,31 @@ export default function ProfilePage() {
               <label className="ml-4 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Modifier mot de passe</label>
               <DSInput type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </div>
+            <div className="space-y-1">
+              <label className="ml-4 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Titre du profil</label>
+              <DSInput type="text" value={gamePassTitle} onChange={(e) => setGamePassTitle(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="ml-4 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Jeu préféré</label>
+              <DSInput type="text" value={gamePassFavorite} onChange={(e) => setGamePassFavorite(e.target.value)} />
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+              <p className="mb-2 ml-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Avatar</p>
+              <div className="flex flex-wrap gap-2">
+                {GAME_PASS_AVATARS.map((avatar) => (
+                  <button key={avatar} type="button" onClick={() => setGamePassAvatar(avatar)} className={`rounded-2xl border px-3 py-2 text-lg transition ${gamePassAvatar === avatar ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-white/5'}`}>
+                    {avatar}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
+              <div>
+                <p className="text-sm font-black text-white">Profil public</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Visible dans le Game Pass</p>
+              </div>
+              <input type="checkbox" checked={gamePassPublic} onChange={(e) => setGamePassPublic(e.target.checked)} className="h-4 w-4 accent-emerald-500" />
+            </label>
             <DSButton onClick={handleUpdateProfile} disabled={updating} variant="success" size="md" className="flex w-full items-center justify-center gap-2">
               {updating ? <DSLoader label="..." /> : <><Save size={16} /> ENREGISTRER</>}
             </DSButton>

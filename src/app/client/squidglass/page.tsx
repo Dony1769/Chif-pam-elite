@@ -5,10 +5,31 @@ import { ChevronLeft, XCircle, Trophy, Play, Volume2, VolumeX, AlertTriangle, Ha
 import { motion, AnimatePresence } from 'framer-motion';
 // Import Pub
 import ExoClickBanner from "@/components/ads/ExoClickBanner";
+import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
 // --- TYPES ---
 interface Coords {
   x: number; y: number; w: number; h: number;
+}
+
+interface GlassShard {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  size: number;
+  rotation: number;
+  rotationSpeed: number;
+  color: string;
+}
+
+interface FogParticle {
+  x: number;
+  y: number;
+  vy: number;
+  alpha: number;
+  size: number;
 }
 
 const CONFIG = {
@@ -25,6 +46,12 @@ const SOUNDS = {
   doll: "https://www.myinstants.com/media/sounds/squid-game-red-light-green-light-sound.mp3"
 };
 
+const triggerHaptic = () => {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate([15, 20, 15]);
+  }
+};
+
 export default function GlassEliteFinal() {
   const [status, setStatus] = useState<'intro' | 'walking_in' | 'idle' | 'playing' | 'won' | 'lost' | 'loading' | 'maintenance'>('intro');
   const [maintenanceMsg, setMaintenanceMsg] = useState('SERVICE MOMENTANÉMENT INDISPONIBLE');
@@ -37,11 +64,15 @@ export default function GlassEliteFinal() {
   const [history, setHistory] = useState<number[]>([]);
   const [muted, setMuted] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(10);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const avatarPos = useRef({ x: 0, y: 0, targetX: 0, targetY: 0, jumpT: 1, walkY: 0, walkCycle: 0 });
   const requestRef = useRef<number | null>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
+  const shardsRef = useRef<GlassShard[]>([]);
+  const fogRef = useRef<FogParticle[]>([]);
+  const shakeRef = useRef({ intensity: 0, timer: 0 });
 
   // 🔒 SÉCURITÉ & REFS CRITIQUES
   const lockedBetRef = useRef<number>(0); // Stocke la mise inviolable
@@ -86,6 +117,38 @@ export default function GlassEliteFinal() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (status === 'playing') {
+      setCountdown(10);
+      const timer = window.setInterval(() => {
+        setCountdown((prev) => (prev > 1 ? prev - 1 : 0));
+      }, 1000);
+      return () => window.clearInterval(timer);
+    }
+
+    if (status === 'won' || status === 'lost' || status === 'idle' || status === 'maintenance') {
+      setCountdown(10);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (status === 'playing' && !muted) {
+      const theme = audioRefs.current.theme;
+      if (theme) {
+        theme.loop = true;
+        theme.currentTime = 0;
+        theme.volume = 0.25;
+        theme.play().catch(() => {});
+      }
+    } else {
+      const theme = audioRefs.current.theme;
+      if (theme) {
+        theme.pause();
+        theme.currentTime = 0;
+      }
+    }
+  }, [status, muted]);
 
   const playSound = (key: keyof typeof SOUNDS) => {
     if (muted) return;
@@ -144,6 +207,7 @@ export default function GlassEliteFinal() {
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     // 🛡️ SÉCURITÉ : Bloquer si déjà en saut (jumpT < 1) ou en traitement
     if (status !== 'playing' || avatarPos.current.jumpT < 1 || isProcessingRef.current) return;
+    triggerHaptic();
     
     const rect = canvasRef.current!.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -183,56 +247,156 @@ export default function GlassEliteFinal() {
     }
   };
 
+  const spawnGlassShards = (x: number, y: number) => {
+    for (let i = 0; i < 16; i += 1) {
+      shardsRef.current.push({
+        x,
+        y,
+        vx: (Math.random() - 0.5) * 6,
+        vy: -Math.random() * 4,
+        life: 1,
+        size: 3 + Math.random() * 5,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.2,
+        color: i % 2 === 0 ? '#f8fafc' : '#38bdf8',
+      });
+    }
+    shakeRef.current.intensity = 10;
+    shakeRef.current.timer = 8;
+  };
+
+  const updateVisualEffects = () => {
+    if (fogRef.current.length < 40) {
+      for (let i = fogRef.current.length; i < 40; i += 1) {
+        fogRef.current.push({
+          x: Math.random() * 600,
+          y: Math.random() * 600,
+          vy: 0.15 + Math.random() * 0.35,
+          alpha: 0.08 + Math.random() * 0.12,
+          size: 60 + Math.random() * 80,
+        });
+      }
+    }
+
+    fogRef.current.forEach((p) => {
+      p.y -= p.vy;
+      if (p.y < -80) p.y = 650;
+    });
+
+    shardsRef.current = shardsRef.current.filter((s) => s.life > 0);
+    shardsRef.current.forEach((s) => {
+      s.x += s.vx;
+      s.y += s.vy;
+      s.vy += 0.04;
+      s.life -= 0.018;
+      s.rotation += s.rotationSpeed;
+    });
+
+    if (shakeRef.current.timer > 0) {
+      shakeRef.current.timer -= 1;
+      shakeRef.current.intensity *= 0.86;
+    } else {
+      shakeRef.current.intensity = 0;
+    }
+  };
+
   const draw = () => {
     const cvs = canvasRef.current;
     const ctx = cvs?.getContext('2d');
     if (!cvs || !ctx) return;
     ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+    const shakeX = (Math.random() - 0.5) * shakeRef.current.intensity;
+    const shakeY = (Math.random() - 0.5) * shakeRef.current.intensity;
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
+    const bg = ctx.createRadialGradient(cvs.width / 2, cvs.height / 2, 60, cvs.width / 2, cvs.height / 2, 420);
+    bg.addColorStop(0, '#0f172a');
+    bg.addColorStop(0.5, '#111827');
+    bg.addColorStop(1, '#020617');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+    fogRef.current.forEach((p) => {
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(248, 250, 252, ${p.alpha})`;
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
     if (status !== 'intro' && status !== 'maintenance') {
-        for (let r = 0; r <= CONFIG[difficulty].rows; r++) {
-            for (let c = 0; c < CONFIG[difficulty].cols; c++) {
-                const { x, y, w, h } = getCoords(r, c);
-                const isPassed = history.length > r - 1 && history[r - 1] === c && r > 0;
-                const isCurrent = history.length === r - 1 && status === 'playing' && r > 0;
-                ctx.fillStyle = isPassed ? '#10b981' : isCurrent ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)';
-                ctx.beginPath();
-                if (ctx.roundRect) ctx.roundRect(x - w/2, y - h/2, w, h, 6);
-                else ctx.rect(x - w/2, y - h/2, w, h);
-                ctx.fill();
-            }
+      for (let r = 0; r <= CONFIG[difficulty].rows; r++) {
+        for (let c = 0; c < CONFIG[difficulty].cols; c++) {
+          const { x, y, w, h } = getCoords(r, c);
+          const isPassed = history.length > r - 1 && history[r - 1] === c && r > 0;
+          const isCurrent = history.length === r - 1 && status === 'playing' && r > 0;
+
+          const glass = ctx.createLinearGradient(x - w / 2, y - h / 2, x + w / 2, y + h / 2);
+          glass.addColorStop(0, isPassed ? '#10b981' : isCurrent ? '#6366f1' : 'rgba(255,255,255,0.12)');
+          glass.addColorStop(1, isPassed ? '#34d399' : isCurrent ? '#8b5cf6' : 'rgba(255,255,255,0.04)');
+          ctx.fillStyle = glass;
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, 8);
+          else ctx.rect(x - w / 2, y - h / 2, w, h);
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(248,250,252,0.24)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
         }
+      }
     }
+
+    shardsRef.current.forEach((s) => {
+      if (s.life <= 0) return;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.rotation);
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = Math.max(0, s.life);
+      ctx.fillRect(-s.size / 2, -s.size / 2, s.size, s.size / 2.6);
+      ctx.restore();
+    });
+
     if (status === 'walking_in' || status === 'playing' || status === 'idle' || status === 'lost') {
       const { x, y, jumpT, walkCycle } = avatarPos.current;
       let drawY = y;
-      // let legOffset = 0; // Unused
       if (status === 'playing') {
-          drawY = y - Math.sin(jumpT * Math.PI) * 45;
-          // legOffset = Math.sin(jumpT * Math.PI) * 10;
+        drawY = y - Math.sin(jumpT * Math.PI) * 45;
       } else if (status === 'walking_in') {
-          drawY = y + Math.abs(Math.sin(walkCycle)) * 5;
-          // legOffset = Math.sin(walkCycle) * 8;
+        drawY = y + Math.abs(Math.sin(walkCycle)) * 5;
       }
+
       ctx.save();
       ctx.translate(x, drawY);
-      ctx.fillStyle = '#0d9488';
-      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-8, -15, 16, 20, 4); else ctx.rect(-8, -15, 16, 20); ctx.fill();
-      ctx.fillStyle = '#ffedd5';
-      ctx.beginPath(); ctx.arc(0, -20, 7, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur = 28;
+      ctx.shadowColor = 'rgba(248,113,113,0.35)';
+      ctx.fillStyle = '#0f766e';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-12, -18, 24, 24, 6); else ctx.rect(-12, -18, 24, 24);
+      ctx.fill();
+      ctx.fillStyle = '#fde68a';
+      ctx.beginPath();
+      ctx.arc(0, -24, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fef2f2';
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-10, -6, 20, 10, 4) : ctx.rect(-10, -6, 20, 10);
+      ctx.fill();
       ctx.restore();
     }
+
+    ctx.restore();
   };
 
   const handleJump = async (colIndex: number) => {
-    // 🛡️ Double vérification sécurité
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
     playSound('jump');
     const nextRow = history.length;
     const target = getCoords(nextRow + 1, colIndex);
-    
-    // Animation de saut
     avatarPos.current.targetX = target.x;
     avatarPos.current.targetY = target.y;
     avatarPos.current.jumpT = 0;
@@ -256,10 +420,9 @@ export default function GlassEliteFinal() {
             isProcessingRef.current = false;
         }
       } else {
-        // --- ÉCHEC / MORT ---
         playSound('break');
+        spawnGlassShards(target.x, target.y);
         setStatus('lost');
-        // Pas de gain, on ferme la session
         await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
         isProcessingRef.current = false;
       }
@@ -268,6 +431,7 @@ export default function GlassEliteFinal() {
 
   const startGame = async () => {
     if (isProcessingRef.current || !userId) return;
+    triggerHaptic();
     
     // Re-vérifier maintenance
     const isMaintained = await init();
@@ -318,13 +482,17 @@ export default function GlassEliteFinal() {
       
       if (error) throw error;
       
+      const cvs = canvasRef.current;
       setGameId(data);
       setPath(sequence);
       setHistory([]);
       setStatus('playing');
       syncAvatar();
+      if (cvs) {
+        spawnGlassShards(cvs.width / 2, 80);
+      }
       
-      isProcessingRef.current = false; // Jeu commence
+      isProcessingRef.current = false;
 
     } catch (e) {
       setStatus('idle');
@@ -359,7 +527,7 @@ export default function GlassEliteFinal() {
 
       // 2. Clôture DB
       await supabase.rpc('claim_glass_win', { p_game_id: gameId, p_multiplier: finalMult });
-      
+      spawnGlassShards(canvasRef.current ? canvasRef.current.width / 2 : 200, 120);
       setStatus('won');
     } catch (e) {
       // En cas d'erreur réseau extrême, on ne peut pas faire grand chose mais on débloque
@@ -370,17 +538,17 @@ export default function GlassEliteFinal() {
   };
 
   return (
-    <div className="flex flex-col h-dvh bg-[#020617] text-white font-black italic uppercase overflow-hidden">
+    <NeonGameShell accent="rose" className="flex h-dvh flex-col font-black italic uppercase overflow-hidden">
       {/* MAINTENANCE OVERLAY */}
       <AnimatePresence>
         {status === 'maintenance' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[300] bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-300 bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
             <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="w-24 h-24 bg-rose-500/10 rounded-full flex items-center justify-center border-2 border-rose-500 mb-6 shadow-[0_0_30px_rgba(244,63,94,0.3)]">
               <Hammer className="text-rose-500" size={40} />
             </motion.div>
             <h1 className="text-4xl tracking-tighter mb-2">MODE <span className="text-rose-500">MAINTENANCE</span></h1>
             <p className="text-sm text-white/40 font-bold max-w-xs">{maintenanceMsg}</p>
-            <button onClick={() => window.history.back()} className="mt-10 px-8 py-4 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-3 active:scale-95 transition-all">
+            <button onClick={() => window.history.back()} className="mt-10 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-8 py-4 transition-all active:scale-95">
               <ChevronLeft size={20}/> RETOUR
             </button>
           </motion.div>
@@ -389,24 +557,34 @@ export default function GlassEliteFinal() {
 
       <AnimatePresence>
         {status === 'intro' && (
-          <motion.div exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
+          <motion.div exit={{ opacity: 0 }} className="fixed inset-0 z-200 bg-black flex flex-col items-center justify-center">
             <motion.h1 initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-5xl text-rose-500 mb-4 tracking-tighter">ELITE #456</motion.h1>
             <div className="w-48 h-1 bg-white/10 overflow-hidden"><motion.div initial={{ x: -200 }} animate={{ x: 200 }} transition={{ repeat: Infinity, duration: 1 }} className="w-full h-full bg-rose-500" /></div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex-none h-16 flex items-center justify-between px-6 bg-[#0f172a] border-b border-white/5 z-50">
-        <button onClick={() => window.history.back()} className="p-2 bg-white/5 rounded-xl active:scale-95"><ChevronLeft size={20}/></button>
-        <span className="text-xl tracking-tight uppercase">GLASS <span className="text-rose-500">BRIDGE</span></span>
-        <div className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-            <Coins size={14} className="text-emerald-500" />
-            <span className="text-sm text-emerald-500">{Math.floor(jetonsCP).toLocaleString()}</span>
+      <div className="z-50 flex h-16 flex-none items-center justify-between border-b border-white/10 bg-white/5 px-6 backdrop-blur-xl">
+        <button onClick={() => window.history.back()} className="rounded-xl border border-rose-400/20 bg-rose-400/10 p-2 text-rose-200 active:scale-95"><ChevronLeft size={20}/></button>
+        <span className="text-xl tracking-tight uppercase">GLASS <span className="text-rose-400">BRIDGE</span></span>
+        <div className="flex items-center gap-2 rounded-full border border-rose-400/20 bg-rose-500/10 px-3 py-1">
+            <Coins size={14} className="text-rose-300" />
+            <span className="text-sm text-rose-200">{Math.floor(jetonsCP).toLocaleString()}</span>
         </div>
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-[radial-gradient(circle_at_center,#1e293b_0%,#020617_100%)]">
         <canvas ref={canvasRef} className="w-full h-full touch-none" onClick={handleCanvasClick} />
+
+        {status === 'playing' && (
+          <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-rose-400/30 bg-black/40 px-4 py-2 text-[11px] tracking-[0.35em] text-rose-200 backdrop-blur-md">
+            COMPTE À REBOURS <span className="ml-2 text-lg text-rose-400">{countdown}s</span>
+          </div>
+        )}
+
+        {(status === 'playing' || status === 'walking_in') && (
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_60%)]" />
+        )}
 
         {/* --- ZONE PUBLICITÉ --- */}
         <div className="absolute bottom-24 w-full flex justify-center pointer-events-none opacity-50">
@@ -416,8 +594,8 @@ export default function GlassEliteFinal() {
         </div>
 
         {status === 'idle' && (
-          <div className="absolute inset-0 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md z-40">
-             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-sm bg-[#0f172a] p-6 rounded-4xl border border-white/10 space-y-6 shadow-2xl">
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-6 backdrop-blur-md">
+             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-sm space-y-6 rounded-[2rem] border border-rose-400/20 bg-slate-950/70 p-6 shadow-[0_0_50px_rgba(244,63,94,0.14)]">
                 <div className="flex bg-black/40 p-1 rounded-2xl gap-1">
                   {['facile', 'intermediaire', 'difficile'].map(d => (
                     <button key={d} onClick={() => setDifficulty(d as any)} className={`flex-1 py-3 text-[9px] rounded-xl transition-all ${difficulty === d ? 'bg-rose-500 text-black shadow-lg' : 'text-white/40'}`}>{d}</button>
@@ -432,26 +610,25 @@ export default function GlassEliteFinal() {
                     className="w-full bg-transparent text-5xl text-center outline-none text-rose-500 font-black" 
                   />
                 </div>
-                <button onClick={startGame} disabled={isProcessingRef.current} className="w-full py-5 bg-rose-500 hover:bg-rose-400 rounded-2xl text-black text-xl flex items-center justify-center gap-3 active:scale-95 transition-transform"><Play fill="black" size={20} /> JOUER</button>
+                <button onClick={startGame} disabled={isProcessingRef.current} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-rose-500 to-fuchsia-500 py-5 text-xl text-black transition-transform active:scale-95"><Play fill="black" size={20} /> JOUER</button>
              </motion.div>
           </div>
         )}
       </div>
 
       {status === 'playing' && (
-        <div className="flex-none h-24 bg-[#0f172a] border-t border-white/10 p-4 flex gap-4 z-50 pb-8 md:pb-4">
-            <div className="flex-1 bg-black/20 rounded-2xl flex flex-col justify-center px-6 border border-white/5">
-                <span className="text-[10px] text-white/30 tracking-widest">GAIN POTENTIEL</span>
-                {/* Affichage sécurisé basé sur lockedBetRef */}
-                <span className="text-2xl text-emerald-500">{currentWin} <span className="text-xs font-light text-white/50">CP</span></span>
+        <div className="z-50 flex h-24 flex-none gap-4 border-t border-white/10 bg-slate-950/70 p-4 pb-8 md:pb-4">
+            <div className="flex flex-1 flex-col justify-center rounded-2xl border border-white/10 bg-black/20 px-6">
+                <span className="text-[10px] tracking-widest text-white/30">GAIN POTENTIEL</span>
+                <span className="text-2xl text-rose-300"><AnimatedCounter value={currentWin} /> <span className="text-xs font-light text-white/50">CP</span></span>
             </div>
-            <button onClick={() => cashout(currentMult)} disabled={history.length === 0 || isProcessingRef.current} className="flex-[1.5] bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl font-black text-xl active:scale-95 disabled:opacity-20 transition-all">ENCAISSER</button>
+            <button onClick={() => cashout(currentMult)} disabled={history.length === 0 || isProcessingRef.current} className="flex-[1.5] rounded-2xl bg-gradient-to-r from-rose-500 to-fuchsia-500 text-xl font-black text-black transition-all active:scale-95 disabled:opacity-20">ENCAISSER</button>
         </div>
       )}
 
       <AnimatePresence>
         {(status === 'won' || status === 'lost') && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-100 bg-black/90 backdrop-blur-xl flex items-center justify-center p-6">
                 <div className="space-y-6 text-center w-full max-w-sm">
                     <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto border-4 ${status === 'won' ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-rose-500 text-rose-500 bg-rose-500/10'}`}>
                         {status === 'won' ? <Trophy size={56} /> : <XCircle size={56} />}
@@ -463,6 +640,6 @@ export default function GlassEliteFinal() {
             </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </NeonGameShell>
   );
 }
