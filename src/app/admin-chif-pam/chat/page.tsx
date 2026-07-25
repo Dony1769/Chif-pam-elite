@@ -1,23 +1,13 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import ChatLayout from '@/components/chat/ChatLayout'
 import ChatSidebar from '@/components/chat/ChatSidebar'
 import ChatHeader from '@/components/chat/ChatHeader'
 import VirtualizedMessageList from '@/components/chat/VirtualizedMessageList'
 import MessageInput from '@/components/chat/MessageInput'
-import TypingIndicator from '@/components/chat/TypingIndicator'
-import { supabase } from '@/lib/supabase'
-import { ChatService } from '@/services/chat'
 import { useAdminChat } from '@/hooks/useAdminChat'
 import { Loader2, MessageSquare, ShieldCheck } from 'lucide-react'
-
-interface BroadcastPayload {
-  isTyping?: boolean
-  status?: 'online' | 'offline'
-}
-
-type UserPresenceStatus = 'online' | 'offline' | null
 
 export default function AdminChat() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
@@ -34,64 +24,31 @@ export default function AdminChat() {
     loadMore 
   } = useAdminChat(selectedUserId)
 
-  const selectedUser = users.find((user) => user.id === selectedUserId) || null
-  const [isTyping, setIsTyping] = useState<boolean>(false)
-  const [presence, setPresence] = useState<UserPresenceStatus>(null)
-
-  // Écoute des événements du client sélectionné
-  useEffect(() => {
-    if (!selectedUserId) {
-      setIsTyping(false)
-      setPresence(null)
-      return
-    }
-
-    const channel = ChatService.subscribeToBroadcasts(selectedUserId, {
-      onTyping: (payload: BroadcastPayload) => setIsTyping(Boolean(payload?.isTyping)),
-      onPresence: (payload: BroadcastPayload) => setPresence(payload?.status || null),
-    })
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
-      }
-    }
-  }, [selectedUserId])
-
-  // Génération du texte de sous-titre sous forme de simple chaîne de caractères (string)
-  const getSubtitleText = (): string => {
-    if (!selectedUser) return 'Sélectionnez une conversation active'
-    if (presence === 'online') return 'En ligne actuellement'
-    return 'Hors ligne'
-  }
+  const selectedUser = users.find((u) => u.id === selectedUserId) || null
 
   return (
     <ChatLayout>
       <div className="h-full flex bg-[#020617] text-white font-sans">
-        {/* Barre latérale des utilisateurs */}
         <ChatSidebar 
           users={users} 
           selectedUserId={selectedUserId} 
           onSelect={(id: string) => setSelectedUserId(id)} 
         />
 
-        {/* Panneau Principal de Discussion */}
         <div className="flex-1 flex flex-col h-full">
-          {/* Header avec un sous-titre de type string pour éviter l'erreur TypeScript */}
           <ChatHeader 
             title={selectedUser ? (selectedUser.username || selectedUser.phone || 'Utilisateur') : 'Administration Support'} 
-            subtitle={getSubtitleText()} 
+            subtitle={selectedUser ? 'Conversation active' : 'Sélectionnez un client dans la liste'} 
           />
 
           <div className="flex-1 flex flex-col min-h-0">
             {selectedUser ? (
               <>
-                {/* Zone des messages */}
                 <div className="flex-1 min-h-0 relative">
                   {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center h-full gap-3">
                       <Loader2 className="animate-spin text-emerald-500" size={32} />
-                      <span className="text-xs text-slate-400">Chargement de l'historique...</span>
+                      <span className="text-xs text-slate-400">Chargement des messages...</span>
                     </div>
                   ) : (
                     <VirtualizedMessageList 
@@ -103,12 +60,6 @@ export default function AdminChat() {
                   )}
                 </div>
 
-                {/* Zone d'indicateur de frappe */}
-                <div className="px-4 min-h-[24px] flex items-center">
-                  {isTyping && <TypingIndicator />}
-                </div>
-
-                {/* Champ d'envoi de la réponse */}
                 <div className="border-t border-white/5 bg-slate-950/50">
                   <MessageInput 
                     text={reply} 
@@ -119,7 +70,6 @@ export default function AdminChat() {
                 </div>
               </>
             ) : (
-              /* Vue par défaut quand aucun client n'est sélectionné */
               <div className="flex-1 flex items-center justify-center p-6">
                 <div className="text-center max-w-sm space-y-3">
                   <div className="p-4 bg-white/5 rounded-2xl w-fit mx-auto text-slate-400 border border-white/10">
@@ -129,7 +79,7 @@ export default function AdminChat() {
                     Centre de messagerie <ShieldCheck size={18} className="text-amber-400" />
                   </h3>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Cliquez sur une conversation dans le menu de gauche pour afficher l'historique et répondre en direct au client.
+                    Cliquez sur un utilisateur dans le panneau de gauche pour voir la discussion et lui répondre.
                   </p>
                 </div>
               </div>
