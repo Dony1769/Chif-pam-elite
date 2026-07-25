@@ -3,14 +3,15 @@ import { supabase } from '@/lib/supabase'
 import { ChatService, ChatMessage } from '@/services/chat'
 import { RealtimeChannel } from '@supabase/supabase-js'
 
+// Interface stricte alignée sur les besoins de ChatSidebar (UserItem)
 export interface ChatUser {
   id: string
   username?: string
   phone?: string
   email?: string
   avatar_url?: string
-  unread?: number
-  last_at?: string
+  unread: number
+  last_at: string
 }
 
 export function useAdminChat(selectedUserId: string | null) {
@@ -24,7 +25,7 @@ export function useAdminChat(selectedUserId: string | null) {
   const seenIds = useRef<Set<string>>(new Set())
 
   /**
-   * Charger la liste des utilisateurs ayant des discussions
+   * Charger la liste des utilisateurs
    */
   const fetchUsers = useCallback(async () => {
     try {
@@ -37,16 +38,20 @@ export function useAdminChat(selectedUserId: string | null) {
         return
       }
 
-      // Formatage pour fournir unread et last_at par défaut aux composants dépendants
+      // Garantie que 'unread' et 'last_at' sont TOUJOURS définis
       const formattedUsers: ChatUser[] = (data || []).map((u) => ({
-        ...u,
-        unread: u.unread ?? 0,
-        last_at: u.last_at ?? new Date().toISOString()
+        id: u.id,
+        username: u.username || undefined,
+        phone: u.phone || undefined,
+        email: u.email || undefined,
+        avatar_url: u.avatar_url || undefined,
+        unread: 0,
+        last_at: new Date().toISOString()
       }))
 
       setUsers(formattedUsers)
     } catch (err) {
-      console.error('Erreur inattendue lors de la récupération des utilisateurs:', err)
+      console.error('Erreur lors de la récupération des utilisateurs:', err)
     }
   }, [])
 
@@ -55,7 +60,7 @@ export function useAdminChat(selectedUserId: string | null) {
   }, [fetchUsers])
 
   /**
-   * Charger les messages et gérer l'abonnement Realtime pour l'utilisateur sélectionné
+   * Charger les messages & abonnement Realtime
    */
   useEffect(() => {
     if (!selectedUserId) {
@@ -76,7 +81,7 @@ export function useAdminChat(selectedUserId: string | null) {
         seenIds.current = new Set(data.map((m) => m.id))
         setMessages(data)
       } catch (err) {
-        console.error('Erreur lors du chargement initial des messages:', err)
+        console.error('Erreur lors du chargement des messages:', err)
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -100,7 +105,7 @@ export function useAdminChat(selectedUserId: string | null) {
   }, [selectedUserId])
 
   /**
-   * Envoyer un message en tant qu'administrateur
+   * Envoyer un message
    */
   const sendReply = async () => {
     if (!reply.trim() || !selectedUserId) return
@@ -125,7 +130,7 @@ export function useAdminChat(selectedUserId: string | null) {
     try {
       setIsLoadingMore(false)
     } catch (err) {
-      console.error('Erreur lors du chargement des messages anciens:', err)
+      console.error('Erreur lors du chargement des anciens messages:', err)
       setIsLoadingMore(false)
     }
   }, [isLoadingMore, hasMore, selectedUserId])
