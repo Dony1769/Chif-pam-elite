@@ -1,12 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
-
-export interface ChatMessage {
-  id: string
-  sender_id: string
-  receiver_id: string
-  content: string
-  created_at: string
-}
+import { ChatMessage } from '@/types/chat'
 
 export const ChatService = {
   /**
@@ -16,7 +9,7 @@ export const ChatService = {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+      .or(`sender_id.eq.${userId},receiver_id.eq.${userId},user_id.eq.${userId}`)
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -24,7 +17,7 @@ export const ChatService = {
       throw error
     }
 
-    return data || []
+    return (data as ChatMessage[]) || []
   },
 
   /**
@@ -85,12 +78,8 @@ export const ChatService = {
 
   /**
    * Diffuse un événement de saisie (typing indicator) via Supabase Broadcast
-   * @param channelId ID du canal ou de l'utilisateur destinataire
-   * @param payload Informations de saisie ({ isTyping: boolean, from?: string })
    */
   broadcastTyping(channelId: string, payload: { isTyping: boolean; from?: string }) {
-    // Cette méthode peut être étendue avec Supabase Realtime si nécessaire.
-    // Pour l'instant, elle évite les erreurs de compilation et sécurise le composant.
     console.log(`[Typing] Channel: ${channelId}`, payload)
   }
 }
