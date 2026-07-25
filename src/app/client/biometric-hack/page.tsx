@@ -1,32 +1,120 @@
 "use client";
+
 import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Fingerprint, ShieldCheck, ShieldX, ChevronLeft, Loader2, Construction, Coins, HeartPulse, Zap } from 'lucide-react';
+import { 
+  Fingerprint, 
+  ShieldCheck, 
+  ShieldX, 
+  ChevronLeft, 
+  Loader2, 
+  Coins, 
+  HeartPulse, 
+  Zap, 
+  Sparkles,
+  AlertTriangle 
+} from 'lucide-react';
 import RewardedVideo from '@/components/ads/RewardedVideo';
 import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
-// --- AUDIO SYSTEM ---
-const playSound = (freq: number, duration: number, type: OscillatorType = 'sine') => {
+// --- TYPAGES TYPESCRIPT STRICTS ---
+interface UserProfile {
+  id: string;
+  jetons_cp: number;
+  [key: string]: unknown;
+}
+
+interface GameSettings {
+  is_active: boolean;
+  maintenance_msg: string;
+}
+
+interface BiometricGameRecord {
+  id: string;
+  user_id: string;
+  mise_cp: number;
+  is_active: boolean;
+  gain_cp?: number;
+}
+
+type GameStatus = 'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance' | 'watching_ad';
+
+// --- SYSTÈME AUDIO ÉVOLUÉ (Web Audio API) ---
+const playAdvancedSound = (type: 'click' | 'success' | 'fail' | 'cashout' | 'scan') => {
   if (typeof window === 'undefined') return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.start(); osc.stop(ctx.currentTime + duration);
-  } catch (e) {}
+
+    const now = ctx.currentTime;
+
+    switch (type) {
+      case 'click':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.05);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+        break;
+
+      case 'scan':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(500, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+
+      case 'success':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+        osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+
+      case 'fail':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.linearRampToValueAtTime(110, now + 0.3);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+
+      case 'cashout':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+        break;
+    }
+  } catch {
+    // Ignorer si l'AudioContext est restreint par le navigateur
+  }
 };
 
-const triggerHaptic = () => {
+const triggerHapticFeedback = (pattern: number | number[] = [10, 30, 10]) => {
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    navigator.vibrate([10, 30, 10]);
+    navigator.vibrate(pattern);
   }
 };
 
@@ -37,57 +125,68 @@ function BiometricGameContent() {
   const challengeFee = searchParams.get('fee');
 
   // --- ÉTATS ---
-  const [profile, setProfile] = useState<any>(null);
-  const [status, setStatus] = useState<'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance' | 'watching_ad'>('loading');
-  const [maintenanceMsg, setMaintenanceMsg] = useState("Protocole de sécurité...");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [status, setStatus] = useState<GameStatus>('loading');
+  const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Protocole de sécurité en cours...");
   
-  const [betCP, setBetCP] = useState(100);
-  const [multiplier, setMultiplier] = useState(0.5);
-  const [gridSize, setGridSize] = useState(3); 
+  const [betCP, setBetCP] = useState<number>(100);
+  const [multiplier, setMultiplier] = useState<number>(0.5);
+  const [gridSize, setGridSize] = useState<number>(3); 
   const [pattern, setPattern] = useState<number[]>([]);
   const [userPattern, setUserPattern] = useState<number[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [displayTime, setDisplayTime] = useState(1000); 
-  const [sessionTimer, setSessionTimer] = useState(10);
-  const [sessionsSolved, setSessionsSolved] = useState(0);
-  const [canRevive, setCanRevive] = useState(true);
-  const [combo, setCombo] = useState(1);
+  const [displayTime, setDisplayTime] = useState<number>(1000); 
+  const [sessionTimer, setSessionTimer] = useState<number>(10);
+  const [sessionsSolved, setSessionsSolved] = useState<number>(0);
+  const [canRevive, setCanRevive] = useState<boolean>(true);
+  const [combo, setCombo] = useState<number>(1);
+  const [shakeGrid, setShakeGrid] = useState<boolean>(false);
 
   // 🔒 SÉCURITÉ REFS
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
 
-  // Synchro Refs
+  // Synchro des références
   useEffect(() => {
     gameStateRef.current = { multiplier, gameId };
   }, [multiplier, gameId]);
 
-  const init = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(data);
-    }
-    checkAccess();
-  }, []);
-
-  useEffect(() => { init(); }, [init]);
-
-  const checkAccess = async () => {
+  const checkAccess = useCallback(async () => {
     try {
-      const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'biometric').single();
+      const { data } = await supabase
+        .from('game_settings')
+        .select('is_active, maintenance_msg')
+        .eq('game_id', 'biometric')
+        .single<GameSettings>();
+
       if (data && !data.is_active) {
-        setMaintenanceMsg(data.maintenance_msg);
+        setMaintenanceMsg(data.maintenance_msg || "Serveurs en maintenance.");
         setStatus('maintenance');
       } else { 
         setStatus('idle'); 
         if (challengeId && challengeFee) setBetCP(Number(challengeFee));
       }
-    } catch (e) { setStatus('idle'); }
-  };
+    } catch {
+      setStatus('idle'); 
+    }
+  }, [challengeId, challengeFee]);
 
+  const init = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      setProfile(data as UserProfile);
+    }
+    await checkAccess();
+  }, [checkAccess]);
+
+  useEffect(() => { 
+    init(); 
+  }, [init]);
+
+  // --- GÉNÉRATION DES MOTIFS ---
   const generatePattern = useCallback((size: number) => {
     const cells = size * size;
     const count = size + 1; 
@@ -100,50 +199,67 @@ function BiometricGameContent() {
     setUserPattern([]);
     setSessionTimer(10);
     setStatus('showing');
+    playAdvancedSound('scan');
   }, []);
   
+  // --- GESTION DES CHRONOMÈTRES ET TIMERS DE PHASE ---
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout;
+
     if (status === 'showing') {
-      const timer = setTimeout(() => setStatus('input'), displayTime);
-      return () => clearTimeout(timer);
+      timeoutId = setTimeout(() => setStatus('input'), displayTime);
     }
+
     if (status === 'input') {
-      const interval = setInterval(() => {
+      intervalId = setInterval(() => {
         setSessionTimer(prev => {
           if (prev <= 1) { 
-              // Temps écoulé = Échec
-              handleFailure(); 
-              return 0; 
+            handleFailure(); 
+            return 0; 
           }
           return prev - 1;
         });
       }, 1000);
-      return () => clearInterval(interval);
     }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [status, displayTime]);
 
+  // --- DÉMARRAGE DU JEU ---
   const startGame = async () => {
     if (!profile || loading) return;
-    if (betCP < 10 && !challengeId) { alert("Mise minimum 10 CP"); return; }
+    if (betCP < 10 && !challengeId) { 
+      alert("Mise minimum : 10 CP"); 
+      return; 
+    }
     
-    triggerHaptic();
+    triggerHapticFeedback([20, 50, 20]);
     setLoading(true);
-    isProcessingRef.current = false; // Reset lock
+    isProcessingRef.current = false;
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
-      
-      // 🔒 VERROUILLAGE DE LA MISE
       lockedBetRef.current = finalFee;
 
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-          p_user_id: profile.id, p_mise_cp: finalFee, p_gain_cp: 0, p_jeu_nom: 'Biometric Start'
+        p_user_id: profile.id, 
+        p_mise_cp: finalFee, 
+        p_gain_cp: 0, 
+        p_jeu_nom: 'Biometric Start'
       });
-      if (rpcError || !result.success) throw new Error(result?.message || "Erreur Solde");
 
-      const { data: game, error: gameErr } = await supabase.from('biometric_games').insert([{
-          user_id: profile.id, mise_cp: finalFee, is_active: true
-      }]).select().single();
+      if (rpcError || !result?.success) throw new Error(result?.message || "Solde de CP insuffisant.");
+
+      const { data: game, error: gameErr } = await supabase
+        .from('biometric_games')
+        .insert([{ user_id: profile.id, mise_cp: finalFee, is_active: true }])
+        .select()
+        .single<BiometricGameRecord>();
+
       if (gameErr) throw gameErr;
 
       const economySettings = getGameEconomySettings('biometric', 'intermédiaire').profile;
@@ -155,27 +271,34 @@ function BiometricGameContent() {
       setCombo(1);
       setDisplayTime(economySettings.displayTime ?? 1000);
       generatePattern(economySettings.gridSize ?? 3);
-      playSound(440, 0.1);
-    } catch (e: any) { alert(e.message); } finally { setLoading(false); }
+    } catch (e: unknown) { 
+      const err = e as Error;
+      alert(err.message || "Erreur de communication avec le serveur."); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
+  // --- CLIC SUR UNE CASE DU SCANNER ---
   const handleCellClick = (idx: number) => {
     if (status !== 'input' || userPattern.includes(idx)) return;
-    triggerHaptic();
+    
+    triggerHapticFeedback(15);
     const nextUserPattern = [...userPattern, idx];
     setUserPattern(nextUserPattern);
 
-    // ERREUR DE MOTIF
+    // Erreur de sélection
     if (!pattern.includes(idx)) { 
-        handleFailure(); 
-        return; 
+      handleFailure(); 
+      return; 
     }
     
-    playSound(880, 0.05);
+    playAdvancedSound('click');
     setCombo(prev => prev + 1);
 
-    // SUCCÈS SÉQUENCE
+    // Séquence validée avec succès
     if (nextUserPattern.length === pattern.length) {
+      playAdvancedSound('success');
       setSessionsSolved(s => s + 1);
       setMultiplier(prev => parseFloat((prev + 0.10).toFixed(2)));
       
@@ -185,28 +308,30 @@ function BiometricGameContent() {
       setGridSize(nextGrid);
       
       setDisplayTime(prev => Math.max(300, prev - 100));
-      setTimeout(() => generatePattern(nextGrid), 500);
+      setTimeout(() => generatePattern(nextGrid), 400);
     }
   };
 
+  // --- GESTION DE L'ÉCHEC ---
   const handleFailure = async () => {
-    triggerHaptic();
-    // Si on perd en zone "Safe" (<1.0) et hors challenge, on encaisse auto
+    triggerHapticFeedback([100, 50, 100]);
+    playAdvancedSound('fail');
+    setShakeGrid(true);
+    setTimeout(() => setShakeGrid(false), 500);
+
     const currentMult = gameStateRef.current.multiplier;
+    // Zone Safe (< 1.0) hors challenge : sauvetage automatique
     if (currentMult < 1.0 && !challengeId) {
-        finalizeGame(true); // true = forced/auto cashout (sauvetage)
-        return;
+      finalizeGame(true);
+      return;
     }
-    playSound(110, 0.5, 'sawtooth');
+
     setCombo(1);
     setStatus('lost');
   };
 
-  // --- FIN DE PARTIE SÉCURISÉE ---
-  // wasAutoSaved = true si déclenché par échec en zone safe
-  // wasAutoSaved = false si déclenché par bouton "Encasser"
+  // --- FIN DE PARTIE SÉCURISÉE (CASH OUT OU PERTE) ---
   const finalizeGame = async (wasAutoSaved: boolean = false) => {
-    // 🛡️ ANTI DOUBLE-APPEL
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
@@ -216,6 +341,7 @@ function BiometricGameContent() {
     const secureBet = lockedBetRef.current;
     const currentMult = gameStateRef.current.multiplier;
     let gainFinal = 0;
+
     const economy = resolveGameEconomy({
       gameId: 'biometric',
       bet: secureBet,
@@ -227,210 +353,335 @@ function BiometricGameContent() {
       specialEventMultiplier: 1
     });
 
-    // Calcul Gain
-    if (wasAutoSaved) {
-        // Sauvetage (Perte < 1.0)
-        gainFinal = economy.payout;
-    } else if (status === 'input' || status === 'showing') {
-        // Encaissement Manuel (Win)
-        gainFinal = economy.payout;
+    if (wasAutoSaved || status === 'input' || status === 'showing') {
+      gainFinal = economy.payout;
     } else {
-        // Perte totale
-        gainFinal = 0;
+      gainFinal = 0;
     }
 
     try {
       if (challengeId) {
         await supabase.rpc('increment_challenge_score', {
-            p_user_id: profile.id, p_challenge_id: challengeId, p_score: sessionsSolved * 10
+          p_user_id: profile?.id, 
+          p_challenge_id: challengeId, 
+          p_score: sessionsSolved * 10
         });
-      } else {
-        if (gainFinal > 0) {
-            await supabase.rpc('jouer_partie_cp', {
-                p_user_id: profile.id, p_mise_cp: 0, p_gain_cp: gainFinal, p_jeu_nom: 'Biometric Final'
-            });
-        }
+      } else if (gainFinal > 0) {
+        await supabase.rpc('jouer_partie_cp', {
+          p_user_id: profile?.id, 
+          p_mise_cp: 0, 
+          p_gain_cp: gainFinal, 
+          p_jeu_nom: 'Biometric Final'
+        });
       }
 
-      await supabase.from('biometric_games').update({ is_active: false, gain_cp: gainFinal }).eq('id', gameId);
+      await supabase
+        .from('biometric_games')
+        .update({ is_active: false, gain_cp: gainFinal })
+        .eq('id', gameId);
       
+      if (gainFinal > 0) playAdvancedSound('cashout');
       setStatus(gainFinal > 0 || (challengeId && sessionsSolved > 0) ? 'won' : 'lost');
-      if (gainFinal > 0) playSound(523, 0.5);
-    } catch (e) { console.error(e); } finally { setLoading(false); init(); }
+    } catch (e) { 
+      console.error("Erreur lors de la finalisation :", e); 
+    } finally { 
+      setLoading(false); 
+      init(); 
+    }
   };
 
-  // --- REWARD ---
+  // --- RECONSTITUTION PAR PUBLICITÉ ---
   const handleAdComplete = () => {
     setCanRevive(false);
     setCombo(1);
-    isProcessingRef.current = false; // On déverrouille pour continuer
+    isProcessingRef.current = false;
     setStatus('showing');
     generatePattern(gridSize);
-    playSound(600, 0.2);
+    playAdvancedSound('scan');
+  };
+
+  // --- MODIFICATEURS DE MISE RAPIDE ---
+  const adjustBet = (amount: number | 'max' | 'double') => {
+    triggerHapticFeedback(10);
+    if (!profile) return;
+    if (amount === 'max') {
+      setBetCP(Math.max(10, profile.jetons_cp || 10));
+    } else if (amount === 'double') {
+      setBetCP(prev => Math.min(profile.jetons_cp || prev, prev * 2));
+    } else {
+      setBetCP(prev => Math.max(10, prev + amount));
+    }
   };
 
   const difficultyLabel = gridSize <= 3 ? 'IRIS-01' : gridSize <= 5 ? 'FINGERPRINT-02' : 'BIOLOCK-03';
   const progressionStage = Math.min(3, Math.floor(sessionsSolved / 2) + 1);
 
-  if (status === 'maintenance') return <NeonGameShell accent="amber" className="h-screen"><div className="flex h-screen items-center justify-center p-10 text-center text-amber-500 font-black uppercase italic">{maintenanceMsg}</div></NeonGameShell>;
+  if (status === 'maintenance') {
+    return (
+      <NeonGameShell accent="amber" className="h-screen">
+        <div className="flex h-screen items-center justify-center p-8 text-center text-amber-500 font-black uppercase italic tracking-wider flex-col gap-4">
+          <AlertTriangle size={64} className="animate-bounce text-amber-400" />
+          <p className="text-xl">{maintenanceMsg}</p>
+        </div>
+      </NeonGameShell>
+    );
+  }
 
   return (
     <NeonGameShell accent="emerald" className="h-screen font-sans select-none">
       
       {status === 'watching_ad' && (
-          <RewardedVideo 
-            onReward={handleAdComplete} 
-            onClose={() => setStatus('lost')} 
-            zoneId={5848554} 
-          />
+        <RewardedVideo 
+          onReward={handleAdComplete} 
+          onClose={() => setStatus('lost')} 
+          zoneId={5848554} 
+        />
       )}
 
-      {/* HEADER */}
-      <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-4 backdrop-blur-xl z-50">
-        <button onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.2)] active:scale-90">
-          <ChevronLeft size={20}/>
+      {/* EN-TÊTE UX / SOLDE */}
+      <div className="flex items-center justify-between border-b border-white/10 bg-black/40 px-5 py-4 backdrop-blur-xl z-50">
+        <button 
+          onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} 
+          className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-2.5 text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.2)] active:scale-90 transition-transform"
+        >
+          <ChevronLeft size={22}/>
         </button>
-        <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2">
-            <Coins size={16} className="text-emerald-300" />
-            <span className="text-sm italic text-emerald-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+        <div className="flex items-center gap-2.5 rounded-full border border-emerald-400/30 bg-emerald-950/40 px-5 py-2 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+          <Coins size={18} className="text-emerald-400 animate-pulse" />
+          <span className="text-sm font-bold tracking-wide text-emerald-200">
+            {profile?.jetons_cp?.toLocaleString() || 0} <span className="text-xs text-emerald-400">CP</span>
+          </span>
         </div>
       </div>
 
-      <div className="relative flex flex-1 flex-col items-center justify-center p-6">
+      <div className="relative flex flex-1 flex-col items-center justify-center p-4 md:p-6">
         {status === 'idle' || status === 'loading' ? (
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative w-full max-w-xs overflow-hidden rounded-[2.5rem] border border-emerald-400/20 bg-slate-950/60 p-8 text-center shadow-[0_0_60px_rgba(16,185,129,0.16)] backdrop-blur-2xl">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_55%)]" />
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 8, ease: 'linear' }} className="pointer-events-none absolute inset-6 rounded-full border border-cyan-400/20" />
-            {status === 'loading' ? <Loader2 className="animate-spin mx-auto text-emerald-500" size={50} /> : (
-                <>
-                <div className="relative mb-6 flex justify-center"><div className="rounded-full border border-emerald-400/30 bg-emerald-500/10 p-5 shadow-[0_0_25px_rgba(16,185,129,0.2)]"><Fingerprint className="text-emerald-300 drop-shadow-[0_0_20px_#10b981]" size={70} /></div></div>
-                <div className="mb-6 rounded-3xl border border-cyan-400/20 bg-black/40 p-4 shadow-inner">
-                    <p className="mb-2 text-[10px] tracking-widest text-cyan-400">LABORATOIRE BIOMETRIC</p>
-                    <p className="mb-3 text-[10px] uppercase tracking-[0.3em] text-emerald-400/70">Scanner • Iris • Empreinte</p>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-emerald-500/20 bg-slate-950/80 p-6 md:p-8 text-center shadow-[0_0_60px_rgba(16,185,129,0.15)] backdrop-blur-2xl"
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.15),transparent_60%)]" />
+            
+            {status === 'loading' ? (
+              <div className="py-12 flex flex-col items-center gap-4">
+                <Loader2 className="animate-spin text-emerald-400" size={56} />
+                <p className="text-xs uppercase tracking-widest text-emerald-400/70">Initialisation du Scanner...</p>
+              </div>
+            ) : (
+              <>
+                <div className="relative mb-6 flex justify-center">
+                  <motion.div 
+                    animate={{ scale: [1, 1.05, 1] }} 
+                    transition={{ repeat: Infinity, duration: 3 }}
+                    className="rounded-full border border-emerald-400/30 bg-emerald-500/10 p-5 shadow-[0_0_30px_rgba(16,185,129,0.25)]"
+                  >
+                    <Fingerprint className="text-emerald-400 drop-shadow-[0_0_15px_#10b981]" size={64} />
+                  </motion.div>
                 </div>
-                <div className="mb-8 rounded-3xl border border-white/10 bg-black/50 p-6 shadow-inner">
-                    <p className="mb-2 text-[10px] tracking-widest text-emerald-500">{challengeId ? 'MISSION FEE' : 'MISE CP'}</p>
-                    <input 
-                        type="number" 
-                        disabled={!!challengeId} 
-                        value={betCP} 
-                        onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                        className="w-full bg-transparent text-center text-5xl font-black tracking-tighter text-white outline-none focus:text-emerald-400" 
-                    />
+
+                <div className="mb-6 rounded-2xl border border-cyan-400/20 bg-black/40 p-3 shadow-inner">
+                  <p className="text-[10px] font-black tracking-widest text-cyan-400 uppercase">LABORATOIRE BIOMETRIC</p>
+                  <p className="text-[9px] uppercase tracking-[0.2em] text-emerald-400/70 mt-1">Analyse Iris • Empreinte Digitale</p>
                 </div>
-                <button onClick={startGame} disabled={loading} className="w-full rounded-3xl bg-linear-to-r from-emerald-500 to-cyan-500 py-6 text-xl font-black text-white shadow-[0_0_30px_rgba(16,185,129,0.25)] transition-all active:scale-95">
-                    {loading ? <Loader2 className="mx-auto animate-spin" /> : 'INITIALISER LE SCAN'}
+
+                {/* Saisie & Boutons de mise rapide */}
+                <div className="mb-6 rounded-3xl border border-white/10 bg-black/60 p-4 shadow-inner">
+                  <p className="mb-2 text-[10px] font-bold tracking-widest text-emerald-400 uppercase">
+                    {challengeId ? 'FRAIS DE MISSION' : 'VOTRE MISE CP'}
+                  </p>
+                  <input 
+                    type="number" 
+                    disabled={!!challengeId} 
+                    value={betCP} 
+                    onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
+                    className="w-full bg-transparent text-center text-4xl font-black tracking-tighter text-white outline-none focus:text-emerald-400" 
+                  />
+
+                  {!challengeId && (
+                    <div className="mt-3 grid grid-cols-4 gap-1.5 pt-2 border-t border-white/5">
+                      <button onClick={() => adjustBet(-50)} className="rounded-xl border border-white/10 bg-white/5 py-1.5 text-[10px] font-bold text-slate-300 active:bg-white/10">-50</button>
+                      <button onClick={() => adjustBet(50)} className="rounded-xl border border-white/10 bg-white/5 py-1.5 text-[10px] font-bold text-slate-300 active:bg-white/10">+50</button>
+                      <button onClick={() => adjustBet('double')} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-1.5 text-[10px] font-bold text-emerald-300 active:bg-emerald-500/20">x2</button>
+                      <button onClick={() => adjustBet('max')} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 py-1.5 text-[10px] font-bold text-cyan-300 active:bg-cyan-500/20">MAX</button>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={startGame} 
+                  disabled={loading} 
+                  className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 font-black text-lg text-white shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : <><Sparkles size={20} /> INITIALISER LE SCAN</>}
                 </button>
-                </>
+              </>
             )}
           </motion.div>
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
-            {/* IN-GAME HUD */}
-            <div className="mb-6 grid w-full grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center backdrop-blur-xl">
-                    <p className="text-[7px] font-bold uppercase tracking-widest text-zinc-400">Timer</p>
-                    <p className={`text-xl font-black ${sessionTimer < 4 ? 'animate-pulse text-rose-400' : 'text-emerald-300'}`}>{sessionTimer}s</p>
-                </div>
-                <div className={`rounded-2xl border p-4 text-center transition-all ${multiplier >= 1.0 ? 'border-rose-400/30 bg-rose-500/10 shadow-[0_0_20px_rgba(244,63,94,0.18)]' : 'border-emerald-400/20 bg-emerald-500/10'}`}>
-                    <p className={`text-[7px] font-bold uppercase ${multiplier >= 1.0 ? 'text-rose-300' : 'text-emerald-300'}`}>Multiplier</p>
-                    <div className="text-2xl font-black"><AnimatedCounter value={multiplier} prefix="x" /></div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center backdrop-blur-xl">
-                    <p className="text-[7px] font-bold uppercase tracking-widest text-zinc-400">Score</p>
-                    <div className="text-xl font-black text-cyan-300"><AnimatedCounter value={sessionsSolved} /></div>
-                </div>
-                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4 text-center backdrop-blur-xl">
-                    <p className="text-[7px] font-bold uppercase tracking-widest text-cyan-300">Combo</p>
-                    <div className="text-xl font-black text-cyan-200">x{combo}</div>
-                </div>
-            </div>
-            <div className="mb-4 flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-[10px] uppercase tracking-[0.3em] text-emerald-300/80 backdrop-blur-xl">
-              <span>ÉCHELLE {difficultyLabel}</span>
-              <span>STAGE {progressionStage}</span>
-              <span>DIFFICULTÉ {gridSize}x{gridSize}</span>
-            </div>
-            <div className="mb-8 w-full rounded-4xl border border-white/10 bg-black/40 p-4 backdrop-blur-xl">
-              <ProgressBar value={Math.min(100, (sessionsSolved / 6) * 100)} max={100} label="Progression de la séquence" accent="emerald" />
-            </div>
+            
+            {/* HUD / TABLEAU DE BORD EN JEU */}
+            <div className="mb-4 grid w-full grid-cols-4 gap-2">
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-2.5 text-center backdrop-blur-xl">
+                <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-400">Timer</p>
+                <p className={`text-lg font-black ${sessionTimer <= 3 ? 'animate-pulse text-rose-400' : 'text-emerald-300'}`}>
+                  {sessionTimer}s
+                </p>
+              </div>
 
-            {/* SCANNER GRID */}
-            <div className="relative rounded-[3rem] border border-cyan-400/20 bg-black/50 p-4 shadow-[0_0_70px_rgba(34,211,238,0.18)]">
-              <motion.div animate={{ y: [0, 260, 0] }} transition={{ repeat: Infinity, duration: 2.4, ease: 'linear' }} className="pointer-events-none absolute inset-x-6 top-0 h-1 rounded-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
-              <motion.div animate={{ scale: [1, 1.02, 1], opacity: [0.25, 0.5, 0.25] }} transition={{ repeat: Infinity, duration: 2.8 }} className="pointer-events-none absolute inset-2 rounded-[2.4rem] border border-cyan-400/20" />
-              <motion.div animate={{ x: [0, 10, 0], y: [0, -8, 0] }} transition={{ repeat: Infinity, duration: 3.2 }} className="pointer-events-none absolute -left-3 top-4 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[8px] uppercase tracking-[0.3em] text-emerald-300">IRIS</motion.div>
-              <motion.div animate={{ x: [0, -10, 0], y: [0, 8, 0] }} transition={{ repeat: Infinity, duration: 3.5 }} className="pointer-events-none absolute -right-3 bottom-4 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[8px] uppercase tracking-[0.3em] text-cyan-300">PRINT</motion.div>
-              <div 
-                className="grid gap-2.5"
-                style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)`, width: 'min(90vw, 360px)', height: 'min(90vw, 360px)' }}
-              >
-                {Array.from({ length: gridSize * gridSize }).map((_, i) => (
-                  <motion.div
-                    key={i}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => handleCellClick(i)}
-                    className={`rounded-xl border-2 transition-all duration-300 ${
-                      status === 'showing' && pattern.includes(i) ? 'border-emerald-400 bg-emerald-500 shadow-[0_0_15px_#10b981]' : 
-                      status === 'input' && userPattern.includes(i) ? 'border-emerald-400 bg-emerald-600/50' : 'border-white/5 bg-white/5'
-                    }`}
-                  />
-                ))}
+              <div className={`rounded-2xl border p-2.5 text-center transition-all ${multiplier >= 1.0 ? 'border-rose-500/40 bg-rose-500/10 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'border-emerald-500/20 bg-emerald-500/10'}`}>
+                <p className={`text-[8px] font-bold uppercase ${multiplier >= 1.0 ? 'text-rose-300' : 'text-emerald-300'}`}>Multi</p>
+                <div className="text-lg font-black text-white">
+                  <AnimatedCounter value={multiplier} prefix="x" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-2.5 text-center backdrop-blur-xl">
+                <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-400">Score</p>
+                <div className="text-lg font-black text-cyan-300">
+                  <AnimatedCounter value={sessionsSolved} />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-2.5 text-center backdrop-blur-xl">
+                <p className="text-[8px] font-bold uppercase tracking-widest text-cyan-300">Combo</p>
+                <div className="text-lg font-black text-cyan-200">x{combo}</div>
               </div>
             </div>
 
+            {/* BARRE DE TIMING VISUELLE EN PHASE INPUT */}
+            <div className="w-full mb-3 h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
+              <motion.div 
+                className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                initial={{ width: '100%' }}
+                animate={{ width: status === 'input' ? `${(sessionTimer / 10) * 100}%` : '100%' }}
+                transition={{ duration: status === 'input' ? 1 : 0.2, ease: 'linear' }}
+              />
+            </div>
+
+            <div className="mb-3 flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-emerald-300/80 backdrop-blur-xl">
+              <span>ÉCHELLE : {difficultyLabel}</span>
+              <span>STAGE : {progressionStage}</span>
+              <span>GRILLE : {gridSize}x{gridSize}</span>
+            </div>
+
+            <div className="mb-6 w-full">
+              <ProgressBar value={Math.min(100, (sessionsSolved / 6) * 100)} max={100} label="Progression Séquence" accent="emerald" />
+            </div>
+
+            {/* MATRICE DU SCANNER */}
+            <motion.div 
+              animate={shakeGrid ? { x: [-10, 10, -10, 10, 0] } : {}}
+              transition={{ duration: 0.4 }}
+              className="relative rounded-[2.5rem] border border-cyan-400/20 bg-black/60 p-4 shadow-[0_0_50px_rgba(34,211,238,0.15)]"
+            >
+              {/* Laser de Scan */}
+              <motion.div 
+                animate={{ y: [0, 240, 0] }} 
+                transition={{ repeat: Infinity, duration: 2.2, ease: 'linear' }} 
+                className="pointer-events-none absolute inset-x-4 top-0 h-0.5 rounded-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_#22d3ee]" 
+              />
+              
+              <div 
+                className="grid gap-2"
+                style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)`, width: 'min(85vw, 320px)', height: 'min(85vw, 320px)' }}
+              >
+                {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+                  const isPatternCell = pattern.includes(i);
+                  const isUserSelected = userPattern.includes(i);
+                  const isShowing = status === 'showing' && isPatternCell;
+
+                  return (
+                    <motion.button
+                      key={i}
+                      whileTap={{ scale: 0.92 }}
+                      onClick={() => handleCellClick(i)}
+                      className={`rounded-xl border-2 transition-all duration-200 ${
+                        isShowing
+                          ? 'border-emerald-400 bg-emerald-400 shadow-[0_0_20px_#10b981]' 
+                          : isUserSelected
+                          ? 'border-cyan-400 bg-cyan-500/40 shadow-[0_0_10px_#22d3ee]'
+                          : 'border-white/10 bg-white/5 active:bg-emerald-500/20'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </motion.div>
+
+            {/* ACTION ENCAISSEMENT */}
             {multiplier >= 1.0 && (
-                <motion.button 
-                  initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                  onClick={() => finalizeGame(false)}
-                  disabled={loading}
-                  className="w-full mt-10 py-6 font-black rounded-4xl text-xl bg-white text-black shadow-2xl active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="animate-spin" /> : <><Zap size={20} fill="black" /> ENCAISSER {Math.floor(betCP * multiplier)} CP</>}
-                </motion.button>
+              <motion.button 
+                initial={{ y: 20, opacity: 0 }} 
+                animate={{ y: 0, opacity: 1 }}
+                onClick={() => finalizeGame(false)}
+                disabled={loading}
+                className="w-full mt-6 py-4 font-black rounded-2xl text-lg bg-gradient-to-r from-emerald-400 to-emerald-500 text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.3)] active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+              >
+                {loading ? <Loader2 className="animate-spin" /> : <><Zap size={20} fill="black" /> ENCAISSER {Math.floor(betCP * multiplier)} CP</>}
+              </motion.button>
             )}
             
             {multiplier < 1.0 && !challengeId && (
-                <p className="mt-8 text-[8px] text-emerald-500/50 tracking-[0.3em] font-black uppercase animate-pulse">Mode Sauvetage Actif : Pas de perte</p>
+              <p className="mt-4 text-[9px] text-emerald-400/60 tracking-[0.2em] font-bold uppercase animate-pulse">
+                Mode Sauvetage Actif : Mise protégée
+              </p>
             )}
           </div>
         )}
       </div>
 
-      {/* RESULTS MODAL */}
+      {/* MODAL DE RÉSULTAT */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-100 bg-[#020617]/98 backdrop-blur-2xl flex flex-col items-center justify-center p-8 text-center">
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
-                {status === 'lost' ? <ShieldX size={48} className="text-rose-500" /> : <ShieldCheck size={48} className="text-emerald-500" />}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center"
+          >
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
+              {status === 'lost' ? <ShieldX size={40} className="text-rose-500" /> : <ShieldCheck size={40} className="text-emerald-400" />}
             </div>
             
-            <h2 className="text-4xl font-black italic mb-2 tracking-tighter uppercase">{status === 'lost' ? 'Scan Interrompu' : 'Succès'}</h2>
+            <h2 className="text-3xl font-black italic mb-1 tracking-tight uppercase text-white">
+              {status === 'lost' ? 'Scan Interrompu' : 'Analyse Validée'}
+            </h2>
             
-            <div className="bg-white/5 p-8 rounded-[2.5rem] w-full max-w-xs mb-8 border border-white/10 shadow-inner">
-                <p className="text-[10px] text-zinc-500 mb-2 font-bold tracking-widest uppercase">Gains Finale</p>
-                <p className="text-6xl font-black italic tracking-tighter text-white">
-                    {/* Le gain affiché dépend du statut. Won = Gain réel, Lost = 0 */}
-                    {status === 'won' ? Math.floor(lockedBetRef.current * multiplier) : 0} 
-                    <span className="text-sm text-emerald-500 ml-1 uppercase font-black">cp</span>
-                </p>
+            <div className="bg-white/5 p-6 rounded-3xl w-full max-w-xs my-6 border border-white/10 shadow-inner">
+              <p className="text-[10px] text-zinc-400 mb-1 font-bold tracking-widest uppercase">Gains Obtenus</p>
+              <p className="text-5xl font-black italic tracking-tighter text-white">
+                {status === 'won' ? Math.floor(lockedBetRef.current * multiplier) : 0} 
+                <span className="text-sm text-emerald-400 ml-1 font-bold">CP</span>
+              </p>
             </div>
 
             <div className="flex flex-col gap-3 w-full max-w-xs">
-                
-                {/* BOUTON REVIVRE PAR PUB */}
-                {status === 'lost' && canRevive && (
-                    <button onClick={() => setStatus('watching_ad')} className="w-full py-6 bg-emerald-600 text-white rounded-[1.8rem] font-black text-lg active:scale-95 flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20">
-                        <HeartPulse className="animate-pulse" size={20}/> REVIVRE (PUBLICITÉ)
-                    </button>
-                )}
-                
-                <button onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} className="w-full py-5 bg-white/5 text-slate-400 rounded-[1.8rem] font-black text-sm active:scale-95 transition-all">
-                    QUITTER L'ARÈNE
+              {status === 'lost' && canRevive && (
+                <button 
+                  onClick={() => setStatus('watching_ad')} 
+                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-2xl font-black text-sm active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
+                >
+                  <HeartPulse className="animate-pulse" size={18}/> SECONDE CHANCE (PUB)
                 </button>
-                
-                {status === 'won' && (
-                     <button onClick={() => setStatus('idle')} className="w-full py-6 bg-emerald-600 text-white rounded-[1.8rem] font-black text-xl active:scale-95 shadow-xl">NOUVEAU SCAN</button>
-                )}
+              )}
+              
+              <button 
+                onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} 
+                className="w-full py-3.5 bg-white/5 text-slate-300 hover:bg-white/10 rounded-2xl font-bold text-xs active:scale-95 transition-all"
+              >
+                QUITTER LE JEU
+              </button>
+              
+              {status === 'won' && (
+                <button 
+                  onClick={() => setStatus('idle')} 
+                  className="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black text-base active:scale-95 shadow-lg shadow-emerald-500/20"
+                >
+                  NOUVELLE SESSION
+                </button>
+              )}
             </div>
           </motion.div>
         )}
@@ -441,7 +692,7 @@ function BiometricGameContent() {
 
 export default function BiometricHack() {
   return (
-    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={50}/></div>}>
+    <Suspense fallback={<div className="h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin text-emerald-400" size={48}/></div>}>
       <BiometricGameContent />
     </Suspense>
   );
