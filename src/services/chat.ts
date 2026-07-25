@@ -1,6 +1,5 @@
 import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 
-// Importation ou alignement strict du type ChatMessage avec src/types/chat.ts
 export interface ChatMessage {
   id: string
   user_id: string
@@ -13,7 +12,7 @@ export interface ChatMessage {
 
 export const ChatService = {
   /**
-   * Charge les messages d'un utilisateur et garantit le type booléen sur la lecture.
+   * Charge la liste des messages pour un utilisateur donné.
    */
   async fetchMessages(supabase: SupabaseClient, userId: string): Promise<ChatMessage[]> {
     const { data, error } = await supabase
@@ -27,7 +26,6 @@ export const ChatService = {
       throw error
     }
 
-    // Normalisation des champs nuls en booléens stricts
     return (data || []).map((msg) => ({
       id: msg.id,
       user_id: msg.user_id,
@@ -40,7 +38,25 @@ export const ChatService = {
   },
 
   /**
-   * Envoie un message côté Client (is_admin_message = false).
+   * Modifie le contenu d'un message existant dans Supabase.
+   */
+  async editMessage(supabase: SupabaseClient, messageId: string, newContent: string): Promise<void> {
+    const trimmed = newContent.trim()
+    if (!trimmed) throw new Error('Le contenu du message ne peut pas être vide.')
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ content: trimmed })
+      .eq('id', messageId)
+
+    if (error) {
+      console.error('[ChatService] Erreur lors de la modification du message:', error.message)
+      throw error
+    }
+  },
+
+  /**
+   * Envoie un message depuis le client.
    */
   async sendMessage(supabase: SupabaseClient, content: string): Promise<ChatMessage> {
     const trimmed = content.trim()
@@ -78,7 +94,7 @@ export const ChatService = {
   },
 
   /**
-   * Envoie une réponse côté Admin (is_admin_message = true).
+   * Envoie une réponse administrative.
    */
   async sendAdminReply(supabase: SupabaseClient, targetUserId: string, content: string): Promise<ChatMessage> {
     const trimmed = content.trim()
@@ -113,7 +129,7 @@ export const ChatService = {
   },
 
   /**
-   * S'abonne aux événements INSERT en Realtime via Postgres Changes.
+   * Inscription aux mises à jour en temps réel via Supabase Realtime.
    */
   subscribeToMessages(
     supabase: SupabaseClient,
@@ -147,7 +163,6 @@ export const ChatService = {
         }
       )
       .subscribe((status, err) => {
-        console.log(`[Realtime Status] Canal ${channelName}:`, status)
         if (err) {
           console.error(`[Realtime Error] Échec de souscription sur ${channelName}:`, err)
         }
