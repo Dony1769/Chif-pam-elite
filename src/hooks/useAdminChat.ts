@@ -4,13 +4,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ChatService, ChatMessage } from '@/services/chat'
 
-// Alignement de l'interface ChatUser avec ce qu'attend ChatSidebar (UserItem)
+// Alignement STRICT avec l'interface UserItem de ChatSidebar
 export interface ChatUser {
   id: string
   username?: string
   phone?: string
-  unread?: number
-  last_at?: string
+  unread: number // Requis (non-optionnel) pour correspondre à UserItem
+  last_at: string // Requis (non-optionnel) pour correspondre à UserItem
 }
 
 export function useAdminChat(selectedUserId: string | null) {
@@ -20,7 +20,7 @@ export function useAdminChat(selectedUserId: string | null) {
   const [loading, setLoading] = useState<boolean>(false)
   const seenIds = useRef<Set<string>>(new Set())
 
-  // Charger la liste des utilisateurs avec les champs requis pour la barre latérale
+  // Charger la liste des utilisateurs depuis la table profiles
   useEffect(() => {
     const fetchUsers = async () => {
       const { data, error } = await supabase
@@ -32,13 +32,13 @@ export function useAdminChat(selectedUserId: string | null) {
         return
       }
 
-      // Formatage des utilisateurs avec des valeurs par défaut pour unread et last_at
+      // Transformation garantissant que unread et last_at ne soient JAMAIS undefined
       const formattedUsers: ChatUser[] = (data || []).map((user) => ({
         id: user.id,
-        username: user.username,
-        phone: user.phone,
-        unread: 0,
-        last_at: new Date().toISOString(),
+        username: user.username || undefined,
+        phone: user.phone || undefined,
+        unread: 0, // Valeur par défaut obligatoire
+        last_at: new Date().toISOString(), // Valeur par défaut obligatoire
       }))
 
       setUsers(formattedUsers)
@@ -69,7 +69,7 @@ export function useAdminChat(selectedUserId: string | null) {
         initial.forEach((m) => seenIds.current.add(m.id))
         setMessages(initial)
 
-        // Écouter les nouveaux messages
+        // Abonnement aux nouveaux messages
         activeChannel = ChatService.subscribeToMessages(supabase, selectedUserId, (newMsg) => {
           if (!seenIds.current.has(newMsg.id)) {
             seenIds.current.add(newMsg.id)
