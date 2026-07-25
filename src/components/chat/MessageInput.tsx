@@ -1,16 +1,15 @@
 "use client"
+
 import React, { useEffect, useRef, useState } from 'react'
 import EmojiPicker from './EmojiPicker'
 import { Send, Image } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { ChatService } from '@/services/chat'
 
-
 type Props = {
   text: string
   setText: (v: string) => void
   sendMessage: (message: string) => Promise<void>
-  // optional target user id for admin -> used for broadcasting typing/presence
   targetUserId?: string | null
 }
 
@@ -74,18 +73,21 @@ export default function MessageInput({ text, setText, sendMessage, targetUserId 
     const f = e.target.files?.[0]
     if (!f) return
     try {
-      // get user id
-      if (!userId) {
+      let currentUserId = userId
+      if (!currentUserId) {
         const { data: { user } } = await supabase.auth.getUser()
-        setUserId(user?.id ?? null)
+        currentUserId = user?.id ?? null
+        setUserId(currentUserId)
       }
-      const uid = userId
-      const publicUrl = await ChatService.uploadFile(uid || 'anonymous', f)
+
+      // MODIFICATION ICI : Transmission des 3 arguments (supabase, userId, file)
+      const publicUrl = await ChatService.uploadFile(supabase, currentUserId || 'anonymous', f)
+      
       setPreview(publicUrl)
       setPreviewName(f.name)
     } catch (err) {
       console.error('Upload failed', err)
-      // fallback to data url preview
+      // En cas d'erreur de téléversement, prévisualisation locale en base64
       const reader = new FileReader()
       reader.onload = () => {
         const data = reader.result as string
@@ -125,22 +127,32 @@ export default function MessageInput({ text, setText, sendMessage, targetUserId 
           </button>
           <label className="p-2 rounded-lg hover:bg-white/5 cursor-pointer" aria-label="Ajouter une pièce jointe">
             <Image aria-hidden="true" />
-            <input onChange={onFileChange} className="hidden" type="file" accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip" />
+            <input 
+              onChange={onFileChange} 
+              className="hidden" 
+              type="file" 
+              accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip" 
+            />
           </label>
         </div>
 
-        <input value={text} onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault()
-            void handleSend()
-          }
-        }} onChange={(e) => {
-          setText(e.target.value)
-          // send typing events
-          sendTyping(true)
-          if (typingTimeout.current) window.clearTimeout(typingTimeout.current)
-          typingTimeout.current = window.setTimeout(() => sendTyping(false), 1500)
-        }} placeholder="Écris un message..." className="flex-1 bg-transparent outline-none p-3 rounded-2xl border border-white/6" />
+        <input 
+          value={text} 
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              void handleSend()
+            }
+          }} 
+          onChange={(e) => {
+            setText(e.target.value)
+            sendTyping(true)
+            if (typingTimeout.current) window.clearTimeout(typingTimeout.current)
+            typingTimeout.current = window.setTimeout(() => sendTyping(false), 1500)
+          }} 
+          placeholder="Écris un message..." 
+          className="flex-1 bg-transparent outline-none p-3 rounded-2xl border border-white/6" 
+        />
 
         <button type="button" onClick={() => void handleSend()} className="px-4 py-2 bg-emerald-500 rounded-2xl text-slate-950 hover:scale-105 transition-transform">
           <Send />
