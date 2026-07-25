@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -7,6 +8,7 @@ import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Spar
 import { resolveGameEconomy } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
 
+// --- INTERFACES ---
 interface ProfileLike {
   id?: string;
   jetons_cp?: number;
@@ -22,6 +24,7 @@ interface MathQuestion {
   answer: number;
 }
 
+// --- UTILITAIRES AUDIOS ET HAPTIQUES ---
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
   if (typeof window === 'undefined') return;
   try {
@@ -60,15 +63,19 @@ const triggerHaptic = () => {
   }
 };
 
-const getQuestionTimeMs = (questionNumber: number) => Math.max(3000, Math.round((8 - (questionNumber - 1) * 0.5) * 1000));
+// Temps dégressif : Départ à 10 000 ms (10s), réduction de 0.8s par niveau, minimum 3s
+const getQuestionTimeMs = (questionNumber: number) => 
+  Math.max(3000, Math.round((10 - (questionNumber - 1) * 0.8) * 1000));
 
+// Paliers de multiplicateur
 const getNextMultiplier = (answered: number) => {
-  const steps = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0];
-  return steps[Math.min(answered, steps.length - 1)] ?? 3.0;
+  const steps = [0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0];
+  return steps[Math.min(answered, steps.length - 1)] ?? 5.0;
 };
 
+// Génération dynamique d'équations mathématiques
 const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
-  const level = questionsAnswered < 5 ? 1 : questionsAnswered < 12 ? 2 : 3;
+  const level = questionsAnswered < 4 ? 1 : questionsAnswered < 10 ? 2 : 3;
 
   if (level === 1) {
     const a = Math.floor(Math.random() * 9) + 1;
@@ -90,9 +97,511 @@ const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
       return { display: `${a} × ${b}`, answer: a * b };
     }
 
-    const a = Math.floor(Math.random() * 90) + 10;
-    const b = Math.floor(Math.random() * 90) + 10;
+    const a = Math.floor(Math.random() * 50) + 10;
+    const b = Math.floor(Math.random() * 50) + 10;
     const isAddition = Math.random() > 0.5;
+    if (isAddition) {
+      return { display: `${a} + ${b}`, answer: a + b };
+    }
+    const left = Math.max(a, b);
+    const right = Math.min(a, b);
+    return { display: `${left} - ${right}`, answer: left - right };
+  }
+
+  const operation = Math.floor(Math.random() * 4);
+  if (operation === 0) {
+    const a = Math.floor(Math.random() * 80) + 20;
+    const b = Math.floor(Math.random() * 80) + 20;
+    return { display: `${a} + ${b}`, answer: a + b };
+  }
+  if (operation === 1) {
+    const a = Math.floor(Math.random() * 80) + 20;
+    const b = Math.floor(Math.random() * 80) + 20;
+    const left = Math.max(a, b);
+    const right = Math.min(a, b);
+    return { display: `${left} - ${right}`, answer: left - right };
+  }
+  if (operation === 2) {
+    const a = Math.floor(Math.random() * 9) + 2;
+    const b = Math.floor(Math.random() * 9) + 2;
+    return { display: `${a} × ${b}`, answer: a * b };
+  }
+
+  const answer = Math.floor(Math.random() * 15) + 2;
+  const divisor = Math.floor(Math.random() * 8) + 2;
+  const dividend = answer * divisor;
+  return { display: `${dividend} ÷ ${divisor}`, answer };
+};
+
+// Avatar visuel animé
+const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }) => (
+  <motion.div className="relative h-12 w-8" animate={status === 'lost' ? { rotate: 90, opacity: 0 } : {}}>
+    <motion.div animate={isScared ? { x: [-1, 1, -1] } : {}} transition={{ repeat: Infinity, duration: 0.1 }} className="absolute left-1.5 top-3 z-10 h-7 w-5 rounded-lg border border-emerald-400/50 bg-emerald-600 shadow-[0_0_12px_rgba(16,185,129,0.4)]" />
+    <div className="absolute left-2 top-0 h-3 w-3 rounded-full border border-black/20 bg-orange-200" />
+  </motion.div>
+);
+
+// --- COMPOSANT JEU PRINCIPAL ---
+function QuickCalcGame() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const challengeId = searchParams.get('challengeId');
+  const challengeFee = searchParams.get('fee');
+
+  const [profile, setProfile] = useState<ProfileLike | null>(null);
+  const [maintenance, setMaintenance] = useState<MaintenanceState | null>(null);
+  const [loadingCheck, setLoadingCheck] = useState(true);
+  const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won' | 'maintenance' | 'loading'>('loading');
+  const [betCP, setBetCP] = useState(10);
+  const [question, setQuestion] = useState<MathQuestion | null>(null);
+  const [input, setInput] = useState('');
+  const [multiplier, setMultiplier] = useState(0.5);
+  const [loading, setLoading] = useState(false);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [questionsAnswered, setQuestionsAnswered] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(10000);
+  const [initialTime, setInitialTime] = useState(10000);
+  const [shakeAnswer, setShakeAnswer] = useState(false);
+
+  const lockedBetRef = useRef(0);
+  const isProcessingRef = useRef(false);
+  const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
+
+  useEffect(() => {
+    gameStateRef.current = { multiplier, gameId };
+  }, [multiplier, gameId]);
+
+  const checkAccess = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'vault').single();
+      if (data && !data.is_active) {
+        setMaintenance({ active: true, msg: data.maintenance_msg || 'Maintenance.' });
+        setStatus('maintenance');
+      } else {
+        setStatus('idle');
+        if (challengeId && challengeFee) {
+          setBetCP(Number(challengeFee));
+        }
+      }
+    } catch {
+      setStatus('idle');
+    } finally {
+      setLoadingCheck(false);
+    }
+  }, [challengeFee, challengeId]);
+
+  const init = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        setProfile(prof as ProfileLike | null);
+      }
+      await checkAccess();
+    } catch {
+      setStatus('idle');
+      setLoadingCheck(false);
+    }
+  }, [checkAccess]);
+
+  useEffect(() => {
+    void init();
+  }, [init]);
+
+  // Lancement d'une partie
+  const startGame = useCallback(async () => {
+    if (betCP < 10) {
+      alert('Mise minimum : 10 CP');
+      return;
+    }
+    triggerHaptic();
+    if (betCP > (profile?.jetons_cp || 0)) {
+      alert('Solde CP insuffisant');
+      return;
+    }
+    if (loading || status === 'playing') return;
+
+    setLoading(true);
+    isProcessingRef.current = false;
+
+    try {
+      const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
+      lockedBetRef.current = finalFee;
+
+      const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
+        p_user_id: profile?.id,
+        p_mise_cp: finalFee,
+        p_gain_cp: 0,
+        p_jeu_nom: challengeId ? 'Arena: Quick Calc' : 'Quick Calc Solo',
+      });
+
+      if (rpcError || !result?.success) {
+        throw new Error(result?.message || 'Solde CP insuffisant');
+      }
+
+      const { data: game, error: gameErr } = await supabase
+        .from('vault_games')
+        .insert([{ user_id: profile?.id, mise_cp: finalFee, is_active: true, challenge_id: challengeId || null }])
+        .select()
+        .single();
+
+      if (gameErr) throw gameErr;
+
+      setGameId(game.id);
+      setMultiplier(0.5);
+      setQuestionsAnswered(0);
+      setInput('');
+
+      // Première question avec 10 secondes
+      const startTime = getQuestionTimeMs(1);
+      setTimeRemaining(startTime);
+      setInitialTime(startTime);
+      setQuestion(generateMathQuestion(0));
+      setStatus('playing');
+      playSound('beep');
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : 'Erreur de partie');
+    } finally {
+      setLoading(false);
+    }
+  }, [betCP, challengeFee, challengeId, loading, profile?.id, profile?.jetons_cp, status]);
+
+  // Clôture et enregistrement des points/gains
+  const finalizeGame = useCallback(async (reason: 'timeout' | 'quit') => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
+    const currentMult = gameStateRef.current.multiplier;
+    const currentGameId = gameStateRef.current.gameId;
+    const secureBet = lockedBetRef.current;
+
+    if (!currentGameId || !profile?.id) return;
+
+    let gainFinal = 0;
+    const finalScore = questionsAnswered * 100;
+    
+    // Gain calculé : mise x multiplicateur accumulé
+    const isWin = questionsAnswered > 0;
+    gainFinal = isWin ? Math.floor(secureBet * currentMult) : 0;
+
+    try {
+      if (challengeId) {
+        const { data: currentAttempt } = await supabase
+          .from('challenge_attempts')
+          .select('total_score, attempts_count')
+          .eq('user_id', profile.id)
+          .eq('challenge_id', challengeId)
+          .single();
+
+        const newTotalScore = (currentAttempt?.total_score || 0) + finalScore;
+        const newAttemptsCount = (currentAttempt?.attempts_count || 0) + 1;
+
+        await supabase
+          .from('challenge_attempts')
+          .update({
+            total_score: newTotalScore,
+            attempts_count: newAttemptsCount,
+            last_attempt_at: new Date().toISOString(),
+          })
+          .eq('user_id', profile.id)
+          .eq('challenge_id', challengeId);
+      } else {
+        if (gainFinal > 0) {
+          await supabase.rpc('jouer_partie_cp', {
+            p_user_id: profile.id,
+            p_mise_cp: 0,
+            p_gain_cp: gainFinal,
+            p_jeu_nom: 'Quick Calc Win',
+          });
+        }
+      }
+
+      await supabase.from('vault_games').update({ is_active: false, gain_cp: gainFinal }).eq('id', currentGameId);
+
+      setStatus(gainFinal > 0 || (challengeId && questionsAnswered > 0) ? 'won' : 'lost');
+      if (gainFinal > 0 || (challengeId && questionsAnswered > 0)) {
+        playSound('win');
+      } else {
+        playSound('error');
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      void init();
+    }
+  }, [challengeId, init, profile?.id, questionsAnswered]);
+
+  // Gestion du décompte du temps
+  useEffect(() => {
+    if (status !== 'playing') return;
+
+    const timer = window.setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 100) {
+          void finalizeGame('timeout');
+          return 0;
+        }
+        return prev - 100;
+      });
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [finalizeGame, status]);
+
+  // Saisie au clavier virtuel
+  const handleInputKey = useCallback((value: string) => {
+    if (status !== 'playing' || !question) return;
+
+    if (value === 'DEL') {
+      setInput((prev) => prev.slice(0, -1));
+      return;
+    }
+
+    const nextInput = `${input}${value}`;
+    const expectedLength = question.answer.toString().length;
+
+    if (nextInput.length > expectedLength) {
+      triggerHaptic();
+      playSound('error');
+      setShakeAnswer(true);
+      window.setTimeout(() => setShakeAnswer(false), 350);
+      setInput('');
+      return;
+    }
+
+    setInput(nextInput);
+    if (nextInput === question.answer.toString()) {
+      triggerHaptic();
+      playSound('win');
+      const nextCount = questionsAnswered + 1;
+      setQuestionsAnswered(nextCount);
+      
+      const newMult = getNextMultiplier(nextCount);
+      setMultiplier(newMult);
+
+      // Temps ajusté pour la question suivante
+      const nextTime = getQuestionTimeMs(nextCount + 1);
+      setTimeRemaining(nextTime);
+      setInitialTime(nextTime);
+      setInput('');
+      setQuestion(generateMathQuestion(nextCount));
+    }
+  }, [input, question, questionsAnswered, status]);
+
+  const handleClear = useCallback(() => {
+    if (status === 'playing') {
+      setInput('');
+    }
+  }, [status]);
+
+  const progressPercent = useMemo(() => Math.min(100, (questionsAnswered / 8) * 100), [questionsAnswered]);
+  const timePercent = useMemo(() => Math.max(0, (timeRemaining / initialTime) * 100), [initialTime, timeRemaining]);
+  const isTimeWarning = timePercent < 25;
+
+  if (loadingCheck || status === 'loading') {
+    return <div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
+  }
+
+  return (
+    <NeonGameShell accent="cyan" className="fixed inset-0 h-screen w-screen overflow-hidden select-none">
+      
+      {/* BARRE SUPÉRIEURE (FIXE) */}
+      <div className="z-50 flex items-center justify-between border-b border-white/10 bg-slate-950/80 px-4 py-2.5 backdrop-blur-xl">
+        <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-200 active:scale-90">
+          <ChevronLeft size={18} />
+        </button>
+        <div className="flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1">
+          <Coins size={14} className="text-cyan-300" />
+          <span className="text-xs font-bold text-cyan-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+        </div>
+      </div>
+
+      {/* ZONE DE JEU PRINCIPALE (Ajustée sans défilement) */}
+      <div className="relative flex h-[calc(100vh-53px)] w-full flex-col items-center justify-between p-3">
+        
+        {status === 'maintenance' ? (
+          <div className="flex flex-1 flex-col items-center justify-center text-center">
+            <ServerOff className="mb-4 animate-pulse text-amber-500" size={50} />
+            <h1 className="text-xl uppercase italic text-amber-500">Maintenance</h1>
+            <p className="mt-2 text-xs text-slate-400">{maintenance?.msg}</p>
+          </div>
+        ) : status === 'idle' ? (
+          <div className="flex w-full max-w-xs flex-1 items-center justify-center">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full rounded-[2.5rem] border border-cyan-400/20 bg-slate-950/80 p-6 text-center shadow-2xl backdrop-blur-2xl">
+              <div className="mb-4 flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.3em] text-cyan-300">
+                <Sparkles size={14} /> Quick Calc
+              </div>
+
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10">
+                {challengeId ? <ShieldAlert className="text-amber-500" size={24} /> : <Lock className="text-emerald-500" size={24} />}
+              </div>
+
+              <div className="mb-6 space-y-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400">
+                  {challengeId ? 'Frais d\'entrée' : 'Choisir la mise (Min 10 CP)'}
+                </p>
+
+                {challengeId ? (
+                  <p className="text-4xl font-black text-white">{challengeFee} CP</p>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/50 p-2">
+                    <button onClick={() => setBetCP((prev) => Math.max(10, prev - 10))} className="rounded-xl bg-white/5 p-2 hover:bg-white/10 active:scale-90"><Lock size={14} /></button>
+                    <div className="w-20">
+                      <input type="number" value={betCP} onChange={(e) => setBetCP(Math.max(0, Number(e.target.value)))} className="w-full bg-transparent text-center text-2xl font-black text-white outline-none" />
+                      <p className="text-[8px] text-slate-400">CP</p>
+                    </div>
+                    <button onClick={() => setBetCP((prev) => prev + 10)} className="rounded-xl bg-white/5 p-2 hover:bg-white/10 active:scale-90"><Sparkles size={14} /></button>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={startGame} disabled={loading || (!challengeId && betCP < 10)} className={`w-full rounded-2xl py-4 text-base font-black text-white shadow-lg transition-all active:scale-95 ${challengeId ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-cyan-500 to-emerald-500'}`}>
+                {loading ? <Loader2 className="mx-auto animate-spin" size={20} /> : 'JOUER'}
+              </button>
+            </motion.div>
+          </div>
+        ) : (
+          /* ÉCRAN DE CALCUL & PAVÉ NUMÉRIQUE (FIT SCREEN) */
+          <div className="flex h-full w-full max-w-sm flex-col justify-between gap-2">
+            
+            {/* ÉCRAN D'AFFICHAGE DU CALCUL */}
+            <div className="relative flex flex-1 flex-col justify-between overflow-hidden rounded-[2rem] border border-cyan-400/25 bg-slate-950/90 p-4 shadow-xl">
+              
+              {/* JAUGE DE TEMPS ARRIÈRE-PLAN */}
+              <motion.div 
+                style={{ height: `${100 - timePercent}%` }} 
+                animate={{ backgroundColor: isTimeWarning ? 'rgba(239,68,68,0.2)' : 'rgba(34,211,238,0.1)' }} 
+                className="absolute bottom-0 left-0 right-0 transition-all pointer-events-none" 
+              />
+
+              {/* EN-TÊTE SCORES & TIMER */}
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="rounded-lg border border-white/10 bg-black/70 px-2.5 py-1 text-center">
+                  <p className="text-[6px] font-bold tracking-widest text-slate-400">SCORE</p>
+                  <p className="text-xs font-black text-white">{questionsAnswered}</p>
+                </div>
+
+                <div className="flex flex-col items-center">
+                  <h2 className="text-3xl font-black italic text-emerald-400">
+                    {challengeId ? `+${questionsAnswered * 100}` : `x${multiplier.toFixed(1)}`}
+                  </h2>
+                  <span className="text-[7px] font-bold text-slate-400">
+                    GAIN POTENTIEL : {Math.floor(betCP * multiplier)} CP
+                  </span>
+                </div>
+
+                <div className={`rounded-lg border px-2.5 py-1 text-center ${isTimeWarning ? 'border-rose-500/50 bg-rose-500/20' : 'border-white/10 bg-black/70'}`}>
+                  <p className="text-[6px] font-bold tracking-widest text-slate-400">TEMPS</p>
+                  <p className={`text-xs font-black ${isTimeWarning ? 'text-rose-400 animate-pulse' : 'text-cyan-300'}`}>
+                    {(timeRemaining / 1000).toFixed(1)}s
+                  </p>
+                </div>
+              </div>
+
+              {/* ÉQUATION ET RÉSULTAT */}
+              <div className="relative z-10 my-auto text-center">
+                <AnimatePresence mode="wait">
+                  <motion.div key={question?.display} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+                    <p className="mb-1 text-[8px] font-bold uppercase tracking-[0.3em] text-cyan-300">
+                      Calcul mental
+                    </p>
+                    <div className="mb-2 text-4xl font-black italic tracking-tight text-white">
+                      {question?.display}
+                    </div>
+                    <motion.div 
+                      animate={shakeAnswer ? { x: [0, -6, 6, -6, 0] } : { x: 0 }} 
+                      className={`mx-auto flex h-14 w-48 items-center justify-center rounded-xl border text-3xl font-black italic ${shakeAnswer ? 'border-rose-400 bg-rose-500/20 text-rose-300' : 'border-cyan-400/40 bg-white/5 text-cyan-200'}`}
+                    >
+                      {input ? <span>{input}</span> : <span className="animate-pulse text-cyan-500/50">_</span>}
+                    </motion.div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* PIED DU PANNEAU */}
+              <div className="relative z-10 flex items-center justify-between text-[8px] font-bold uppercase text-slate-400">
+                <span>Niveau {questionsAnswered + 1}</span>
+                <EliteAvatar status={status} isScared={isTimeWarning} />
+                <span>Min: 3s</span>
+              </div>
+            </div>
+
+            {/* PAVÉ NUMÉRIQUE COMPACT (PAS DE SCROLL) */}
+            <div className="grid grid-cols-3 gap-1.5 shrink-0">
+              {['7', '8', '9', '4', '5', '6', '1', '2', '3'].map((value) => (
+                <motion.button 
+                  key={value} 
+                  whileTap={{ scale: 0.92 }} 
+                  onClick={() => handleInputKey(value)} 
+                  className="h-12 rounded-xl border border-cyan-400/20 bg-white/5 text-xl font-black text-white hover:bg-white/10 active:bg-cyan-500/20"
+                >
+                  {value}
+                </motion.button>
+              ))}
+              <button 
+                onClick={handleClear} 
+                className="h-12 rounded-xl border border-cyan-400/20 bg-cyan-500/10 text-[9px] font-black uppercase text-cyan-300"
+              >
+                CLR
+              </button>
+              <motion.button 
+                whileTap={{ scale: 0.92 }} 
+                onClick={() => handleInputKey('0')} 
+                className="h-12 rounded-xl border border-cyan-400/20 bg-white/5 text-xl font-black text-white"
+              >
+                0
+              </motion.button>
+              <motion.button 
+                whileTap={{ scale: 0.92 }} 
+                onClick={() => handleInputKey('DEL')} 
+                className="flex h-12 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400"
+              >
+                <Delete size={18} />
+              </motion.button>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {/* ECRAN DE FIN DE PARTIE */}
+      <AnimatePresence>
+        {(status === 'lost' || status === 'won') && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020617]/95 p-6 text-center backdrop-blur-2xl">
+            <div className="w-full max-w-xs">
+              <div className={`mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border-2 ${status === 'lost' && !challengeId ? 'border-rose-500/40 bg-rose-600/20' : 'border-emerald-500/40 bg-emerald-500/20'}`}>
+                {status === 'lost' && !challengeId ? <ShieldAlert size={36} className="text-rose-500" /> : <Unlock size={36} className="text-emerald-500" />}
+              </div>
+              <h2 className="mb-2 text-2xl font-black uppercase italic tracking-tight">
+                {challengeId ? 'SCORE TRANSMIS' : status === 'lost' ? 'TEMPS ÉCOULÉ' : 'VICTOIRE'}
+              </h2>
+              <div className="mb-6 w-full rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-slate-400">
+                  {challengeId ? 'POINTS ARENA' : 'CP REMPORTÉS'}
+                </p>
+                <p className="text-4xl font-black text-white">
+                  {challengeId ? questionsAnswered * 100 : Math.floor(betCP * multiplier)}
+                  <span className="ml-1 text-sm text-emerald-400">{challengeId ? 'PTS' : 'CP'}</span>
+                </p>
+              </div>
+              <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="w-full rounded-xl bg-emerald-500 py-4 text-base font-black italic text-white shadow-lg active:scale-95">
+                {challengeId ? 'VOIR LE CLASSEMENT' : 'RETOUR AU HUB'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </NeonGameShell>
+  );
+}
+
+export default function LaserVaultPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
+      <QuickCalcGame />
+    </Suspense>
+  );
+}
     if (isAddition) {
       return { display: `${a} + ${b}`, answer: a + b };
     }
