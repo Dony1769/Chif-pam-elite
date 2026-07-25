@@ -37,6 +37,7 @@ export default function MinesElite() {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintenanceMsg, setMaintenanceMsg] = useState('');
   const [checkingSystem, setCheckingSystem] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
   // 🔒 SÉCURITÉ & REFS CRITIQUES
   const lockedBetRef = useRef<number>(0); // Stocke la mise inviolable au lancement
@@ -57,24 +58,55 @@ export default function MinesElite() {
   // INITIALISATION
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        const { data } = await supabase.from('profiles').select('jetons_cp').eq('id', user.id).single();
-        if (data) setJetonsCP(data.jetons_cp);
-      } else {
-        router.push('/connexion');
-      }
+      try {
+        // 1. Vérifier l'authentification
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError || !authData?.user) {
+          router.push('/connexion');
+          return;
+        }
 
-      const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'mines').maybeSingle();
-      if (data && data.is_active === false) {
-        setIsMaintenance(true);
-        setMaintenanceMsg(data.maintenance_msg || "Maintenance en cours...");
+        setUserId(authData.user.id);
+
+        // 2. Charger le solde CP du profil
+        try {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('jetons_cp')
+            .eq('id', authData.user.id)
+            .single();
+          if (profileData?.jetons_cp !== undefined) {
+            setJetonsCP(profileData.jetons_cp);
+          }
+        } catch (profileErr) {
+          console.warn('Profile load failed:', profileErr);
+          setJetonsCP(0);
+        }
+
+        // 3. Vérifier maintenance
+        try {
+          const { data: settingsData } = await supabase
+            .from('game_settings')
+            .select('is_active, maintenance_msg')
+            .eq('game_id', 'mines')
+            .maybeSingle();
+          if (settingsData && settingsData.is_active === false) {
+            setIsMaintenance(true);
+            setMaintenanceMsg(settingsData.maintenance_msg || 'Maintenance en cours...');
+          }
+        } catch (settingsErr) {
+          console.warn('Settings load failed:', settingsErr);
+        }
+      } catch (err: any) {
+        const errMsg = err?.message || 'Erreur lors du chargement';
+        console.error('Init error:', errMsg);
+        setInitError(errMsg);
+      } finally {
+        setCheckingSystem(false);
       }
-      setCheckingSystem(false);
     };
     init();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const counts = { facile: 5, intermédiaire: 8, difficile: 11 };
@@ -130,10 +162,12 @@ export default function MinesElite() {
           p_jeu_nom: 'Mines Bet'
       });
 
-      if (error || !ok.success) {
-        alert("Solde insuffisant !");
+      if (error || !ok?.success) {
+        const errorMsg = error?.message || 'Erreur lors du débit CP';
+        setInitError(errorMsg);
         setLoading(false);
         isProcessingRef.current = false;
+        setTimeout(() => setInitError(null), 4000);
         return;
       }
 
@@ -167,9 +201,12 @@ export default function MinesElite() {
       // Déverrouillage pour le jeu
       isProcessingRef.current = false;
 
-    } catch (err) {
-      alert("Erreur technique.");
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Erreur technique';
+      setInitError(errorMsg);
+      console.error('Start error:', err);
       isProcessingRef.current = false;
+      setTimeout(() => setInitError(null), 4000);
     } finally { setLoading(false); }
   };
 
@@ -230,12 +267,17 @@ export default function MinesElite() {
     try {
         // Transaction Gain (si > 0)
         if (winAmount > 0) {
-            await supabase.rpc('jouer_partie_cp', {
+            const { error: payoutError } = await supabase.rpc('jouer_partie_cp', {
                 p_user_id: userId,
                 p_mise_cp: 0,
                 p_gain_cp: winAmount,
                 p_jeu_nom: isBombHit ? 'Mines Safety Cashout' : 'Mines Win'
             });
+            if (payoutError) {
+              console.error('Payout error:', payoutError);
+              setInitError('Erreur lors du crédit des gains');
+              setTimeout(() => setInitError(null), 3000);
+            }
             setJetonsCP(prev => prev + winAmount);
         }
 
@@ -270,6 +312,20 @@ export default function MinesElite() {
     return (
       <div className="min-h-screen bg-[#050508] flex items-center justify-center">
         <Loader2 className="text-emerald-500 animate-spin" size={40} />
+      </div>
+    );
+  }
+
+  if (initError) {
+    return (
+      <div className="min-h-screen bg-[#050508] text-white p-6 flex flex-col items-center justify-center text-center font-black italic uppercase relative overflow-hidden">
+        <div className="absolute inset-0 bg-red-500/5 animate-pulse"></div>
+        <div className="relative z-10 bg-[#0a0a0f] border border-red-500/20 p-10 rounded-[3rem] shadow-2xl shadow-red-500/10 max-w-md w-full">
+          <ShieldAlert size={40} className="mx-auto text-red-500 mb-4" />
+          <h1 className="text-3xl text-red-500 mb-2 tracking-tighter">ERREUR</h1>
+          <p className="text-xs text-slate-400 mb-6 italic">«{initError}»</p>
+          <button onClick={() => window.location.reload()} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] tracking-widest">RÉESSAYER</button>
+        </div>
       </div>
     );
   }

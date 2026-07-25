@@ -159,23 +159,30 @@ export default function PlinkoElite() {
   };
 
   const generatePlinkoPath = () => {
+    // 🎯 PHYSIQUE RÉELLE : Décision aléatoire INDÉPENDANTE à chaque rangée
+    // Cela crée une distribution binomiale naturelle (courbe de Gauss)
     let path = [] as number[];
-    const randomValue = Math.random();
+    let finalPos = 0;
+
+    // Générer aléatoirement chaque direction (gauche=0, droite=1)
+    // Chaque rangée a ~50% de chance d'aller à droite
+    for (let i = 0; i < ROWS; i += 1) {
+      const goRight = Math.random() < 0.5 ? 1 : 0;
+      path.push(goRight);
+      finalPos += goRight;
+    }
+
+    // Calculer le payout basé sur la position finale réelle
     const economy = resolveGameEconomy({
       gameId: 'plinko',
       bet: Math.floor(bet),
-      randomValue,
+      finalPos,
       difficulty: 'intermédiaire',
       bonusMultiplier: 1,
       jackpotMultiplier: 1,
       specialEventMultiplier: 1,
     });
-    const finalPos = economy.metadata.finalPos as number;
 
-    for (let i = 0; i < ROWS; i += 1) {
-      const goRight = i < finalPos;
-      path.push(goRight ? 1 : 0);
-    }
     return { path, finalPos };
   };
 
