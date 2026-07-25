@@ -12,7 +12,6 @@ import { ChatService } from '@/services/chat'
 import { useAdminChat } from '@/hooks/useAdminChat'
 import { Loader2, MessageSquare, ShieldCheck } from 'lucide-react'
 
-/** Interfaces pour la présence et le Broadcast */
 interface BroadcastPayload {
   isTyping?: boolean
   status?: 'online' | 'offline'
@@ -59,6 +58,13 @@ export default function AdminChat() {
     }
   }, [selectedUserId])
 
+  // Génération du texte de sous-titre sous forme de simple chaîne de caractères (string)
+  const getSubtitleText = (): string => {
+    if (!selectedUser) return 'Sélectionnez une conversation active'
+    if (presence === 'online') return 'En ligne actuellement'
+    return 'Hors ligne'
+  }
+
   return (
     <ChatLayout>
       <div className="h-full flex bg-[#020617] text-white font-sans">
@@ -71,17 +77,10 @@ export default function AdminChat() {
 
         {/* Panneau Principal de Discussion */}
         <div className="flex-1 flex flex-col h-full">
-          {/* Header dynamique en fonction du client sélectionné */}
+          {/* Header avec un sous-titre de type string pour éviter l'erreur TypeScript */}
           <ChatHeader 
             title={selectedUser ? (selectedUser.username || selectedUser.phone || 'Utilisateur') : 'Administration Support'} 
-            subtitle={
-              selectedUser ? (
-                <span className="flex items-center gap-2">
-                  <span className={`inline-block w-2 h-2 rounded-full ${presence === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                  {presence === 'online' ? 'En ligne actuellement' : 'Hors ligne'}
-                </span>
-              ) : 'Sélectionnez une conversation active'
-            } 
+            subtitle={getSubtitleText()} 
           />
 
           <div className="flex-1 flex flex-col min-h-0">
@@ -104,12 +103,12 @@ export default function AdminChat() {
                   )}
                 </div>
 
-                {/* Zone de saisie en cours de l'utilisateur */}
+                {/* Zone d'indicateur de frappe */}
                 <div className="px-4 min-h-[24px] flex items-center">
                   {isTyping && <TypingIndicator />}
                 </div>
 
-                {/* Saisie de la réponse de l'admin */}
+                {/* Champ d'envoi de la réponse */}
                 <div className="border-t border-white/5 bg-slate-950/50">
                   <MessageInput 
                     text={reply} 
