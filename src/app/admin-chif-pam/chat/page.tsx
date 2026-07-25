@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import React, { useState } from 'react'
 import ChatLayout from '@/components/chat/ChatLayout'
@@ -26,11 +26,22 @@ export default function AdminChat() {
 
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
 
+  // Mappage sécurisé garantissant la parfaite conformité avec les props de ChatSidebar
+  const sidebarUsers = users.map((user) => ({
+    id: user.id,
+    username: user.username,
+    phone: user.phone,
+    email: user.email,
+    avatar_url: user.avatar_url,
+    unread: user.unread ?? 0,
+    last_at: user.last_at ?? new Date().toISOString(),
+  }))
+
   return (
     <ChatLayout>
       <div className="h-full flex bg-[#020617] text-white font-sans">
         <ChatSidebar 
-          users={users} 
+          users={sidebarUsers} 
           selectedUserId={selectedUserId} 
           onSelect={(id: string) => setSelectedUserId(id)} 
         />
