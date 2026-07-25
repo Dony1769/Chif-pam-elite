@@ -1,12 +1,12 @@
-import { SupabaseClient } from '@supabase/supabase-js'
+import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 import { ChatMessage } from '@/types/chat'
 
-// Re-exportation du type pour garantir la compatibilité globale
+// Re-exportation du type pour garantir la compatibilité dans tous les composants
 export type { ChatMessage }
 
 export const ChatService = {
   /**
-   * Récupère la liste des messages échangés entre deux utilisateurs
+   * Récupère la liste des messages échangés pour un utilisateur donné
    */
   async fetchMessages(supabase: SupabaseClient, userId: string): Promise<ChatMessage[]> {
     const { data, error } = await supabase
@@ -80,7 +80,46 @@ export const ChatService = {
   },
 
   /**
-   * Diffuse un événement de saisie (typing indicator) via Supabase Broadcast
+   * S'abonne en temps réel aux nouveaux messages pour un utilisateur spécifique
+   */
+  subscribeToMessages(
+    supabase: SupabaseClient,
+    targetUserId: string,
+    onNewMessage: (message: ChatMessage) => void
+  ): RealtimeChannel {
+    const channelName = `realtime:messages:${targetUserId}`
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const newMsg = payload.new as ChatMessage
+          if (
+            newMsg.user_id === targetUserId ||
+            newMsg.sender_id === targetUserId ||
+            newMsg.receiver_id === targetUserId
+          ) {
+            onNewMessage(newMsg)
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.error(`[Realtime Error] Échec de souscription sur ${channelName}:`, err)
+        }
+      })
+
+    return channel
+  },
+
+  /**
+   * Diffuse un événement de saisie (typing indicator) via Supabase
    */
   broadcastTyping(channelId: string, payload: { isTyping: boolean; from?: string }) {
     console.log(`[Typing] Channel: ${channelId}`, payload)
