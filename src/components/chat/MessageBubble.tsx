@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ChatService, ChatMessage } from '@/services/chat'
@@ -12,7 +14,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   const handleSaveEdit = useCallback(async () => {
     try {
-      // Passer l'instance 'supabase' comme premier argument
       await ChatService.editMessage(supabase, message.id, editText)
       setEditing(false)
     } catch (err) {
@@ -30,10 +31,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             onChange={(e) => setEditText(e.target.value)}
             className="px-2 py-1 bg-slate-700 text-white rounded w-full"
           />
-          <button onClick={handleSaveEdit} className="px-3 py-1 bg-green-600 rounded">
+          <button onClick={handleSaveEdit} className="px-3 py-1 bg-green-600 rounded text-sm">
             Enregistrer
           </button>
-          <button onClick={() => setEditing(false)} className="px-3 py-1 bg-gray-600 rounded">
+          <button onClick={() => setEditing(false)} className="px-3 py-1 bg-gray-600 rounded text-sm">
             Annuler
           </button>
         </div>
@@ -48,3 +49,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     </div>
   )
 }
+
+// Export par défaut requis par VirtualizedMessageList.tsx
+export default MessageBubble
