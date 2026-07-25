@@ -1,6 +1,9 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { ChatMessage } from '@/types/chat'
 
+// Re-exportation du type pour garantir la compatibilité globale
+export type { ChatMessage }
+
 export const ChatService = {
   /**
    * Récupère la liste des messages échangés entre deux utilisateurs
