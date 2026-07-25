@@ -4,10 +4,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ChatService, ChatMessage } from '@/services/chat'
 
+// Alignement de l'interface ChatUser avec ce qu'attend ChatSidebar (UserItem)
 export interface ChatUser {
   id: string
   username?: string
   phone?: string
+  unread?: number
+  last_at?: string
 }
 
 export function useAdminChat(selectedUserId: string | null) {
@@ -17,7 +20,7 @@ export function useAdminChat(selectedUserId: string | null) {
   const [loading, setLoading] = useState<boolean>(false)
   const seenIds = useRef<Set<string>>(new Set())
 
-  // Charger la liste des utilisateurs (profils)
+  // Charger la liste des utilisateurs avec les champs requis pour la barre latérale
   useEffect(() => {
     const fetchUsers = async () => {
       const { data, error } = await supabase
@@ -28,7 +31,17 @@ export function useAdminChat(selectedUserId: string | null) {
         console.error('[useAdminChat] Erreur profiles:', error)
         return
       }
-      setUsers(data || [])
+
+      // Formatage des utilisateurs avec des valeurs par défaut pour unread et last_at
+      const formattedUsers: ChatUser[] = (data || []).map((user) => ({
+        id: user.id,
+        username: user.username,
+        phone: user.phone,
+        unread: 0,
+        last_at: new Date().toISOString(),
+      }))
+
+      setUsers(formattedUsers)
     }
 
     fetchUsers()
@@ -56,7 +69,7 @@ export function useAdminChat(selectedUserId: string | null) {
         initial.forEach((m) => seenIds.current.add(m.id))
         setMessages(initial)
 
-        // Écouter les messages reçus ou envoyés pour cet utilisateur spécifique
+        // Écouter les nouveaux messages
         activeChannel = ChatService.subscribeToMessages(supabase, selectedUserId, (newMsg) => {
           if (!seenIds.current.has(newMsg.id)) {
             seenIds.current.add(newMsg.id)
