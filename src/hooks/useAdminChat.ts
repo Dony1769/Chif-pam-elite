@@ -9,6 +9,8 @@ export interface ChatUser {
   phone?: string
   email?: string
   avatar_url?: string
+  unread?: number
+  last_at?: string
 }
 
 export function useAdminChat(selectedUserId: string | null) {
@@ -19,7 +21,6 @@ export function useAdminChat(selectedUserId: string | null) {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
 
-  // Ensemble pour éviter les doublons de messages reçus en temps réel
   const seenIds = useRef<Set<string>>(new Set())
 
   /**
@@ -36,7 +37,14 @@ export function useAdminChat(selectedUserId: string | null) {
         return
       }
 
-      setUsers(data || [])
+      // Formatage pour fournir unread et last_at par défaut aux composants dépendants
+      const formattedUsers: ChatUser[] = (data || []).map((u) => ({
+        ...u,
+        unread: u.unread ?? 0,
+        last_at: u.last_at ?? new Date().toISOString()
+      }))
+
+      setUsers(formattedUsers)
     } catch (err) {
       console.error('Erreur inattendue lors de la récupération des utilisateurs:', err)
     }
@@ -76,7 +84,6 @@ export function useAdminChat(selectedUserId: string | null) {
 
     loadInitialMessages()
 
-    // Abonnement aux nouveaux messages via Realtime
     activeChannel = ChatService.subscribeToMessages(supabase, selectedUserId, (newMsg) => {
       if (!seenIds.current.has(newMsg.id)) {
         seenIds.current.add(newMsg.id)
@@ -84,7 +91,6 @@ export function useAdminChat(selectedUserId: string | null) {
       }
     })
 
-    // Nettoyage lors du changement d'utilisateur ou au démontage
     return () => {
       isMounted = false
       if (activeChannel) {
@@ -112,15 +118,11 @@ export function useAdminChat(selectedUserId: string | null) {
     }
   }
 
-  /**
-   * Charger plus de messages anciens (pagination)
-   */
   const loadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore || !selectedUserId) return
     setIsLoadingMore(true)
 
     try {
-      // Logique de chargement des anciens messages si nécessaire
       setIsLoadingMore(false)
     } catch (err) {
       console.error('Erreur lors du chargement des messages anciens:', err)
