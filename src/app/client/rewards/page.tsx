@@ -1,24 +1,41 @@
-﻿"use client";
-import React, { useState, useEffect, useCallback } from 'react';
+"use client";
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import {
   Trophy,
-  Calendar,
+  Calendar as CalendarIcon,
   CheckCircle2,
   Star,
   Coins,
   Gem,
   Loader2,
-  ArrowDownCircle,
   Sparkles,
   Crown,
+  Clock,
+  Flame,
+  Gift,
+  CheckCheck,
+  ChevronRight,
+  Lock,
 } from 'lucide-react';
-import { fetchDailyMissions, canClaimMission, formatMissionProgress, type MissionItem, type RewardType } from '@/services/missionService';
-import { getDailyReward, getMonthlyReward, getWeeklyReward, resolveMissionReward, type EconomyRewardType } from '@/lib/game-economy';
+import {
+  fetchDailyMissions,
+  canClaimMission,
+  formatMissionProgress,
+  type MissionItem,
+  type RewardType,
+} from '@/services/missionService';
+import {
+  getDailyReward,
+  resolveMissionReward,
+  type EconomyRewardType,
+} from '@/lib/game-economy';
 import { motion, AnimatePresence } from 'framer-motion';
 import ExoClickBanner from '@/components/ads/ExoClickBanner';
 
+// --- TYPES ---
 type RewardsConfigItem = {
   day_number: number;
   title: string;
@@ -34,80 +51,122 @@ type ProfileData = {
   xp?: number;
 };
 
+type MissionFilter = 'all' | 'claimable' | 'completed';
+
+// --- METADATA CONFIG ---
 const rewardTypeMeta = {
   cp: {
     label: 'CP',
     icon: Coins,
-    color: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
+    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+    badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   },
   diamonds: {
     label: 'Diamants',
     icon: Gem,
-    color: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
+    color: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
+    badge: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
   },
   xp: {
     label: 'XP',
     icon: Star,
-    color: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
+    color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+    badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   },
 };
 
 export default function RewardsPage() {
+  // --- STATES ---
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [activeTab, setActiveTab] = useState<'login' | 'tasks'>('login');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'missions'>('calendar');
+  const [missionFilter, setMissionFilter] = useState<MissionFilter>('all');
   const [loading, setLoading] = useState(true);
   const [rewardsConfig, setRewardsConfig] = useState<RewardsConfigItem[]>([]);
   const [userTasks, setUserTasks] = useState<MissionItem[]>([]);
   const [claimedDays, setClaimedDays] = useState<number[]>([]);
   const [claiming, setClaiming] = useState(false);
   const [claimingTask, setClaimingTask] = useState<string | null>(null);
-  const [currentDate] = useState(new Date());
+  const [claimingAll, setClaimingAll] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState({ hours: 0, minutes: 0, seconds: 0 });
+
   const router = useRouter();
 
+  // --- DATES CALCULATIONS ---
+  const currentDate = useMemo(() => new Date(), []);
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const todayDayNumber = currentDate.getDate();
 
+  // --- COUNTDOWN TIMER UNTIL MIDNIGHT ---
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const diff = tomorrow.getTime() - now.getTime();
+
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / 1000 / 60) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      setTimeRemaining({ hours, minutes, seconds });
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // --- FETCH DATA ---
   const fetchData = useCallback(async () => {
-    const response = await supabase.auth.getUser();
-    const user = response.data?.user;
-    if (!user) {
-      router.push('/connexion');
-      return;
+    try {
+      const response = await supabase.auth.getUser();
+      const user = response.data?.user;
+      if (!user) {
+        router.push('/connexion');
+        return;
+      }
+
+      const [profRes, rewRes] = await Promise.all([
+        supabase.from('profiles').select('id, username, jetons_cp, diamonds, xp').eq('id', user.id).single(),
+        supabase.from('daily_rewards_config').select('*').lte('day_number', daysInMonth).order('day_number', { ascending: true })
+      ]);
+
+      setProfile(profRes.data ?? null);
+      setRewardsConfig(rewRes.data ?? []);
+
+      const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString();
+      const endOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString();
+
+      const { data: claims } = await supabase
+        .from('user_calendar_claims')
+        .select('day_number')
+        .eq('user_id', user.id)
+        .gte('claim_date', startOfMonth)
+        .lte('claim_date', endOfMonth);
+
+      if (claims) setClaimedDays(claims.map((c: { day_number: number }) => c.day_number));
+
+      const missions = await fetchDailyMissions(user.id);
+      setUserTasks(missions);
+    } catch (error) {
+      console.error("Erreur lors du chargement des données:", error);
+    } finally {
+      setLoading(false);
     }
-
-    const [profRes, rewRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('daily_rewards_config').select('*').lte('day_number', daysInMonth).order('day_number', { ascending: true })
-    ]);
-
-    setProfile(profRes.data ?? null);
-    setRewardsConfig(rewRes.data ?? []);
-
-    const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString();
-    const endOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString();
-
-    const { data: claims } = await supabase
-      .from('user_calendar_claims')
-      .select('day_number')
-      .eq('user_id', user.id)
-      .gte('claim_date', startOfMonth)
-      .lte('claim_date', endOfMonth);
-
-    if (claims) setClaimedDays(claims.map((c: { day_number: number }) => c.day_number));
-
-    const missions = await fetchDailyMissions(user.id);
-    setUserTasks(missions);
-
-    setLoading(false);
   }, [currentYear, currentMonth, daysInMonth, router]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleClaim = async () => {
+  // --- SOUND EFFECT HELPER ---
+  const playRewardSound = () => {
+    new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3').play().catch(() => {});
+  };
+
+  // --- HANDLERS ---
+  const handleClaimDaily = async () => {
     if (!profile || claiming || claimedDays.includes(todayDayNumber)) return;
     setClaiming(true);
 
@@ -115,17 +174,22 @@ export default function RewardsPage() {
       const reward = getDailyReward(todayDayNumber, 1);
       const { data, error } = await supabase.rpc('claim_calendar_reward', { p_user_id: profile.id });
       if (error) throw error;
+
       if (!data?.success) {
         alert(data?.message ?? 'Impossible de réclamer la récompense.');
       } else {
-        setProfile(prev => prev ? {
-          ...prev,
-          jetons_cp: reward?.rewardType === 'cp' ? (prev.jetons_cp || 0) + (reward.rewardAmount || 0) : prev.jetons_cp,
-          diamonds: reward?.rewardType === 'diamonds' ? (prev.diamonds || 0) + (reward.rewardAmount || 0) : prev.diamonds,
-          xp: reward?.rewardType === 'xp' ? (prev.xp || 0) + (reward.rewardAmount || 0) : prev.xp,
-        } : prev);
-        setClaimedDays(prev => [...prev, todayDayNumber]);
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3').play().catch(() => {});
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                jetons_cp: reward?.rewardType === 'cp' ? (prev.jetons_cp || 0) + (reward.rewardAmount || 0) : prev.jetons_cp,
+                diamonds: reward?.rewardType === 'diamonds' ? (prev.diamonds || 0) + (reward.rewardAmount || 0) : prev.diamonds,
+                xp: reward?.rewardType === 'xp' ? (prev.xp || 0) + (reward.rewardAmount || 0) : prev.xp,
+              }
+            : prev
+        );
+        setClaimedDays((prev) => [...prev, todayDayNumber]);
+        playRewardSound();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -139,11 +203,7 @@ export default function RewardsPage() {
     if (!profile || claimingTask) return;
 
     const mission = userTasks.find((task) => task.id === missionId);
-    if (!mission) return;
-    if (!canClaimMission(mission)) {
-      alert('Cette mission n’est pas encore terminée.');
-      return;
-    }
+    if (!mission || !canClaimMission(mission)) return;
 
     setClaimingTask(missionId);
 
@@ -163,30 +223,17 @@ export default function RewardsPage() {
         reward_amount: mission.reward_amount,
         reward_type: mission.reward_type,
       });
+
       const updates: Partial<ProfileData> = {};
       if (resolvedReward.type === 'cp') updates.jetons_cp = (profile.jetons_cp || 0) + resolvedReward.amount;
       else if (resolvedReward.type === 'diamonds') updates.diamonds = (profile.diamonds || 0) + resolvedReward.amount;
       else if (resolvedReward.type === 'xp') updates.xp = (profile.xp || 0) + resolvedReward.amount;
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', profile.id);
+      await supabase.from('profiles').update(updates).eq('id', profile.id);
 
-      if (profileError) throw profileError;
-
-      const refreshedProfile = await supabase
-        .from('profiles')
-        .select('id, jetons_cp, diamonds, xp')
-        .eq('id', profile.id)
-        .single();
-
-      if (refreshedProfile.error) throw refreshedProfile.error;
-      setProfile(refreshedProfile.data ?? { ...profile, ...updates, id: profile.id });
-
-      const refreshedMissions = await fetchDailyMissions(profile.id);
-      setUserTasks(refreshedMissions);
-      new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3').play().catch(() => {});
+      setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
+      setUserTasks((prev) => prev.map((t) => (t.id === missionId ? { ...t, is_claimed: true } : t)));
+      playRewardSound();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur inconnue';
       alert('Erreur: ' + message);
@@ -195,257 +242,391 @@ export default function RewardsPage() {
     }
   };
 
-  const completedMissions = userTasks.filter(task => task.is_claimed).length;
+  const handleClaimAllTasks = async () => {
+    const claimableTasks = userTasks.filter((t) => canClaimMission(t));
+    if (claimableTasks.length === 0 || claimingAll) return;
 
-  const CalendarDay = ({ day }: { day: RewardsConfigItem }) => {
-    const isToday = day.day_number === todayDayNumber;
-    const isClaimed = claimedDays.includes(day.day_number);
-    const isDisabled = day.day_number > todayDayNumber;
-    return (
-      <button
-        className={`group relative flex min-h-22.5 flex-col justify-between gap-3 rounded-3xl border p-4 text-left transition ${isClaimed ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100' : isToday ? 'border-amber-400/30 bg-amber-400/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'} ${isDisabled ? 'cursor-not-allowed opacity-50' : ''}`}
-        disabled={isDisabled || claiming || isClaimed}
-        onClick={handleClaim}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Jour {day.day_number}</p>
-            <p className="mt-1 text-sm font-black text-white">{day.title}</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-slate-200">
-            +{getDailyReward(day.day_number, 1, day.reward_amount)?.rewardAmount ?? day.reward_amount} {((getDailyReward(day.day_number, 1, day.reward_amount)?.rewardType ?? day.reward_type) as EconomyRewardType).toUpperCase()}
-          </div>
-        </div>
-        <div className="text-xs text-slate-400">{isClaimed ? 'Réclamé' : isToday ? 'Disponible aujourd’hui' : isDisabled ? 'Bloqué' : 'À venir'}</div>
-      </button>
-    );
+    setClaimingAll(true);
+    for (const task of claimableTasks) {
+      await handleClaimTask(task.id);
+    }
+    setClaimingAll(false);
   };
 
-  const TaskCard = ({ mission }: { mission: MissionItem }) => {
-    const reward = rewardTypeMeta[mission.reward_type] || rewardTypeMeta.cp;
-    const RewardIcon = reward.icon;
-    return (
-      <div className="group relative rounded-4xl border border-white/10 bg-slate-950/70 p-5 transition hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-slate-900/90">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Mission</p>
-            <p className="mt-2 text-lg font-black tracking-tight text-white">{mission.title}</p>
-          </div>
-          <div className={`inline-flex h-12 w-12 items-center justify-center rounded-3xl border ${reward.color}`}>
-            <RewardIcon size={18} />
-          </div>
-        </div>
-        <p className="mt-4 text-sm leading-6 text-slate-300">{mission.description}</p>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-2">
-            <div className="rounded-3xl border border-white/10 bg-white/5 px-3 py-2 text-xs uppercase tracking-[0.25em] text-slate-200">
-              +{resolveMissionReward({ id: mission.id, title: mission.title, reward_amount: mission.reward_amount, reward_type: mission.reward_type }).amount} {reward.label}
-            </div>
-            <div className="text-xs text-slate-400">
-              {formatMissionProgress(mission)}
-            </div>
-          </div>
-          <button
-            onClick={() => handleClaimTask(mission.id)}
-            disabled={!canClaimMission(mission) || claimingTask === mission.id}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.25em] text-slate-950 transition ${canClaimMission(mission) ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-white/10 text-slate-400 cursor-not-allowed'}`}
-          >
-            {mission.is_claimed ? 'Réclamé' : claimingTask === mission.id ? 'Réclamation...' : 'Réclamer'}
-            {mission.is_claimed ? <CheckCircle2 size={16} /> : <ArrowDownCircle size={16} />}
-          </button>
-        </div>
-      </div>
-    );
-  };
+  // --- COMPUTED VALUES ---
+  const completedMissionsCount = useMemo(() => userTasks.filter((t) => t.is_claimed).length, [userTasks]);
+  const claimableMissionsCount = useMemo(() => userTasks.filter((t) => canClaimMission(t)).length, [userTasks]);
+  const progressPercentage = useMemo(() => {
+    if (userTasks.length === 0) return 0;
+    return Math.round((completedMissionsCount / userTasks.length) * 100);
+  }, [completedMissionsCount, userTasks.length]);
 
+  const filteredMissions = useMemo(() => {
+    return userTasks.filter((task) => {
+      if (missionFilter === 'claimable') return canClaimMission(task);
+      if (missionFilter === 'completed') return task.is_claimed;
+      return true;
+    });
+  }, [userTasks, missionFilter]);
+
+  // --- LOADING RENDER ---
   if (loading) {
     return (
       <div className="min-h-screen w-full bg-slate-950 p-6 text-slate-300">
         <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col items-center justify-center gap-4">
           <Loader2 className="h-12 w-12 animate-spin text-emerald-400" />
-          <p className="text-center text-sm uppercase tracking-[0.35em] text-slate-500">Chargement du Centre de Mission...</p>
+          <p className="text-center text-xs uppercase tracking-[0.35em] text-slate-500">
+            Initialisation du Pass Récompenses...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 pb-28 text-slate-100">
-      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-[2rem] border border-emerald-500/15 bg-linear-to-br from-slate-950/95 via-slate-900/80 to-slate-950/70 px-5 py-6 shadow-[0_20px_60px_rgba(16,185,129,0.08)] sm:px-7 sm:py-8">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.15),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.12),transparent_30%)]" />
-          <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.35em] text-emerald-200">
-                <Sparkles size={16} /> Premium Mission Center
+    <main className="min-h-screen bg-slate-950 pb-28 text-slate-100 font-sans">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-8">
+        
+        {/* === HERO BANNER / STATS HEADER === */}
+        <section className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6 sm:p-8 shadow-2xl">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl" />
+
+          <div className="relative grid gap-6 lg:grid-cols-12 lg:items-center">
+            {/* Title & Info */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                <Sparkles size={14} className="animate-pulse" /> Pass Récompenses Quotidiennes
               </div>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-black text-white sm:text-4xl">Centre de Mission</h1>
-                <p className="max-w-2xl text-sm leading-7 text-slate-300">Passez d’un bonus quotidien à une expérience premium organisée autour de vos missions, récompenses et progression VIP.</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">CP total</p>
-                  <p className="mt-2 text-2xl font-black text-white">{(profile?.jetons_cp || 0).toLocaleString()}</p>
-                </div>
-                <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Diamants</p>
-                  <p className="mt-2 text-2xl font-black text-white">{(profile?.diamonds || 0).toLocaleString()}</p>
-                </div>
-                <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">XP</p>
-                  <p className="mt-2 text-2xl font-black text-white">{(profile?.xp || 0).toLocaleString()}</p>
-                </div>
+              
+              <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+                Centre de Récompenses
+              </h1>
+              
+              <p className="text-sm text-slate-300 leading-relaxed max-w-xl">
+                Complétez vos missions, cumulez votre série de connexion quotidienne et débloquez des ressources exclusives pour accélérer votre progression.
+              </p>
+
+              {/* Countdown timer */}
+              <div className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 backdrop-blur-md">
+                <Clock size={16} className="text-amber-400 animate-spin" />
+                <span>Réinitialisation dans :</span>
+                <span className="font-mono font-bold text-amber-300">
+                  {String(timeRemaining.hours).padStart(2, '0')}h {String(timeRemaining.minutes).padStart(2, '0')}m {String(timeRemaining.seconds).padStart(2, '0')}s
+                </span>
               </div>
             </div>
-            <div className="grid gap-3 rounded-[1.6rem] border border-white/10 bg-slate-950/80 p-4 shadow-xl shadow-slate-950/20">
-              <div className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-white/10 bg-white/5 p-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Progression</p>
-                  <p className="mt-1 text-3xl font-black text-white">{completedMissions}/{userTasks.length}</p>
+
+            {/* Solde des ressources */}
+            <div className="lg:col-span-5 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-center backdrop-blur-md">
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 mb-2">
+                  <Coins size={20} />
                 </div>
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-200">
-                  <Trophy size={20} />
-                </div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">CP</p>
+                <p className="mt-1 text-xl font-black text-white">{profile?.jetons_cp?.toLocaleString() ?? 0}</p>
               </div>
-              <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                <div className="flex items-center gap-2 text-amber-200">
-                  <Crown size={16} />
-                  <p className="text-[10px] uppercase tracking-[0.35em]">Bonus VIP</p>
+
+              <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 text-center backdrop-blur-md">
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/20 text-sky-300 mb-2">
+                  <Gem size={20} />
                 </div>
-                <p className="mt-2">Votre calendrier de récompenses s’ouvre maintenant avec une lecture plus claire et plus rapide.</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Diamants</p>
+                <p className="mt-1 text-xl font-black text-white">{profile?.diamonds?.toLocaleString() ?? 0}</p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-[1.2rem] border border-white/10 bg-slate-900/80 p-3 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Jours</p>
-                  <p className="mt-2 text-2xl font-black text-white">{claimedDays.length}</p>
+
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-center backdrop-blur-md">
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 mb-2">
+                  <Star size={20} />
                 </div>
-                <div className="rounded-[1.2rem] border border-white/10 bg-slate-900/80 p-3 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Actives</p>
-                  <p className="mt-2 text-2xl font-black text-white">{userTasks.length}</p>
-                </div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">XP</p>
+                <p className="mt-1 text-xl font-black text-white">{profile?.xp?.toLocaleString() ?? 0}</p>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
-          <section className="space-y-6 rounded-[2rem] border border-white/10 bg-slate-950/90 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Calendrier de récompenses</p>
-                <h2 className="mt-2 text-2xl font-black text-white">Réclamez vos bonus quotidiens</h2>
-              </div>
-              <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-300">
-                <Calendar size={16} />
-                {new Date(currentYear, currentMonth).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}
-              </div>
-            </div>
-
-            <div className="rounded-[1.6rem] border border-white/10 bg-slate-950/80 p-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {rewardsConfig.map((day) => (
-                  <CalendarDay key={day.day_number} day={day} />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-6 rounded-[2rem] border border-white/10 bg-slate-950/90 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Missions du jour</p>
-                <h2 className="mt-2 text-2xl font-black text-white">Défis premium</h2>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setActiveTab('login')}
-                  className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.25em] transition ${activeTab === 'login' ? 'bg-emerald-500 text-slate-950' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
-                >
-                  Calendrier
-                </button>
-                <button
-                  onClick={() => setActiveTab('tasks')}
-                  className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.25em] transition ${activeTab === 'tasks' ? 'bg-emerald-500 text-slate-950' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
-                >
-                  Missions
-                </button>
-              </div>
-            </div>
-
-            <AnimatePresence mode="wait">
-              {activeTab === 'login' ? (
-                <motion.div
-                  key="calendar"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-4"
-                >
-                  <p className="text-sm leading-7 text-slate-400">Réclamez votre bonus jour après jour pour construire un agenda de récompenses stable et exclusif.</p>
-                  <div className="rounded-[1.6rem] border border-white/10 bg-slate-950/80 p-5">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-center">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Aujourd’hui</p>
-                        <p className="mt-3 text-3xl font-black text-white">{todayDayNumber}</p>
-                      </div>
-                      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-center">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Réclamé</p>
-                        <p className="mt-3 text-3xl font-black text-white">{claimedDays.includes(todayDayNumber) ? 'Oui' : 'Non'}</p>
-                      </div>
-                      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-center">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Prochain bonus</p>
-                        <p className="mt-3 text-3xl font-black text-white">{rewardsConfig.find(r => r.day_number === Math.min(todayDayNumber + 1, daysInMonth))?.reward_amount || '–'}</p>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="tasks"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.25 }}
-                  className="space-y-4"
-                >
-                  <div className="grid gap-4">
-                    {userTasks.map((mission) => (
-                      <TaskCard key={mission.id} mission={mission} />
-                    ))}
-                  </div>
-                </motion.div>
+        {/* === NAVIGATION ONGLETS & PROGRESS BAR === */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-2xl border border-white/10 w-fit">
+            <button
+              onClick={() => setActiveTab('calendar')}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                activeTab === 'calendar'
+                  ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <CalendarIcon size={16} /> Calendrier Mensuel
+            </button>
+            <button
+              onClick={() => setActiveTab('missions')}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative ${
+                activeTab === 'missions'
+                  ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Trophy size={16} /> Missions Du Jour
+              {claimableMissionsCount > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-[10px] font-black text-slate-950 animate-bounce">
+                  {claimableMissionsCount}
+                </span>
               )}
-            </AnimatePresence>
-          </section>
-        </div>
-
-        <div className="mt-8 grid gap-6 xl:grid-cols-[0.7fr_1.3fr]">
-          <div className="rounded-4xl border border-emerald-500/10 bg-slate-950/90 p-6">
-            <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-emerald-500/10 p-4">
-              <Sparkles size={20} className="text-emerald-300" />
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.35em] text-emerald-300">Astuce Premium</p>
-                <p className="mt-1 text-sm text-slate-200">Enchaînez trois jours consécutifs pour débloquer un multiplicateur de gains sur les missions.</p>
-              </div>
-            </div>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-4">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Conseil</p>
-                <p className="mt-3 text-sm leading-6 text-slate-300">Terminez vos missions du jour avant minuit pour recevoir une récompense bonus aléatoire.</p>
-              </div>
-              <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-4">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Bonus VIP</p>
-                <p className="mt-3 text-sm leading-6 text-slate-300">Les membres VIP obtiennent un multiplicateur de 15% sur les récompenses CP et XP.</p>
-              </div>
-            </div>
+            </button>
           </div>
 
-          <div className="rounded-4xl border border-white/10 bg-slate-950/90 p-6">
+          {/* Barre de progression des missions */}
+          <div className="flex items-center gap-4 bg-slate-900/60 border border-white/10 rounded-2xl px-4 py-2.5 sm:max-w-xs w-full">
+            <div className="flex-1 space-y-1">
+              <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+                <span className="text-slate-400">Missions accomplies</span>
+                <span className="text-emerald-400">{progressPercentage}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <motion.div
+                  className="h-full bg-emerald-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progressPercentage}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+            </div>
+            <span className="text-xs font-black text-white">{completedMissionsCount}/{userTasks.length}</span>
+          </div>
+        </div>
+
+        {/* === MAIN CONTENT VUES === */}
+        <AnimatePresence mode="wait">
+          {/* TAB 1 : CALENDRIER DE CONNEXION */}
+          {activeTab === 'calendar' && (
+            <motion.section
+              key="calendar-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/50 p-4 rounded-2xl border border-white/5">
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <Gift className="text-emerald-400" size={20} /> Recompenses de Présence
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Connectez-vous chaque jour pour débloquer le coffre suivant.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10 w-fit">
+                  <Flame size={16} className="text-amber-400" />
+                  <span>Série actuelle : <strong className="text-amber-300">{claimedDays.length} jours</strong></span>
+                </div>
+              </div>
+
+              {/* Grid du calendrier */}
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {rewardsConfig.map((day) => {
+                  const isToday = day.day_number === todayDayNumber;
+                  const isClaimed = claimedDays.includes(day.day_number);
+                  const isLocked = day.day_number > todayDayNumber;
+                  const rewardMeta = rewardTypeMeta[day.reward_type] || rewardTypeMeta.cp;
+                  const RewardIcon = rewardMeta.icon;
+
+                  return (
+                    <div
+                      key={day.day_number}
+                      className={`relative flex flex-col justify-between rounded-2xl border p-4 transition-all duration-200 ${
+                        isClaimed
+                          ? 'border-emerald-500/20 bg-emerald-950/20 opacity-75'
+                          : isToday
+                          ? 'border-amber-400/60 bg-gradient-to-b from-amber-500/10 to-slate-900 shadow-lg shadow-amber-500/10 ring-2 ring-amber-400/30'
+                          : 'border-white/10 bg-slate-900/60 hover:border-white/20'
+                      } ${isLocked ? 'opacity-40 bg-slate-950' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Jour {day.day_number}
+                        </span>
+                        {isClaimed ? (
+                          <CheckCircle2 size={16} className="text-emerald-400" />
+                        ) : isLocked ? (
+                          <Lock size={14} className="text-slate-500" />
+                        ) : isToday ? (
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 animate-pulse">
+                            Aujourd'hui
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="my-4 text-center space-y-1">
+                        <div className={`mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border ${rewardMeta.color}`}>
+                          <RewardIcon size={20} />
+                        </div>
+                        <p className="text-xs font-bold text-white line-clamp-1">{day.title}</p>
+                        <p className="text-sm font-black text-amber-300">
+                          +{day.reward_amount} {rewardMeta.label}
+                        </p>
+                      </div>
+
+                      {/* Action Button */}
+                      {isToday && !isClaimed ? (
+                        <button
+                          onClick={handleClaimDaily}
+                          disabled={claiming}
+                          className="w-full rounded-xl bg-amber-400 py-2 text-xs font-black uppercase tracking-wider text-slate-950 shadow-md transition hover:bg-amber-300 active:scale-95 disabled:opacity-50"
+                        >
+                          {claiming ? <Loader2 size={14} className="mx-auto animate-spin" /> : 'Réclamer'}
+                        </button>
+                      ) : (
+                        <div className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 py-1">
+                          {isClaimed ? 'Réclamé' : isLocked ? 'Verrouillé' : 'Manqué'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.section>
+          )}
+
+          {/* TAB 2 : MISSIONS QUOTIDIENNES */}
+          {activeTab === 'missions' && (
+            <motion.section
+              key="missions-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
+              {/* Filtres & Tout réclamer */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/50 p-4 rounded-2xl border border-white/5">
+                <div className="flex items-center gap-2">
+                  {(['all', 'claimable', 'completed'] as MissionFilter[]).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setMissionFilter(filter)}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition ${
+                        missionFilter === filter
+                          ? 'bg-white/10 text-white border border-white/20'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {filter === 'all' && 'Toutes'}
+                      {filter === 'claimable' && `À réclamer (${claimableMissionsCount})`}
+                      {filter === 'completed' && 'Terminées'}
+                    </button>
+                  ))}
+                </div>
+
+                {claimableMissionsCount > 0 && (
+                  <button
+                    onClick={handleClaimAllTasks}
+                    disabled={claimingAll}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:bg-emerald-400 active:scale-95 disabled:opacity-50"
+                  >
+                    {claimingAll ? <Loader2 size={16} className="animate-spin" /> : <CheckCheck size={16} />}
+                    Tout Réclamer ({claimableMissionsCount})
+                  </button>
+                )}
+              </div>
+
+              {/* Liste des cartes de missions */}
+              <div className="grid gap-4 md:grid-cols-2">
+                {filteredMissions.length === 0 ? (
+                  <div className="col-span-full rounded-2xl border border-white/5 bg-slate-900/30 p-12 text-center text-slate-500">
+                    <Trophy size={32} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-semibold">Aucune mission ne correspond à ce filtre.</p>
+                  </div>
+                ) : (
+                  filteredMissions.map((mission) => {
+                    const isClaimable = canClaimMission(mission);
+                    const isClaimed = mission.is_claimed;
+                    const rewardMeta = rewardTypeMeta[mission.reward_type] || rewardTypeMeta.cp;
+                    const RewardIcon = rewardMeta.icon;
+
+                    return (
+                      <div
+                        key={mission.id}
+                        className={`group relative flex flex-col justify-between rounded-3xl border p-5 transition-all ${
+                          isClaimed
+                            ? 'border-white/5 bg-slate-950/50 opacity-60'
+                            : isClaimable
+                            ? 'border-emerald-500/40 bg-slate-900/90 shadow-lg shadow-emerald-500/5 ring-1 ring-emerald-500/20'
+                            : 'border-white/10 bg-slate-900/60'
+                        }`}
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                Mission Quotidienne
+                              </span>
+                              <h3 className="text-base font-black text-white">{mission.title}</h3>
+                            </div>
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${rewardMeta.color}`}>
+                              <RewardIcon size={18} />
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-slate-400 leading-relaxed">{mission.description}</p>
+                        </div>
+
+                        <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
+                          <div>
+                            <span className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold ${rewardMeta.badge}`}>
+                              +{mission.reward_amount} {rewardMeta.label}
+                            </span>
+                            <p className="mt-1 text-[10px] text-slate-500 font-mono">
+                              {formatMissionProgress(mission)}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => handleClaimTask(mission.id)}
+                            disabled={!isClaimable || claimingTask === mission.id}
+                            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition active:scale-95 ${
+                              isClaimed
+                                ? 'bg-white/5 text-slate-500 cursor-default'
+                                : isClaimable
+                                ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-md shadow-emerald-500/20'
+                                : 'bg-white/5 text-slate-600 cursor-not-allowed'
+                            }`}
+                          >
+                            {isClaimed ? (
+                              <>Réclamé <CheckCircle2 size={14} /></>
+                            ) : claimingTask === mission.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <>Réclamer <ChevronRight size={14} /></>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+        {/* === SECTION CONSEILS & PUB === */}
+        <div className="grid gap-6 lg:grid-cols-12 pt-4">
+          <div className="lg:col-span-5 rounded-3xl border border-emerald-500/20 bg-slate-900/60 p-6 space-y-4">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+              <Crown size={16} /> Astuce de Progression VIP
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Maintenez une série ininterrompue de 7 jours de connexion pour obtenir un coffre bonus mystère contenant jusqu'à 500 CP et des Diamants supplémentaires.
+            </p>
+          </div>
+
+          <div className="lg:col-span-7 rounded-3xl border border-white/10 bg-slate-900/60 p-4 flex items-center justify-center overflow-hidden">
             <ExoClickBanner />
           </div>
         </div>
+
       </div>
     </main>
   );
