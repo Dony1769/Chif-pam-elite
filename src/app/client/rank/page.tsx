@@ -1,254 +1,366 @@
 "use client";
-import React, { useState, useEffect, Suspense } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Trophy, Timer, ChevronLeft, Loader2, Zap, ArrowRight, Star, TrendingUp, Crown, Gamepad2 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
 
-// --- COMPOSANT PUBLICITÉ MONETAG ---
-// Ce composant charge le script intelligemment sans bloquer le reste de la page
-const MonetagVignette = () => {
-  useEffect(() => {
-    // Le script exact que vous m'avez donné, adapté pour React
-    const script = document.createElement('script');
-    script.dataset.zone = '10586275';
-    script.src = 'https://gizokraijaw.net/vignette.min.js';
-    
-    // Insertion sécurisée dans le body
-    const target = document.body || document.documentElement;
-    target.appendChild(script);
+import React, { useState, useEffect, Suspense } from "react";
+import { supabase } from "@/lib/supabase";
+import {
+  Trophy,
+  Timer,
+  ChevronLeft,
+  Loader2,
+  Zap,
+  ArrowRight,
+  Star,
+  TrendingUp,
+  Crown,
+  Gamepad2,
+} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
+import Script from "next/script";
 
-    return () => {
-      // Nettoyage si on quitte la page pour éviter les doublons
-      try {
-        if (target && target.contains(script)) {
-          target.removeChild(script);
-        }
-      } catch (e) {
-        // Ignorer les erreurs de nettoyage
-      }
-    };
-  }, []);
+type ChallengeInfo = {
+  id: string;
+  title: string;
+  game_type: "quiz" | "biometric" | "vault";
+  is_active: boolean;
+  ends_at?: string;
+};
 
-  return null; // Ce composant n'affiche rien visuellement, il lance juste la pub
+type LeaderboardEntry = {
+  user_id: string;
+  username: string;
+  total_score: number;
+  attempts_count: number;
+  rank: number;
 };
 
 function RankContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const challengeId = searchParams.get('challengeId');
+  const challengeId = searchParams.get("challengeId");
 
-  const [loading, setLoading] = useState(true);
-  const [myChallenges, setMyChallenges] = useState<any[]>([]);
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [activeChallenge, setActiveChallenge] = useState<any>(null);
-  const [currentUserRank, setCurrentUserRank] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [myChallenges, setMyChallenges] = useState<ChallengeInfo[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [activeChallenge, setActiveChallenge] = useState<ChallengeInfo | null>(null);
+  const [currentUserRank, setCurrentUserRank] = useState<LeaderboardEntry | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>("");
 
   useEffect(() => {
-    initData();
-    const channel = supabase.channel('rank_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_attempts' }, () => fetchRankingsOnly())
+    const initData = async () => {
+      setLoading(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: attempts } = await supabase
+        .from("challenge_attempts")
+        .select("challenge_id, challenges(*)")
+        .eq("user_id", user.id);
+
+      if (attempts) {
+        const list = attempts
+          .map((a: { challenges: unknown }) => a.challenges as ChallengeInfo)
+          .filter(Boolean);
+        setMyChallenges(list);
+      }
+
+      if (challengeId) {
+        await fetchRankings(challengeId, user.id);
+      }
+      setLoading(false);
+    };
+
+    void initData();
+
+    const channel = supabase
+      .channel("rank_sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "challenge_attempts" },
+        () => {
+          if (challengeId) {
+            void supabase.auth.getUser().then(({ data }) => {
+              if (data.user) void fetchRankings(challengeId, data.user.id);
+            });
+          }
+        }
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [challengeId]);
 
-  const initData = async () => {
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: attempts } = await supabase
-      .from('challenge_attempts')
-      .select('challenge_id, challenges(*)')
-      .eq('user_id', user.id);
-
-    // Fusion et nettoyage des données
-    const challengesList = attempts?.map((a: any) => a.challenges).filter(Boolean) || [];
-    setMyChallenges(challengesList);
-
-    if (challengeId) await fetchRankingsOnly();
-    setLoading(false);
-  };
-
-  const fetchRankingsOnly = async () => {
-    if (!challengeId) return;
-    const { data: { user } } = await supabase.auth.getUser();
-
+  const fetchRankings = async (cId: string, currentUserId: string) => {
     const [chRes, lbRes] = await Promise.all([
-      supabase.from('challenges').select('*').eq('id', challengeId).single(),
-      supabase.from('challenge_leaderboards').select('*').eq('challenge_id', challengeId).order('rank', { ascending: true })
+      supabase.from("challenges").select("*").eq("id", cId).single(),
+      supabase
+        .from("challenge_leaderboards")
+        .select("*")
+        .eq("challenge_id", cId)
+        .order("rank", { ascending: true }),
     ]);
 
-    setActiveChallenge(chRes.data);
-    setLeaderboard(lbRes.data || []);
-    if (user && lbRes.data) {
-      setCurrentUserRank(lbRes.data.find((r: any) => r.user_id === user.id));
+    if (chRes.data) setActiveChallenge(chRes.data as ChallengeInfo);
+    if (lbRes.data) {
+      const entries = lbRes.data as LeaderboardEntry[];
+      setLeaderboard(entries);
+      setCurrentUserRank(entries.find((e) => e.user_id === currentUserId) || null);
     }
   };
 
-  // Logique du Timer
+  // Timer de fin de défi
   useEffect(() => {
+    if (!activeChallenge?.ends_at) return;
+
     const interval = setInterval(() => {
-      if (activeChallenge?.ends_at) {
-        const end = new Date(activeChallenge.ends_at).getTime();
-        const now = new Date().getTime();
-        const diff = end - now;
-        if (diff <= 0) setTimeLeft("MISSION TERMINÉE");
-        else {
-          const h = Math.floor(diff / (1000 * 60 * 60));
-          const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const s = Math.floor((diff % (1000 * 60)) / 1000);
-          setTimeLeft(`${h}H ${m}M ${s}S`);
-        }
+      const end = new Date(activeChallenge.ends_at!).getTime();
+      const now = new Date().getTime();
+      const diff = end - now;
+
+      if (diff <= 0) {
+        setTimeLeft("MISSION TERMINÉE");
+      } else {
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft(`${h}H ${m}M ${s}S`);
       }
     }, 1000);
+
     return () => clearInterval(interval);
   }, [activeChallenge]);
 
-  if (loading) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#020617]">
+        <Loader2 className="animate-spin text-emerald-500" size={40} />
+      </div>
+    );
+  }
 
-  // --- PARTIE 1 : LISTE DES DÉFIS (SANS ID) ---
+  // --- VUE 1 : MES PARTICIPATIONS ---
   if (!challengeId) {
     return (
-      <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
-        
-        {/* INTÉGRATION DE LA PUBLICITÉ MONETAG */}
-        <MonetagVignette />
-
-        {/* BOUTON RETOUR VERS HOME */}
-        <div className="flex justify-between items-center mb-8 mt-2">
-          <button
-            onClick={() => router.push('/client/home')}
-            className="p-3 bg-white/5 border border-white/10 rounded-2xl active:scale-90 transition-all text-slate-400 hover:text-white"
-          >
-            <ChevronLeft size={24} />
-          </button>
-          <div className="bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20">
-            <Trophy size={20} className="text-emerald-500" />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 mb-10">
-          <h1 className="text-3xl tracking-tighter">MES_STATS_ARENA</h1>
-        </div>
-
-        <div className="space-y-4">
-          {myChallenges.length === 0 ? (
-            <div className="py-20 text-center bg-white/5 rounded-[3rem] border border-white/5">
-              <Gamepad2 size={40} className="mx-auto mb-4 text-slate-700" />
-              <p className="text-[10px] tracking-widest text-slate-500">AUCUNE PARTICIPATION</p>
-              <button onClick={() => router.push('/client/challenges')} className="mt-6 text-emerald-500 underline text-xs">REJOINDRE UNE MISSION</button>
+      <div className="min-h-screen bg-[#020617] p-4 text-white sm:p-6 font-black italic uppercase">
+        <div className="mx-auto max-w-md">
+          <div className="mb-8 mt-2 flex items-center justify-between">
+            <button
+              onClick={() => router.push("/client/home")}
+              className="rounded-2xl border border-white/10 bg-white/5 p-3 text-slate-400 transition active:scale-90 hover:text-white"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
+              <Trophy size={18} className="text-emerald-500" />
             </div>
-          ) : (
-            myChallenges.map((ch) => (
-              <motion.button whileTap={{ scale: 0.98 }} key={ch.id} onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
-                className="w-full p-8 bg-slate-900/40 border border-white/5 rounded-[2.5rem] flex items-center justify-between group">
-                <div className="text-left">
-                  <h3 className="text-xl tracking-tight">{ch.title}</h3>
-                  <p className={`text-[9px] tracking-[0.3em] mt-1 ${ch.is_active ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {ch.is_active ? 'STATUT: ACTIF' : 'STATUT: ARCHIVÉ'}
-                  </p>
-                </div>
-                <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-emerald-500 group-hover:text-black transition-all"><ArrowRight size={20} /></div>
-              </motion.button>
-            ))
-          )}
+          </div>
+
+          <h1 className="mb-6 text-2xl tracking-tight text-white">Mes Stats Arena</h1>
+
+          <div className="space-y-3">
+            {myChallenges.length === 0 ? (
+              <div className="rounded-[2.5rem] border border-white/5 bg-slate-900/40 p-10 text-center">
+                <Gamepad2 size={36} className="mx-auto mb-3 text-slate-700" />
+                <p className="text-[10px] tracking-widest text-slate-500">AUCUNE PARTICIPATION</p>
+                <button
+                  onClick={() => router.push("/client/challenges")}
+                  className="mt-4 text-xs text-emerald-500 underline"
+                >
+                  REJOINDRE UNE MISSION
+                </button>
+              </div>
+            ) : (
+              myChallenges.map((ch) => (
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  key={ch.id}
+                  onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
+                  className="flex w-full items-center justify-between rounded-[2rem] border border-white/5 bg-slate-900/60 p-6 text-left transition hover:border-emerald-500/30"
+                >
+                  <div>
+                    <h3 className="text-lg tracking-tight text-white">{ch.title}</h3>
+                    <p
+                      className={`mt-1 text-[9px] tracking-[0.2em] ${
+                        ch.is_active ? "text-emerald-400" : "text-rose-500"
+                      }`}
+                    >
+                      {ch.is_active ? "STATUT: ACTIF" : "STATUT: ARCHIVÉ"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-white/5 p-3 text-slate-300">
+                    <ArrowRight size={18} />
+                  </div>
+                </motion.button>
+              ))
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
-  // --- PARTIE 2 : CLASSEMENT DÉTAILLÉ (AVEC ID) ---
+  // --- VUE 2 : CLASSEMENT DÉTAILLÉ DU DÉFI ---
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-4 font-black uppercase italic pb-40">
-      
-      {/* INTÉGRATION DE LA PUBLICITÉ MONETAG (Aussi ici pour maximiser les vues) */}
-      <MonetagVignette />
-
-      <div className="max-w-md mx-auto flex justify-between items-center mb-8 mt-2">
-        <button onClick={() => router.push('/client/rank')} className="p-4 bg-white/5 rounded-3xl border border-white/10 active:scale-90 transition-all"><ChevronLeft size={20} /></button>
-        <div className="text-center">
-          <p className="text-[9px] text-emerald-500 tracking-[0.3em] mb-1">DATA_STREAM_SYNC</p>
-          <h2 className="text-sm border-b border-emerald-500/30 pb-1">{activeChallenge?.title}</h2>
-        </div>
-        <div className="w-12 h-12 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-500"><Star size={20} className="animate-pulse" /></div>
-      </div>
-
-      <div className="max-w-md mx-auto space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-emerald-600 p-6 rounded-[2.2rem] shadow-[0_20px_40px_rgba(16,185,129,0.2)] text-black">
-            <p className="text-[8px] font-bold opacity-70 mb-2">TEMPS RESTANT</p>
-            <p className="text-lg flex items-center gap-2 font-black"><Timer size={18} /> {timeLeft}</p>
+    <div className="min-h-screen bg-[#020617] p-4 text-white sm:p-6 font-black italic uppercase pb-32">
+      <div className="mx-auto max-w-md">
+        
+        {/* En-tête */}
+        <div className="mb-6 mt-2 flex items-center justify-between">
+          <button
+            onClick={() => router.push("/client/rank")}
+            className="rounded-2xl border border-white/10 bg-white/5 p-3 active:scale-90"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div className="text-center">
+            <p className="text-[8px] tracking-[0.3em] text-emerald-400">DATA_STREAM_SYNC</p>
+            <h2 className="text-xs text-slate-200">{activeChallenge?.title}</h2>
           </div>
-          <div className="bg-slate-900 border border-white/10 p-6 rounded-[2.2rem]">
-            <p className="text-[8px] text-slate-500 mb-2">MON SCORE CUMULÉ</p>
-            <p className="text-lg text-emerald-500 flex items-center gap-2 font-black"><TrendingUp size={18} /> {currentUserRank?.total_score || 0}</p>
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+            <Star size={18} className="animate-pulse" />
           </div>
         </div>
 
+        {/* Stats Rapides */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="rounded-[2rem] bg-emerald-500 p-5 text-slate-950 shadow-lg">
+            <p className="text-[8px] opacity-80 mb-1">TEMPS RESTANT</p>
+            <p className="text-base font-black flex items-center gap-1.5">
+              <Timer size={16} /> {timeLeft || "--H --M"}
+            </p>
+          </div>
+          <div className="rounded-[2rem] border border-white/10 bg-slate-900 p-5">
+            <p className="text-[8px] text-slate-500 mb-1">SCORE CUMULÉ</p>
+            <p className="text-base text-emerald-400 flex items-center gap-1.5 font-black">
+              <TrendingUp size={16} /> {currentUserRank?.total_score || 0}
+            </p>
+          </div>
+        </div>
+
+        {/* Carte de position de l'utilisateur */}
         {currentUserRank && (
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            className={`p-8 rounded-[2.8rem] flex items-center justify-between border-2 ${currentUserRank.rank <= 3 ? 'bg-white text-black border-emerald-500' : 'bg-slate-900 border-white/10'
-              }`}>
-            <div className="flex items-center gap-5">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={`mb-6 p-6 rounded-[2.2rem] flex items-center justify-between border-2 ${
+              currentUserRank.rank <= 3
+                ? "bg-white text-slate-950 border-emerald-400"
+                : "bg-slate-900 border-white/10"
+            }`}
+          >
+            <div className="flex items-center gap-4">
               <div className="relative">
-                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center text-2xl font-black rotate-3 ${currentUserRank.rank <= 3 ? 'bg-black text-emerald-500' : 'bg-emerald-500 text-black'
-                  }`}>#{currentUserRank.rank}</div>
-                {currentUserRank.rank === 1 && <Crown size={16} className="absolute -top-2 -right-2 text-amber-500 fill-current -rotate-12" />}
+                <div
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black ${
+                    currentUserRank.rank <= 3 ? "bg-slate-950 text-emerald-400" : "bg-emerald-500 text-slate-950"
+                  }`}
+                >
+                  #{currentUserRank.rank}
+                </div>
+                {currentUserRank.rank === 1 && (
+                  <Crown size={14} className="absolute -top-2 -right-1 text-amber-500 fill-current" />
+                )}
               </div>
               <div>
-                <p className="text-[9px] opacity-50 tracking-widest leading-none mb-1">VOTRE POSITION</p>
-                <p className="text-xl tracking-tighter">{currentUserRank.username}</p>
+                <p className="text-[8px] opacity-60 tracking-widest">VOTRE POSITION</p>
+                <p className="text-lg tracking-tight">{currentUserRank.username}</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-black">{currentUserRank.total_score}</p>
-              <p className="text-[8px] opacity-50">PTS ({currentUserRank.attempts_count} essais)</p>
+              <p className="text-xl font-black">{currentUserRank.total_score}</p>
+              <p className="text-[8px] opacity-60">PTS ({currentUserRank.attempts_count} essais)</p>
             </div>
           </motion.div>
         )}
 
-        <div className="space-y-3 mt-6">
-          {leaderboard.map((entry: any) => {
+        {/* Liste du Leaderboard */}
+        <div className="space-y-2.5">
+          {leaderboard.map((entry) => {
             const isMe = entry.user_id === currentUserRank?.user_id;
             return (
-              <div key={entry.user_id} className={`p-5 rounded-[2rem] border flex items-center justify-between ${isMe ? 'bg-emerald-500/20 border-emerald-500 shadow-lg' : 'bg-white/2 border-white/5'
-                }`}>
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black ${entry.rank === 1 ? 'bg-amber-500 text-black' : 'bg-white/5 text-slate-500'
-                    }`}>{entry.rank}</div>
-                  <p className={`text-sm tracking-tight ${isMe ? 'text-emerald-400' : 'text-white'}`}>{entry.username} {isMe && "(VOUS)"}</p>
+              <div
+                key={entry.user_id}
+                className={`p-4 rounded-[1.5rem] border flex items-center justify-between ${
+                  isMe
+                    ? "bg-emerald-500/20 border-emerald-500 shadow-lg"
+                    : "bg-slate-900/40 border-white/5"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${
+                      entry.rank === 1 ? "bg-amber-500 text-slate-950" : "bg-white/5 text-slate-400"
+                    }`}
+                  >
+                    {entry.rank}
+                  </div>
+                  <p className={`text-xs tracking-tight ${isMe ? "text-emerald-300" : "text-white"}`}>
+                    {entry.username} {isMe && "(VOUS)"}
+                  </p>
                 </div>
-                <p className={`text-lg font-black ${entry.rank <= 3 ? 'text-emerald-500' : 'text-white'}`}>{entry.total_score}</p>
+                <p className={`text-sm font-black ${entry.rank <= 3 ? "text-emerald-400" : "text-white"}`}>
+                  {entry.total_score}
+                </p>
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-[#020617] to-transparent z-50">
-        <div className="max-w-md mx-auto">
-          <motion.button whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              const routes: any = { quiz: 'quiz', biometric: 'biometric-hack', vault: 'laser-vault' };
-              router.push(`/client/${routes[activeChallenge.game_type]}?challengeId=${activeChallenge.id}`);
-            }}
-            disabled={timeLeft.includes("TERMINÉE")}
-            className="w-full py-6 bg-white text-black rounded-[2rem] font-black text-xl shadow-xl flex items-center justify-center gap-3 disabled:opacity-20"
-          >
-            <Zap size={24} fill="black" /> {timeLeft.includes("TERMINÉE") ? "MISSION_EXPIRÉE" : "GRIMPER AU SCORE"}
-          </motion.button>
+      {/* Bouton d'action flottant au bas */}
+      {activeChallenge && (
+        <div className="fixed bottom-0 left-0 w-full p-4 bg-gradient-to-t from-[#020617] via-[#020617]/90 to-transparent z-50">
+          <div className="max-w-md mx-auto">
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                const routes: Record<ChallengeInfo["game_type"], string> = {
+                  quiz: "quiz",
+                  biometric: "biometric-hack",
+                  vault: "laser-vault",
+                };
+                router.push(`/client/${routes[activeChallenge.game_type]}?challengeId=${activeChallenge.id}`);
+              }}
+              disabled={timeLeft.includes("TERMINÉE")}
+              className="w-full py-4 bg-white text-slate-950 rounded-[1.8rem] font-black text-lg shadow-xl flex items-center justify-center gap-2 disabled:opacity-30"
+            >
+              <Zap size={20} fill="currentColor" />
+              <span>{timeLeft.includes("TERMINÉE") ? "MISSION EXPIRÉE" : "AMÉLIORER MON SCORE"}</span>
+            </motion.button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
 export default function LeaderboardPage() {
   return (
-    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
-      <RankContent />
-    </Suspense>
+    <>
+      {/* Intégration optimisée du script Monetag sans bloquer React */}
+      <Script
+        id="monetag-vignette"
+        src="https://gizokraijaw.net/vignette.min.js"
+        data-zone="10586275"
+        strategy="lazyOnload"
+      />
+      <Suspense
+        fallback={
+          <div className="flex h-screen items-center justify-center bg-[#020617]">
+            <Loader2 className="animate-spin text-emerald-500" size={40} />
+          </div>
+        }
+      >
+        <RankContent />
+      </Suspense>
+    </>
   );
 }
