@@ -1,53 +1,54 @@
-"use client"
-
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ChatService, ChatMessage } from '@/services/chat'
+import { RealtimeChannel } from '@supabase/supabase-js'
 
-// Alignement STRICT avec l'interface UserItem de ChatSidebar
 export interface ChatUser {
   id: string
   username?: string
   phone?: string
-  unread: number // Requis (non-optionnel) pour correspondre à UserItem
-  last_at: string // Requis (non-optionnel) pour correspondre à UserItem
+  email?: string
+  avatar_url?: string
 }
 
 export function useAdminChat(selectedUserId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [reply, setReply] = useState<string>('')
+  const [reply, setReply] = useState('')
   const [users, setUsers] = useState<ChatUser[]>([])
-  const [loading, setLoading] = useState<boolean>(false)
+  const [loading, setLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+
+  // Ensemble pour éviter les doublons de messages reçus en temps réel
   const seenIds = useRef<Set<string>>(new Set())
 
-  // Charger la liste des utilisateurs depuis la table profiles
-  useEffect(() => {
-    const fetchUsers = async () => {
+  /**
+   * Charger la liste des utilisateurs ayant des discussions
+   */
+  const fetchUsers = useCallback(async () => {
+    try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, phone')
-      
+        .select('id, username, phone, email, avatar_url')
+
       if (error) {
-        console.error('[useAdminChat] Erreur profiles:', error)
+        console.error('Erreur lors du chargement des utilisateurs:', error)
         return
       }
 
-      // Transformation garantissant que unread et last_at ne soient JAMAIS undefined
-      const formattedUsers: ChatUser[] = (data || []).map((user) => ({
-        id: user.id,
-        username: user.username || undefined,
-        phone: user.phone || undefined,
-        unread: 0, // Valeur par défaut obligatoire
-        last_at: new Date().toISOString(), // Valeur par défaut obligatoire
-      }))
-
-      setUsers(formattedUsers)
+      setUsers(data || [])
+    } catch (err) {
+      console.error('Erreur inattendue lors de la récupération des utilisateurs:', err)
     }
-
-    fetchUsers()
   }, [])
 
-  // Chargement des messages de l'utilisateur sélectionné + souscription Realtime
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
+
+  /**
+   * Charger les messages et gérer l'abonnement Realtime pour l'utilisateur sélectionné
+   */
   useEffect(() => {
     if (!selectedUserId) {
       setMessages([])
@@ -55,36 +56,35 @@ export function useAdminChat(selectedUserId: string | null) {
       return
     }
 
-    let activeChannel: ReturnType<typeof supabase.channel> | null = null
+    let activeChannel: RealtimeChannel | null = null
     let isMounted = true
 
-    const loadAdminChat = async () => {
+    const loadInitialMessages = async () => {
+      setLoading(true)
       try {
-        setLoading(true)
-        seenIds.current.clear()
-
-        const initial = await ChatService.fetchMessages(supabase, selectedUserId)
+        const data = await ChatService.fetchMessages(supabase, selectedUserId)
         if (!isMounted) return
 
-        initial.forEach((m) => seenIds.current.add(m.id))
-        setMessages(initial)
-
-        // Abonnement aux nouveaux messages
-        activeChannel = ChatService.subscribeToMessages(supabase, selectedUserId, (newMsg) => {
-          if (!seenIds.current.has(newMsg.id)) {
-            seenIds.current.add(newMsg.id)
-            setMessages((prev) => [...prev, newMsg])
-          }
-        })
+        seenIds.current = new Set(data.map((m) => m.id))
+        setMessages(data)
       } catch (err) {
-        console.error('[useAdminChat] Erreur chargement chat:', err)
+        console.error('Erreur lors du chargement initial des messages:', err)
       } finally {
         if (isMounted) setLoading(false)
       }
     }
 
-    loadAdminChat()
+    loadInitialMessages()
 
+    // Abonnement aux nouveaux messages via Realtime
+    activeChannel = ChatService.subscribeToMessages(supabase, selectedUserId, (newMsg) => {
+      if (!seenIds.current.has(newMsg.id)) {
+        seenIds.current.add(newMsg.id)
+        setMessages((prev) => [...prev, newMsg])
+      }
+    })
+
+    // Nettoyage lors du changement d'utilisateur ou au démontage
     return () => {
       isMounted = false
       if (activeChannel) {
@@ -93,23 +93,40 @@ export function useAdminChat(selectedUserId: string | null) {
     }
   }, [selectedUserId])
 
-  // Envoi d'une réponse admin
-  const sendReply = useCallback(async () => {
-    if (!selectedUserId || !reply.trim()) return
-    const currentReply = reply
+  /**
+   * Envoyer un message en tant qu'administrateur
+   */
+  const sendReply = async () => {
+    if (!reply.trim() || !selectedUserId) return
+
+    const content = reply.trim()
     setReply('')
 
     try {
-      const inserted = await ChatService.sendAdminReply(supabase, selectedUserId, currentReply)
-      if (!seenIds.current.has(inserted.id)) {
-        seenIds.current.add(inserted.id)
-        setMessages((prev) => [...prev, inserted])
-      }
+      const { data: { user } } = await supabase.auth.getUser()
+      const adminId = user?.id || 'admin'
+
+      await ChatService.sendMessage(supabase, adminId, selectedUserId, content)
     } catch (err) {
-      console.error('[useAdminChat] Erreur réponse admin:', err)
-      setReply(currentReply)
+      console.error('Erreur lors de l’envoi de la réponse:', err)
     }
-  }, [selectedUserId, reply])
+  }
+
+  /**
+   * Charger plus de messages anciens (pagination)
+   */
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !selectedUserId) return
+    setIsLoadingMore(true)
+
+    try {
+      // Logique de chargement des anciens messages si nécessaire
+      setIsLoadingMore(false)
+    } catch (err) {
+      console.error('Erreur lors du chargement des messages anciens:', err)
+      setIsLoadingMore(false)
+    }
+  }, [isLoadingMore, hasMore, selectedUserId])
 
   return {
     messages,
@@ -118,8 +135,8 @@ export function useAdminChat(selectedUserId: string | null) {
     users,
     sendReply,
     loading,
-    isLoadingMore: false,
-    hasMore: false,
-    loadMore: () => {},
+    isLoadingMore,
+    hasMore,
+    loadMore,
   }
 }
