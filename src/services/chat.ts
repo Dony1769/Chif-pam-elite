@@ -38,7 +38,36 @@ export const ChatService = {
   },
 
   /**
-   * Modifie le contenu d'un message existant dans Supabase.
+   * Televerse un fichier joint dans Supabase Storage et retourne son URL publique.
+   */
+  async uploadFile(supabase: SupabaseClient, userId: string, file: File): Promise<string> {
+    // Generer un nom de fichier unique pour eviter les collisions
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${userId}/${Date.now()}.${fileExt}`
+
+    // Televersement vers le bucket 'chat-attachments'
+    const { error: uploadError } = await supabase.storage
+      .from('chat-attachments')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+
+    if (uploadError) {
+      console.error('[ChatService] Erreur lors du televersement du fichier:', uploadError.message)
+      throw uploadError
+    }
+
+    // Récupération de l'URL publique
+    const { data } = supabase.storage
+      .from('chat-attachments')
+      .getPublicUrl(fileName)
+
+    return data.publicUrl
+  },
+
+  /**
+   * Modifie le contenu d'un message existant.
    */
   async editMessage(supabase: SupabaseClient, messageId: string, newContent: string): Promise<void> {
     const trimmed = newContent.trim()
