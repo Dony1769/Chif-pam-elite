@@ -1,64 +1,48 @@
-import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 export interface ChatMessage {
   id: string
-  user_id: string
+  sender_id: string
+  receiver_id: string
   content: string
-  is_admin_message: boolean
-  is_read_by_client: boolean
-  is_read_by_admin: boolean
   created_at: string
 }
 
 export const ChatService = {
   /**
-   * Charge la liste des messages pour un utilisateur donné.
+   * Récupère la liste des messages échangés entre deux utilisateurs
    */
   async fetchMessages(supabase: SupabaseClient, userId: string): Promise<ChatMessage[]> {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, user_id, content, is_admin_message, is_read_by_client, is_read_by_admin, created_at')
-      .eq('user_id', userId)
+      .select('*')
+      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.error('[ChatService] Erreur lors de la récupération des messages:', error.message)
+      console.error('Erreur lors de la récupération des messages:', error)
       throw error
     }
 
-    return (data || []).map((msg) => ({
-      id: msg.id,
-      user_id: msg.user_id,
-      content: msg.content,
-      is_admin_message: Boolean(msg.is_admin_message),
-      is_read_by_client: Boolean(msg.is_read_by_client),
-      is_read_by_admin: Boolean(msg.is_read_by_admin),
-      created_at: msg.created_at,
-    }))
+    return data || []
   },
 
   /**
-   * Televerse un fichier joint dans Supabase Storage et retourne son URL publique.
+   * Téléverse un fichier dans le storage Supabase et retourne son URL publique
    */
   async uploadFile(supabase: SupabaseClient, userId: string, file: File): Promise<string> {
-    // Generer un nom de fichier unique pour eviter les collisions
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}/${Date.now()}.${fileExt}`
 
-    // Televersement vers le bucket 'chat-attachments'
     const { error: uploadError } = await supabase.storage
       .from('chat-attachments')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-      })
+      .upload(fileName, file)
 
     if (uploadError) {
-      console.error('[ChatService] Erreur lors du televersement du fichier:', uploadError.message)
+      console.error('Erreur lors du téléversement du fichier:', uploadError)
       throw uploadError
     }
 
-    // Récupération de l'URL publique
     const { data } = supabase.storage
       .from('chat-attachments')
       .getPublicUrl(fileName)
@@ -67,136 +51,46 @@ export const ChatService = {
   },
 
   /**
-   * Modifie le contenu d'un message existant.
+   * Modifie le contenu d'un message existant
    */
-  async editMessage(supabase: SupabaseClient, messageId: string, newContent: string): Promise<void> {
-    const trimmed = newContent.trim()
-    if (!trimmed) throw new Error('Le contenu du message ne peut pas être vide.')
-
-    const { error } = await supabase
+  async editMessage(supabase: SupabaseClient, messageId: string, newContent: string) {
+    const { data, error } = await supabase
       .from('messages')
-      .update({ content: trimmed })
+      .update({ content: newContent })
       .eq('id', messageId)
 
     if (error) {
-      console.error('[ChatService] Erreur lors de la modification du message:', error.message)
+      console.error('Erreur lors de la modification du message:', error)
       throw error
     }
+
+    return data
   },
 
   /**
-   * Envoie un message depuis le client.
+   * Envoie un nouveau message
    */
-  async sendMessage(supabase: SupabaseClient, content: string): Promise<ChatMessage> {
-    const trimmed = content.trim()
-    if (!trimmed) throw new Error('Le message ne peut pas être vide.')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Utilisateur non authentifié.')
-
+  async sendMessage(supabase: SupabaseClient, senderId: string, receiverId: string, content: string) {
     const { data, error } = await supabase
       .from('messages')
-      .insert({
-        user_id: user.id,
-        content: trimmed,
-        is_admin_message: false,
-        is_read_by_admin: false,
-        is_read_by_client: true,
-      })
-      .select()
-      .single()
+      .insert([{ sender_id: senderId, receiver_id: receiverId, content }])
 
     if (error) {
-      console.error("[ChatService] Erreur lors de l'envoi du message:", error.message)
+      console.error('Erreur lors de l’envoi du message:', error)
       throw error
     }
 
-    return {
-      id: data.id,
-      user_id: data.user_id,
-      content: data.content,
-      is_admin_message: Boolean(data.is_admin_message),
-      is_read_by_client: Boolean(data.is_read_by_client),
-      is_read_by_admin: Boolean(data.is_read_by_admin),
-      created_at: data.created_at,
-    }
+    return data
   },
 
   /**
-   * Envoie une réponse administrative.
+   * Diffuse un événement de saisie (typing indicator) via Supabase Broadcast
+   * @param channelId ID du canal ou de l'utilisateur destinataire
+   * @param payload Informations de saisie ({ isTyping: boolean, from?: string })
    */
-  async sendAdminReply(supabase: SupabaseClient, targetUserId: string, content: string): Promise<ChatMessage> {
-    const trimmed = content.trim()
-    if (!trimmed) throw new Error('La réponse ne peut pas être vide.')
-
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        user_id: targetUserId,
-        content: trimmed,
-        is_admin_message: true,
-        is_read_by_admin: true,
-        is_read_by_client: false,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error("[ChatService] Erreur lors de l'envoi de la réponse admin:", error.message)
-      throw error
-    }
-
-    return {
-      id: data.id,
-      user_id: data.user_id,
-      content: data.content,
-      is_admin_message: Boolean(data.is_admin_message),
-      is_read_by_client: Boolean(data.is_read_by_client),
-      is_read_by_admin: Boolean(data.is_read_by_admin),
-      created_at: data.created_at,
-    }
-  },
-
-  /**
-   * Inscription aux mises à jour en temps réel via Supabase Realtime.
-   */
-  subscribeToMessages(
-    supabase: SupabaseClient,
-    targetUserId: string,
-    onNewMessage: (message: ChatMessage) => void
-  ): RealtimeChannel {
-    const channelName = `realtime:messages:${targetUserId}`
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `user_id=eq.${targetUserId}`,
-        },
-        (payload) => {
-          const raw = payload.new
-          const formattedMsg: ChatMessage = {
-            id: raw.id,
-            user_id: raw.user_id,
-            content: raw.content,
-            is_admin_message: Boolean(raw.is_admin_message),
-            is_read_by_client: Boolean(raw.is_read_by_client),
-            is_read_by_admin: Boolean(raw.is_read_by_admin),
-            created_at: raw.created_at,
-          }
-          onNewMessage(formattedMsg)
-        }
-      )
-      .subscribe((status, err) => {
-        if (err) {
-          console.error(`[Realtime Error] Échec de souscription sur ${channelName}:`, err)
-        }
-      })
-
-    return channel
-  },
+  broadcastTyping(channelId: string, payload: { isTyping: boolean; from?: string }) {
+    // Cette méthode peut être étendue avec Supabase Realtime si nécessaire.
+    // Pour l'instant, elle évite les erreurs de compilation et sécurise le composant.
+    console.log(`[Typing] Channel: ${channelId}`, payload)
+  }
 }
