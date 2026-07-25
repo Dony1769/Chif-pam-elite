@@ -2,7 +2,9 @@
 
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ChatService, ChatMessage } from '@/services/chat'
+import { ChatService } from '@/services/chat'
+import { ChatMessage } from '@/types/chat'
+
 
 interface MessageBubbleProps {
   message: ChatMessage
