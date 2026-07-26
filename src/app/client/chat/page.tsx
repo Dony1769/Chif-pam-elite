@@ -1,12 +1,15 @@
-"use client"
+'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, MessageSquareHeart, Paperclip, Send } from 'lucide-react'
+import { Loader2, MessageSquareHeart, Paperclip, Send, ExternalLink } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ChatService } from '@/services/chat'
+import { ChatBotService } from '@/services/chatBot'
 import { type ChatMessage, parseMessageContent } from '@/types/chat'
 
 export default function ClientChatPage() {
+  const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,6 +73,15 @@ export default function ClientChatPage() {
       const sent = await ChatService.sendTextMessage(supabase, userId, content, false)
       if (sent) {
         setMessages((prev) => [...prev, sent])
+
+        // Déclenchement automatique du Bot de réponse si c'est le premier message ou une demande d'aide
+        setTimeout(async () => {
+          const autoReply = ChatBotService.generateAutoReply(content)
+          const botMessage = await ChatService.sendTextMessage(supabase, userId, autoReply.content, true)
+          if (botMessage) {
+            setMessages((prev) => [...prev, botMessage])
+          }
+        }, 1000)
       }
     } catch (error) {
       console.error('Erreur lors de l’envoi du texte:', error)
@@ -127,7 +139,7 @@ export default function ClientChatPage() {
             </div>
             <h2 className="text-lg font-semibold text-slate-200">Comment pouvons-nous vous aider ?</h2>
             <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-400">
-              Décrivez votre besoin ci-dessous. Notre équipe vous répondra rapidement.
+              Décrivez votre besoin ci-dessous. Notre équipe ou notre bot vous répondra rapidement.
             </p>
           </div>
         ) : (
@@ -138,9 +150,21 @@ export default function ClientChatPage() {
 
               return (
                 <div key={msg.id} className={`flex ${isClientMessage ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow ${isClientMessage ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-100'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow ${isClientMessage ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-100'}`}>
                     {parsed.type === 'image' ? (
                       <img src={parsed.url} alt="Pièce jointe" className="max-h-72 rounded-xl object-cover" />
+                    ) : parsed.type === 'action' ? (
+                      <div className="space-y-2.5">
+                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{parsed.text}</p>
+                        <button
+                          type="button"
+                          onClick={() => router.push(parsed.actionUrl)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black uppercase tracking-wider text-slate-950 shadow transition hover:bg-emerald-400 active:scale-95"
+                        >
+                          <span>{parsed.actionLabel}</span>
+                          <ExternalLink size={14} />
+                        </button>
+                      </div>
                     ) : (
                       <p className="whitespace-pre-wrap break-words text-sm">{parsed.text}</p>
                     )}
