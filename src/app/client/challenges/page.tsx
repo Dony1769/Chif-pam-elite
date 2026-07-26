@@ -18,7 +18,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 
-// Chargement dynamique des composants publicitaires
 const AdsterraNativeBanner = dynamic(
   () => import("@/components/ads/AdsterraNativeBanner"),
   { ssr: false }
@@ -40,6 +39,7 @@ type ChallengeItem = {
   prize_pool_cp: number;
   entry_fee_cp_base: number;
   game_type: "quiz" | "biometric" | "vault";
+  is_active: boolean;
   ends_at?: string;
   challenge_attempts: ChallengeAttempt[] | null;
 };
@@ -50,7 +50,6 @@ type Profile = {
   vip_status: "free" | "weekly" | "monthly" | null;
 };
 
-// Composant Interne pour le Compte à Rebours d'un Défi
 function ChallengeTimer({ endsAt }: { endsAt?: string }) {
   const [timeLeft, setTimeLeft] = useState<string>("");
 
@@ -93,17 +92,12 @@ export default function ArenaPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [entryLoading, setEntryLoading] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Filtrage par type de jeu
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
-
-  // Gestion optimisée de la pub d'accueil (Une seule fois par session utilisateur)
   const [showInterstitial, setShowInterstitial] = useState<boolean>(false);
 
   const router = useRouter();
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Vérification de la pub au chargement
   useEffect(() => {
     const hasSeenAd = sessionStorage.getItem("arena_ad_seen");
     if (!hasSeenAd) {
@@ -114,6 +108,11 @@ export default function ArenaPage() {
   const dismissInterstitial = () => {
     sessionStorage.setItem("arena_ad_seen", "true");
     setShowInterstitial(false);
+  };
+
+  const isChallengeExpired = (endsAt?: string): boolean => {
+    if (!endsAt) return false;
+    return new Date(endsAt).getTime() <= new Date().getTime();
   };
 
   const fetchData = useCallback(async () => {
@@ -134,7 +133,7 @@ export default function ArenaPage() {
       supabase
         .from("challenges")
         .select(
-          "id, title, prize_pool_cp, entry_fee_cp_base, game_type, ends_at, challenge_attempts (user_id, total_score, attempts_count)"
+          "id, title, prize_pool_cp, entry_fee_cp_base, game_type, is_active, ends_at, challenge_attempts (user_id, total_score, attempts_count)"
         )
         .eq("is_active", true)
         .order("created_at", { ascending: false }),
@@ -177,6 +176,12 @@ export default function ArenaPage() {
   const handleEntry = async (challenge: ChallengeItem, fee: number) => {
     setErrorMessage(null);
     if (!profile) return;
+
+    // Vérification de sécurité (défi inactif ou expiré)
+    if (!challenge.is_active || isChallengeExpired(challenge.ends_at)) {
+      setErrorMessage("Ce défi est terminé ou n'est plus accessible.");
+      return;
+    }
 
     if (profile.jetons_cp < fee) {
       setErrorMessage("Solde insuffisant en jetons CP pour rejoindre ce défi.");
@@ -233,7 +238,6 @@ export default function ArenaPage() {
 
   return (
     <>
-      {/* Modal Interstitiel Flottant et Non Bloquant */}
       <AnimatePresence>
         {showInterstitial && (
           <motion.div
@@ -271,8 +275,6 @@ export default function ArenaPage() {
 
       <div className="min-h-screen bg-[#020617] pb-28 text-white selection:bg-emerald-500 selection:text-black">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-          
-          {/* En-tête */}
           <header className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -300,7 +302,6 @@ export default function ArenaPage() {
             </button>
           </header>
 
-          {/* Affichage des Erreurs Intégré */}
           {errorMessage && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -317,7 +318,6 @@ export default function ArenaPage() {
             </motion.div>
           )}
 
-          {/* Cartes d'informations Solde & Premium */}
           <section className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-[2rem] border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-slate-900/80 to-slate-950 p-5 shadow-[0_20px_50px_rgba(16,185,129,0.05)]">
               <div className="flex items-center justify-between">
@@ -350,7 +350,6 @@ export default function ArenaPage() {
             </div>
           </section>
 
-          {/* Barre de Filtres */}
           <div className="mt-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
             <div className="flex items-center gap-1 text-xs text-slate-500 pr-2">
               <Filter size={14} />
@@ -376,7 +375,6 @@ export default function ArenaPage() {
             ))}
           </div>
 
-          {/* Liste des défis */}
           <div className="mt-6 space-y-4">
             {filteredChallenges.length === 0 ? (
               <div className="rounded-[2rem] border border-white/5 bg-slate-900/40 p-8 text-center text-slate-500 text-xs">
@@ -391,6 +389,7 @@ export default function ArenaPage() {
                 );
                 const myScore = myAttempt?.total_score || 0;
                 const myCount = myAttempt?.attempts_count || 0;
+                const expired = isChallengeExpired(ch.ends_at) || !ch.is_active;
 
                 return (
                   <motion.div
@@ -435,11 +434,13 @@ export default function ArenaPage() {
                     <div className="mt-5 flex items-center gap-3">
                       <button
                         onClick={() => handleEntry(ch, fee)}
-                        disabled={(profile?.jetons_cp ?? 0) < fee || entryLoading === ch.id}
+                        disabled={(profile?.jetons_cp ?? 0) < fee || entryLoading === ch.id || expired}
                         className="flex-1 rounded-2xl bg-white py-3.5 text-center text-sm font-black text-slate-950 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 flex items-center justify-center gap-2"
                       >
                         {entryLoading === ch.id ? (
                           <Loader2 className="animate-spin" size={18} />
+                        ) : expired ? (
+                          <span>DÉFI TERMINÉ</span>
                         ) : (
                           <>
                             <Play size={16} fill="currentColor" />
@@ -468,7 +469,6 @@ export default function ArenaPage() {
               <AdsterraNativeBanner />
             </div>
           </div>
-
         </div>
       </div>
     </>
