@@ -6,12 +6,19 @@ import { FINANCE_PAYMENT_METHODS, type FinancePaymentMethod } from '@/lib/consta
 import { ClientFinanceService } from '@/services/client/finance';
 import { 
   ArrowUpCircle, ArrowDownCircle, Upload, Loader2, Clock, 
-  Smartphone, ChevronLeft, TrendingUp, Wallet, CheckCircle2, Copy, Sparkles, ShieldCheck
+  Smartphone, ChevronLeft, TrendingUp, Wallet, CheckCircle2, Copy, Sparkles, ShieldCheck,
+  AlertCircle, X
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
 const AdsterraNativeBanner = dynamic(() => import('@/components/ads/AdsterraNativeBanner'), { ssr: false });
+
+// Structure pour la gestion des messages de retour utilisateur (Succès / Erreur)
+type ToastState = {
+  type: 'success' | 'error';
+  message: string;
+} | null;
 
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
@@ -32,6 +39,9 @@ export default function FinancePage() {
   const [copied, setCopied] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Nouvel état pour remplacer les alert() natifs par des toasts élégants
+  const [toast, setToast] = useState<ToastState>(null);
+
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -40,6 +50,14 @@ export default function FinancePage() {
     NatCash: "+509 4045 1937",
     MonCash: "+509 4719 3408"
   };
+
+  // Fonction utilitaire pour afficher une notification UI temporaire (4 secondes)
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => {
+      setToast(null);
+    }, 4500);
+  }, []);
 
   const fetchProfile = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -71,12 +89,17 @@ export default function FinancePage() {
 
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !amount || !method) return alert("Remplissez tous les champs et choisissez une méthode");
+    
+    // Remplacement de alert() par showToast
+    if (!file || !amount || !method) {
+      return showToast("error", "Veuillez remplir tous les champs et sélectionner une preuve de paiement.");
+    }
+
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        throw new Error('Session expirée. Reconnectez-vous.');
+        throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
 
       const fileExt = file.name.split('.').pop();
@@ -91,20 +114,31 @@ export default function FinancePage() {
         throw new Error(result.message);
       }
 
-      alert(result.message);
+      // Notification de succès élégante
+      showToast("success", result.message || "Votre demande de dépôt a été transmise avec succès !");
       setView('menu');
       setMethod(null);
       setAmount('');
       setFile(null);
-    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Erreur inconnue'); } 
-    finally { setIsSubmitting(false); }
+    } catch (err: unknown) { 
+      showToast("error", err instanceof Error ? err.message : 'Une erreur inattendue est survenue.'); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const handleWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
-    if (!amt || !phone || !method) return alert("Remplissez tous les champs");
-    if (amt > (profile?.balance || 0) - (profile?.locked_balance || 0)) return alert("Solde disponible insuffisant");
+
+    // Remplacement des alert() par showToast
+    if (!amt || !phone || !method) {
+      return showToast("error", "Veuillez remplir tous les champs obligatoires.");
+    }
+    
+    if (amt > (profile?.balance || 0) - (profile?.locked_balance || 0)) {
+      return showToast("error", "Solde disponible insuffisant pour effectuer ce retrait.");
+    }
     
     setIsSubmitting(true);
     try {
@@ -113,13 +147,17 @@ export default function FinancePage() {
         throw new Error(result.message);
       }
 
-      alert(result.message);
+      // Notification de succès élégante
+      showToast("success", result.message || "Demande de retrait envoyée avec succès.");
       setView('menu');
       setMethod(null);
       setAmount('');
       setPhone('');
-    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Erreur inconnue'); } 
-    finally { setIsSubmitting(false); }
+    } catch (err: unknown) { 
+      showToast("error", err instanceof Error ? err.message : 'Une erreur inattendue est survenue.'); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   if (loading) return (
@@ -143,8 +181,10 @@ export default function FinancePage() {
   const availableBalance = (profile?.balance || 0) - (profile?.locked_balance || 0);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_30%),linear-gradient(135deg,_#030712_0%,_#020617_45%,_#020617_100%)] text-white">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_30%),linear-gradient(135deg,_#030712_0%,_#020617_45%,_#020617_100%)] text-white relative">
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-5 sm:px-6 lg:px-8">
+        
+        {/* Entête avec bouton retour et Logo */}
         <div className="mb-4 flex items-center justify-between">
           <button
             onClick={() => {
@@ -168,6 +208,39 @@ export default function FinancePage() {
           </div>
         </div>
 
+        {/* Composant Toast de notification UI animé */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+              className={`mb-4 flex items-center justify-between rounded-2xl border p-4 shadow-lg backdrop-blur-xl ${
+                toast.type === 'success'
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 shadow-emerald-950/20'
+                  : 'border-red-500/30 bg-red-500/10 text-red-200 shadow-red-950/20'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {toast.type === 'success' ? (
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+                )}
+                <span className="text-xs font-semibold tracking-wide sm:text-sm">{toast.message}</span>
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="ml-3 rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Carte du Solde du portefeuille */}
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -206,6 +279,7 @@ export default function FinancePage() {
           )}
         </motion.section>
 
+        {/* Menu principal (Dépôt / Retrait) */}
         {view === 'menu' && (
           <motion.div
             initial={{ opacity: 0, y: 14 }}
@@ -258,6 +332,7 @@ export default function FinancePage() {
           </motion.div>
         )}
 
+        {/* Sélection de la méthode de paiement */}
         {(view === 'deposit' || view === 'withdrawal') && !method && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -291,6 +366,7 @@ export default function FinancePage() {
           </motion.div>
         )}
 
+        {/* Formulaire de Dépôt */}
         {view === 'deposit' && method && (
           <motion.form
             initial={{ opacity: 0, y: 16 }}
@@ -329,7 +405,7 @@ export default function FinancePage() {
               />
             </div>
 
-            <label className="flex w-full flex-col items-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-950/60 p-8 text-center transition-all duration-200 hover:border-emerald-400/30">
+            <label className="flex w-full flex-col items-center rounded-[1.5rem] border border-dashed border-white/10 bg-slate-950/60 p-8 text-center cursor-pointer transition-all duration-200 hover:border-emerald-400/30">
               <Upload size={24} className="mb-2 text-slate-400" />
               <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">{file ? file.name : 'Preuve (Image)'}</span>
               <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" />
@@ -346,6 +422,7 @@ export default function FinancePage() {
           </motion.form>
         )}
 
+        {/* Formulaire de Retrait */}
         {view === 'withdrawal' && method && (
           <motion.form
             initial={{ opacity: 0, y: 16 }}
