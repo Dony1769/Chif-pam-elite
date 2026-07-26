@@ -71,7 +71,7 @@ export function useClientChat() {
   }, [currentUserId])
 
   /**
-   * Étape 3 : Envoi d'un nouveau message
+   * Étape 3 : Envoi d'un nouveau message avec typage strict
    */
   const sendMessage = useCallback(async () => {
     if (!text.trim() || !currentUserId) return
@@ -82,12 +82,13 @@ export function useClientChat() {
     try {
       const adminReceiverId = 'admin'
 
-      const inserted = await ChatService.sendMessage(
+      // Cast explicite de la réponse en ChatMessage pour empêcher l'inférence 'never'
+      const inserted = (await ChatService.sendMessage(
         supabase,
         currentUserId,
         adminReceiverId,
         currentText
-      )
+      )) as ChatMessage | null
 
       if (inserted && inserted.id && !seenIds.current.has(inserted.id)) {
         seenIds.current.add(inserted.id)
@@ -106,7 +107,6 @@ export function useClientChat() {
     setIsLoadingMore(true)
 
     try {
-      // Logique de chargement des anciens messages si nécessaire
       setIsLoadingMore(false)
     } catch (err) {
       console.error('Erreur lors du chargement des anciens messages:', err)
@@ -114,7 +114,6 @@ export function useClientChat() {
     }
   }, [isLoadingMore, hasMore, currentUserId])
 
-  // Retour de l'ensemble des données et fonctions consommées par la page
   return {
     messages,
     text,
