@@ -14,8 +14,6 @@ import {
   Flame,
   BellOff,
   Coins,
-  Crown,
-  Medal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -23,20 +21,20 @@ type FilterType = "TOUT" | "VICTOIRES" | "DÉFIS" | "SYSTÈME";
 
 type NotificationRow = {
   id: string;
-  user_id: string;
   title: string | null;
   content: string | null;
-  type: string | null;
-  is_read: boolean;
+  message?: string | null;
   created_at: string;
+  is_read: boolean;
+  link?: string | null;
 };
 
 type ChallengeRow = {
   id: string;
   title: string;
   prize_pool_cp: number;
-  game_type: string;
   created_at: string;
+  ends_at?: string | null;
   is_active: boolean;
 };
 
@@ -48,7 +46,6 @@ type AlertItem = {
   is_read: boolean;
   is_challenge: boolean;
   is_victory: boolean;
-  rank_position?: number;
   link?: string;
 };
 
@@ -73,7 +70,7 @@ export default function ClientNotifications() {
   const [isTabVisible, setIsTabVisible] = useState(true);
   const router = useRouter();
 
-  // --- Notification native locale ---
+  // --- FONCTION D'ENVOI PUSH NATIVE (App Ouverte) ---
   const sendNativePush = async (title: string, body: string) => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
@@ -94,7 +91,7 @@ export default function ClientNotifications() {
 
       await swReg.showNotification(title, options);
     } catch (err) {
-      console.error("Erreur affichage notification native:", err);
+      console.error("Erreur affichage notif:", err);
     }
   };
 
@@ -103,30 +100,37 @@ export default function ClientNotifications() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/connexion");
-        return;
-      }
+      if (!user) return router.push("/connexion");
       setUserId(user.id);
 
       const [notifsRes, challengesRes] = await Promise.all([
         supabase
           .from("notifications")
-          .select("id, user_id, title, content, type, is_read, created_at")
+          .select("id, title, content, created_at, is_read")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("challenges")
-          .select("id, title, prize_pool_cp, game_type, created_at, is_active")
+          .select("id, title, prize_pool_cp, created_at, ends_at, is_active")
           .eq("is_active", true)
           .order("created_at", { ascending: false }),
       ]);
 
-      if (notifsRes.data) setNotifications(notifsRes.data as NotificationRow[]);
-      if (challengesRes.data) setLiveChallenges(challengesRes.data as ChallengeRow[]);
-    } catch (err) {
-      console.error("Erreur de chargement des données:", err);
+      if (notifsRes.error) {
+        console.error("notifications list query failed", notifsRes.error);
+      }
+
+      setNotifications((notifsRes.data || []) as NotificationRow[]);
+      
+      // Filtre côté JS pour ne garder strictement QUE les défis actifs ET non expirés
+      const now = new Date().getTime();
+      const validChallenges = ((challengesRes.data || []) as ChallengeRow[]).filter((c) => {
+        if (!c.is_active) return false;
+        if (c.ends_at && new Date(c.ends_at).getTime() <= now) return false;
+        return true;
+      });
+
+      setLiveChallenges(validChallenges);
     } finally {
       setLoading(false);
     }
@@ -151,16 +155,15 @@ export default function ClientNotifications() {
   }, []);
 
   useEffect(() => {
-    void fetchAllData();
-    void checkPushSubscription();
+    fetchAllData();
+    checkPushSubscription();
   }, [checkPushSubscription, fetchAllData]);
 
-  // Synchronisation en temps réel via Supabase Realtime
   useEffect(() => {
     if (!userId || !isTabVisible) return;
 
     const channel = supabase
-      .channel("notifications_realtime_sync")
+      .channel("notif_radar_sync")
       .on(
         "postgres_changes",
         {
@@ -170,36 +173,28 @@ export default function ClientNotifications() {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          const newNotif = payload.new as NotificationRow;
-          setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
-          void sendNativePush(
-            newNotif.title || "CHIF PAM ⚡",
-            newNotif.content || "Nouvelle notification"
-          );
+          const n = payload.new as NotificationRow;
+          setNotifications((prev) => [n, ...prev.filter((item) => item.id !== n.id)]);
+          sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle info");
         }
       )
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "challenges",
-        },
+        { event: "INSERT", schema: "public", table: "challenges" },
         (payload) => {
-          const newChallenge = payload.new as ChallengeRow;
-          if (newChallenge.is_active) {
-            setLiveChallenges((prev) => [
-              newChallenge,
-              ...prev.filter((c) => c.id !== newChallenge.id),
-            ]);
-            void sendNativePush("NOUVEAU DÉFI DISPONIBLE 🔥", newChallenge.title);
+          const c = payload.new as ChallengeRow;
+          const now = new Date().getTime();
+          // Vérification supplémentaire de l'expiration au moment du push temps réel
+          if (c.is_active && (!c.ends_at || new Date(c.ends_at).getTime() > now)) {
+            setLiveChallenges((prev) => [c, ...prev.filter((item) => item.id !== c.id)]);
+            sendNativePush("NOUVEAU DÉFI 🔥", c.title);
           }
         }
       )
       .subscribe();
 
     return () => {
-      void supabase.removeChannel(channel);
+      supabase.removeChannel(channel);
     };
   }, [isTabVisible, userId]);
 
@@ -210,99 +205,87 @@ export default function ClientNotifications() {
 
       if (permission === "granted") {
         const reg = await navigator.serviceWorker.ready;
+
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
         });
 
-        if (userId) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
           const { error } = await supabase.from("push_subscriptions").upsert(
             {
-              user_id: userId,
+              user_id: user.id,
               subscription: sub.toJSON(),
             },
             { onConflict: "subscription" }
           );
 
           if (!error) {
-            void sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar de notifications est actif.");
+            sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar est actif.");
             setPushEnabled(true);
           } else {
-            alert("Erreur lors de la sauvegarde de l'abonnement push.");
+            alert("Erreur lors de la sauvegarde de l'abonnement.");
           }
         }
       } else {
-        alert("Permission refusée. Modifiez les paramètres de votre navigateur.");
+        alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
       }
     } catch (e) {
       console.error(e);
-      alert("Une erreur technique s'est produite.");
+      alert("Erreur technique lors de l'abonnement.");
     } finally {
       setIsRegistering(false);
     }
   };
 
-  const urlBase64ToUint8Array = (base64String: string) => {
-    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  };
-
-  const markAllAsRead = async () => {
-    if (!userId) return;
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    await supabase.from("notifications").update({ is_read: true }).eq("user_id", userId);
+  const urlBase64ToUint8Array = (bs: string) => {
+    const pad = "=".repeat((4 - (bs.length % 4)) % 4);
+    const b64 = (bs + pad).replace(/-/g, "+").replace(/_/g, "/");
+    return Uint8Array.from([...window.atob(b64)].map((c) => c.charCodeAt(0)));
   };
 
   const allAlerts = useMemo<AlertItem[]>(() => {
-    const mappedChallenges: AlertItem[] = liveChallenges.map((c) => ({
-      id: `challenge-${c.id}`,
-      title: `DÉFI : ${c.title}`,
-      content: `Jackpot de ${c.prize_pool_cp.toLocaleString()} CP à remporter. Participez dès maintenant !`,
-      created_at: c.created_at,
-      is_read: false,
-      is_challenge: true,
-      is_victory: false,
-      link: "/client/challenges",
-    }));
+    const now = new Date().getTime();
+
+    // Filtre pour garantir qu'aucun défi expiré n'apparaît
+    const mappedChallenges: AlertItem[] = liveChallenges
+      .filter((c) => c.is_active && (!c.ends_at || new Date(c.ends_at).getTime() > now))
+      .map((c) => ({
+        id: `challenge-${c.id}`,
+        title: `NOUVEAU DÉFI : ${c.title}`,
+        content: `Récompense : ${c.prize_pool_cp} CP. Bonne chance !`,
+        created_at: c.created_at,
+        is_read: false,
+        is_challenge: true,
+        is_victory: false,
+        link: "/client/challenges",
+      }));
 
     const normalizedNotifs: AlertItem[] = notifications.map((n) => {
-      const title = n.title || "ALERTE SYSTÈME";
-      const content = n.content || "Nouvelle information";
+      const titleLower = (n.title || "").toLowerCase();
+      const contentLower = (n.content || n.message || "").toLowerCase();
 
-      // Détection des victoires Top 3 ou gains de CP
-      const isTop1 = title.includes("🥇") || title.includes("#1") || title.toLowerCase().includes("1er");
-      const isTop2 = title.includes("🥈") || title.includes("#2") || title.toLowerCase().includes("2eme");
-      const isTop3 = title.includes("🥉") || title.includes("#3") || title.toLowerCase().includes("3eme");
-
+      // Détection dynamique des victoires (Top 3, récompenses)
       const isVictory =
-        isTop1 ||
-        isTop2 ||
-        isTop3 ||
-        title.toLowerCase().includes("victoire") ||
-        title.toLowerCase().includes("récompense") ||
-        n.type === "reward";
-
-      let rank_position: number | undefined;
-      if (isTop1) rank_position = 1;
-      else if (isTop2) rank_position = 2;
-      else if (isTop3) rank_position = 3;
+        titleLower.includes("vic") ||
+        titleLower.includes("gagné") ||
+        titleLower.includes("top") ||
+        titleLower.includes("🥇") ||
+        titleLower.includes("🥈") ||
+        titleLower.includes("🥉") ||
+        contentLower.includes("récompense") ||
+        contentLower.includes("cp");
 
       return {
-        id: n.id,
-        title,
-        content,
-        created_at: n.created_at,
-        is_read: n.is_read,
+        ...n,
+        title: n.title || "ALERTE",
+        content: n.content || n.message || "Nouvelle information",
         is_challenge: false,
+        link: n.link ?? undefined,
         is_victory: isVictory,
-        rank_position,
-        link: isVictory ? "/client/rank" : undefined,
       };
     });
 
@@ -331,59 +314,58 @@ export default function ClientNotifications() {
     [allAlerts]
   );
 
-  if (loading) {
+  if (loading)
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#020617] text-emerald-500">
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center text-emerald-500">
         <Loader2 className="animate-spin" size={40} />
       </div>
     );
-  }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-24">
-      {/* En-tête */}
-      <div className="sticky top-0 z-20 space-y-4 border-b border-white/10 bg-[#020617]/95 p-5 backdrop-blur-2xl">
+    <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase pb-20">
+      <div className="p-6 sticky top-0 bg-[#020617]/95 backdrop-blur-2xl z-20 border-b border-emerald-500/10 space-y-6">
         <div className="flex items-center justify-between">
           <button
             onClick={() => router.push("/client/home")}
-            className="rounded-2xl border border-white/10 bg-white/5 p-3 transition active:scale-90"
+            className="p-3 bg-white/5 rounded-2xl border border-white/10 active:scale-90 transition-all"
           >
             <ArrowLeft size={20} />
           </button>
           <div className="text-center">
             <h1 className="text-xl tracking-tighter">CENTRE_D_ALERTES</h1>
-            <p className="text-[8px] tracking-[0.3em] text-emerald-400">
-              SYNCHRONISATION_TEMPS_RÉEL
-            </p>
+            <p className="text-[7px] text-emerald-500/50 tracking-[0.4em]">RADAR_ACTIF_SYNCHRONISÉ</p>
           </div>
           <button
-            onClick={markAllAsRead}
-            className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-400 active:scale-95 transition"
-            title="Tout marquer comme lu"
+            onClick={async () => {
+              if (userId)
+                await supabase
+                  .from("notifications")
+                  .update({ is_read: true })
+                  .eq("user_id", userId);
+              setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+            }}
+            className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-emerald-500"
           >
             <CheckCheck size={20} />
           </button>
         </div>
 
-        {/* Filtres */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {(["TOUT", "VICTOIRES", "DÉFIS", "SYSTÈME"] as FilterType[]).map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
-              className={`relative flex items-center gap-2 rounded-2xl px-5 py-2.5 text-[9px] tracking-widest whitespace-nowrap border transition ${
+              className={`relative px-6 py-3 rounded-2xl text-[9px] tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border ${
                 activeFilter === filter
-                  ? "bg-emerald-500 text-slate-950 border-emerald-500 shadow-md shadow-emerald-500/20"
-                  : "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10"
+                  ? "bg-emerald-500 text-black border-emerald-500"
+                  : "bg-white/5 text-slate-500 border-white/5"
               }`}
             >
-              <span>{filter}</span>
+              {filter}
               {counts[filter] > 0 && (
                 <span
-                  className={`rounded-md px-1.5 py-0.5 text-[8px] ${
-                    activeFilter === filter
-                      ? "bg-slate-950 text-emerald-400"
-                      : "bg-emerald-500 text-slate-950"
+                  className={`px-1.5 py-0.5 rounded-md text-[8px] ${
+                    activeFilter === filter ? "bg-black text-emerald-500" : "bg-emerald-500 text-black"
                   }`}
                 >
                   {counts[filter]}
@@ -394,101 +376,93 @@ export default function ClientNotifications() {
         </div>
       </div>
 
-      {/* Liste des alertes */}
-      <div className="p-4 space-y-3 sm:p-6">
+      <div className="p-6 space-y-4">
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 text-slate-600">
-              <Inbox size={50} strokeWidth={1.5} />
-              <p className="mt-4 text-[10px] tracking-[0.4em]">AUCUNE ALERTE TROUVÉE</p>
+            <div className="flex flex-col items-center py-40 text-slate-700 opacity-20">
+              <Inbox size={60} strokeWidth={1} />
+              <p className="text-[10px] tracking-[0.5em] mt-4">AUCUNE ALERTE</p>
             </div>
           ) : (
             filteredAlerts.map((n) => (
               <motion.div
                 key={n.id}
                 layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                onClick={() => n.link && router.push(n.link)}
-                className={`relative overflow-hidden rounded-[2rem] border p-5 transition cursor-pointer ${
-                  n.is_victory
-                    ? "border-emerald-500/50 bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.15)]"
-                    : n.is_challenge
-                    ? "border-blue-500/50 bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-950 shadow-[0_0_25px_rgba(59,130,246,0.15)]"
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className={`relative p-6 rounded-4xl border overflow-hidden cursor-pointer transition-all ${
+                  n.is_challenge
+                    ? "bg-gradient-to-br from-blue-900/30 to-black border-blue-500/50"
+                    : n.is_victory
+                    ? "bg-gradient-to-br from-emerald-900/40 via-black to-black border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
                     : n.is_read
-                    ? "border-white/5 bg-slate-900/30 opacity-50"
-                    : "border-white/10 bg-slate-900/80 backdrop-blur-md"
+                    ? "bg-white/5 border-white/5 opacity-40"
+                    : "bg-slate-900/40 border-white/10"
                 }`}
+                onClick={() => n.link && router.push(n.link)}
               >
                 {!n.is_read && (
-                  <div className="absolute top-4 right-4 flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <div className="absolute top-4 right-4">
+                    <span className="flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
                   </div>
                 )}
 
-                <div className="flex items-start gap-4">
-                  {/* Icône dynamique selon le type */}
+                <div className="flex gap-4 items-start">
                   <div
-                    className={`rounded-2xl p-3 ${
-                      n.is_victory
-                        ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30"
-                        : n.is_challenge
-                        ? "bg-blue-500 text-white shadow-md shadow-blue-500/30"
+                    className={`p-3 rounded-xl ${
+                      n.is_challenge
+                        ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                        : n.is_victory
+                        ? "bg-emerald-500 text-black animate-pulse"
                         : "bg-white/5 text-slate-400"
                     }`}
                   >
-                    {n.rank_position === 1 ? (
-                      <Crown size={22} className="text-amber-300 fill-current" />
-                    ) : n.rank_position === 2 || n.rank_position === 3 ? (
-                      <Medal size={22} />
+                    {n.is_challenge ? (
+                      <Flame size={20} />
                     ) : n.is_victory ? (
-                      <Trophy size={22} />
-                    ) : n.is_challenge ? (
-                      <Flame size={22} />
+                      <Trophy size={20} />
                     ) : (
-                      <Shield size={22} />
+                      <Shield size={20} />
                     )}
                   </div>
-
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3
-                        className={`text-sm tracking-tight ${
-                          n.is_victory
+                        className={`text-sm tracking-tighter leading-none pr-6 ${
+                          n.is_challenge
+                            ? "text-blue-400"
+                            : n.is_victory
                             ? "text-emerald-400 font-black"
-                            : n.is_challenge
-                            ? "text-blue-400 font-black"
-                            : "text-white"
+                            : ""
                         }`}
                       >
                         {n.title}
                       </h3>
-                      {n.is_victory && <Coins size={14} className="text-emerald-400" />}
+                      {n.is_victory && <Coins size={12} className="text-emerald-500" />}
                     </div>
-
-                    <p className="text-xs not-italic text-slate-300 font-medium leading-relaxed lowercase">
+                    <p
+                      className={`text-[11px] lowercase not-italic leading-relaxed ${
+                        n.is_victory ? "text-white" : "text-slate-400"
+                      }`}
+                    >
                       {n.content}
                     </p>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-[8px] tracking-widest text-slate-500">
-                        {new Date(n.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-
-                      {n.is_victory && (
-                        <span className="text-[8px] font-black text-emerald-400 tracking-widest">
-                          VOIR LE CLASSEMENT
-                        </span>
-                      )}
+                    <div className="flex justify-between items-center mt-3">
+                      <p className="text-[7px] text-slate-600 tracking-widest">
+                        {new Date(n.created_at).toLocaleTimeString()}
+                      </p>
                       {n.is_challenge && (
-                        <span className="text-[8px] font-black text-blue-400 tracking-widest animate-pulse">
-                          REJOINDRER LA MISSION
-                        </span>
+                        <p className="text-[7px] text-blue-500 tracking-widest animate-pulse font-bold">
+                          VOIR_DÉFI_MAINTENANT
+                        </p>
+                      )}
+                      {n.is_victory && (
+                        <p className="text-[7px] text-emerald-500 tracking-widest font-bold">
+                          RÉCOMPENSE_REÇUE
+                        </p>
                       )}
                     </div>
                   </div>
@@ -499,15 +473,14 @@ export default function ClientNotifications() {
         </AnimatePresence>
       </div>
 
-      {/* Bouton Fixe d'Abonnement aux Notifications Push */}
-      <div className="fixed bottom-6 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
+      <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
         <button
           onClick={togglePush}
           disabled={isRegistering}
-          className={`pointer-events-auto flex items-center gap-3 rounded-2xl px-6 py-3.5 text-[10px] font-black tracking-widest shadow-2xl transition active:scale-95 ${
+          className={`pointer-events-auto px-8 py-4 rounded-2xl font-black text-[10px] tracking-widest flex items-center gap-3 active:scale-95 transition-all shadow-2xl ${
             pushEnabled
-              ? "bg-slate-900 border border-emerald-500/30 text-emerald-400"
-              : "bg-emerald-500 text-slate-950 shadow-emerald-500/30"
+              ? "bg-slate-800 text-emerald-500 border border-emerald-500/20"
+              : "bg-emerald-500 text-black shadow-emerald-500/40"
           }`}
         >
           {isRegistering ? (
@@ -517,7 +490,7 @@ export default function ClientNotifications() {
           ) : (
             <BellOff size={16} />
           )}
-          <span>{pushEnabled ? "PUSH ACTIF" : "ACTIVER LES NOTIFICATIONS PUSH"}</span>
+          {pushEnabled ? "PUSH_ACTIF" : "ACTIVER_PUSH"}
         </button>
       </div>
     </div>
