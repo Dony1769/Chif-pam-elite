@@ -23,16 +23,27 @@ export interface AdminConversation {
 
 export type ParsedMessageContent = 
   | { type: 'text'; text: string }
-  | { type: 'image'; url: string };
+  | { type: 'image'; url: string }
+  | { type: 'action'; text: string; actionLabel: string; actionUrl: string };
 
 /**
- * Helper pour décoder le contenu d'un message (Texte brut ou JSON d'image)
+ * Helper pour décoder le contenu d'un message (Texte brut, Image JSON ou Action Card)
  */
 export function parseMessageContent(content: string): ParsedMessageContent {
   try {
     const obj = JSON.parse(content);
-    if (obj && obj.type === 'image' && typeof obj.url === 'string') {
-      return { type: 'image', url: obj.url };
+    if (obj && typeof obj === 'object') {
+      if (obj.type === 'image' && typeof obj.url === 'string') {
+        return { type: 'image', url: obj.url };
+      }
+      if (obj.type === 'action' && typeof obj.text === 'string' && typeof obj.actionUrl === 'string') {
+        return { 
+          type: 'action', 
+          text: obj.text, 
+          actionLabel: obj.actionLabel || 'Ouvrir la page', 
+          actionUrl: obj.actionUrl 
+        };
+      }
     }
   } catch {
     // Si ce n'est pas du JSON valide, c'est du texte simple
