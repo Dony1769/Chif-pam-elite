@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Crown, CheckCircle2, Zap, ShieldCheck, 
   ChevronLeft, AlertTriangle, Loader2, Sparkles,
-  Clock, HelpCircle, ChevronDown, Check
+  Clock, HelpCircle, ChevronDown, Check, Star, PartyPopper
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -36,6 +36,17 @@ interface FAQItem {
   answer: string;
 }
 
+// Helper haptique pour mobile
+const triggerHaptic = () => {
+  if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([15, 30, 15]);
+    } catch {
+      // Ignorer si non supporté
+    }
+  }
+};
+
 // --- DONNÉES STATIQUES ---
 const VIP_PLANS: VipPlan[] = [
   {
@@ -44,9 +55,9 @@ const VIP_PLANS: VipPlan[] = [
     price: 250,
     durationDays: 7,
     durationLabel: '7 JOURS',
-    color: 'from-emerald-500/10 via-emerald-500/5 to-slate-900',
-    border: 'border-emerald-500/30 hover:border-emerald-500/60',
-    icon: <Zap className="text-emerald-400" size={24} />,
+    color: 'from-emerald-500/15 via-emerald-950/20 to-slate-950',
+    border: 'border-emerald-500/40 hover:border-emerald-400',
+    icon: <Zap className="text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" size={26} />,
     benefits: [
       '-10% sur tous les frais d\'entrée',
       'Badge VIP exclusif sur le profil',
@@ -59,10 +70,10 @@ const VIP_PLANS: VipPlan[] = [
     price: 850,
     durationDays: 30,
     durationLabel: '30 JOURS',
-    badge: 'PLUS POPULAIRE',
-    color: 'from-amber-500/15 via-amber-500/5 to-slate-900',
-    border: 'border-amber-500/40 hover:border-amber-500/70',
-    icon: <Crown className="text-amber-400" size={28} />,
+    badge: 'LE PLUS POPULAIRE',
+    color: 'from-amber-500/20 via-amber-950/30 to-slate-950',
+    border: 'border-amber-500/60 hover:border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.15)]',
+    icon: <Crown className="text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]" size={30} />,
     benefits: [
       '-25% sur tous les frais d\'entrée',
       'Accès exclusif aux tournois VIP',
@@ -76,17 +87,51 @@ const VIP_PLANS: VipPlan[] = [
 const FAQ_DATA: FAQItem[] = [
   {
     question: "Comment fonctionne l'activation du statut VIP ?",
-    answer: "L'activation est instantanée dès que votre solde est débité. Vous bénéficiez immédiatement de tous les avantages liés à votre plan."
+    answer: "L'activation est instantanée dès la validation de la transaction. Les privilèges s'appliquent immédiatement à votre compte."
   },
   {
     question: "Puis-je changer de plan en cours d'abonnement ?",
-    answer: "Pour le moment, vous devez attendre l'expiration de votre plan actuel avant de pouvoir en activer un nouveau."
+    answer: "Vous pourrez souscrire à un nouveau plan dès l'expiration de votre abonnement actuel."
   },
   {
     question: "Que se passe-t-il à la fin de la période ?",
-    answer: "L'abonnement ne se renouvelle pas automatiquement. Votre compte repassera en 'Membre Standard' sans frais supplémentaires."
+    answer: "L'abonnement ne se renouvelle pas automatiquement. Votre compte repasse en statut standard sans aucun frais additionnel."
   }
 ];
+
+// COMPOSANT CONFETTI SANS DÉPENDANCE (Framer Motion)
+function VipConfetti() {
+  const particles = Array.from({ length: 25 });
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {particles.map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{
+            x: `${Math.random() * 100}vw`,
+            y: -20,
+            rotate: 0,
+            scale: Math.random() * 0.6 + 0.6,
+            opacity: 1
+          }}
+          animate={{
+            y: '105vh',
+            rotate: Math.random() * 720 - 360,
+            opacity: [1, 1, 0]
+          }}
+          transition={{
+            duration: Math.random() * 2 + 2,
+            ease: 'easeOut',
+            delay: Math.random() * 0.3
+          }}
+          className={`absolute w-3 h-3 rounded-sm ${
+            i % 3 === 0 ? 'bg-amber-400' : i % 3 === 1 ? 'bg-emerald-400' : 'bg-yellow-200'
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function VipPage() {
   // --- ÉTATS ---
@@ -95,16 +140,16 @@ export default function VipPage() {
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<VipPlan | null>(null);
+  const [showCelebration, setShowCelebration] = useState<boolean>(false);
+  const [celebratedPlanName, setCelebratedPlanName] = useState<string>('');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const router = useRouter();
 
-  // --- EFFETS ---
   useEffect(() => {
     fetchProfile();
   }, []);
 
-  // --- FONCTIONS LOGIQUES ---
   const fetchProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -129,7 +174,7 @@ export default function VipPage() {
     if (!profile || !selectedPlan) return;
 
     if (profile.balance < selectedPlan.price) {
-      setError("Solde insuffisant pour ce plan.");
+      setError("Solde insuffisant pour souscrire à ce plan.");
       setSelectedPlan(null);
       return;
     }
@@ -141,7 +186,6 @@ export default function VipPage() {
     expiryDate.setDate(expiryDate.getDate() + selectedPlan.durationDays);
 
     try {
-      // Update Profil
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
@@ -153,7 +197,6 @@ export default function VipPage() {
 
       if (updateError) throw updateError;
 
-      // Historique de transaction
       await supabase.from('transactions').insert({
         user_id: profile.id,
         amount: -selectedPlan.price,
@@ -161,10 +204,17 @@ export default function VipPage() {
         description: `Activation plan VIP ${selectedPlan.name}`
       });
 
-      await fetchProfile();
+      const planName = selectedPlan.name;
       setSelectedPlan(null);
+      await fetchProfile();
+      
+      // Déclencher la célébration
+      setCelebratedPlanName(planName);
+      setShowCelebration(true);
+      triggerHaptic();
+
     } catch (err) {
-      setError("Erreur lors du traitement de la transaction. Veuillez réessayer.");
+      setError("Erreur lors du traitement de la transaction. Veuillez reessayer.");
     } finally {
       setActionLoading(false);
     }
@@ -186,7 +236,6 @@ export default function VipPage() {
     }
   };
 
-  // Helper pour trouver le nom du plan actif
   const getActivePlanName = () => {
     if (!profile || profile.vip_status === 'free') return 'Membre Standard';
     const active = VIP_PLANS.find(p => p.id === profile.vip_status);
@@ -196,84 +245,106 @@ export default function VipPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-        <Loader2 className="animate-spin text-amber-500" size={32} />
+        <Loader2 className="animate-spin text-amber-500" size={36} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white pb-24 overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-[#020617] text-white pb-24 overflow-x-hidden font-sans select-none">
       
-      {/* HEADER */}
-      <header className="p-6 flex items-center justify-between border-b border-white/5">
-        <div className="flex items-center gap-4">
+      {/* EFFET CELEBRATION VIP */}
+      {showCelebration && <VipConfetti />}
+
+      {/* HEADER RESPONSIVE */}
+      <header className="p-4 sm:p-6 flex items-center justify-between border-b border-white/10 backdrop-blur-md sticky top-0 z-30 bg-[#020617]/80">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => router.back()} 
-            className="p-3 bg-white/5 hover:bg-white/10 transition-colors rounded-2xl border border-white/10 text-slate-300"
+            className="p-2.5 bg-white/5 hover:bg-white/10 transition-transform active:scale-95 rounded-2xl border border-white/10 text-slate-300"
             aria-label="Retour"
           >
             <ChevronLeft size={20} />
           </button>
           <div>
-            <h1 className="text-xl font-black italic tracking-tight uppercase">
-              Elite <span className="text-amber-500">Membership</span>
+            <h1 className="text-lg sm:text-xl font-black italic tracking-tight uppercase flex items-center gap-1.5">
+              Elite <span className="text-amber-400">Membership</span>
             </h1>
-            <p className="text-xs text-slate-400">Passez au niveau supérieur</p>
+            <p className="text-[10px] sm:text-xs text-slate-400">Privilèges & Avantages Exclusifs</p>
           </div>
         </div>
 
-        {/* Display Solde Utilisateur */}
         {profile && (
-          <div className="text-right bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
-            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Solde disponible</p>
-            <p className="text-sm font-bold text-emerald-400">{profile.balance.toLocaleString()} HTG</p>
+          <div className="text-right bg-amber-500/10 px-3.5 py-1.5 rounded-2xl border border-amber-500/20">
+            <p className="text-[9px] text-amber-300/80 uppercase font-bold">Solde</p>
+            <p className="text-xs sm:text-sm font-black text-amber-400">{profile.balance.toLocaleString()} HTG</p>
           </div>
         )}
       </header>
 
-      <main className="p-6 space-y-8 max-w-2xl mx-auto">
+      <main className="p-4 sm:p-6 space-y-6 max-w-xl mx-auto">
         
-        {/* CARTE STATUT ACTUEL */}
-        <section className="relative p-8 rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-white/10 overflow-hidden shadow-2xl">
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-[11px] font-bold text-amber-400/80 tracking-widest uppercase bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
-                Statut Actuel
+        {/* CARTE PASS VIP DYNAMIQUE */}
+        <section className={`relative p-6 sm:p-8 rounded-[2.5rem] overflow-hidden transition-all duration-500 border shadow-2xl ${
+          profile?.vip_status !== 'free' 
+            ? 'bg-gradient-to-br from-amber-950/60 via-slate-900 to-amber-900/30 border-amber-500/50 shadow-amber-500/10' 
+            : 'bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border-white/10'
+        }`}>
+          
+          {/* Reflet Holographique */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none" />
+
+          <div className="relative z-10 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full border ${
+                profile?.vip_status !== 'free'
+                  ? 'bg-amber-500 text-black border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                  : 'bg-white/5 text-slate-400 border-white/10'
+              }`}>
+                {profile?.vip_status !== 'free' ? 'PASS VIP ACTIF' : 'MEMBRE STANDARD'}
               </span>
+
               {profile?.vip_status !== 'free' && (
-                <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                  <Check size={12} /> Actif
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30">
+                  <Check size={12} /> BÉNÉFICES ACTIFS
                 </span>
               )}
             </div>
 
-            <h2 className="text-3xl font-black italic tracking-tight flex items-center gap-3">
-              {getActivePlanName()}
-              {profile?.vip_status !== 'free' && <Sparkles className="text-amber-400 animate-pulse" size={24} />}
-            </h2>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tight flex items-center gap-2">
+                {getActivePlanName()}
+                {profile?.vip_status !== 'free' && (
+                  <Sparkles className="text-amber-400 animate-pulse" size={24} />
+                )}
+              </h2>
+            </div>
 
             {profile?.vip_status !== 'free' && profile?.vip_expiry ? (
-              <div className="mt-4 flex items-center gap-2 text-xs text-slate-300 bg-white/5 p-3 rounded-xl border border-white/5 w-fit">
-                <Clock size={15} className="text-amber-400" />
-                <span>Expire le : <strong className="text-white">{new Date(profile.vip_expiry).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></span>
+              <div className="flex items-center gap-2 text-xs text-amber-200/90 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 backdrop-blur-md">
+                <Clock size={16} className="text-amber-400 shrink-0" />
+                <span>Valide jusqu'au : <strong className="text-white">{new Date(profile.vip_expiry).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></span>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 mt-2">
-                Passez VIP pour débloquer des réductions et un support prioritaire.
+              <p className="text-xs text-slate-400">
+                Passez Membre VIP dès maintenant pour débloquer toutes les fonctionnalités exclusives.
               </p>
             )}
           </div>
-          <Crown size={140} className="absolute -right-10 -bottom-10 opacity-5 text-amber-400 rotate-12 pointer-events-none" />
+
+          <Crown size={150} className={`absolute -right-8 -bottom-8 transition-opacity duration-500 pointer-events-none rotate-12 ${
+            profile?.vip_status !== 'free' ? 'opacity-15 text-amber-400' : 'opacity-5 text-white'
+          }`} />
         </section>
 
-        {/* ALERTES ERREUR */}
+        {/* ALERTE ERREUR */}
         <AnimatePresence>
           {error && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }} 
               animate={{ opacity: 1, y: 0 }} 
               exit={{ opacity: 0 }}
-              className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center gap-3 text-rose-400 text-xs font-medium"
+              className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center gap-3 text-rose-400 text-xs font-semibold"
             >
               <AlertTriangle size={18} className="shrink-0" />
               <span>{error}</span>
@@ -281,42 +352,47 @@ export default function VipPage() {
           )}
         </AnimatePresence>
 
-        {/* SECTION PLANS OU DETAILS ABONNEMENT */}
+        {/* LISTE DES FORMULES OU ACTIONS */}
         {profile?.vip_status === 'free' ? (
-          <section className="space-y-6">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Choisissez votre formule</h3>
-            
-            <div className="grid grid-cols-1 gap-6">
+          <section className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Choisis ta formule</h3>
+              <span className="text-[10px] text-amber-400/80 font-bold flex items-center gap-1">
+                <Star size={12} /> Instantané
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5">
               {VIP_PLANS.map((plan) => (
                 <motion.div 
                   key={plan.id}
-                  whileHover={{ y: -4 }}
-                  className={`relative p-7 rounded-[2.5rem] bg-gradient-to-b ${plan.color} border ${plan.border} transition-all shadow-xl`}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => triggerHaptic()}
+                  className={`relative p-6 sm:p-7 rounded-[2.5rem] bg-gradient-to-b ${plan.color} border ${plan.border} transition-all shadow-xl overflow-hidden`}
                 >
-                  {/* Badge Populaire */}
                   {plan.badge && (
-                    <div className="absolute -top-3 left-8 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black text-[10px] tracking-wider uppercase px-4 py-1 rounded-full shadow-lg">
-                      {plan.badge}
+                    <div className="absolute -top-0.5 right-8 bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black text-[9px] tracking-widest uppercase px-3 py-1 rounded-b-xl shadow-lg flex items-center gap-1">
+                      <Sparkles size={10} /> {plan.badge}
                     </div>
                   )}
 
-                  <div className="flex justify-between items-start mb-6">
+                  <div className="flex justify-between items-start mb-5">
                     <div>
-                      <h4 className="text-xl font-bold uppercase tracking-tight">{plan.name}</h4>
+                      <h4 className="text-lg font-black uppercase tracking-tight text-white">{plan.name}</h4>
                       <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-3xl font-black text-white">{plan.price} HTG</span>
+                        <span className="text-2xl sm:text-3xl font-black text-amber-400">{plan.price} HTG</span>
                         <span className="text-xs text-slate-400 font-medium">/ {plan.durationLabel}</span>
                       </div>
                     </div>
-                    <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md">
+                    <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
                       {plan.icon}
                     </div>
                   </div>
 
-                  <ul className="space-y-3 mb-8">
+                  <ul className="space-y-2.5 mb-6">
                     {plan.benefits.map((benefit, i) => (
-                      <li key={i} className="flex items-start gap-3 text-xs text-slate-200">
-                        <CheckCircle2 size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                      <li key={i} className="flex items-center gap-2.5 text-xs text-slate-200">
+                        <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
                         <span>{benefit}</span>
                       </li>
                     ))}
@@ -325,51 +401,50 @@ export default function VipPage() {
                   <button 
                     disabled={actionLoading}
                     onClick={() => setSelectedPlan(plan)}
-                    className="w-full py-4 bg-white hover:bg-amber-400 text-black font-black text-xs uppercase tracking-wider rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg"
+                    className="w-full py-3.5 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-black font-black text-xs uppercase tracking-widest rounded-2xl transition-transform active:scale-95 shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
                   >
-                    Activer ce plan
+                    Devenir VIP
                   </button>
                 </motion.div>
               ))}
             </div>
           </section>
         ) : (
-          /* VUE ABONNEMENT ACTIF */
-          <section className="p-8 border border-white/10 rounded-[2.5rem] bg-slate-900/40 text-center space-y-6">
-            <div className="p-4 bg-emerald-500/10 w-fit mx-auto rounded-full text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck size={40} />
+          <section className="p-6 border border-white/10 rounded-[2.5rem] bg-slate-900/40 text-center space-y-4">
+            <div className="p-3.5 bg-emerald-500/10 w-fit mx-auto rounded-full text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck size={36} />
             </div>
             <div>
-              <h3 className="text-lg font-bold">Votre abonnement est actif</h3>
-              <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
-                Vous profitez actuellement de tous les privilèges réservés aux membres Elite.
+              <h3 className="text-base font-bold">Abonnement Actif</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                Vous profitez actuellement de tous vos privilèges VIP sur la plateforme.
               </p>
             </div>
             
             <button 
               onClick={handleCancel}
               disabled={actionLoading}
-              className="text-rose-400 hover:text-rose-300 text-xs font-semibold tracking-wider uppercase border-b border-rose-500/30 hover:border-rose-500 pb-1 transition-all"
+              className="text-rose-400 hover:text-rose-300 text-[11px] font-bold tracking-wider uppercase border-b border-rose-500/30 hover:border-rose-500 pb-0.5 transition-all"
             >
-              {actionLoading ? "Traitement..." : "Désactiver l'abonnement"}
+              {actionLoading ? "Traitement..." : "Résilier l'abonnement"}
             </button>
           </section>
         )}
 
-        {/* SECTION FAQ */}
-        <section className="pt-4 space-y-4">
+        {/* FAQ ACCORDEON */}
+        <section className="pt-2 space-y-3">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-            <HelpCircle size={16} /> Questions fréquentes
+            <HelpCircle size={15} /> Foire aux questions
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {FAQ_DATA.map((faq, index) => (
               <div 
                 key={index}
-                className="border border-white/5 rounded-2xl bg-slate-900/30 overflow-hidden transition-colors"
+                className="border border-white/5 rounded-2xl bg-slate-900/30 overflow-hidden"
               >
                 <button
                   onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                  className="w-full p-4 text-left text-xs font-semibold flex justify-between items-center text-slate-200 hover:text-white"
+                  className="w-full p-4 text-left text-xs font-semibold flex justify-between items-center text-slate-200"
                 >
                   <span>{faq.question}</span>
                   <ChevronDown 
@@ -383,7 +458,7 @@ export default function VipPage() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="px-4 pb-4 text-xs text-slate-400 border-t border-white/5 pt-3"
+                      className="px-4 pb-4 text-xs text-slate-400 border-t border-white/5 pt-2.5"
                     >
                       {faq.answer}
                     </motion.div>
@@ -396,28 +471,28 @@ export default function VipPage() {
 
       </main>
 
-      {/* MODAL DE CONFIRMATION ACHAT */}
+      {/* MODAL CONFIRMATION ACHAT */}
       <AnimatePresence>
         {selectedPlan && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-slate-900 border border-white/10 p-6 rounded-3xl max-w-sm w-full space-y-6 text-center"
+              className="bg-slate-900 border border-amber-500/30 p-6 rounded-3xl max-w-xs w-full space-y-5 text-center shadow-2xl shadow-amber-500/10"
             >
-              <div className="p-3 bg-amber-500/10 w-fit mx-auto rounded-2xl text-amber-400 border border-amber-500/20">
+              <div className="p-3 bg-amber-500/10 w-fit mx-auto rounded-2xl text-amber-400 border border-amber-500/30">
                 <Crown size={32} />
               </div>
 
               <div>
-                <h3 className="text-lg font-bold">Confirmer l'activation</h3>
-                <p className="text-xs text-slate-400 mt-2">
-                  Vous allez souscrire au plan <strong className="text-white">{selectedPlan.name}</strong> pour un montant de <strong className="text-emerald-400">{selectedPlan.price} HTG</strong>.
+                <h3 className="text-lg font-black uppercase tracking-tight">Activer le VIP</h3>
+                <p className="text-xs text-slate-300 mt-2">
+                  Confirmez-vous l'activation du plan <strong className="text-amber-400">{selectedPlan.name}</strong> pour <strong className="text-emerald-400">{selectedPlan.price} HTG</strong> ?
                 </p>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-2.5">
                 <button
                   onClick={() => setSelectedPlan(null)}
                   disabled={actionLoading}
@@ -428,11 +503,46 @@ export default function VipPage() {
                 <button
                   onClick={executeSubscription}
                   disabled={actionLoading}
-                  className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 py-3 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs uppercase tracking-wider rounded-xl transition-transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20"
                 >
-                  {actionLoading ? <Loader2 className="animate-spin" size={16} /> : 'Confirmer'}
+                  {actionLoading ? <Loader2 className="animate-spin" size={16} /> : 'Valider'}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL CÉLÉBRATION DE BIENVENUE VIP */}
+      <AnimatePresence>
+        {showCelebration && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-gradient-to-b from-amber-950/80 via-slate-900 to-black border-2 border-amber-400/80 p-6 sm:p-8 rounded-[2.5rem] max-w-xs w-full text-center space-y-5 shadow-[0_0_50px_rgba(245,158,11,0.3)] relative overflow-hidden"
+            >
+              <div className="absolute -top-10 -left-10 w-24 h-24 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="p-4 bg-gradient-to-tr from-amber-500 to-yellow-300 text-black w-fit mx-auto rounded-full shadow-lg shadow-amber-500/30 animate-bounce">
+                <PartyPopper size={36} />
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase">FÉLICITATIONS</span>
+                <h3 className="text-xl sm:text-2xl font-black italic uppercase text-white">BIENVENUE CHEZ L'ÉLITE !</h3>
+                <p className="text-xs text-slate-300 pt-1">
+                  Votre formule <strong className="text-amber-400">{celebratedPlanName}</strong> est désormais active. Profitez immédiatement de vos avantages VIP.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowCelebration(false)}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-amber-500/20 active:scale-95 transition-transform"
+              >
+                PROFITER DE MES AVANTAGES
+              </button>
             </motion.div>
           </div>
         )}
