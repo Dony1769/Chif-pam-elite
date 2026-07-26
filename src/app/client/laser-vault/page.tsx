@@ -65,21 +65,24 @@ const triggerHaptic = () => {
   }
 };
 
-// --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS ---
+// --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS OPTIMISÉE ---
+// Le temps initial commence à 8s et diminue progressivement jusqu'à un minimum de 2.5s
 const getQuestionTimeMs = (questionNumber: number) => {
-  const baseTimeMs = 10000;
-  const reductionMs = (questionNumber - 1) * 500;
-  return Math.max(3000, baseTimeMs - reductionMs);
+  const baseTimeMs = 8000;
+  const reductionMs = (questionNumber - 1) * 600;
+  return Math.max(2500, baseTimeMs - reductionMs);
 };
 
+// Échelle ajustée pour protéger la marge admin (Rendement sous 1.0x sur les 4 premières questions)
 const getNextMultiplier = (answered: number) => {
-  const steps = [0.5, 0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0];
-  return steps[Math.min(answered, steps.length - 1)] ?? 5.0;
+  const steps = [0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+  return steps[Math.min(answered, steps.length - 1)] ?? 4.0;
 };
 
-// --- GÉNÉRATION DES QUESTIONS CORRIGÉE ---
+// --- GENERATION DES QUESTIONS OPTIMISEE ---
 const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
-  const level = questionsAnswered < 5 ? 1 : questionsAnswered < 12 ? 2 : 3;
+  // Ajustement plus rapide des paliers de difficulté
+  const level = questionsAnswered < 3 ? 1 : questionsAnswered < 7 ? 2 : 3;
 
   if (level === 1) {
     const a = Math.floor(Math.random() * 9) + 1;
@@ -94,15 +97,15 @@ const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
   }
 
   if (level === 2) {
-    const useMultiplication = Math.random() > 0.5;
+    const useMultiplication = Math.random() > 0.4;
     if (useMultiplication) {
-      const a = Math.floor(Math.random() * 8) + 2;
-      const b = Math.floor(Math.random() * 8) + 2;
+      const a = Math.floor(Math.random() * 7) + 3;
+      const b = Math.floor(Math.random() * 7) + 3;
       return { display: `${a} × ${b}`, answer: a * b };
     }
 
-    const a = Math.floor(Math.random() * 50) + 10;
-    const b = Math.floor(Math.random() * 50) + 10;
+    const a = Math.floor(Math.random() * 40) + 10;
+    const b = Math.floor(Math.random() * 40) + 10;
     const isAddition = Math.random() > 0.5;
     if (isAddition) {
       return { display: `${a} + ${b}`, answer: a + b };
@@ -112,28 +115,28 @@ const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
     return { display: `${left} - ${right}`, answer: left - right };
   }
 
-  // Niveau 3
+  // Niveau 3 : Calculs rapides sous forte pression
   const operation = Math.floor(Math.random() * 4);
   if (operation === 0) {
-    const a = Math.floor(Math.random() * 90) + 10;
-    const b = Math.floor(Math.random() * 90) + 10;
+    const a = Math.floor(Math.random() * 80) + 20;
+    const b = Math.floor(Math.random() * 80) + 20;
     return { display: `${a} + ${b}`, answer: a + b };
   }
   if (operation === 1) {
-    const a = Math.floor(Math.random() * 90) + 10;
-    const b = Math.floor(Math.random() * 90) + 10;
+    const a = Math.floor(Math.random() * 80) + 20;
+    const b = Math.floor(Math.random() * 80) + 20;
     const left = Math.max(a, b);
     const right = Math.min(a, b);
     return { display: `${left} - ${right}`, answer: left - right };
   }
   if (operation === 2) {
-    const a = Math.floor(Math.random() * 9) + 2;
-    const b = Math.floor(Math.random() * 9) + 2;
+    const a = Math.floor(Math.random() * 9) + 3;
+    const b = Math.floor(Math.random() * 9) + 3;
     return { display: `${a} × ${b}`, answer: a * b };
   }
 
-  const answer = Math.floor(Math.random() * 19) + 2;
-  const divisor = Math.floor(Math.random() * 9) + 2;
+  const answer = Math.floor(Math.random() * 15) + 3;
+  const divisor = Math.floor(Math.random() * 8) + 2;
   const dividend = answer * divisor;
   return { display: `${dividend} ÷ ${divisor}`, answer };
 };
@@ -160,17 +163,17 @@ function QuickCalcGameContent() {
   const [betCP, setBetCP] = useState(10);
   const [question, setQuestion] = useState<MathQuestion | null>(null);
   const [input, setInput] = useState('');
-  const [multiplier, setMultiplier] = useState(0.5);
+  const [multiplier, setMultiplier] = useState(0.2);
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsAnswered, setQuestionsAnswered] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(10000);
-  const [initialTime, setInitialTime] = useState(10000);
+  const [timeRemaining, setTimeRemaining] = useState(8000);
+  const [initialTime, setInitialTime] = useState(8000);
   const [shakeAnswer, setShakeAnswer] = useState(false);
 
   const lockedBetRef = useRef(0);
   const isProcessingRef = useRef(false);
-  const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
+  const gameStateRef = useRef({ multiplier: 0.2, gameId: null as string | null });
 
   useEffect(() => {
     gameStateRef.current = { multiplier, gameId };
@@ -252,7 +255,7 @@ function QuickCalcGameContent() {
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMultiplier(0.5);
+      setMultiplier(0.2);
       setQuestionsAnswered(0);
       setInput('');
       const firstTimeMs = getQuestionTimeMs(1);
@@ -315,8 +318,8 @@ function QuickCalcGameContent() {
 
       await supabase.from('vault_games').update({ is_active: false, gain_cp: gainFinal }).eq('id', currentGameId);
 
-      setStatus(challengeId ? (questionsAnswered > 0 ? 'won' : 'lost') : gainFinal > 0 ? 'won' : 'lost');
-      if (gainFinal > 0 || (challengeId && questionsAnswered > 0)) {
+      setStatus(challengeId ? (questionsAnswered > 0 ? 'won' : 'lost') : gainFinal >= secureBet ? 'won' : 'lost');
+      if (gainFinal >= secureBet || (challengeId && questionsAnswered > 0)) {
         playSound('win');
       } else {
         playSound('error');
