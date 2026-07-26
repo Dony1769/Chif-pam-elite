@@ -1,18 +1,22 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Loader2, MessageSquare, Paperclip, Send, Image as ImageIcon } from 'lucide-react'
+import { Loader2, MessageSquare, Paperclip, Send, Image as ImageIcon, Zap, ExternalLink } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ChatService } from '@/services/chat'
+import { PRESET_RESPONSES, PresetResponse } from '@/services/chatBot'
 import { type ChatMessage, type AdminConversation, parseMessageContent } from '@/types/chat'
 
 export default function AdminChatPage() {
+  const router = useRouter()
   const [conversations, setConversations] = useState<AdminConversation[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [composerText, setComposerText] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [showPresets, setShowPresets] = useState(false)
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -95,15 +99,16 @@ export default function AdminChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const handleSendText = async () => {
-    if (!selectedClientId || !composerText.trim() || isSending) return
+  const handleSendText = async (customContent?: string) => {
+    if (!selectedClientId || isSending) return
+    const contentToSend = customContent || composerText.trim()
+    if (!contentToSend) return
 
-    const content = composerText.trim()
     setIsSending(true)
-    setComposerText('')
+    if (!customContent) setComposerText('')
 
     try {
-      const sentMessage = await ChatService.sendTextMessage(supabase, selectedClientId, content, true)
+      const sentMessage = await ChatService.sendTextMessage(supabase, selectedClientId, contentToSend, true)
       if (sentMessage) {
         setMessages((prev) => [...prev, sentMessage])
         const refreshedConversations = await ChatService.fetchAdminConversations(supabase)
@@ -111,10 +116,21 @@ export default function AdminChatPage() {
       }
     } catch (error) {
       console.error('Erreur lors de l’envoi du message:', error)
-      setComposerText(content)
+      if (!customContent) setComposerText(contentToSend)
     } finally {
       setIsSending(false)
+      setShowPresets(false)
     }
+  }
+
+  const handleSendPreset = (preset: PresetResponse) => {
+    const actionPayload = JSON.stringify({
+      type: 'action',
+      text: preset.messageText,
+      actionLabel: preset.actionLabel,
+      actionUrl: preset.actionUrl,
+    })
+    void handleSendText(actionPayload)
   }
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,6 +244,18 @@ export default function AdminChatPage() {
                         <div className={`max-w-[80%] rounded-2xl px-3 py-2 shadow ${isAdmin ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-100'}`}>
                           {parsed.type === 'image' ? (
                             <img src={parsed.url} alt="Pièce jointe" className="max-h-72 rounded-xl object-cover" />
+                          ) : parsed.type === 'action' ? (
+                            <div className="space-y-2">
+                              <p className="whitespace-pre-wrap break-words text-sm">{parsed.text}</p>
+                              <button
+                                type="button"
+                                onClick={() => router.push(parsed.actionUrl)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-950/80 px-3 py-1.5 text-xs font-bold text-emerald-400 transition hover:bg-black"
+                              >
+                                <span>{parsed.actionLabel}</span>
+                                <ExternalLink size={12} />
+                              </button>
+                            </div>
                           ) : (
                             <p className="whitespace-pre-wrap break-words text-sm">{parsed.text}</p>
                           )}
@@ -246,8 +274,39 @@ export default function AdminChatPage() {
               )}
             </section>
 
-            <footer className="border-t border-white/10 bg-slate-950/80 p-3">
+            <footer className="relative border-t border-white/10 bg-slate-950/80 p-3">
+              {/* Menu de réponses rapides (Preset Responses) */}
+              {showPresets && (
+                <div className="absolute bottom-full left-3 right-3 mb-2 rounded-2xl border border-white/10 bg-slate-900/95 p-3 shadow-xl backdrop-blur-xl">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    ⚡ Réponses automatiques & Liens
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {PRESET_RESPONSES.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleSendPreset(preset)}
+                        className="flex flex-col items-start rounded-xl border border-white/5 bg-slate-950/60 p-2 text-left transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                      >
+                        <span className="text-xs font-bold text-white">{preset.title}</span>
+                        <span className="text-[10px] text-slate-400">{preset.actionLabel} ({preset.actionUrl})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPresets((prev) => !prev)}
+                  className={`rounded-lg p-2 transition ${showPresets ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-400 hover:text-white'}`}
+                  title="Réponses préconçues"
+                >
+                  <Zap size={18} />
+                </button>
+
                 <input
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
