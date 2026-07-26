@@ -1,7 +1,7 @@
 import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 
 /**
- * Interface représentant la structure d'un message de chat
+ * Interface unifiée représentant la structure d'un message de chat
  */
 export interface ChatMessage {
   id: string
@@ -12,6 +12,10 @@ export interface ChatMessage {
   receiver_id?: string
   sender_type?: 'client' | 'admin'
   is_read?: boolean
+  // Propriétés requises pour l'interface administration et la liste virtualisée
+  is_admin_message?: boolean
+  is_read_by_admin?: boolean
+  is_read_by_client?: boolean
 }
 
 export class ChatService {
@@ -37,7 +41,7 @@ export class ChatService {
   }
 
   /**
-   * S'abonne aux nouveaux messages en temps réel pour un utilisateur donné
+   * S'abonne aux nouveaux messages en temps réel
    */
   static subscribeToMessages(
     supabase: SupabaseClient,
@@ -56,7 +60,6 @@ export class ChatService {
         (payload) => {
           const newMsg = payload.new as ChatMessage
 
-          // Vérifie si le message concerne l'utilisateur cible
           if (
             newMsg.user_id === targetUserId ||
             newMsg.sender_id === targetUserId ||
