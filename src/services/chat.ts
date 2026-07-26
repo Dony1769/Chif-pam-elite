@@ -1,7 +1,7 @@
 import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 import { ChatMessage } from '@/types/chat'
 
-// Re-exportation propre du type centralisé
+// Re-exportation du type centralisé
 export type { ChatMessage }
 
 export class ChatService {
@@ -59,7 +59,7 @@ export class ChatService {
   }
 
   /**
-   * Envoie un message dans la base de données Supabase
+   * Envoie un nouveau message dans la base de données
    */
   static async sendMessage(
     supabase: SupabaseClient,
@@ -86,5 +86,53 @@ export class ChatService {
     }
 
     return data as ChatMessage
+  }
+
+  /**
+   * Modifie le contenu d'un message existant dans Supabase
+   * @param supabase Instance du client Supabase
+   * @param messageId Identifiant du message à modifier
+   * @param newContent Nouveau texte du message
+   */
+  static async editMessage(
+    supabase: SupabaseClient,
+    messageId: string,
+    newContent: string
+  ): Promise<ChatMessage | null> {
+    const { data, error } = await supabase
+      .from('messages')
+      .update({ content: newContent.trim() })
+      .eq('id', messageId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erreur lors de la modification du message :', error)
+      throw error
+    }
+
+    return data as ChatMessage
+  }
+
+  /**
+   * Supprime un message dans Supabase
+   * @param supabase Instance du client Supabase
+   * @param messageId Identifiant du message à supprimer
+   */
+  static async deleteMessage(
+    supabase: SupabaseClient,
+    messageId: string
+  ): Promise<boolean> {
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', messageId)
+
+    if (error) {
+      console.error('Erreur lors de la suppression du message :', error)
+      return false
+    }
+
+    return true
   }
 }
