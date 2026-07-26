@@ -68,7 +68,7 @@ const triggerHaptic = () => {
 // --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS OPTIMISÉE ---
 // Le temps initial commence à 8s et diminue progressivement jusqu'à un minimum de 2.5s
 const getQuestionTimeMs = (questionNumber: number) => {
-  const baseTimeMs = 8000;
+  const baseTimeMs = 6000;
   const reductionMs = (questionNumber - 1) * 600;
   return Math.max(2500, baseTimeMs - reductionMs);
 };
@@ -167,8 +167,8 @@ function QuickCalcGameContent() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsAnswered, setQuestionsAnswered] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(8000);
-  const [initialTime, setInitialTime] = useState(8000);
+  const [timeRemaining, setTimeRemaining] = useState(6000);
+  const [initialTime, setInitialTime] = useState(6000);
   const [shakeAnswer, setShakeAnswer] = useState(false);
 
   const lockedBetRef = useRef(0);
