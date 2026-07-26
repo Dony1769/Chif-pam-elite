@@ -471,10 +471,10 @@ export default function ClientHome() {
                   </div>
                 </div>
 
-                {/* Boutons d'action rapide portefeuille */}
+                {/* Boutons d'action rapide market */}
                 <div className="grid grid-cols-2 gap-2">
                   <Link 
-                    href="/client/market" 
+                    href="/client/finance" 
                     className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-black hover:bg-emerald-500/20 transition"
                   >
                     <PlusCircle size={12} />
@@ -492,7 +492,7 @@ export default function ClientHome() {
                 <div className="pt-3 border-t border-white/5 flex items-center justify-between">
                   <span className="text-[9px] text-slate-500 lowercase italic">Retraits & transferts instantanés</span>
                   <Link href="/client/market" className="text-[10px] text-emerald-400 hover:underline">
-                    Portefeuille →
+                    Boutique →
                   </Link>
                 </div>
               </DSCard>
