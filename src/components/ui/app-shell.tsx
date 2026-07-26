@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { type ReactNode, useEffect, useState, useCallback } from "react";
 import {
   ArrowLeft,
   BarChart3,
@@ -19,20 +18,13 @@ import {
   Sparkles,
   Ticket,
   Trophy,
-  User,
   Users,
   Wallet,
-  X,
-  Send,
+  User,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { ChatService } from "@/services/chat";
-import { ChatMessage, parseMessageContent } from "@/types/chat";
-
-// Initialisation du client Supabase pour le badge temps réel
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "@/lib/supabase";
 
 type ShellNavItem = {
   href: string;
@@ -51,7 +43,7 @@ const adminItems: ShellNavItem[] = [
   { href: "/admin-chif-pam/notifications", label: "Notifications", icon: <Bell size={18} /> },
 ];
 
-// REVISION : /client/chat remplacé par /client/profile
+// Remplacement de /client/chat par /client/profile
 const clientItems: ShellNavItem[] = [
   { href: "/client/home", label: "Accueil", icon: <Home size={18} /> },
   { href: "/client/rewards", label: "Récompenses", icon: <Gift size={18} /> },
@@ -74,7 +66,7 @@ function ShellNav({ items, compact = false }: { items: ShellNavItem[]; compact?:
   const pathname = usePathname();
 
   return (
-    <nav className={cn(compact ? "flex items-center justify-between gap-1" : "space-y-2")}>
+    <nav className={cn(compact ? "flex items-center justify-between gap-1 w-full" : "space-y-2")}>
       {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -84,11 +76,11 @@ function ShellNav({ items, compact = false }: { items: ShellNavItem[]; compact?:
             href={item.href}
             className={cn(
               compact
-                ? "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1.5 py-2 text-[9px] font-semibold uppercase tracking-[0.1em] transition-all duration-300"
+                ? "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[9px] font-semibold uppercase tracking-[0.08em] transition-all duration-300"
                 : "group relative flex items-center gap-3 overflow-hidden rounded-2xl border px-3.5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] transition-all duration-300",
               active
                 ? compact
-                  ? "bg-emerald-400/15 text-emerald-200 shadow-[0_10px_25px_rgba(16,185,129,0.2)]"
+                  ? "bg-emerald-400/15 text-emerald-200 shadow-[0_10px_25px_rgba(16,185,129,0.2)] font-bold"
                   : "border-(--accent-border) bg-linear-to-r from-emerald-300/18 via-cyan-300/10 to-transparent text-(--fg-1) shadow-[0_14px_35px_rgba(45,205,164,0.2)]"
                 : compact
                   ? "bg-white/4 text-(--fg-4) hover:bg-white/8 hover:text-(--fg-2)"
@@ -98,7 +90,7 @@ function ShellNav({ items, compact = false }: { items: ShellNavItem[]; compact?:
             <span className={cn("transition-transform duration-300", active ? "text-(--accent)" : compact ? "opacity-85" : "group-hover:scale-105")}>
               {item.icon}
             </span>
-            <span className="leading-none truncate">{item.label}</span>
+            <span className="leading-none truncate max-w-full">{item.label}</span>
             {!compact && (
               <>
                 <ChevronRight size={14} className={cn("transition-transform duration-300", active ? "translate-x-0 text-(--accent)" : "-translate-x-1 opacity-30 group-hover:translate-x-0 group-hover:opacity-80")} />
@@ -129,143 +121,110 @@ function SectionHeadline({ role }: { role: "admin" | "client" }) {
 }
 
 /**
- * Composant de Bulle de Chat Flottante (Client)
- * Gère le badge de messages non lus en Temps Réel et l'ouverture d'un popup de support.
+ * Composant : Bulle de Chat Flottante
+ * Gère le temps réel via Supabase et affiche les messages non lus de l'administration.
  */
 function FloatingChatBubble() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isDismissed, setIsDismissed] = useState<boolean>(false);
+  const pathname = usePathname();
+  const router = useRouter();
 
-  // 1. Authentification & Récupération de l'utilisateur
+  // Ne pas afficher la bulle si l'utilisateur est sur la page chat
+  const isChatPage = pathname === "/client/chat";
+
+  const fetchUnreadCount = useCallback(async (uid: string) => {
+    if (isChatPage) {
+      setUnreadCount(0);
+      return;
+    }
+    const { count, error } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", uid)
+      .eq("is_admin_message", true)
+      .eq("is_read_by_client", false);
+
+    if (!error) {
+      setUnreadCount(count || 0);
+    }
+  }, [isChatPage]);
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) {
-        setUserId(data.user.id);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const initAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        fetchUnreadCount(user.id);
+
+        // Ecoute en temps réel des nouveaux messages
+        channel = supabase.channel(`realtime_chat_bubble_${user.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "messages",
+              filter: `user_id=eq.${user.id}`,
+            },
+            () => {
+              fetchUnreadCount(user.id);
+            }
+          )
+          .subscribe();
       }
-    });
-  }, []);
+    };
 
-  // 2. Chargement des messages et comptage des non-lus
-  const loadChatData = async (uid: string) => {
-    const msgs = await ChatService.fetchMessagesForClient(supabase, uid);
-    setMessages(msgs);
-
-    const unread = msgs.filter((m) => m.is_admin_message && !m.is_read_by_client).length;
-    setUnreadCount(unread);
-  };
-
-  useEffect(() => {
-    if (!userId) return;
-
-    loadChatData(userId);
-
-    // Écoute en temps réel des nouveaux messages
-    const channel = ChatService.subscribeToClientMessages(supabase, userId, (newMsg) => {
-      setMessages((prev) => [...prev, newMsg]);
-      if (newMsg.is_admin_message) {
-        setUnreadCount((prev) => prev + 1);
-      }
-    });
+    initAuth();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
-  }, [userId]);
+  }, [fetchUnreadCount]);
 
-  // 3. Action à l'ouverture du chat
-  const handleOpenToggle = async () => {
-    const nextState = !isOpen;
-    setIsOpen(nextState);
-
-    if (nextState && userId && unreadCount > 0) {
-      await ChatService.markConversationReadByClient(supabase, userId);
-      setUnreadCount(0);
-    }
-  };
-
-  // 4. Envoi rapide d'un message texte
-  const handleSend = async () => {
-    if (!inputText.trim() || !userId) return;
-    const textToSend = inputText;
-    setInputText("");
-
-    try {
-      await ChatService.sendTextMessage(supabase, userId, textToSend, false);
-      loadChatData(userId);
-    } catch (err) {
-      console.error("Erreur d'envoi du message:", err);
-    }
-  };
+  if (isChatPage || isDismissed) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 z-50 md:bottom-6 md:left-6">
-      {/* Fenêtre Popup de Chat */}
-      {isOpen && (
-        <div className="mb-3 flex h-[420px] w-[320px] flex-col overflow-hidden rounded-3xl border border-white/15 bg-slate-950/95 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl sm:w-[360px]">
-          {/* Entête du Popup */}
-          <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-white">Support ChifPam</span>
-            </div>
-            <button onClick={() => setIsOpen(false)} className="rounded-full p-1 text-white/60 hover:bg-white/10 hover:text-white">
-              <X size={16} />
-            </button>
-          </div>
+    <div className="fixed bottom-20 left-4 z-50 md:bottom-6 md:left-6 flex items-center gap-2">
+      <div className="relative group">
+        <button
+          onClick={() => router.push("/client/chat")}
+          className="relative flex h-13 w-13 items-center justify-center rounded-2xl border border-emerald-400/30 bg-slate-950/90 text-emerald-300 shadow-[0_0_30px_rgba(16,185,129,0.25)] backdrop-blur-xl transition-all duration-300 hover:scale-110 active:scale-95"
+          aria-label="Support Chat"
+        >
+          <MessageSquare size={22} className="transition-transform group-hover:rotate-6" />
 
-          {/* Liste des messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
-            {messages.length === 0 ? (
-              <p className="text-center text-white/40 pt-10">Un problème ? Posez votre question ici à l&apos;équipe support.</p>
-            ) : (
-              messages.map((m) => {
-                const parsed = parseMessageContent(m.content);
-                const isClientMsg = !m.is_admin_message;
+          {/* Badge du compteur de messages non lus */}
+          {unreadCount > 0 && (
+            <span className="absolute -top-2 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-black text-white shadow-[0_0_12px_rgba(239,68,68,0.6)] animate-bounce">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
 
-                return (
-                  <div key={m.id} className={cn("flex flex-col max-w-[80%]", isClientMsg ? "ml-auto items-end" : "mr-auto items-start")}>
-                    <div className={cn("rounded-2xl px-3 py-2 text-white", isClientMsg ? "bg-emerald-600/80 rounded-br-none" : "bg-white/10 rounded-bl-none")}>
-                      {parsed.type === "image" ? <img src={parsed.url} alt="Attachment" className="max-w-full rounded-lg" /> : parsed.text}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+          {/* Effet d'impulsion si un message est non lu */}
+          {unreadCount > 0 && (
+            <span className="absolute inset-0 rounded-2xl border-2 border-emerald-400 animate-ping opacity-40 pointer-events-none" />
+          )}
+        </button>
 
-          {/* Saisie rapide */}
-          <div className="border-t border-white/10 p-2 bg-white/5 flex gap-2">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder="Écrivez votre message..."
-              className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
-            />
-            <button onClick={handleSend} className="rounded-xl bg-emerald-500 p-2 text-slate-950 font-bold hover:bg-emerald-400">
-              <Send size={14} />
-            </button>
-          </div>
+        {/* Info-bulle indicative au survol sur ordinateur */}
+        <div className="pointer-events-none absolute left-16 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-xl border border-white/10 bg-slate-900/90 px-3 py-1.5 text-[10px] font-semibold text-slate-200 opacity-0 shadow-lg backdrop-blur-md transition-opacity duration-200 group-hover:opacity-100 hidden md:block">
+          {unreadCount > 0 ? `${unreadCount} nouveau(x) message(s)` : "Besoin d'aide ? Chattez avec nous"}
         </div>
-      )}
+      </div>
 
-      {/* Bulle d'activation */}
+      {/* Option de fermeture temporaire de la bulle */}
       <button
-        type="button"
-        onClick={handleOpenToggle}
-        className="relative flex h-13 w-13 items-center justify-center rounded-full border border-emerald-400/30 bg-slate-950/90 text-emerald-300 shadow-[0_10px_30px_rgba(16,185,129,0.3)] backdrop-blur-xl transition hover:scale-105 active:scale-95"
-        aria-label="Ouvrir le support"
+        onClick={() => setIsDismissed(true)}
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white transition"
+        title="Masquer la bulle"
       >
-        <MessageSquare size={22} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-md animate-bounce">
-            {unreadCount}
-          </span>
-        )}
+        <X size={12} />
       </button>
     </div>
   );
@@ -287,6 +246,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
 
   return (
     <div className="relative min-h-screen text-(--fg-1)">
+      {/* Arrière-plan décoratif */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-32 -top-30 h-110 w-110 rounded-full bg-emerald-300/15 blur-3xl" />
         <div className="absolute -right-36 top-[20%] h-130 w-130 rounded-full bg-cyan-300/12 blur-3xl" />
@@ -294,6 +254,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
       </div>
 
       <div className="relative z-10 mx-auto flex w-full max-w-440 gap-6 px-4 pb-6 pt-4 md:px-6 xl:gap-8 xl:px-10">
+        {/* Menu latéral ordinateur */}
         <aside className="hidden w-72.5 shrink-0 xl:flex xl:flex-col">
           <div className="glass-strong sticky top-4 flex h-[calc(100vh-2rem)] flex-col rounded-[28px] p-4">
             <div className="mb-6 flex items-center gap-3 px-2 pt-1">
@@ -313,6 +274,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
           </div>
         </aside>
 
+        {/* Zone de contenu principal */}
         <div className="min-w-0 flex-1">
           <header className="glass sticky top-4 z-30 rounded-3xl border border-white/12 px-5 py-4 md:px-6">
             <div className="flex items-center justify-between gap-3">
@@ -341,25 +303,25 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
         </div>
       </div>
 
-      {/* Composants spécifiques au Client */}
+      {/* Éléments d'interface utilisateur client */}
       {isClient ? (
         <>
-          {/* Navigation Mobile Basse */}
-          <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-3 pt-2 md:hidden">
+          {/* Bulle de chat flottante */}
+          <FloatingChatBubble />
+
+          {/* Navigation inférieure mobile */}
+          <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 pt-2 md:hidden">
             <div className="mx-auto flex max-w-md items-center justify-between rounded-[28px] border border-white/12 bg-slate-950/85 px-2 py-2 shadow-[0_24px_65px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
               <ShellNav items={items} compact />
             </div>
           </div>
 
-          {/* Bulle de Chat Flottante en bas à gauche */}
-          <FloatingChatBubble />
-
-          {/* Bouton Retour en bas à droite */}
+          {/* Bouton de retour en arrière */}
           {showBackButton ? (
             <button
               type="button"
               onClick={handleBack}
-              className="fixed bottom-20 right-4 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/25 bg-slate-950/85 text-emerald-200 shadow-[0_16px_40px_rgba(16,185,129,0.2)] backdrop-blur-xl transition hover:scale-105 md:bottom-6 md:right-6"
+              className="fixed bottom-20 right-4 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/25 bg-slate-950/85 text-emerald-200 shadow-[0_16px_40px_rgba(16,185,129,0.2)] backdrop-blur-xl transition hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
               aria-label="Retour"
             >
               <ArrowLeft size={18} />
