@@ -13,10 +13,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { DSButton, DSCard, DSHeader, DSPage, DSPanel } from '@/components/ui/primitives';
 
-// Chargement dynamique du composant d'onboarding
+// Chargement dynamique du composant d'onboarding (SSR désactivé pour éviter les erreurs d'hydratation)
 const OnboardingTour = dynamic(() => import('@/components/OnboardingTour'), { ssr: false });
 
-// Nouveau taux de conversion CP -> HTG officiel : 0.05882352941176470588
+// Taux de conversion CP -> HTG officiel : 100 CP = ~5.88 HTG
 const CP_TO_HTG_RATE = 0.05882352941176470588; 
 
 interface Profile {
@@ -64,7 +64,8 @@ export default function ClientHome() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const globalNotificationCount = unreadNotifs + activeChallengesCount;
+  // FIXATION SOURCE DE VÉRITÉ : Les alertes comptent EXCLUSIVEMENT les notifications non lues en DB
+  const globalNotificationCount = unreadNotifs;
 
   // Ajustement initial du montant de conversion par rapport aux CP possédés
   useEffect(() => {
@@ -91,7 +92,7 @@ export default function ClientHome() {
       audio.volume = 0.4;
       audio.play().catch(() => {});
     } catch {
-      // Ignorer l'erreur si l'audio n'est pas supporté ou bloqué
+      // Ignorer l'erreur si l'audio n'est pas supporté
     }
   };
 
@@ -105,6 +106,7 @@ export default function ClientHome() {
     };
   }, []);
 
+  // Récupération du nombre de défis actifs
   const fetchChallengesCount = useCallback(async () => {
     const { count, error } = await supabase
       .from('challenges')
@@ -113,6 +115,7 @@ export default function ClientHome() {
     if (!error) setActiveChallengesCount(count || 0);
   }, []);
 
+  // Récupération des messages non lus du chat admin
   const refreshChatCount = useCallback(async () => {
     if (!currentUserId || pathname === '/client/chat') { 
       setUnreadChat(0); 
@@ -127,6 +130,7 @@ export default function ClientHome() {
     if (!error) setUnreadChat(count || 0);
   }, [currentUserId, pathname]);
 
+  // Récupération des notifications non lues (Unique source de vérité des alertes)
   const fetchNotificationCount = useCallback(async () => {
     if (!currentUserId) return;
     const { count, error } = await supabase
@@ -137,6 +141,7 @@ export default function ClientHome() {
     if (!error) setUnreadNotifs(count || 0);
   }, [currentUserId]);
 
+  // Chargement global initial
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -194,6 +199,7 @@ export default function ClientHome() {
     fetchData();
   }, [fetchData]);
 
+  // Écoute Realtime Supabase
   useEffect(() => {
     if (!currentUserId || !isTabVisible) return;
 
@@ -202,7 +208,7 @@ export default function ClientHome() {
         setProfile(payload.new as Profile);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${currentUserId}` }, () => refreshChatCount())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` }, () => fetchNotificationCount())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUserId}` }, () => fetchNotificationCount())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges' }, () => fetchChallengesCount())
       .subscribe();
 
