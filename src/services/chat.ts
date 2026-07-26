@@ -1,12 +1,12 @@
 import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 import { ChatMessage } from '@/types/chat'
 
-// Re-exportation du type centralisé
+// Exportation uniforme du type de message
 export type { ChatMessage }
 
 export class ChatService {
   /**
-   * Récupère la liste des messages pour un utilisateur
+   * Récupère l'historique des messages pour un utilisateur
    */
   static async fetchMessages(
     supabase: SupabaseClient,
@@ -27,7 +27,7 @@ export class ChatService {
   }
 
   /**
-   * S'abonne aux nouveaux messages en temps réel
+   * Souscrit aux nouveaux messages en temps réel
    */
   static subscribeToMessages(
     supabase: SupabaseClient,
@@ -59,7 +59,7 @@ export class ChatService {
   }
 
   /**
-   * Envoie un nouveau message dans la base de données
+   * Envoie un nouveau message texte dans Supabase
    */
   static async sendMessage(
     supabase: SupabaseClient,
@@ -89,10 +89,7 @@ export class ChatService {
   }
 
   /**
-   * Modifie le contenu d'un message existant dans Supabase
-   * @param supabase Instance du client Supabase
-   * @param messageId Identifiant du message à modifier
-   * @param newContent Nouveau texte du message
+   * Modifie le texte d'un message existant
    */
   static async editMessage(
     supabase: SupabaseClient,
@@ -115,9 +112,7 @@ export class ChatService {
   }
 
   /**
-   * Supprime un message dans Supabase
-   * @param supabase Instance du client Supabase
-   * @param messageId Identifiant du message à supprimer
+   * Supprime un message de la base de données
    */
   static async deleteMessage(
     supabase: SupabaseClient,
@@ -134,5 +129,43 @@ export class ChatService {
     }
 
     return true
+  }
+
+  /**
+   * Téléverse un fichier (image, document, etc.) dans Supabase Storage
+   * @param supabase Instance du client Supabase
+   * @param userId Identifiant de l'utilisateur qui envoie le fichier
+   * @param file Le fichier brut sélectionné
+   * @returns L'URL publique d'accès au fichier téléversé
+   */
+  static async uploadFile(
+    supabase: SupabaseClient,
+    userId: string,
+    file: File
+  ): Promise<string> {
+    // 1. Nettoyage et sécurisation du nom de fichier
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`
+    const bucketName = 'chat-attachments' // Assure-toi que ce bucket existe ou adapte son nom si nécessaire
+
+    // 2. Envoi du fichier sur Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+
+    if (error) {
+      console.error('Erreur lors du téléversement du fichier:', error)
+      throw new Error(`Échec de l'envoi du fichier: ${error.message}`)
+    }
+
+    // 3. Récupération de l'URL publique
+    const { data: publicUrlData } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(data.path)
+
+    return publicUrlData.publicUrl
   }
 }
