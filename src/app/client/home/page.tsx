@@ -4,11 +4,9 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell,
-  Lock, Trophy,
-  Activity, ChevronRight, Brain, Fingerprint,
-  Menu, X, Crown, ShieldCheck, Gift, Sparkles,
-  Coins, ArrowRightLeft, Flame, User, LogOut, CheckCircle2
+  Bell, Lock, Trophy, Activity, ChevronRight, Brain, Fingerprint,
+  Menu, X, Crown, ShieldCheck, Gift, Sparkles, Coins, ArrowRightLeft,
+  Flame, User, LogOut, CheckCircle2, Wallet, PlusCircle, ArrowUpRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,8 +16,8 @@ import { DSButton, DSCard, DSHeader, DSPage, DSPanel } from '@/components/ui/pri
 // Chargement dynamique du composant d'onboarding
 const OnboardingTour = dynamic(() => import('@/components/OnboardingTour'), { ssr: false });
 
-// Taux de conversion par défaut : 100 CP = 10 HTG (Ajustable selon la logique métier)
-const CP_TO_HTG_RATE = 0.1; 
+// Nouveau taux de conversion CP -> HTG officiel : 0.05882352941176470588
+const CP_TO_HTG_RATE = 0.05882352941176470588; 
 
 interface Profile {
   id: string;
@@ -60,15 +58,31 @@ export default function ClientHome() {
   const [isTabVisible, setIsTabVisible] = useState<boolean>(true);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
+  // État local pour le montant personnalisable de conversion CP
+  const [cpToConvert, setCpToConvert] = useState<number>(100);
+
   const router = useRouter();
   const pathname = usePathname();
 
   const globalNotificationCount = unreadNotifs + activeChallengesCount;
 
-  // Calcul du montant estimé en HTG lors de la conversion
-  const estimatedHTG = useMemo(() => {
-    if (!profile?.jetons_cp) return 0;
-    return Math.floor(profile.jetons_cp * CP_TO_HTG_RATE);
+  // Ajustement initial du montant de conversion par rapport aux CP possédés
+  useEffect(() => {
+    if (profile?.jetons_cp) {
+      setCpToConvert(Math.min(profile.jetons_cp, 100));
+    }
+  }, [profile?.jetons_cp]);
+
+  // Estimation dynamique en HTG selon la valeur saisie
+  const calculatedHTG = useMemo(() => {
+    const cp = Number(cpToConvert) || 0;
+    return (cp * CP_TO_HTG_RATE).toFixed(2);
+  }, [cpToConvert]);
+
+  // Estimation du solde total équivalent en HTG
+  const totalEstimatedHTG = useMemo(() => {
+    if (!profile?.jetons_cp) return "0.00";
+    return (profile.jetons_cp * CP_TO_HTG_RATE).toFixed(2);
   }, [profile?.jetons_cp]);
 
   const playPing = () => {
@@ -199,8 +213,16 @@ export default function ClientHome() {
 
   const handleQuickConvert = async () => {
     if (!profile) return;
-    if (profile.jetons_cp < 100) {
-      setFeedbackMessage({ type: 'error', text: 'Un minimum de 100 CP est requis pour la conversion.' });
+    
+    const montantCP = Math.floor(cpToConvert);
+
+    if (montantCP < 100) {
+      setFeedbackMessage({ type: 'error', text: 'Un minimum de 100 CP est requis pour effectuer une conversion.' });
+      return;
+    }
+
+    if (montantCP > profile.jetons_cp) {
+      setFeedbackMessage({ type: 'error', text: 'Solde de CP insuffisant pour cette conversion.' });
       return;
     }
     
@@ -208,8 +230,6 @@ export default function ClientHome() {
     setFeedbackMessage(null);
 
     try {
-      const montantCP = Math.floor(profile.jetons_cp);
-
       const { error } = await supabase.rpc('convertir_cp_en_htg', {
         p_user_id: profile.id,
         p_montant_cp: montantCP
@@ -219,7 +239,11 @@ export default function ClientHome() {
         setFeedbackMessage({ type: 'error', text: error.message || 'Erreur lors de la conversion.' });
       } else {
         playPing();
-        setFeedbackMessage({ type: 'success', text: `Conversion réussie ! Vous avez converti ${montantCP} CP.` });
+        const montantObtenu = (montantCP * CP_TO_HTG_RATE).toFixed(2);
+        setFeedbackMessage({ 
+          type: 'success', 
+          text: `Conversion réussie ! ${montantCP} CP convertis en ~${montantObtenu} HTG.` 
+        });
       }
     } catch (err) {
       console.error('Erreur inattendue conversion:', err);
@@ -374,7 +398,7 @@ export default function ClientHome() {
             {/* Cartes de Soldes & Conversion */}
             <DSPanel className="grid gap-4 xl:grid-cols-[1.45fr_0.9fr]">
               
-              {/* Carte Points CP & Conversion */}
+              {/* Carte Points CP & Conversion Interactive */}
               <DSCard className={`relative overflow-hidden p-6 ${profile?.vip_status && profile.vip_status !== 'free' ? 'border-amber-400/30 bg-gradient-to-br from-amber-400/10 via-slate-950/80 to-emerald-400/10' : ''}`}>
                 <div className="absolute inset-y-0 right-0 flex items-center opacity-10 pointer-events-none">
                   <Coins size={120} className="text-emerald-500" />
@@ -391,42 +415,82 @@ export default function ClientHome() {
                     )}
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <p className="text-4xl sm:text-5xl font-black tracking-tighter text-white">
-                        {(profile?.jetons_cp || 0).toLocaleString()} <span className="text-lg text-emerald-400">CP</span>
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400 font-normal lowercase italic">
-                        Valeur estimée : <strong className="text-white font-black">{estimatedHTG.toLocaleString()} HTG</strong>
-                      </p>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-4xl sm:text-5xl font-black tracking-tighter text-white">
+                      {(profile?.jetons_cp || 0).toLocaleString()} <span className="text-lg text-emerald-400">CP</span>
+                    </p>
+                    <p className="text-xs text-slate-400 font-normal lowercase italic">
+                      Valeur globale estimée : <strong className="text-white font-black">{totalEstimatedHTG} HTG</strong>
+                    </p>
+                  </div>
+
+                  {/* Simulateur / Convertisseur interactif incorporé */}
+                  <div className="pt-3 border-t border-white/10 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400 lowercase font-normal italic">Montant à convertir :</span>
+                      <span className="text-emerald-300 font-black">{calculatedHTG} HTG</span>
                     </div>
 
-                    <DSButton
-                      onClick={handleQuickConvert}
-                      disabled={isConverting || (profile?.jetons_cp || 0) < 100}
-                      variant="success"
-                      size="sm"
-                      className="mt-2 sm:mt-0 flex items-center justify-center gap-2"
-                    >
-                      <ArrowRightLeft size={14} />
-                      {isConverting ? 'Conversion...' : 'Convertir en HTG'}
-                    </DSButton>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number" 
+                        min="100"
+                        max={profile?.jetons_cp || 100}
+                        step="100"
+                        value={cpToConvert}
+                        onChange={(e) => setCpToConvert(Math.max(0, Number(e.target.value)))}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-white focus:outline-none focus:border-emerald-500"
+                        placeholder="Ex: 500"
+                      />
+                      <DSButton
+                        onClick={handleQuickConvert}
+                        disabled={isConverting || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
+                        variant="success"
+                        size="sm"
+                        className="shrink-0 flex items-center justify-center gap-2"
+                      >
+                        <ArrowRightLeft size={14} />
+                        {isConverting ? '...' : 'Convertir'}
+                      </DSButton>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-normal lowercase italic">Taux : 100 CP = {(100 * CP_TO_HTG_RATE).toFixed(2)} HTG (Min. 100 CP)</p>
                   </div>
                 </div>
               </DSCard>
 
-              {/* Carte Solde Principal HTG */}
-              <DSCard className="p-6 flex flex-col justify-between">
+              {/* Carte Solde Principal HTG avec Actions Rapides */}
+              <DSCard className="p-6 flex flex-col justify-between space-y-4">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Solde principal</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Solde principal</p>
+                    <Wallet size={16} className="text-emerald-400" />
+                  </div>
                   <div className="mt-3 flex items-baseline gap-2">
                     <p className="text-3xl font-black text-white">{(profile?.balance || 0).toLocaleString()}</p>
                     <span className="text-xs text-emerald-400 font-black">HTG</span>
                   </div>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-[9px] text-slate-500 lowercase italic">Retraits & transferts disponibles</span>
+                {/* Boutons d'action rapide portefeuille */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Link 
+                    href="/client/market" 
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-black hover:bg-emerald-500/20 transition"
+                  >
+                    <PlusCircle size={12} />
+                    <span>Recharger</span>
+                  </Link>
+                  <Link 
+                    href="/client/market" 
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-black hover:bg-white/10 transition"
+                  >
+                    <ArrowUpRight size={12} />
+                    <span>Retirer</span>
+                  </Link>
+                </div>
+
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-[9px] text-slate-500 lowercase italic">Retraits & transferts instantanés</span>
                   <Link href="/client/market" className="text-[10px] text-emerald-400 hover:underline">
                     Portefeuille →
                   </Link>
