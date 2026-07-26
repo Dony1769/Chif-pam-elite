@@ -116,7 +116,6 @@ function RankContent() {
     }
   };
 
-  // Timer de fin de défi
   useEffect(() => {
     if (!activeChallenge?.ends_at) return;
 
@@ -138,6 +137,12 @@ function RankContent() {
     return () => clearInterval(interval);
   }, [activeChallenge]);
 
+  const isExpired = Boolean(
+    !activeChallenge?.is_active ||
+      (activeChallenge?.ends_at && new Date(activeChallenge.ends_at).getTime() <= Date.now()) ||
+      timeLeft.includes("TERMINÉE")
+  );
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#020617]">
@@ -146,7 +151,6 @@ function RankContent() {
     );
   }
 
-  // --- VUE 1 : MES PARTICIPATIONS ---
   if (!challengeId) {
     return (
       <div className="min-h-screen bg-[#020617] p-4 text-white sm:p-6 font-black italic uppercase">
@@ -178,28 +182,31 @@ function RankContent() {
                 </button>
               </div>
             ) : (
-              myChallenges.map((ch) => (
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  key={ch.id}
-                  onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
-                  className="flex w-full items-center justify-between rounded-[2rem] border border-white/5 bg-slate-900/60 p-6 text-left transition hover:border-emerald-500/30"
-                >
-                  <div>
-                    <h3 className="text-lg tracking-tight text-white">{ch.title}</h3>
-                    <p
-                      className={`mt-1 text-[9px] tracking-[0.2em] ${
-                        ch.is_active ? "text-emerald-400" : "text-rose-500"
-                      }`}
-                    >
-                      {ch.is_active ? "STATUT: ACTIF" : "STATUT: ARCHIVÉ"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-white/5 p-3 text-slate-300">
-                    <ArrowRight size={18} />
-                  </div>
-                </motion.button>
-              ))
+              myChallenges.map((ch) => {
+                const expired = !ch.is_active || (ch.ends_at && new Date(ch.ends_at).getTime() <= Date.now());
+                return (
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    key={ch.id}
+                    onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
+                    className="flex w-full items-center justify-between rounded-[2rem] border border-white/5 bg-slate-900/60 p-6 text-left transition hover:border-emerald-500/30"
+                  >
+                    <div>
+                      <h3 className="text-lg tracking-tight text-white">{ch.title}</h3>
+                      <p
+                        className={`mt-1 text-[9px] tracking-[0.2em] ${
+                          !expired ? "text-emerald-400" : "text-rose-500"
+                        }`}
+                      >
+                        {!expired ? "STATUT: ACTIF" : "STATUT: EXPIRÉ"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white/5 p-3 text-slate-300">
+                      <ArrowRight size={18} />
+                    </div>
+                  </motion.button>
+                );
+              })
             )}
           </div>
         </div>
@@ -207,12 +214,9 @@ function RankContent() {
     );
   }
 
-  // --- VUE 2 : CLASSEMENT DÉTAILLÉ DU DÉFI ---
   return (
     <div className="min-h-screen bg-[#020617] p-4 text-white sm:p-6 font-black italic uppercase pb-32">
       <div className="mx-auto max-w-md">
-        
-        {/* En-tête */}
         <div className="mb-6 mt-2 flex items-center justify-between">
           <button
             onClick={() => router.push("/client/rank")}
@@ -229,7 +233,6 @@ function RankContent() {
           </div>
         </div>
 
-        {/* Stats Rapides */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="rounded-[2rem] bg-emerald-500 p-5 text-slate-950 shadow-lg">
             <p className="text-[8px] opacity-80 mb-1">TEMPS RESTANT</p>
@@ -245,7 +248,6 @@ function RankContent() {
           </div>
         </div>
 
-        {/* Carte de position de l'utilisateur */}
         {currentUserRank && (
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
@@ -281,7 +283,6 @@ function RankContent() {
           </motion.div>
         )}
 
-        {/* Liste du Leaderboard */}
         <div className="space-y-2.5">
           {leaderboard.map((entry) => {
             const isMe = entry.user_id === currentUserRank?.user_id;
@@ -315,13 +316,13 @@ function RankContent() {
         </div>
       </div>
 
-      {/* Bouton d'action flottant au bas */}
       {activeChallenge && (
         <div className="fixed bottom-0 left-0 w-full p-4 bg-gradient-to-t from-[#020617] via-[#020617]/90 to-transparent z-50">
           <div className="max-w-md mx-auto">
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => {
+                if (isExpired) return;
                 const routes: Record<ChallengeInfo["game_type"], string> = {
                   quiz: "quiz",
                   biometric: "biometric-hack",
@@ -329,11 +330,11 @@ function RankContent() {
                 };
                 router.push(`/client/${routes[activeChallenge.game_type]}?challengeId=${activeChallenge.id}`);
               }}
-              disabled={timeLeft.includes("TERMINÉE")}
-              className="w-full py-4 bg-white text-slate-950 rounded-[1.8rem] font-black text-lg shadow-xl flex items-center justify-center gap-2 disabled:opacity-30"
+              disabled={isExpired}
+              className="w-full py-4 bg-white text-slate-950 rounded-[1.8rem] font-black text-lg shadow-xl flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-30"
             >
               <Zap size={20} fill="currentColor" />
-              <span>{timeLeft.includes("TERMINÉE") ? "MISSION EXPIRÉE" : "AMÉLIORER MON SCORE"}</span>
+              <span>{isExpired ? "MISSION EXPIRÉE" : "AMÉLIORER MON SCORE"}</span>
             </motion.button>
           </div>
         </div>
@@ -345,7 +346,6 @@ function RankContent() {
 export default function LeaderboardPage() {
   return (
     <>
-      {/* Intégration optimisée du script Monetag sans bloquer React */}
       <Script
         id="monetag-vignette"
         src="https://gizokraijaw.net/vignette.min.js"
