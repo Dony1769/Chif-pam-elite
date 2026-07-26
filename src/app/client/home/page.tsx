@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell, Lock, Trophy, Activity, ChevronRight, Brain, Fingerprint,
   Menu, X, Crown, ShieldCheck, Gift, Sparkles, Coins, ArrowRightLeft,
-  Flame, User, LogOut, CheckCircle2, Wallet, PlusCircle, ArrowUpRight, Zap
+  Flame, User, LogOut, CheckCircle2, Wallet, PlusCircle, ArrowUpRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,6 +19,7 @@ const OnboardingTour = dynamic(() => import('@/components/OnboardingTour'), { ss
 // Taux de conversion CP -> HTG officiel : 100 CP = ~5.88 HTG
 const CP_TO_HTG_RATE = 0.05882352941176470588; 
 
+// --- TYPES & INTERFACES ---
 interface Profile {
   id: string;
   username: string | null;
@@ -39,14 +40,46 @@ interface GameItem {
   tag?: string;
 }
 
-const LogoSmall: React.FC = () => (
-  <svg viewBox="0 0 100 100" className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
-    <path d="M55 45L76 24M76 24H58M76 24V42" stroke="#10B981" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+// --- LOGO CHIF PAM LUMINEUX ET ANIMÉ ---
+const ChifPamLogoGlow: React.FC<{ isVip?: boolean }> = ({ isVip }) => (
+  <div className="relative flex items-center justify-center">
+    {/* Halo lumineux d'arrière-plan */}
+    <div 
+      className={`absolute inset-0 rounded-full blur-xl transition-all duration-700 pointer-events-none ${
+        isVip 
+          ? 'bg-gradient-to-r from-amber-500/40 via-emerald-500/40 to-amber-500/40 animate-pulse' 
+          : 'bg-emerald-500/25 animate-pulse'
+      }`} 
+    />
+    <svg 
+      viewBox="0 0 100 100" 
+      className={`w-11 h-11 sm:w-12 sm:h-12 relative z-10 transition-all duration-500 ${
+        isVip 
+          ? 'drop-shadow-[0_0_15px_rgba(245,158,11,0.8)]' 
+          : 'drop-shadow-[0_0_12px_rgba(16,185,129,0.7)]'
+      }`} 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path 
+        d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" 
+        stroke={isVip ? "#FBBF24" : "#10B981"} 
+        strokeWidth="10" 
+        strokeLinecap="round" 
+      />
+      <path 
+        d="M55 45L76 24M76 24H58M76 24V42" 
+        stroke={isVip ? "#FBBF24" : "#10B981"} 
+        strokeWidth="10" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+      />
+    </svg>
+  </div>
 );
 
 export default function ClientHome() {
+  // --- ÉTATS ---
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [unreadNotifs, setUnreadNotifs] = useState<number>(0);
@@ -64,7 +97,9 @@ export default function ClientHome() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Source unique de vérité des alertes notifications
+  const isVip = useMemo(() => profile?.vip_status && profile.vip_status !== 'free', [profile?.vip_status]);
+
+  // FIXATION SOURCE DE VÉRITÉ : Les alertes comptent EXCLUSIVEMENT les notifications non lues en DB
   const globalNotificationCount = unreadNotifs;
 
   // Ajustement initial du montant de conversion par rapport aux CP possédés
@@ -190,7 +225,7 @@ export default function ClientHome() {
 
     } catch (error) {
       console.error('Erreur globale fetchData:', error);
-    } finally {
+    } font-sans finally {
       setLoading(false);
     }
   }, [pathname, router]);
@@ -265,8 +300,6 @@ export default function ClientHome() {
     { id: 'biometric', href: '/client/biometric-hack', icon: <Fingerprint className="text-emerald-400" />, title: 'Biometric Lab', desc: 'Mémoire adaptative & logique', players: '650 actifs' }
   ];
 
-  const isVipUser = Boolean(profile?.vip_status && profile.vip_status !== 'free');
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
@@ -277,10 +310,10 @@ export default function ClientHome() {
   }
 
   return (
-    <DSPage className="text-white font-black italic uppercase pb-12 overflow-x-hidden relative ds-fade-up">
+    <DSPage className="text-white font-black italic uppercase pb-12 sm:pb-16 overflow-x-hidden relative ds-fade-up">
       <OnboardingTour />
 
-      {/* Navigation latérale Drawer */}
+      {/* Navigation latérale Drawer (Tiroir mobile) */}
       <AnimatePresence>
         {isMenuOpen && (
           <>
@@ -289,27 +322,27 @@ export default function ClientHome() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMenuOpen(false)}
-              className="fixed inset-0 bg-black/70 backdrop-blur-md z-50"
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-50"
             />
             <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 left-0 h-full w-[85%] max-w-[320px] bg-slate-950 z-50 border-r border-white/10 p-5 sm:p-6 flex flex-col justify-between shadow-2xl"
+              className="fixed top-0 left-0 h-full w-[85%] sm:w-[320px] bg-slate-950 z-50 border-r border-white/10 p-5 sm:p-6 flex flex-col justify-between shadow-2xl overflow-y-auto"
             >
               <div>
                 <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
                   <div className="flex items-center gap-3">
-                    <LogoSmall />
+                    <ChifPamLogoGlow isVip={!!isVip} />
                     <div className="min-w-0">
                       <p className="text-xs font-black text-white lowercase truncate">@{profile?.username || 'utilisateur'}</p>
-                      <p className={`text-[9px] tracking-wider truncate ${isVipUser ? 'text-amber-400' : 'text-slate-400'}`}>
-                        {isVipUser ? 'Membre VIP' : 'Compte Standard'}
+                      <p className={`text-[9px] tracking-wider ${isVip ? 'text-amber-400 font-bold' : 'text-emerald-400'}`}>
+                        {isVip ? 'Membre VIP Élite' : 'Compte Standard'}
                       </p>
                     </div>
                   </div>
-                  <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition">
+                  <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition text-slate-300">
                     <X size={18} />
                   </button>
                 </div>
@@ -324,10 +357,10 @@ export default function ClientHome() {
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-white/10">
+              <div className="pt-6 border-t border-white/10 mt-6">
                 <button
                   onClick={() => supabase.auth.signOut().then(() => router.push('/'))}
-                  className="flex items-center gap-3 w-full p-3 rounded-xl bg-red-500/10 text-red-400 text-xs tracking-widest font-black transition hover:bg-red-500/20"
+                  className="flex items-center gap-3 w-full p-3 rounded-xl bg-red-500/10 text-red-400 text-xs tracking-widest font-black transition hover:bg-red-500/20 active:scale-95"
                 >
                   <LogOut size={16} />
                   <span>Déconnexion</span>
@@ -338,119 +371,101 @@ export default function ClientHome() {
         )}
       </AnimatePresence>
 
-      <div className="space-y-5 sm:space-y-6 p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="space-y-6 p-3 sm:p-5 md:p-6 max-w-7xl mx-auto">
         
-        {/* Feedback message (Succès / Erreur) */}
-        {feedbackMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className={`p-3.5 sm:p-4 rounded-2xl flex items-center justify-between gap-3 text-xs tracking-wider ${
-              feedbackMessage.type === 'success' 
-                ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-200' 
-                : 'bg-red-500/20 border border-red-500/40 text-red-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="shrink-0" />
-              <span>{feedbackMessage.text}</span>
-            </div>
-            <button onClick={() => setFeedbackMessage(null)} className="opacity-60 hover:opacity-100 p-1">
-              <X size={14} />
-            </button>
-          </motion.div>
-        )}
+        {/* Messages de retour utilisateur (Succès / Erreur) */}
+        <AnimatePresence>
+          {feedbackMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`p-3.5 sm:p-4 rounded-2xl flex items-center justify-between gap-3 text-xs tracking-wider backdrop-blur-md ${
+                feedbackMessage.type === 'success' 
+                  ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-200' 
+                  : 'bg-red-500/20 border border-red-500/40 text-red-200'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 size={16} className="shrink-0" />
+                <span>{feedbackMessage.text}</span>
+              </div>
+              <button onClick={() => setFeedbackMessage(null)} className="opacity-60 hover:opacity-100 p-1">
+                <X size={14} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div className="grid gap-5 sm:gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-          <div className="space-y-5 sm:space-y-6">
+        <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
+          <div className="space-y-6">
             
-            {/* Header principal */}
+            {/* Entête principal */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="min-w-0">
-                <div className={`mb-2.5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] ${
-                  isVipUser 
-                    ? 'border border-amber-400/30 bg-amber-400/10 text-amber-300' 
-                    : 'border border-white/10 bg-white/5 text-slate-400'
-                }`}>
-                  <Crown size={13} className={isVipUser ? "text-amber-400" : "text-slate-400"} />
-                  {isVipUser ? 'VIP Actif' : 'Membre Standard'}
+              <div className="min-w-0 flex items-start gap-3.5">
+                <ChifPamLogoGlow isVip={!!isVip} />
+                <div className="min-w-0">
+                  <div className={`mb-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.25em] border ${
+                    isVip 
+                      ? 'border-amber-400/40 bg-amber-400/10 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
+                      : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                  }`}>
+                    <Crown size={12} className={isVip ? 'text-amber-400' : 'text-emerald-400'} />
+                    {isVip ? 'VIP Élite' : 'Accès Standard'}
+                  </div>
+                  <DSHeader
+                    eyebrow="Tableau de bord"
+                    title={`Bienvenue, @${profile?.username || 'Aventurier'}`}
+                    description="Convertissez vos points, validez vos parcours et débloquez vos récompenses."
+                  />
                 </div>
-                <DSHeader
-                  eyebrow="Tableau de bord"
-                  title={`Bienvenue, @${profile?.username || 'Aventurier'}`}
-                  description="Convertissez vos points, validez vos parcours et débloquez vos récompenses."
-                />
               </div>
 
-              <div className="flex items-center gap-2.5 sm:gap-3">
+              {/* Boutons d'en-tête */}
+              <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
                 <button
                   onClick={() => setIsMenuOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-[11px] sm:text-xs font-black uppercase tracking-[0.2em] text-emerald-300 transition hover:bg-white/10 active:scale-95"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/80 px-3.5 py-2 text-xs font-black uppercase tracking-[0.2em] text-emerald-300 transition hover:bg-white/10 active:scale-95 shadow-md"
                 >
                   <Menu size={16} />
                   Menu
                 </button>
                 <Link 
                   href="/client/notifications" 
-                  className="relative inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-[11px] sm:text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 active:scale-95"
+                  className="relative inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/80 px-3.5 py-2 text-xs uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/10 active:scale-95 shadow-md"
                 >
                   <Bell size={16} />
-                  <span className="hidden xs:inline">{globalNotificationCount > 0 ? `${globalNotificationCount} Alertes` : 'Notifs'}</span>
+                  <span className="hidden sm:inline">{globalNotificationCount > 0 ? `${globalNotificationCount} Alertes` : 'Notifs'}</span>
                   {globalNotificationCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="relative flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                     </span>
                   )}
                 </Link>
               </div>
             </div>
 
-            {/* BANNIÈRE D'INCITATION VIP (AFFICHÉE UNIQUEMENT POUR NON VIP) */}
-            {!isVipUser && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="relative overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-slate-900 to-slate-950 p-5 sm:p-6 shadow-[0_0_25px_rgba(245,158,11,0.1)]"
-              >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-black tracking-widest text-amber-400 uppercase bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30">
-                      Offre Spéciale
-                    </span>
-                    <h3 className="text-base sm:text-lg font-black text-white italic tracking-tight flex items-center gap-2 mt-1">
-                      Passez au Statut VIP <Sparkles size={16} className="text-amber-400" />
-                    </h3>
-                    <p className="text-xs text-slate-300 font-normal lowercase italic max-w-md">
-                      Obtenez jusqu'à -25% sur les frais, un badge exclusif et un traitement prioritaire.
-                    </p>
-                  </div>
-
-                  <Link 
-                    href="/client/vip"
-                    className="w-full sm:w-auto shrink-0 px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-110 text-black text-xs font-black tracking-wider uppercase text-center transition shadow-lg active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <Crown size={15} /> Découvrir les offres
-                  </Link>
-                </div>
-              </motion.div>
-            )}
-
             {/* Cartes de Soldes & Conversion */}
             <DSPanel className="grid gap-4 xl:grid-cols-[1.45fr_0.9fr]">
               
               {/* Carte Points CP & Conversion Interactive */}
-              <DSCard className={`relative overflow-hidden p-5 sm:p-6 ${isVipUser ? 'border-amber-400/30 bg-gradient-to-br from-amber-400/10 via-slate-950/80 to-emerald-400/10' : ''}`}>
+              <DSCard className={`relative overflow-hidden p-5 sm:p-6 transition-all duration-500 ${
+                isVip 
+                  ? 'border-2 border-amber-400/40 bg-gradient-to-br from-amber-950/30 via-slate-950 to-emerald-950/20 shadow-[0_0_30px_rgba(245,158,11,0.15)]' 
+                  : 'border border-white/10 bg-slate-900/60'
+              }`}>
                 <div className="absolute inset-y-0 right-0 flex items-center opacity-10 pointer-events-none">
-                  <Coins size={120} className="text-emerald-500" />
+                  <Coins size={140} className={isVip ? 'text-amber-400' : 'text-emerald-500'} />
                 </div>
 
                 <div className="relative z-10 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">POINTS DE PARTICIPATION (CP)</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isVip ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      POINTS DE PARTICIPATION (CP)
+                    </p>
                     {(profile?.login_streak ?? 0) > 0 && (
-                      <div className="flex items-center gap-1 bg-orange-500/10 border border-orange-500/30 px-2.5 py-0.5 rounded-full text-[10px] text-orange-400 font-black">
+                      <div className="flex items-center gap-1.5 bg-orange-500/15 border border-orange-500/30 px-2.5 py-1 rounded-full text-[10px] text-orange-400 font-black shrink-0">
                         <Flame size={12} />
                         <span>Série: {profile?.login_streak}j</span>
                       </div>
@@ -459,21 +474,21 @@ export default function ClientHome() {
 
                   <div className="flex flex-col gap-1">
                     <p className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white">
-                      {(profile?.jetons_cp || 0).toLocaleString()} <span className="text-base sm:text-lg text-emerald-400">CP</span>
+                      {(profile?.jetons_cp || 0).toLocaleString()} <span className={`text-base sm:text-lg ${isVip ? 'text-amber-400' : 'text-emerald-400'}`}>CP</span>
                     </p>
                     <p className="text-xs text-slate-400 font-normal lowercase italic">
-                      Valeur estimée : <strong className="text-white font-black">{totalEstimatedHTG} HTG</strong>
+                      Valeur globale estimée : <strong className="text-white font-black">{totalEstimatedHTG} HTG</strong>
                     </p>
                   </div>
 
-                  {/* Simulateur / Convertisseur interactif */}
-                  <div className="pt-3 border-t border-white/10 space-y-2.5">
+                  {/* Simulateur / Convertisseur interactif incorporé */}
+                  <div className="pt-3 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 lowercase font-normal italic">Montant à convertir :</span>
                       <span className="text-emerald-300 font-black">{calculatedHTG} HTG</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input 
                         type="number" 
                         min="100"
@@ -481,7 +496,7 @@ export default function ClientHome() {
                         step="100"
                         value={cpToConvert}
                         onChange={(e) => setCpToConvert(Math.max(0, Number(e.target.value)))}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-white focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-black/50 border border-white/15 rounded-xl px-3.5 py-2 text-xs font-black text-white focus:outline-none focus:border-emerald-500 transition-colors"
                         placeholder="Ex: 500"
                       />
                       <DSButton
@@ -489,7 +504,7 @@ export default function ClientHome() {
                         disabled={isConverting || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
                         variant="success"
                         size="sm"
-                        className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-2"
+                        className="shrink-0 flex items-center justify-center gap-2 py-2.5"
                       >
                         <ArrowRightLeft size={14} />
                         {isConverting ? '...' : 'Convertir'}
@@ -500,59 +515,59 @@ export default function ClientHome() {
                 </div>
               </DSCard>
 
-              {/* Carte Solde Principal HTG */}
-              <DSCard className="p-5 sm:p-6 flex flex-col justify-between space-y-4">
+              {/* Carte Solde Principal HTG avec Actions Rapides */}
+              <DSCard className="p-5 sm:p-6 flex flex-col justify-between space-y-4 bg-slate-900/80 border border-white/10">
                 <div>
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Solde principal</p>
                     <Wallet size={16} className="text-emerald-400" />
                   </div>
-                  <div className="mt-2.5 flex items-baseline gap-2">
+                  <div className="mt-3 flex items-baseline gap-2">
                     <p className="text-2xl sm:text-3xl font-black text-white">{(profile?.balance || 0).toLocaleString()}</p>
                     <span className="text-xs text-emerald-400 font-black">HTG</span>
                   </div>
                 </div>
 
-                {/* Actions rapides */}
+                {/* Boutons d'action rapide market */}
                 <div className="grid grid-cols-2 gap-2">
                   <Link 
                     href="/client/finance" 
-                    className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-black hover:bg-emerald-500/20 transition"
+                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-black hover:bg-emerald-500/20 transition active:scale-95"
                   >
                     <PlusCircle size={12} />
                     <span>Recharger</span>
                   </Link>
                   <Link 
                     href="/client/market" 
-                    className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-black hover:bg-white/10 transition"
+                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-black hover:bg-white/10 transition active:scale-95"
                   >
                     <ArrowUpRight size={12} />
                     <span>Retirer</span>
                   </Link>
                 </div>
 
-                <div className="pt-2.5 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-[9px] text-slate-500 lowercase italic">Operations instantanées</span>
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-[9px] text-slate-500 lowercase italic">Retraits instantanés</span>
                   <Link href="/client/market" className="text-[10px] text-emerald-400 hover:underline">
-                    Marketplace →
+                    Boutique →
                   </Link>
                 </div>
               </DSCard>
             </DSPanel>
 
-            {/* Section Activités */}
+            {/* Section Jeux / Expériences */}
             <DSPanel>
-              <div className="flex items-center justify-between mb-3.5">
+              <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Missions & Activités</p>
-                  <p className="mt-0.5 text-xs text-slate-300 font-normal lowercase italic">Accumulez des jetons CP grâce aux défis.</p>
+                  <p className="mt-1 text-xs text-slate-300 font-normal lowercase italic">Participez pour accumuler des jetons CP supplémentaires.</p>
                 </div>
                 <Link href="/client/list" className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 hover:text-emerald-300 transition">
                   Tout voir →
                 </Link>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {gamesList.map((game) => (
                   <GameRow 
                     key={game.id}
@@ -568,57 +583,46 @@ export default function ClientHome() {
             </DSPanel>
           </div>
 
-          {/* Colonne secondaire */}
-          <div className="space-y-5 sm:space-y-6">
+          {/* Colonne secondaire (Progrès & Actions) */}
+          <div className="space-y-6">
             
             {/* Statut & Synthèse */}
-            <DSCard className="space-y-4 p-5 sm:p-6">
-              <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+            <DSCard className="space-y-5 p-5 sm:p-6 bg-slate-900/80 border border-white/10">
+              <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Synthèse</p>
-                  <p className="mt-0.5 text-base font-black text-white">Activité du compte</p>
+                  <p className="mt-1 text-base font-black text-white">Activité du compte</p>
                 </div>
-                <div className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-[9px] uppercase tracking-[0.15em] text-emerald-300">
+                <div className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[9px] uppercase tracking-[0.15em] text-emerald-300">
                   {activeChallengesCount} En cours
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="rounded-2xl border border-white/5 bg-white/5 p-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/5 bg-white/5 p-3.5 sm:p-4">
                   <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400">Chat Admin</p>
-                  <p className="mt-1.5 text-xl sm:text-2xl font-black text-white">{unreadChat}</p>
+                  <p className="mt-1.5 text-2xl font-black text-white">{unreadChat}</p>
                   <p className="text-[8px] text-slate-500 mt-0.5 lowercase italic">{unreadChat > 0 ? 'Nouveaux msgs' : 'À jour'}</p>
                 </div>
 
-                <div className="rounded-2xl border border-white/5 bg-white/5 p-3.5">
+                <div className="rounded-2xl border border-white/5 bg-white/5 p-3.5 sm:p-4">
                   <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400">Alertes</p>
-                  <p className="mt-1.5 text-xl sm:text-2xl font-black text-white">{unreadNotifs}</p>
+                  <p className="mt-1.5 text-2xl font-black text-white">{unreadNotifs}</p>
                   <p className="text-[8px] text-slate-500 mt-0.5 lowercase italic">{unreadNotifs > 0 ? 'Non lues' : 'Aucune alerte'}</p>
                 </div>
               </div>
             </DSCard>
 
-            {/* Accès rapides */}
-            <DSCard className="space-y-3 p-5 sm:p-6">
+            {/* Raccourcis rapides */}
+            <DSCard className="space-y-4 p-5 sm:p-6 bg-slate-900/80 border border-white/10">
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Accès Rapides</p>
               <div className="space-y-2">
                 <Link
-                  href="/client/vip"
-                  className="flex items-center justify-between w-full rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-amber-300 transition hover:bg-amber-500/10"
-                >
-                  <span className="flex items-center gap-2">
-                    <Zap size={15} className="text-amber-400" />
-                    Offres VIP
-                  </span>
-                  <ChevronRight size={14} className="text-amber-500/60" />
-                </Link>
-
-                <Link
                   href="/client/market"
-                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10"
+                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-98"
                 >
-                  <span className="flex items-center gap-2">
-                    <Sparkles size={15} className="text-purple-400" />
+                  <span className="flex items-center gap-2.5">
+                    <Sparkles size={16} className="text-purple-400" />
                     Marketplace
                   </span>
                   <ChevronRight size={14} className="text-slate-500" />
@@ -626,10 +630,10 @@ export default function ClientHome() {
 
                 <Link
                   href="/client/challenges"
-                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10"
+                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-98"
                 >
-                  <span className="flex items-center gap-2">
-                    <ShieldCheck size={15} className="text-emerald-400" />
+                  <span className="flex items-center gap-2.5">
+                    <ShieldCheck size={16} className="text-emerald-400" />
                     Mes Défis
                   </span>
                   <ChevronRight size={14} className="text-slate-500" />
@@ -637,11 +641,11 @@ export default function ClientHome() {
 
                 <Link
                   href="/client/profile"
-                  className="flex items-center justify-between w-full rounded-xl border border-transparent bg-transparent px-3.5 py-2 text-xs font-black uppercase tracking-[0.15em] text-slate-400 transition hover:text-white"
+                  className="flex items-center justify-between w-full rounded-xl border border-transparent bg-transparent px-4 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-slate-400 transition hover:text-white"
                 >
-                  <span className="flex items-center gap-2">
-                    <User size={15} />
-                    Paramètres du profil
+                  <span className="flex items-center gap-2.5">
+                    <User size={16} />
+                    Paramètres profil
                   </span>
                 </Link>
               </div>
@@ -653,7 +657,7 @@ export default function ClientHome() {
   );
 }
 
-// Helper pour les liens du drawer
+// Composant Helper pour les liens du menu latéral
 function MenuLink({
   href,
   icon,
@@ -668,23 +672,23 @@ function MenuLink({
   return (
     <Link 
       href={href} 
-      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all active:bg-white/10 group"
+      className="flex items-center gap-3 p-3.5 rounded-xl hover:bg-white/5 transition-all active:bg-white/10 group"
     >
       <div className="shrink-0">{icon}</div>
       <span className="text-[11px] font-black tracking-wider uppercase italic text-slate-300 group-hover:text-white transition truncate">
         {label}
       </span>
       {badge !== undefined && (
-        <span className="ml-auto bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] px-2 py-0.5 rounded-full font-black">
+        <span className="ml-auto bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] px-2 py-0.5 rounded-full font-black shrink-0">
           {badge}
         </span>
       )}
-      {!badge && <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition" />}
+      {!badge && <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition shrink-0" />}
     </Link>
   );
 }
 
-// Helper pour les cartes de jeux
+// Composant Helper pour les lignes du catalogue de jeux
 function GameRow({
   href,
   icon,
@@ -703,17 +707,17 @@ function GameRow({
   return (
     <Link 
       href={href} 
-      className="bg-slate-900/80 border border-white/5 p-3.5 rounded-2xl flex items-center justify-between hover:border-emerald-500/30 hover:bg-slate-900 transition-all active:scale-[0.98] group"
+      className="bg-slate-900/80 border border-white/5 p-3.5 sm:p-4 rounded-2xl flex items-center justify-between hover:border-emerald-500/30 hover:bg-slate-900 transition-all active:scale-[0.98] group"
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
           {icon}
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
             <h4 className="text-xs font-black italic tracking-wider uppercase text-white truncate">{title}</h4>
             {tag && (
-              <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[8px] px-1.5 py-0.2 rounded font-black uppercase shrink-0">
+              <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[8px] px-1.5 py-0.5 rounded font-black uppercase shrink-0">
                 {tag}
               </span>
             )}
@@ -723,7 +727,7 @@ function GameRow({
       </div>
 
       <div className="flex items-center gap-2 shrink-0 ml-2">
-        <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg text-[9px] text-emerald-400 font-black">
+        <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[9px] text-emerald-400 font-black hidden sm:inline-block">
           {players}
         </span>
         <ChevronRight size={14} className="text-slate-600 group-hover:text-emerald-400 transition" />
