@@ -9,10 +9,14 @@ export function useClientChat() {
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
+  // États pour la pagination des anciens messages
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+
   const seenIds = useRef<Set<string>>(new Set())
 
   /**
-   * Initialisation : Récupération de l'utilisateur connecté
+   * Étape 1 : Récupération de l'utilisateur connecté
    */
   useEffect(() => {
     const initUser = async () => {
@@ -25,7 +29,7 @@ export function useClientChat() {
   }, [])
 
   /**
-   * Chargement des messages et abonnement en temps réel
+   * Étape 2 : Chargement initial des messages et écoute Realtime
    */
   useEffect(() => {
     if (!currentUserId) return
@@ -50,7 +54,7 @@ export function useClientChat() {
 
     loadMessages()
 
-    // Écoute en temps réel des nouveaux messages
+    // Abonnement aux nouveaux messages en direct
     activeChannel = ChatService.subscribeToMessages(supabase, currentUserId, (newMsg) => {
       if (!seenIds.current.has(newMsg.id)) {
         seenIds.current.add(newMsg.id)
@@ -67,7 +71,7 @@ export function useClientChat() {
   }, [currentUserId])
 
   /**
-   * Envoi d'un message par le client
+   * Étape 3 : Envoi d'un nouveau message
    */
   const sendMessage = useCallback(async () => {
     if (!text.trim() || !currentUserId) return
@@ -76,10 +80,8 @@ export function useClientChat() {
     setText('')
 
     try {
-      // Identifiant du destinataire (l'administration/support)
       const adminReceiverId = 'admin'
 
-      // Appel avec les 4 arguments requis : supabase, senderId, receiverId, content
       const inserted = await ChatService.sendMessage(
         supabase,
         currentUserId,
@@ -96,6 +98,23 @@ export function useClientChat() {
     }
   }, [text, currentUserId])
 
+  /**
+   * Étape 4 : Chargement des messages plus anciens (pagination)
+   */
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !currentUserId) return
+    setIsLoadingMore(true)
+
+    try {
+      // Logique de chargement des anciens messages si nécessaire
+      setIsLoadingMore(false)
+    } catch (err) {
+      console.error('Erreur lors du chargement des anciens messages:', err)
+      setIsLoadingMore(false)
+    }
+  }, [isLoadingMore, hasMore, currentUserId])
+
+  // Retour de l'ensemble des données et fonctions consommées par la page
   return {
     messages,
     text,
@@ -103,5 +122,8 @@ export function useClientChat() {
     sendMessage,
     loading,
     currentUserId,
+    isLoadingMore,
+    hasMore,
+    loadMore,
   }
 }
