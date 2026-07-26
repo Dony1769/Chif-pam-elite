@@ -33,7 +33,7 @@ export const PRESET_RESPONSES: PresetResponse[] = [
   {
     id: 'profil',
     title: 'Modifier le Profil / Mot de passe',
-    keywords: ['profil', 'profile', 'modifye', 'pwofil', 'mot de passe', `modpas', 'kod', 'sekirite'],
+    keywords: ['profil', 'profile', 'modifye', 'pwofil', 'mot de passe', 'modpas', 'kod', 'sekirite'],
     messageText: 'Ou ka modifye enfòmasyon pèsonèl ou ak kòd sekirite ou sou paj Profil la.',
     actionLabel: 'Mon Profil',
     actionUrl: '/client/profile',
