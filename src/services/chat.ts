@@ -1,22 +1,8 @@
 import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
+import { ChatMessage } from '@/types/chat'
 
-/**
- * Interface unifiée représentant la structure d'un message de chat
- */
-export interface ChatMessage {
-  id: string
-  created_at: string
-  content: string
-  user_id?: string
-  sender_id?: string
-  receiver_id?: string
-  sender_type?: 'client' | 'admin'
-  is_read?: boolean
-  // Propriétés requises pour l'interface administration et la liste virtualisée
-  is_admin_message?: boolean
-  is_read_by_admin?: boolean
-  is_read_by_client?: boolean
-}
+// Re-exportation propre du type centralisé
+export type { ChatMessage }
 
 export class ChatService {
   /**
