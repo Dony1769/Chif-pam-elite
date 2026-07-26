@@ -1,171 +1,183 @@
-import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
-import { ChatMessage } from '@/types/chat'
+import { supabase } from '@/lib/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ChatMessage } from '@/types/chat'
 
-// Exportation uniforme du type de message
-export type { ChatMessage }
+export type { ChatMessage } from '@/types/chat'
+
+type RealtimeMessagePayload = { new: ChatMessage }
+
+const CHAT_CHANNEL_PREFIX = 'chat_user_'
+
+function getChatChannelName(userId: string) {
+  return `${CHAT_CHANNEL_PREFIX}${userId}`
+}
 
 export class ChatService {
-  /**
-   * Récupère l'historique des messages pour un utilisateur
-   */
+  static async fetchMessages(userId: string, limit?: number, before?: string): Promise<ChatMessage[]>
+  static async fetchMessages(supabaseClient: SupabaseClient, userId: string, limit?: number, before?: string): Promise<ChatMessage[]>
   static async fetchMessages(
-    supabase: SupabaseClient,
-    userId: string
+    arg1: SupabaseClient | string,
+    arg2?: string | number,
+    arg3?: number | string,
+    arg4?: string
   ): Promise<ChatMessage[]> {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .or(`user_id.eq.${userId},sender_id.eq.${userId},receiver_id.eq.${userId}`)
-      .order('created_at', { ascending: true })
+    const client = typeof arg1 === 'string' ? supabase : arg1
+    const userId = typeof arg1 === 'string' ? arg1 : (typeof arg2 === 'string' ? arg2 : '')
+    const limit = typeof arg2 === 'number' ? arg2 : (typeof arg3 === 'number' ? arg3 : 30)
+    const before = typeof arg2 === 'string' ? arg2 : (typeof arg3 === 'string' ? arg3 : arg4)
 
-    if (error) {
-      console.error('Erreur lors de la récupération des messages:', error)
-      return []
+    let query = client
+      .from('messages')
+      .select('id, user_id, content, created_at, is_admin_message, is_read_by_admin, is_read_by_client')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (before) {
+      query = query.lt('created_at', before)
     }
 
-    return (data as ChatMessage[]) || []
+    const { data, error } = await query
+
+    if (error) {
+      throw error
+    }
+
+    return data || []
   }
 
-  /**
-   * Souscrit aux nouveaux messages en temps réel
-   */
+  static async sendMessage(senderId: string, receiverId: string, content: string): Promise<ChatMessage | null>
+  static async sendMessage(supabaseClient: SupabaseClient, senderId: string, receiverId: string, content: string): Promise<ChatMessage | null>
+  static async sendMessage(
+    arg1: SupabaseClient | string,
+    arg2: string,
+    arg3?: string,
+    arg4?: string
+  ): Promise<ChatMessage | null> {
+    const client = typeof arg1 === 'string' ? supabase : arg1
+    const senderId = typeof arg1 === 'string' ? arg1 : arg2
+    const receiverId = typeof arg1 === 'string' ? arg2 : (arg3 ?? '')
+    const content = typeof arg1 === 'string' ? arg3 ?? '' : (arg4 ?? '')
+    const trimmed = content.trim()
+
+    if (!trimmed) return null
+
+    const isAdminMessage = senderId === 'admin'
+    const { data, error } = await client.from('messages').insert({
+      content: trimmed,
+      user_id: senderId,
+      is_admin_message: isAdminMessage,
+      is_read_by_admin: isAdminMessage,
+      is_read_by_client: !isAdminMessage,
+    }).select('id, user_id, content, created_at, is_admin_message, is_read_by_admin, is_read_by_client').single()
+
+    if (error) {
+      throw error
+    }
+
+    return data as ChatMessage | null
+  }
+
+  static async sendClientMessage(userId: string, content: string) {
+    return this.sendMessage(userId, 'admin', content)
+  }
+
+  static async markAdminMessagesReadForClient(userId: string) {
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_read_by_client: true })
+      .eq('user_id', userId)
+      .eq('is_admin_message', true)
+      .eq('is_read_by_client', false)
+
+    if (error) {
+      throw error
+    }
+  }
+
+  static subscribeToMessages(userId: string, callback: (message: ChatMessage) => void): ReturnType<typeof supabase.channel>
+  static subscribeToMessages(supabaseClient: SupabaseClient, userId: string, callback: (message: ChatMessage) => void): ReturnType<typeof supabase.channel>
   static subscribeToMessages(
-    supabase: SupabaseClient,
-    targetUserId: string,
-    onNewMessage: (msg: ChatMessage) => void
-  ): RealtimeChannel {
-    return supabase
-      .channel(`chat_${targetUserId}`)
+    arg1: SupabaseClient | string,
+    arg2: string | ((message: ChatMessage) => void),
+    arg3?: (message: ChatMessage) => void
+  ): ReturnType<typeof supabase.channel> {
+    const client = typeof arg1 === 'string' ? supabase : arg1
+    const userId = typeof arg1 === 'string' ? arg1 : (typeof arg2 === 'string' ? arg2 : '')
+    const callback = typeof arg2 === 'function' ? arg2 : (arg3 as (message: ChatMessage) => void)
+
+    return client
+      .channel(getChatChannelName(userId))
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-        },
-        (payload) => {
-          const newMsg = payload.new as ChatMessage
-
-          if (
-            newMsg.user_id === targetUserId ||
-            newMsg.sender_id === targetUserId ||
-            newMsg.receiver_id === targetUserId
-          ) {
-            onNewMessage(newMsg)
-          }
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` },
+        (payload: RealtimeMessagePayload) => {
+          callback(payload.new)
         }
       )
       .subscribe()
   }
 
-  /**
-   * Envoie un nouveau message texte dans Supabase
-   */
-  static async sendMessage(
-    supabase: SupabaseClient,
-    senderId: string,
-    receiverId: string,
-    content: string
-  ): Promise<ChatMessage | null> {
-    const { data, error } = await supabase
-      .from('messages')
-      .insert([
-        {
-          sender_id: senderId,
-          receiver_id: receiverId,
-          user_id: senderId,
-          content: content.trim(),
-        },
-      ])
-      .select()
-      .single()
+  static async uploadFile(supabaseClient: SupabaseClient, userId: string, file: File): Promise<string> {
+    const path = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${file.name.split('.').pop()?.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase() || 'bin'}`
+
+    const { error } = await supabaseClient.storage.from('chat-attachments').upload(path, file)
 
     if (error) {
-      console.error('Erreur lors de l’envoi du message:', error)
-      return null
+      throw new Error(`Failed to upload attachment: ${error.message}`)
     }
 
-    return data as ChatMessage
-  }
-
-  /**
-   * Modifie le texte d'un message existant
-   */
-  static async editMessage(
-    supabase: SupabaseClient,
-    messageId: string,
-    newContent: string
-  ): Promise<ChatMessage | null> {
-    const { data, error } = await supabase
-      .from('messages')
-      .update({ content: newContent.trim() })
-      .eq('id', messageId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Erreur lors de la modification du message :', error)
-      throw error
-    }
-
-    return data as ChatMessage
-  }
-
-  /**
-   * Supprime un message de la base de données
-   */
-  static async deleteMessage(
-    supabase: SupabaseClient,
-    messageId: string
-  ): Promise<boolean> {
-    const { error } = await supabase
-      .from('messages')
-      .delete()
-      .eq('id', messageId)
-
-    if (error) {
-      console.error('Erreur lors de la suppression du message :', error)
-      return false
-    }
-
-    return true
-  }
-
-  /**
-   * Téléverse un fichier (image, document, etc.) dans Supabase Storage
-   * @param supabase Instance du client Supabase
-   * @param userId Identifiant de l'utilisateur qui envoie le fichier
-   * @param file Le fichier brut sélectionné
-   * @returns L'URL publique d'accès au fichier téléversé
-   */
-  static async uploadFile(
-    supabase: SupabaseClient,
-    userId: string,
-    file: File
-  ): Promise<string> {
-    // 1. Nettoyage et sécurisation du nom de fichier
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`
-    const bucketName = 'chat-attachments' // Assure-toi que ce bucket existe ou adapte son nom si nécessaire
-
-    // 2. Envoi du fichier sur Supabase Storage
-    const { data, error } = await supabase.storage
-      .from(bucketName)
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-      })
-
-    if (error) {
-      console.error('Erreur lors du téléversement du fichier:', error)
-      throw new Error(`Échec de l'envoi du fichier: ${error.message}`)
-    }
-
-    // 3. Récupération de l'URL publique
-    const { data: publicUrlData } = supabase.storage
-      .from(bucketName)
-      .getPublicUrl(data.path)
-
+    const { data: publicUrlData } = supabaseClient.storage.from('chat-attachments').getPublicUrl(path)
     return publicUrlData.publicUrl
+  }
+
+  static async editMessage(messageId: string, newContent: string): Promise<void>
+  static async editMessage(supabaseClient: SupabaseClient, messageId: string, newContent: string): Promise<void>
+  static async editMessage(
+    arg1: SupabaseClient | string,
+    arg2: string,
+    arg3?: string
+  ): Promise<void> {
+    const client = typeof arg1 === 'string' ? supabase : arg1
+    const messageId = typeof arg1 === 'string' ? arg1 : arg2
+    const newContent = typeof arg1 === 'string' ? arg2 : (arg3 ?? '')
+
+    const { error } = await client.from('messages').update({ content: newContent }).eq('id', messageId)
+    if (error) throw error
+  }
+
+  static async deleteMessage(messageId: string): Promise<void>
+  static async deleteMessage(supabaseClient: SupabaseClient, messageId: string): Promise<void>
+  static async deleteMessage(arg1: SupabaseClient | string, arg2?: string): Promise<void> {
+    const client = typeof arg1 === 'string' ? supabase : arg1
+    const messageId = typeof arg1 === 'string' ? arg1 : (arg2 ?? '')
+
+    const { error } = await client.from('messages').delete().eq('id', messageId)
+    if (error) throw error
+  }
+
+  // Broadcast typing/presence events on the user's chat channel
+  static broadcastTyping(userId: string, payload: { isTyping: boolean; from?: string }) {
+    const channel = supabase.channel(getChatChannelName(userId))
+    channel.send({ type: 'broadcast', event: 'typing', payload })
+    return channel
+  }
+
+  static broadcastPresence(userId: string, payload: { status: 'online' | 'offline'; at?: string }) {
+    const channel = supabase.channel(getChatChannelName(userId))
+    channel.send({ type: 'broadcast', event: 'presence', payload })
+    return channel
+  }
+
+  static subscribeToBroadcasts(userId: string, handlers: { onTyping?: (p: any) => void; onPresence?: (p: any) => void }) {
+    const channel = supabase.channel(getChatChannelName(userId))
+    if (handlers.onTyping) {
+      channel.on('broadcast', { event: 'typing' }, (e) => handlers.onTyping && handlers.onTyping(e.payload))
+    }
+    if (handlers.onPresence) {
+      channel.on('broadcast', { event: 'presence' }, (e) => handlers.onPresence && handlers.onPresence(e.payload))
+    }
+    channel.subscribe()
+    return channel
   }
 }
