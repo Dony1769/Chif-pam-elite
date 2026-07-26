@@ -8,6 +8,7 @@ import VirtualizedMessageList from '@/components/chat/VirtualizedMessageList'
 import MessageInput from '@/components/chat/MessageInput'
 import { useAdminChat } from '@/hooks/useAdminChat'
 import { Loader2, MessageSquare, ShieldCheck } from 'lucide-react'
+import { ChatMessage } from '@/types/chat'
 
 export default function AdminChat() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
