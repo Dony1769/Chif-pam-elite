@@ -13,7 +13,7 @@ export interface PresetResponse {
 }
 
 // Modèles de réponses préconçues pour l'Admin et le Bot
-export fontConst PRESET_RESPONSES: PresetResponse[] = [
+export const PRESET_RESPONSES: PresetResponse[] = [
   {
     id: 'depot',
     title: 'Faire un Dépôt / Recharger',
@@ -33,7 +33,7 @@ export fontConst PRESET_RESPONSES: PresetResponse[] = [
   {
     id: 'profil',
     title: 'Modifier le Profil / Mot de passe',
-    keywords: ['profil', 'profile', 'modifye', 'pwofil', 'mot de passe', 'modpas', 'kod', 'sekirite'],
+    keywords: ['profil', 'profile', 'modifye', 'pwofil', 'mot de passe', `modpas', 'kod', 'sekirite'],
     messageText: 'Ou ka modifye enfòmasyon pèsonèl ou ak kòd sekirite ou sou paj Profil la.',
     actionLabel: 'Mon Profil',
     actionUrl: '/client/profile',
