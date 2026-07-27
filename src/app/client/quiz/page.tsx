@@ -5,11 +5,10 @@ import { supabase } from '@/lib/supabase';
 import { 
   Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
   Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, 
-  Coins, Target, Sparkles, Volume2, VolumeX, MessageCircleQuestion, 
-  History, BarChart3 
+  Coins, Sparkles, Volume2, VolumeX, History
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
 
@@ -44,14 +43,14 @@ const getDifficultySettings = (difficulty: DifficultyType) => {
 };
 
 const CATEGORIES = [
-  { id: 9, name: "Général", icon: <Brain size={16}/> },
-  { id: 23, name: "Histoire", icon: <Globe size={16}/> },
-  { id: 11, name: "Film", icon: <Film size={16}/> },
-  { id: 21, name: "Sports", icon: <Award size={16}/> },
-  { id: 12, name: "Musique", icon: <Music size={16}/> },
-  { id: 18, name: "Tech", icon: <Laptop size={16}/> },
-  { id: 10, name: "Livres", icon: <BookOpen size={16}/> },
-  { id: 22, name: "Géo", icon: <MapPin size={16}/> },
+  { id: 9, name: "Général", icon: <Brain size={14}/> },
+  { id: 23, name: "Histoire", icon: <Globe size={14}/> },
+  { id: 11, name: "Film", icon: <Film size={14}/> },
+  { id: 21, name: "Sports", icon: <Award size={14}/> },
+  { id: 12, name: "Musique", icon: <Music size={14}/> },
+  { id: 18, name: "Tech", icon: <Laptop size={14}/> },
+  { id: 10, name: "Livres", icon: <BookOpen size={14}/> },
+  { id: 22, name: "Géo", icon: <MapPin size={14}/> },
 ];
 
 function QuizGameContent() {
@@ -71,7 +70,7 @@ function QuizGameContent() {
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
-  const [multiplier, setMultiplier] = useState<number>(0.5);
+  const [multiplier, setMultiplier] = useState<number>(1.0); // Démarrage base 1.0x
   const [gameId, setGameId] = useState<string | null>(null);
   const [sessionScore, setSessionScore] = useState<number>(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -80,11 +79,18 @@ function QuizGameContent() {
   const [, setCombo] = useState<number>(1);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
+  const [finalPayout, setFinalPayout] = useState<number>(0);
 
-  // --- SÉCURITÉ & REFS CRITIQUES ---
+  // --- SÉCURITÉ & REFS ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const multiplierRef = useRef<number>(1.0);
+
+  // Synchronisation de la ref pour l'accès instantané dans les callbacks asynchrones
+  useEffect(() => {
+    multiplierRef.current = multiplier;
+  }, [multiplier]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -165,7 +171,7 @@ function QuizGameContent() {
     triggerHaptic();
     
     if (betCP < 10 && !challengeId) { 
-      alert("Mise minimum 10 CP"); 
+      alert("Mise minimum : 10 CP"); 
       return; 
     }
     
@@ -217,7 +223,7 @@ function QuizGameContent() {
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
-      setMultiplier(0.5);
+      setMultiplier(1.0);
       setSessionScore(0);
       setCombo(1);
       setTimeLeft(difficultySettings.time);
@@ -241,6 +247,26 @@ function QuizGameContent() {
     setSelectedAnswer(ans);
     setShowCorrection(true);
 
+    // Cas 1 : Temps écoulé (ans === null)
+    if (ans === null) {
+      playQuizSound('wrong');
+      
+      // Si le joueur a déjà au moins une bonne réponse (multiplicateur > 1.0) -> Auto Cashout
+      if (multiplierRef.current > 1.0 && !challengeId) {
+        setExplanation(`⏱️ Temps écoulé ! Encaissement automatique des gains accumulés.`);
+        setTimeout(() => {
+          finalizeGame(true); // Gagnant partiel
+        }, 1200);
+      } else {
+        setExplanation(`⏱️ Temps écoulé ! Aucune réponse enregistrée.`);
+        setTimeout(() => {
+          finalizeGame(false); // Perte totale
+        }, 1200);
+      }
+      return;
+    }
+
+    // Cas 2 : Bonne réponse
     if (ans === questions[currentIndex].correct) {
       playQuizSound('correct');
       const difficultySettings = getDifficultySettings(difficulty);
@@ -259,16 +285,26 @@ function QuizGameContent() {
           setShowCorrection(false);
           setTimeLeft(getDifficultySettings(difficulty).time);
         } else { 
-          finalizeGame(true); 
+          finalizeGame(true); // Victoire totale
         }
-      }, 1200);
-    } else {
+      }, 1000);
+    } 
+    // Cas 3 : Mauvaise réponse
+    else {
       playQuizSound('wrong');
       setCombo(1);
-      setExplanation(`❌ Mauvaise réponse. La solution était : ${questions[currentIndex].correct}`);
-      setTimeout(() => {
-        finalizeGame(false);
-      }, 1500);
+      setExplanation(`❌ Mauvaise réponse. La solution : ${questions[currentIndex].correct}`);
+      
+      // Si le joueur a accumulé un multiplicateur, on fait un encaissement partiel des étapes réussies
+      if (multiplierRef.current > 1.0 && !challengeId) {
+        setTimeout(() => {
+          finalizeGame(true);
+        }, 1200);
+      } else {
+        setTimeout(() => {
+          finalizeGame(false);
+        }, 1200);
+      }
     }
   };
 
@@ -277,15 +313,16 @@ function QuizGameContent() {
     isProcessingRef.current = true;
     
     if (!gameId) return;
-    
     if (timerRef.current) clearInterval(timerRef.current);
 
     const secureBet = lockedBetRef.current;
+    
+    // Calcul unifié selon l'économie définie côté administration
     const economy = resolveGameEconomy({
       gameId: 'quiz',
       bet: secureBet,
       difficulty,
-      multiplier,
+      multiplier: multiplierRef.current,
       currentStep: currentIndex,
       bonusMultiplier: 1,
       jackpotMultiplier: 1,
@@ -293,6 +330,7 @@ function QuizGameContent() {
     });
     
     const gainCP = challengeId ? 0 : (isWin ? economy.payout : 0);
+    setFinalPayout(gainCP);
 
     try {
       if (challengeId) {
@@ -307,7 +345,7 @@ function QuizGameContent() {
             p_user_id: profile.id,
             p_mise_cp: 0,
             p_gain_cp: gainCP,
-            p_jeu_nom: 'Quiz Victory'
+            p_jeu_nom: 'Quiz Victory/Cashout'
           });
         }
       }
@@ -322,11 +360,11 @@ function QuizGameContent() {
         label: `${difficulty} • ${CATEGORIES.find(c => c.id === category)?.name || 'Général'}`, 
         score: sessionScore, 
         difficulty 
-      }, ...prev].slice(0, 5));
+      }, ...prev].slice(0, 3));
       
       setStatus(isWin ? 'ended' : 'lost');
     } catch (e: any) {
-      console.error(e);
+      console.error("Erreur lors de la finalisation :", e);
     } finally {
       isProcessingRef.current = false;
       setShowCorrection(false);
@@ -334,7 +372,7 @@ function QuizGameContent() {
     }
   };
 
-  // TIMER LOGIC
+  // BOUCLE DU CHRONO
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -351,101 +389,91 @@ function QuizGameContent() {
   const difficultyBadge = difficulty === 'facile' ? 'ÉCLAIR' : difficulty === 'intermédiaire' ? 'PRÉCIS' : 'MAESTRO';
 
   return (
-    <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden">
+    <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-2.5 font-black uppercase flex flex-col justify-between select-none overflow-hidden">
       
-      {/* HEADER : Toujours visible en haut */}
-      <div className="flex-none flex items-center justify-between mb-2">
+      {/* HEADER FIXE */}
+      <div className="flex-none flex items-center justify-between mb-1">
         <button 
           onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} 
-          className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-2 text-amber-200 active:scale-90 transition-transform"
+          className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-1.5 text-amber-200 active:scale-90 transition-transform"
         >
-          <ChevronLeft size={20}/>
+          <ChevronLeft size={18}/>
         </button>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 shadow-lg">
-            <Coins size={14} className="text-amber-300" />
-            <span className="text-xs italic text-amber-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+          <div className="flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-0.5 shadow-lg">
+            <Coins size={12} className="text-amber-300" />
+            <span className="text-[11px] italic text-amber-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
           </div>
 
           <button 
             onClick={() => setMuted(v => !v)} 
-            className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 active:scale-90"
+            className="rounded-full border border-white/10 bg-white/5 p-1.5 text-slate-300 active:scale-90"
           >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </button>
         </div>
       </div>
 
-      {/* CONTENU PRINCIPAL ADAPTATIF */}
-      <div className="flex-1 min-h-0 flex flex-col justify-center overflow-y-auto no-scrollbar">
+      {/* CONTENEUR PRINCIPAL SANS SCROLL */}
+      <div className="flex-1 min-h-0 flex flex-col justify-center overflow-hidden">
         
         {status === 'maintenance' ? (
-          <div className="flex flex-col items-center justify-center my-auto py-8 bg-white/5 rounded-[2rem] border border-white/5">
-            <Construction size={48} className="text-amber-500 animate-pulse" />
-            <h2 className="text-xl text-amber-500 mt-3 italic">MAINTENANCE</h2>
-            <p className="text-zinc-500 text-[10px] mt-1 px-6 text-center">{maintenanceMsg}</p>
+          <div className="flex flex-col items-center justify-center my-auto py-6 bg-white/5 rounded-[2rem] border border-white/5">
+            <Construction size={40} className="text-amber-500 animate-pulse" />
+            <h2 className="text-lg text-amber-500 mt-2 italic">MAINTENANCE</h2>
+            <p className="text-zinc-500 text-[9px] mt-1 px-4 text-center">{maintenanceMsg}</p>
           </div>
         ) : status === 'idle' || status === 'loading' ? (
-          <div className="space-y-3 my-auto py-2">
+          <div className="space-y-2 my-auto">
             
             {status === 'loading' ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <Loader2 className="animate-spin text-amber-500" size={48}/>
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="animate-spin text-amber-500" size={40}/>
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between rounded-xl border border-amber-400/20 bg-black/30 px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-amber-300 text-[10px]">
-                    <Sparkles size={14} />
+                <div className="flex items-center justify-between rounded-xl border border-amber-400/20 bg-black/30 px-2.5 py-1.5">
+                  <div className="flex items-center gap-1 text-amber-300 text-[9px]">
+                    <Sparkles size={12} />
                     <span>Mode Quiz Elite</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-amber-200/80">
-                    <Brain size={14} /> {difficultyBadge}
+                  <div className="flex items-center gap-1 text-[9px] text-amber-200/80">
+                    <Brain size={12} /> {difficultyBadge}
                   </div>
                 </div>
 
-                {challengeId && (
-                  <div className="bg-emerald-600 text-white p-3 rounded-2xl flex items-center justify-between shadow-lg">
-                    <div className="flex items-center gap-2">
-                      <Target size={20} className="text-black" />
-                      <span className="text-xs font-black italic">MISSION CIBLÉE</span>
-                    </div>
-                    <span className="text-[9px] opacity-80">POINTS CLASSEMENT</span>
-                  </div>
-                )}
-
-                {/* Catégories compactes */}
-                <div className="grid grid-cols-4 gap-1.5">
+                {/* Grille des Catégories */}
+                <div className="grid grid-cols-4 gap-1">
                   {CATEGORIES.map(c => (
                     <button 
                       key={c.id} 
                       onClick={() => setCategory(c.id)} 
-                      className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2 transition-all ${category === c.id ? 'border-amber-400 bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'border-white/10 bg-white/5 text-slate-400'}`}
+                      className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border p-1.5 transition-all ${category === c.id ? 'border-amber-400 bg-amber-500 text-black shadow-[0_0_12px_rgba(245,158,11,0.25)]' : 'border-white/10 bg-white/5 text-slate-400'}`}
                     >
                       {c.icon} 
-                      <span className="text-[8px] font-black italic truncate max-w-full">{c.name}</span>
+                      <span className="text-[7.5px] font-black italic truncate max-w-full">{c.name}</span>
                     </button>
                   ))}
                 </div>
 
-                {/* Sélecteur de difficulté */}
-                <div className="flex gap-1.5">
+                {/* Choix de Difficulté */}
+                <div className="flex gap-1">
                   {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
                     <button 
                       key={d} 
                       onClick={() => setDifficulty(d)} 
-                      className={`flex-1 rounded-xl border py-2.5 text-[9px] font-bold transition-all ${difficulty === d ? 'border-amber-400 bg-white text-black' : 'border-white/10 bg-white/5 text-slate-400'}`}
+                      className={`flex-1 rounded-xl border py-1.5 text-[8.5px] font-bold transition-all ${difficulty === d ? 'border-amber-400 bg-white text-black' : 'border-white/10 bg-white/5 text-slate-400'}`}
                     >
                       {d.toUpperCase()} <br/> 
-                      <span className="text-[7px] opacity-60">+{SETTINGS[d].points} PTS</span>
+                      <span className="text-[6.5px] opacity-70">+{SETTINGS[d].points} PTS</span>
                     </button>
                   ))}
                 </div>
 
-                {/* Section Mise */}
-                <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 shadow-md">
-                  <span className={`text-[9px] italic font-bold block mb-1 ${challengeId ? 'text-amber-500' : 'text-emerald-500'}`}>
+                {/* Saisie de la Mise */}
+                <div className="rounded-xl border border-white/10 bg-slate-950/80 p-2.5 shadow-md">
+                  <span className={`text-[8.5px] italic font-bold block mb-0.5 ${challengeId ? 'text-amber-500' : 'text-emerald-500'}`}>
                     {challengeId ? "FRAIS DE MISSION (FIXE)" : "MISE DE LA SESSION (CP)"}
                   </span>
                   <input 
@@ -453,53 +481,53 @@ function QuizGameContent() {
                     value={betCP} 
                     disabled={!!challengeId}
                     onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                    className={`bg-transparent outline-none w-full text-3xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
+                    className={`bg-transparent outline-none w-full text-2xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
                   />
                 </div>
 
-                {/* Bouton Lancer */}
+                {/* Bouton de Lancement */}
                 <button 
                   onClick={start} 
                   disabled={isProcessingRef.current} 
-                  className={`w-full rounded-2xl py-4 text-lg font-black italic shadow-lg active:scale-95 transition-all ${challengeId ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' : 'bg-gradient-to-r from-amber-400 to-emerald-500 text-white'}`}
+                  className={`w-full rounded-xl py-3 text-base font-black italic shadow-lg active:scale-95 transition-all ${challengeId ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' : 'bg-gradient-to-r from-amber-400 to-emerald-500 text-white'}`}
                 >
-                  {isProcessingRef.current ? <Loader2 className="animate-spin mx-auto" size={24}/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
+                  {isProcessingRef.current ? <Loader2 className="animate-spin mx-auto" size={20}/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
                 </button>
               </>
             )}
           </div>
         ) : status === 'playing' ? (
           
-          /* MODE JEU OPTIMISÉ (ZÉRO SCROLL - HYPER DYNAMIQUE) */
-          <div className="flex-1 flex flex-col justify-between gap-2 py-1 min-h-0">
+          /* ÉCRAN DE JEU */
+          <div className="flex-1 flex flex-col justify-between gap-1.5 py-0.5 min-h-0">
             
-            {/* Barre de statut & Chrono combiné */}
-            <div className="flex-none space-y-1.5">
+            {/* Barre de Statut & Multiplicateur */}
+            <div className="flex-none space-y-1">
               <div className="flex justify-between items-center text-xs">
                 <div>
-                  <span className="text-[9px] text-slate-400">MULTIPLIER</span>
-                  <p className="text-xl text-emerald-400 font-black italic leading-none">
+                  <span className="text-[8px] text-slate-400">MULTIPLIER</span>
+                  <p className="text-lg text-emerald-400 font-black italic leading-none">
                     {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[9px] text-slate-400">QUESTION</span>
-                  <p className="text-sm text-amber-300 font-black leading-none">{currentIndex + 1} / 5</p>
+                  <span className="text-[8px] text-slate-400">QUESTION</span>
+                  <p className="text-xs text-amber-300 font-black leading-none">{currentIndex + 1} / 5</p>
                 </div>
 
-                {!challengeId && multiplier > 1.2 && (
+                {!challengeId && multiplier > 1.0 && (
                   <button 
                     onClick={() => finalizeGame(true)} 
-                    className="bg-emerald-500 text-black px-3 py-1.5 rounded-xl text-[9px] font-black flex items-center gap-1 shadow-md active:scale-95"
+                    className="bg-emerald-500 text-black px-2.5 py-1 rounded-lg text-[8px] font-black flex items-center gap-1 shadow-md active:scale-95"
                   >
-                    <Wallet size={12}/> ENCAISSER
+                    <Wallet size={10}/> ENCAISSER
                   </button>
                 )}
               </div>
 
-              {/* BARRE DE CHRONO FIXE ET BIEN VISIBLE */}
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+              {/* Chrono */}
+              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                 <div 
                   className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500 animate-pulse' : 'bg-amber-400'}`} 
                   style={{ width: `${(timeLeft / getDifficultySettings(difficulty).time) * 100}%` }}
@@ -507,18 +535,18 @@ function QuizGameContent() {
               </div>
             </div>
 
-            {/* BLOC QUESTION */}
-            <div className="flex-1 min-h-[110px] max-h-[160px] bg-white text-black p-4 rounded-2xl flex flex-col justify-center items-center shadow-lg relative text-center">
-              <span className="absolute top-2 right-3 text-[8px] text-slate-400 font-bold italic">
+            {/* Carte de la Question */}
+            <div className="flex-1 min-h-[90px] max-h-[140px] bg-white text-black p-3 rounded-xl flex flex-col justify-center items-center shadow-lg relative text-center">
+              <span className="absolute top-1.5 right-2 text-[7.5px] text-slate-400 font-bold italic">
                 {timeLeft.toFixed(1)}s
               </span>
-              <p className="text-sm md:text-base font-black italic uppercase leading-tight">
+              <p className="text-xs sm:text-sm font-black italic uppercase leading-snug">
                 {questions[currentIndex]?.question}
               </p>
             </div>
 
-            {/* GRILLE DES RÉPONSES (Compacte & ergonomique) */}
-            <div className="flex-none grid grid-cols-1 gap-2">
+            {/* Réponses */}
+            <div className="flex-none grid grid-cols-1 gap-1.5">
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
                 const isCorrect = a === questions[currentIndex].correct;
                 const isSelected = a === selectedAnswer;
@@ -535,18 +563,18 @@ function QuizGameContent() {
                     key={i} 
                     onClick={() => handleAnswer(a)} 
                     disabled={showCorrection || isProcessingRef.current} 
-                    className={`p-3 border rounded-xl text-left transition-all font-black text-xs italic flex items-center justify-between ${style}`}
+                    className={`p-2.5 border rounded-xl text-left transition-all font-black text-[11px] italic flex items-center justify-between ${style}`}
                   >
                     <span className="truncate pr-2">{a}</span>
-                    <span className="text-[9px] opacity-40 flex-none">0{i+1}</span>
+                    <span className="text-[8px] opacity-40 flex-none">0{i+1}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* EXPLICATION RAPIDE */}
+            {/* Explication */}
             {explanation && (
-              <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex-none rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-2 text-center text-[9px] uppercase text-emerald-200 truncate">
+              <motion.div initial={{ opacity: 0, y: 2 }} animate={{ opacity: 1, y: 0 }} className="flex-none rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-1.5 text-center text-[8.5px] uppercase text-emerald-200 truncate">
                 {explanation}
               </motion.div>
             )}
@@ -554,28 +582,28 @@ function QuizGameContent() {
           </div>
         ) : (
           /* ÉCRAN DE FIN DE PARTIE */
-          <div className="text-center my-auto py-6 space-y-4">
-            <div className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-              {status === 'lost' && !challengeId ? <XCircle size={48} className="text-rose-500"/> : <Trophy size={48} className="text-emerald-500"/>}
+          <div className="text-center my-auto py-4 space-y-3">
+            <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center border-2 ${status === 'lost' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+              {status === 'lost' ? <XCircle size={36} className="text-rose-500"/> : <Trophy size={36} className="text-emerald-500"/>}
             </div>
 
-            <h2 className={`text-3xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-500'}`}>
-              {challengeId ? "MISSION COMPLÈTE" : (status === 'lost' ? "ÉCHEC" : "VICTOIRE")}
+            <h2 className={`text-2xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>
+              {challengeId ? "MISSION COMPLÈTE" : (status === 'lost' ? "ÉCHEC" : "PARTIE TERMINÉE")}
             </h2>
             
-            <div className="bg-slate-900/80 p-6 rounded-2xl border border-white/10 backdrop-blur-xl">
-              <p className="text-[9px] text-zinc-400 mb-1 font-bold italic tracking-widest">
-                {challengeId ? "POINTS AJOUTÉS AU CLASSEMENT" : "JETONS RÉCUPÉRÉS"}
+            <div className="bg-slate-900/80 p-4 rounded-xl border border-white/10 backdrop-blur-xl">
+              <p className="text-[8px] text-zinc-400 mb-0.5 font-bold italic tracking-widest">
+                {challengeId ? "POINTS OBTENUS" : "JETONS RÉCUPÉRÉS"}
               </p>
-              <p className="text-4xl font-black text-white italic tracking-tighter">
-                {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(lockedBetRef.current * multiplier))} 
-                <span className="text-base text-emerald-500 ml-1.5 font-black">{challengeId ? 'PTS' : 'CP'}</span>
+              <p className="text-3xl font-black text-white italic tracking-tighter">
+                {challengeId ? sessionScore : finalPayout} 
+                <span className="text-sm text-emerald-500 ml-1 font-black">{challengeId ? 'PTS' : 'CP'}</span>
               </p>
             </div>
 
             <button 
               onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} 
-              className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-lg italic shadow-lg active:scale-95 transition-all"
+              className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-base italic shadow-lg active:scale-95 transition-all"
             >
               {challengeId ? 'VOIR MON RANG' : 'NOUVELLE SESSION'}
             </button>
@@ -584,15 +612,15 @@ function QuizGameContent() {
 
       </div>
 
-      {/* HISTORIQUE COMPACT EN BAS (Affiché uniquement au repos) */}
+      {/* HISTORIQUE FIXE EN BAS */}
       {(status === 'idle' && history.length > 0) && (
-        <div className="flex-none mt-2 rounded-xl border border-white/10 bg-black/30 p-2.5">
-          <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-wider text-slate-400">
-            <span className="flex items-center gap-1.5"><History size={12} /> Historique récent</span>
+        <div className="flex-none mt-1 rounded-xl border border-white/10 bg-black/30 p-2">
+          <div className="mb-1 flex items-center justify-between text-[8px] uppercase tracking-wider text-slate-400">
+            <span className="flex items-center gap-1"><History size={10} /> Historique</span>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {history.slice(0, 2).map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-[9px] text-slate-300">
+              <div key={idx} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 px-2 py-0.5 text-[8px] text-slate-300">
                 <span className="truncate">{item.label}</span>
                 <span className="text-emerald-400 font-bold">{item.score} pts</span>
               </div>
@@ -607,7 +635,7 @@ function QuizGameContent() {
 
 export default function QuizElite() {
   return (
-    <Suspense fallback={<div className="h-[100dvh] bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-amber-500" size={40} /></div>}>
+    <Suspense fallback={<div className="h-[100dvh] bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-amber-500" size={32} /></div>}>
       <QuizGameContent />
     </Suspense>
   );
