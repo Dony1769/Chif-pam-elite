@@ -4,15 +4,16 @@ import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react
 import { supabase } from '@/lib/supabase';
 import { 
   Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
-  Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, 
-  Coins, Sparkles, Volume2, VolumeX, History
+  Laptop, Film, Award, BookOpen, MapPin, Construction,
+  Coins, Target, Sparkles, Volume2, VolumeX, 
+  History, Flame, Zap
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
 
-// --- TYPAGE ---
+// --- TYPES & CONSTANTES ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
 
 interface QuestionItem {
@@ -65,12 +66,12 @@ function QuizGameContent() {
   const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
   const [category, setCategory] = useState<number>(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
-  const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Maintenance...");
+  const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Maintenance en cours...");
   
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
-  const [multiplier, setMultiplier] = useState<number>(1.0); // Démarrage base 1.0x
+  const [multiplier, setMultiplier] = useState<number>(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
   const [sessionScore, setSessionScore] = useState<number>(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -79,18 +80,11 @@ function QuizGameContent() {
   const [, setCombo] = useState<number>(1);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
-  const [finalPayout, setFinalPayout] = useState<number>(0);
 
   // --- SÉCURITÉ & REFS ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const multiplierRef = useRef<number>(1.0);
-
-  // Synchronisation de la ref pour l'accès instantané dans les callbacks asynchrones
-  useEffect(() => {
-    multiplierRef.current = multiplier;
-  }, [multiplier]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -223,7 +217,7 @@ function QuizGameContent() {
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
-      setMultiplier(1.0);
+      setMultiplier(0.5);
       setSessionScore(0);
       setCombo(1);
       setTimeLeft(difficultySettings.time);
@@ -247,26 +241,6 @@ function QuizGameContent() {
     setSelectedAnswer(ans);
     setShowCorrection(true);
 
-    // Cas 1 : Temps écoulé (ans === null)
-    if (ans === null) {
-      playQuizSound('wrong');
-      
-      // Si le joueur a déjà au moins une bonne réponse (multiplicateur > 1.0) -> Auto Cashout
-      if (multiplierRef.current > 1.0 && !challengeId) {
-        setExplanation(`⏱️ Temps écoulé ! Encaissement automatique des gains accumulés.`);
-        setTimeout(() => {
-          finalizeGame(true); // Gagnant partiel
-        }, 1200);
-      } else {
-        setExplanation(`⏱️ Temps écoulé ! Aucune réponse enregistrée.`);
-        setTimeout(() => {
-          finalizeGame(false); // Perte totale
-        }, 1200);
-      }
-      return;
-    }
-
-    // Cas 2 : Bonne réponse
     if (ans === questions[currentIndex].correct) {
       playQuizSound('correct');
       const difficultySettings = getDifficultySettings(difficulty);
@@ -285,26 +259,16 @@ function QuizGameContent() {
           setShowCorrection(false);
           setTimeLeft(getDifficultySettings(difficulty).time);
         } else { 
-          finalizeGame(true); // Victoire totale
+          finalizeGame(true); 
         }
-      }, 1000);
-    } 
-    // Cas 3 : Mauvaise réponse
-    else {
+      }, 1100);
+    } else {
       playQuizSound('wrong');
       setCombo(1);
-      setExplanation(`❌ Mauvaise réponse. La solution : ${questions[currentIndex].correct}`);
-      
-      // Si le joueur a accumulé un multiplicateur, on fait un encaissement partiel des étapes réussies
-      if (multiplierRef.current > 1.0 && !challengeId) {
-        setTimeout(() => {
-          finalizeGame(true);
-        }, 1200);
-      } else {
-        setTimeout(() => {
-          finalizeGame(false);
-        }, 1200);
-      }
+      setExplanation(`❌ Mauvaise réponse. La solution était : ${questions[currentIndex].correct}`);
+      setTimeout(() => {
+        finalizeGame(false);
+      }, 1400);
     }
   };
 
@@ -313,16 +277,15 @@ function QuizGameContent() {
     isProcessingRef.current = true;
     
     if (!gameId) return;
+    
     if (timerRef.current) clearInterval(timerRef.current);
 
     const secureBet = lockedBetRef.current;
-    
-    // Calcul unifié selon l'économie définie côté administration
     const economy = resolveGameEconomy({
       gameId: 'quiz',
       bet: secureBet,
       difficulty,
-      multiplier: multiplierRef.current,
+      multiplier,
       currentStep: currentIndex,
       bonusMultiplier: 1,
       jackpotMultiplier: 1,
@@ -330,7 +293,6 @@ function QuizGameContent() {
     });
     
     const gainCP = challengeId ? 0 : (isWin ? economy.payout : 0);
-    setFinalPayout(gainCP);
 
     try {
       if (challengeId) {
@@ -345,7 +307,7 @@ function QuizGameContent() {
             p_user_id: profile.id,
             p_mise_cp: 0,
             p_gain_cp: gainCP,
-            p_jeu_nom: 'Quiz Victory/Cashout'
+            p_jeu_nom: 'Quiz Victory'
           });
         }
       }
@@ -364,7 +326,7 @@ function QuizGameContent() {
       
       setStatus(isWin ? 'ended' : 'lost');
     } catch (e: any) {
-      console.error("Erreur lors de la finalisation :", e);
+      console.error(e);
     } finally {
       isProcessingRef.current = false;
       setShowCorrection(false);
@@ -372,7 +334,7 @@ function QuizGameContent() {
     }
   };
 
-  // BOUCLE DU CHRONO
+  // --- LOGIQUE TIMEOUT ---
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -386,166 +348,178 @@ function QuizGameContent() {
     };
   }, [timeLeft, status, showCorrection]);
 
-  const difficultyBadge = difficulty === 'facile' ? 'ÉCLAIR' : difficulty === 'intermédiaire' ? 'PRÉCIS' : 'MAESTRO';
-
   return (
-    <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-2.5 font-black uppercase flex flex-col justify-between select-none overflow-hidden">
+    <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950">
       
-      {/* HEADER FIXE */}
-      <div className="flex-none flex items-center justify-between mb-1">
+      {/* 1. EN-TÊTE FIXE (HEADER) */}
+      <div className="flex-none flex items-center justify-between h-12">
         <button 
           onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} 
-          className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-1.5 text-amber-200 active:scale-90 transition-transform"
+          className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-2 text-amber-200 active:scale-90 transition-transform"
         >
           <ChevronLeft size={18}/>
         </button>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-0.5 shadow-lg">
-            <Coins size={12} className="text-amber-300" />
-            <span className="text-[11px] italic text-amber-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+          <div className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 backdrop-blur-md">
+            <Coins size={14} className="text-amber-400 animate-pulse" />
+            <span className="text-xs text-amber-200 tracking-wider">{profile?.jetons_cp?.toLocaleString() || 0} <span className="text-[9px] text-amber-400">CP</span></span>
           </div>
 
           <button 
             onClick={() => setMuted(v => !v)} 
-            className="rounded-full border border-white/10 bg-white/5 p-1.5 text-slate-300 active:scale-90"
+            className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 active:scale-90"
           >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </button>
         </div>
       </div>
 
-      {/* CONTENEUR PRINCIPAL SANS SCROLL */}
-      <div className="flex-1 min-h-0 flex flex-col justify-center overflow-hidden">
+      {/* 2. ZONE CENTRALE AJUSTABLE (AUCUN SCROLL) */}
+      <div className="flex-1 my-auto flex flex-col justify-center min-h-0 overflow-hidden py-1">
         
         {status === 'maintenance' ? (
-          <div className="flex flex-col items-center justify-center my-auto py-6 bg-white/5 rounded-[2rem] border border-white/5">
-            <Construction size={40} className="text-amber-500 animate-pulse" />
-            <h2 className="text-lg text-amber-500 mt-2 italic">MAINTENANCE</h2>
-            <p className="text-zinc-500 text-[9px] mt-1 px-4 text-center">{maintenanceMsg}</p>
+          <div className="flex flex-col items-center justify-center py-6 bg-white/5 rounded-2xl border border-white/10">
+            <Construction size={40} className="text-amber-500 animate-bounce" />
+            <h2 className="text-lg text-amber-500 mt-2">MAINTENANCE</h2>
+            <p className="text-zinc-400 text-[10px] px-4 text-center mt-1">{maintenanceMsg}</p>
           </div>
         ) : status === 'idle' || status === 'loading' ? (
-          <div className="space-y-2 my-auto">
+          
+          <div className="flex flex-col justify-between h-full max-h-[520px] gap-2">
             
             {status === 'loading' ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="animate-spin text-amber-500" size={40}/>
+              <div className="flex flex-col items-center justify-center my-auto">
+                <Loader2 className="animate-spin text-amber-400" size={40}/>
+                <span className="text-xs text-amber-300/80 mt-2 italic">CHARGEMENT...</span>
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between rounded-xl border border-amber-400/20 bg-black/30 px-2.5 py-1.5">
-                  <div className="flex items-center gap-1 text-amber-300 text-[9px]">
+                {/* BANNIÈRE / MODE */}
+                <div className="flex-none flex items-center justify-between rounded-xl border border-amber-400/20 bg-amber-500/5 px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-300 text-[10px]">
                     <Sparkles size={12} />
-                    <span>Mode Quiz Elite</span>
+                    <span>QUIZ ELITE</span>
                   </div>
-                  <div className="flex items-center gap-1 text-[9px] text-amber-200/80">
-                    <Brain size={12} /> {difficultyBadge}
+                  <div className="text-[10px] text-amber-400/80 font-bold">
+                    {difficulty.toUpperCase()}
                   </div>
                 </div>
 
-                {/* Grille des Catégories */}
-                <div className="grid grid-cols-4 gap-1">
-                  {CATEGORIES.map(c => (
-                    <button 
-                      key={c.id} 
-                      onClick={() => setCategory(c.id)} 
-                      className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border p-1.5 transition-all ${category === c.id ? 'border-amber-400 bg-amber-500 text-black shadow-[0_0_12px_rgba(245,158,11,0.25)]' : 'border-white/10 bg-white/5 text-slate-400'}`}
-                    >
-                      {c.icon} 
-                      <span className="text-[7.5px] font-black italic truncate max-w-full">{c.name}</span>
-                    </button>
-                  ))}
+                {/* DÉFI SPÉCIAL */}
+                {challengeId && (
+                  <div className="flex-none bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-2.5 rounded-xl flex items-center justify-between shadow-md">
+                    <div className="flex items-center gap-2">
+                      <Target size={16} className="text-emerald-200" />
+                      <span className="text-xs italic">MODE CHALLENGE</span>
+                    </div>
+                    <span className="text-[9px] text-emerald-100 font-normal">CLASSEMENT</span>
+                  </div>
+                )}
+
+                {/* GRILLE DES CATÉGORIES (Compacte 4x2) */}
+                <div className="flex-none">
+                  <span className="text-[9px] text-slate-400 mb-1 block">1. CATÉGORIE</span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {CATEGORIES.map(c => (
+                      <button 
+                        key={c.id} 
+                        onClick={() => setCategory(c.id)} 
+                        className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2 px-1 transition-all ${category === c.id ? 'border-amber-400 bg-amber-500 text-black shadow-lg scale-[1.02]' : 'border-white/10 bg-white/5 text-slate-400'}`}
+                      >
+                        {c.icon} 
+                        <span className="text-[8px] truncate max-w-full">{c.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Choix de Difficulté */}
-                <div className="flex gap-1">
-                  {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
-                    <button 
-                      key={d} 
-                      onClick={() => setDifficulty(d)} 
-                      className={`flex-1 rounded-xl border py-1.5 text-[8.5px] font-bold transition-all ${difficulty === d ? 'border-amber-400 bg-white text-black' : 'border-white/10 bg-white/5 text-slate-400'}`}
-                    >
-                      {d.toUpperCase()} <br/> 
-                      <span className="text-[6.5px] opacity-70">+{SETTINGS[d].points} PTS</span>
-                    </button>
-                  ))}
+                {/* CHOIX DIFFICULTÉ */}
+                <div className="flex-none">
+                  <span className="text-[9px] text-slate-400 mb-1 block">2. DIFFICULTÉ</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
+                      <button 
+                        key={d} 
+                        onClick={() => setDifficulty(d)} 
+                        className={`rounded-xl border py-2 text-center transition-all ${difficulty === d ? 'border-amber-400 bg-white text-black' : 'border-white/10 bg-white/5 text-slate-400'}`}
+                      >
+                        <div className="text-[9px]">{d}</div>
+                        <div className="text-[7px] opacity-70">+{SETTINGS[d].points} PTS</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Saisie de la Mise */}
-                <div className="rounded-xl border border-white/10 bg-slate-950/80 p-2.5 shadow-md">
-                  <span className={`text-[8.5px] italic font-bold block mb-0.5 ${challengeId ? 'text-amber-500' : 'text-emerald-500'}`}>
-                    {challengeId ? "FRAIS DE MISSION (FIXE)" : "MISE DE LA SESSION (CP)"}
-                  </span>
+                {/* MISE (CP) */}
+                <div className="flex-none rounded-xl border border-white/10 bg-black/40 p-2.5">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[9px] text-slate-400">3. MISE</span>
+                    <span className="text-[9px] text-amber-400">MIN 10 CP</span>
+                  </div>
                   <input 
                     type="number" 
                     value={betCP} 
                     disabled={!!challengeId}
                     onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                    className={`bg-transparent outline-none w-full text-2xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
+                    className="bg-transparent outline-none w-full text-2xl font-black italic tracking-tight text-white"
                   />
                 </div>
 
-                {/* Bouton de Lancement */}
+                {/* BOUTON JOUER */}
                 <button 
                   onClick={start} 
                   disabled={isProcessingRef.current} 
-                  className={`w-full rounded-xl py-3 text-base font-black italic shadow-lg active:scale-95 transition-all ${challengeId ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' : 'bg-gradient-to-r from-amber-400 to-emerald-500 text-white'}`}
+                  className="flex-none w-full rounded-xl py-3.5 text-base font-black italic shadow-lg active:scale-95 transition-all bg-gradient-to-r from-amber-400 via-amber-500 to-emerald-500 text-black flex items-center justify-center gap-2"
                 >
-                  {isProcessingRef.current ? <Loader2 className="animate-spin mx-auto" size={20}/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
+                  <Zap size={18} fill="currentColor" />
+                  <span>{challengeId ? 'LANCER LE DÉFI' : 'COMMENCER'}</span>
                 </button>
               </>
             )}
           </div>
+
         ) : status === 'playing' ? (
           
-          /* ÉCRAN DE JEU */
-          <div className="flex-1 flex flex-col justify-between gap-1.5 py-0.5 min-h-0">
+          /* MODE JEU DYNAMIQUE 100% FIT SCREEN */
+          <div className="flex flex-col justify-between h-full max-h-[500px] gap-2">
             
-            {/* Barre de Statut & Multiplicateur */}
+            {/* EN-TÊTE DU JEU & SCORE */}
             <div className="flex-none space-y-1">
-              <div className="flex justify-between items-center text-xs">
+              <div className="flex justify-between items-center">
                 <div>
-                  <span className="text-[8px] text-slate-400">MULTIPLIER</span>
-                  <p className="text-lg text-emerald-400 font-black italic leading-none">
+                  <span className="text-[8px] text-slate-400">GAIN / MULTIPLICATEUR</span>
+                  <div className="text-lg text-emerald-400 font-black italic leading-none">
                     {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
-                  </p>
+                  </div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[8px] text-slate-400">QUESTION</span>
-                  <p className="text-xs text-amber-300 font-black leading-none">{currentIndex + 1} / 5</p>
+                  <span className="text-[8px] text-slate-400">PROGRESSION</span>
+                  <div className="text-xs text-amber-300 font-black leading-none">{currentIndex + 1} / 5</div>
                 </div>
-
-                {!challengeId && multiplier > 1.0 && (
-                  <button 
-                    onClick={() => finalizeGame(true)} 
-                    className="bg-emerald-500 text-black px-2.5 py-1 rounded-lg text-[8px] font-black flex items-center gap-1 shadow-md active:scale-95"
-                  >
-                    <Wallet size={10}/> ENCAISSER
-                  </button>
-                )}
               </div>
 
-              {/* Chrono */}
-              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+              {/* TIMER / CHRONO */}
+              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mt-1">
                 <div 
-                  className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500 animate-pulse' : 'bg-amber-400'}`} 
+                  className={`h-full transition-all duration-100 ${timeLeft < 2.5 ? 'bg-rose-500 animate-pulse' : 'bg-amber-400'}`} 
                   style={{ width: `${(timeLeft / getDifficultySettings(difficulty).time) * 100}%` }}
                 />
               </div>
             </div>
 
-            {/* Carte de la Question */}
-            <div className="flex-1 min-h-[90px] max-h-[140px] bg-white text-black p-3 rounded-xl flex flex-col justify-center items-center shadow-lg relative text-center">
-              <span className="absolute top-1.5 right-2 text-[7.5px] text-slate-400 font-bold italic">
+            {/* CARTE QUESTION (FIT CENTRAL) */}
+            <div className="flex-1 min-h-0 bg-white text-black p-3.5 rounded-2xl flex flex-col justify-center items-center shadow-lg relative text-center my-1">
+              <span className="absolute top-2 right-2 text-[9px] text-slate-400 font-bold">
                 {timeLeft.toFixed(1)}s
               </span>
-              <p className="text-xs sm:text-sm font-black italic uppercase leading-snug">
+              <p className="text-xs sm:text-sm font-black italic leading-snug">
                 {questions[currentIndex]?.question}
               </p>
             </div>
 
-            {/* Réponses */}
+            {/* GRILLE DES RÉPONSES */}
             <div className="flex-none grid grid-cols-1 gap-1.5">
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
                 const isCorrect = a === questions[currentIndex].correct;
@@ -553,8 +527,8 @@ function QuizGameContent() {
                 let style = "bg-white/5 border-white/10 text-white active:bg-white/10";
                 
                 if (showCorrection) {
-                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.01] shadow-md";
-                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-80";
+                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.01]";
+                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-90";
                   else style = "opacity-20 bg-white/5 border-transparent";
                 }
 
@@ -563,65 +537,70 @@ function QuizGameContent() {
                     key={i} 
                     onClick={() => handleAnswer(a)} 
                     disabled={showCorrection || isProcessingRef.current} 
-                    className={`p-2.5 border rounded-xl text-left transition-all font-black text-[11px] italic flex items-center justify-between ${style}`}
+                    className={`p-3 border rounded-xl text-left transition-all font-black text-xs italic flex items-center justify-between ${style}`}
                   >
                     <span className="truncate pr-2">{a}</span>
-                    <span className="text-[8px] opacity-40 flex-none">0{i+1}</span>
+                    <span className="text-[8px] opacity-40">0{i+1}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Explication */}
+            {/* MESSAGE D'EXPLICATION RAPIDE */}
             {explanation && (
-              <motion.div initial={{ opacity: 0, y: 2 }} animate={{ opacity: 1, y: 0 }} className="flex-none rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-1.5 text-center text-[8.5px] uppercase text-emerald-200 truncate">
+              <div className="flex-none rounded-lg bg-amber-500/10 border border-amber-500/20 p-1.5 text-center text-[9px] text-amber-200 truncate">
                 {explanation}
-              </motion.div>
+              </div>
             )}
 
           </div>
+
         ) : (
-          /* ÉCRAN DE FIN DE PARTIE */
-          <div className="text-center my-auto py-4 space-y-3">
-            <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center border-2 ${status === 'lost' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-              {status === 'lost' ? <XCircle size={36} className="text-rose-500"/> : <Trophy size={36} className="text-emerald-500"/>}
+
+          /* ÉCRAN DE RÉSULTAT DE FIN */
+          <div className="flex flex-col items-center justify-center h-full space-y-3 text-center my-auto">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
+              {status === 'lost' && !challengeId ? <XCircle size={36}/> : <Trophy size={36}/>}
             </div>
 
-            <h2 className={`text-2xl font-black italic ${status === 'lost' ? 'text-rose-500' : 'text-emerald-500'}`}>
-              {challengeId ? "MISSION COMPLÈTE" : (status === 'lost' ? "ÉCHEC" : "PARTIE TERMINÉE")}
-            </h2>
-            
-            <div className="bg-slate-900/80 p-4 rounded-xl border border-white/10 backdrop-blur-xl">
-              <p className="text-[8px] text-zinc-400 mb-0.5 font-bold italic tracking-widest">
-                {challengeId ? "POINTS OBTENUS" : "JETONS RÉCUPÉRÉS"}
+            <div>
+              <h2 className={`text-2xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-400'}`}>
+                {challengeId ? "MISSION TERMINÉE" : (status === 'lost' ? "PERDU" : "VICTOIRE")}
+              </h2>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {challengeId ? "POINTS AJOUTÉS AU SCORE" : "GAINS OBTENUS"}
               </p>
-              <p className="text-3xl font-black text-white italic tracking-tighter">
-                {challengeId ? sessionScore : finalPayout} 
-                <span className="text-sm text-emerald-500 ml-1 font-black">{challengeId ? 'PTS' : 'CP'}</span>
-              </p>
+            </div>
+
+            <div className="bg-slate-900/90 w-full p-4 rounded-xl border border-white/10">
+              <span className="text-3xl font-black text-white italic">
+                {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(lockedBetRef.current * multiplier))}
+              </span>
+              <span className="text-xs text-amber-400 ml-1">{challengeId ? 'PTS' : 'CP'}</span>
             </div>
 
             <button 
               onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} 
-              className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-base italic shadow-lg active:scale-95 transition-all"
+              className="w-full py-3 bg-emerald-500 text-black rounded-xl font-black text-sm italic shadow-md active:scale-95 transition-all"
             >
-              {challengeId ? 'VOIR MON RANG' : 'NOUVELLE SESSION'}
+              {challengeId ? 'RETOURNER AU CLASSEMENT' : 'RECOUVER UNE PARTIE'}
             </button>
           </div>
+
         )}
 
       </div>
 
-      {/* HISTORIQUE FIXE EN BAS */}
-      {(status === 'idle' && history.length > 0) && (
-        <div className="flex-none mt-1 rounded-xl border border-white/10 bg-black/30 p-2">
-          <div className="mb-1 flex items-center justify-between text-[8px] uppercase tracking-wider text-slate-400">
-            <span className="flex items-center gap-1"><History size={10} /> Historique</span>
+      {/* 3. HISTORIQUE EN BAS (AFFICHÉ UNIQUEMENT SI IDLE ET PEU D'ESPACE) */}
+      {status === 'idle' && history.length > 0 && (
+        <div className="flex-none h-14 border-t border-white/5 pt-1.5">
+          <div className="flex items-center gap-1 text-[8px] text-slate-400 mb-1">
+            <History size={10} /> RECENT
           </div>
-          <div className="space-y-0.5">
+          <div className="flex gap-1.5 overflow-hidden">
             {history.slice(0, 2).map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 px-2 py-0.5 text-[8px] text-slate-300">
-                <span className="truncate">{item.label}</span>
+              <div key={idx} className="flex-1 flex justify-between items-center bg-white/5 border border-white/5 rounded-lg px-2 py-1 text-[8px]">
+                <span className="truncate text-slate-300">{item.label}</span>
                 <span className="text-emerald-400 font-bold">{item.score} pts</span>
               </div>
             ))}
