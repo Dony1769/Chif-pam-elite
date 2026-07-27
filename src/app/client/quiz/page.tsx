@@ -6,14 +6,14 @@ import {
   Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
   Laptop, Film, Award, BookOpen, MapPin, Construction,
   Coins, Target, Sparkles, Volume2, VolumeX, 
-  History, Flame, Zap
+  History, Zap
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
+import { getGameEconomySettings } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
 
-// --- TYPES & CONSTANTES ---
+// --- TYPES & INTERFACES ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
 
 interface QuestionItem {
@@ -28,6 +28,11 @@ interface HistoryItem {
   difficulty: string;
 }
 
+interface ProfileLike {
+  id: string;
+  jetons_cp?: number;
+}
+
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
   facile: { time: 13, step: 0.15, points: 10 },
   intermédiaire: { time: 9, step: 0.20, points: 25 },
@@ -35,11 +40,11 @@ const SETTINGS: Record<DifficultyType, { time: number; step: number; points: num
 };
 
 const getDifficultySettings = (difficulty: DifficultyType) => {
-  const profile = getGameEconomySettings('quiz', difficulty).profile;
+  const profile = getGameEconomySettings('quiz', difficulty)?.profile;
   return {
-    time: profile.time ?? SETTINGS[difficulty].time,
-    step: profile.multiplierStep ?? SETTINGS[difficulty].step,
-    points: profile.points ?? SETTINGS[difficulty].points
+    time: profile?.time ?? SETTINGS[difficulty].time,
+    step: profile?.multiplierStep ?? SETTINGS[difficulty].step,
+    points: profile?.points ?? SETTINGS[difficulty].points
   };
 };
 
@@ -60,9 +65,9 @@ function QuizGameContent() {
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
-  // --- ÉTATS ---
-  const [profile, setProfile] = useState<any>(null);
-  const [betCP, setBetCP] = useState<number>(100);
+  // --- ÉTATS DU JEU ---
+  const [profile, setProfile] = useState<ProfileLike | null>(null);
+  const [betCP, setBetCP] = useState<number>(10);
   const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
   const [category, setCategory] = useState<number>(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
@@ -77,14 +82,18 @@ function QuizGameContent() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showCorrection, setShowCorrection] = useState<boolean>(false);
   const [muted, setMuted] = useState<boolean>(false);
-  const [, setCombo] = useState<number>(1);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
 
-  // --- SÉCURITÉ & REFS ---
+  // --- REFS POUR ACCÈS EN TEMPS RÉEL ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
+
+  useEffect(() => {
+    gameStateRef.current = { multiplier, gameId };
+  }, [multiplier, gameId]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -124,7 +133,7 @@ function QuizGameContent() {
     try {
       const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'quiz').single();
       if (data && !data.is_active) {
-        setMaintenanceMsg(data.maintenance_msg);
+        setMaintenanceMsg(data.maintenance_msg || "Maintenance en cours...");
         setStatus('maintenance');
       } else { 
         setStatus('idle'); 
@@ -138,13 +147,13 @@ function QuizGameContent() {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(prof);
+      setProfile(prof as ProfileLike | null);
     }
-    checkMaintenance();
+    await checkMaintenance();
   }, []);
 
   useEffect(() => {
-    init();
+    void init();
     if (challengeId && challengeFee) {
       setBetCP(Number(challengeFee));
     }
@@ -214,12 +223,13 @@ function QuizGameContent() {
       if (insertError) throw insertError;
 
       const difficultySettings = getDifficultySettings(difficulty);
+      const initialMult = 0.5;
+
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
-      setMultiplier(0.5);
+      setMultiplier(initialMult);
       setSessionScore(0);
-      setCombo(1);
       setTimeLeft(difficultySettings.time);
       setExplanation('');
       setStatus('playing');
@@ -227,72 +237,25 @@ function QuizGameContent() {
       isProcessingRef.current = false;
 
     } catch (e: any) {
-      alert(e.message);
+      alert(e.message || "Erreur lors du lancement");
       setStatus('idle');
       isProcessingRef.current = false;
     }
   };
 
-  const handleAnswer = (ans: string | null) => {
-    if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
-    triggerHaptic();
-    
-    if (timerRef.current) clearInterval(timerRef.current);
-    setSelectedAnswer(ans);
-    setShowCorrection(true);
-
-    if (ans === questions[currentIndex].correct) {
-      playQuizSound('correct');
-      const difficultySettings = getDifficultySettings(difficulty);
-      const pointsToAdd = difficultySettings.points;
-      setSessionScore(prev => prev + pointsToAdd);
-
-      const nextM = parseFloat((multiplier + difficultySettings.step).toFixed(2));
-      setMultiplier(nextM);
-      setCombo(prev => prev + 1);
-      setExplanation(`✅ Bonne réponse (+${pointsToAdd} pts).`);
-      
-      setTimeout(() => {
-        if (currentIndex < 4) {
-          setCurrentIndex(p => p + 1);
-          setSelectedAnswer(null);
-          setShowCorrection(false);
-          setTimeLeft(getDifficultySettings(difficulty).time);
-        } else { 
-          finalizeGame(true); 
-        }
-      }, 1100);
-    } else {
-      playQuizSound('wrong');
-      setCombo(1);
-      setExplanation(`❌ Mauvaise réponse. La solution était : ${questions[currentIndex].correct}`);
-      setTimeout(() => {
-        finalizeGame(false);
-      }, 1400);
-    }
-  };
-
-  const finalizeGame = async (isWin: boolean) => {
+  const finalizeGame = useCallback(async (isWin: boolean, calculatedGain?: number) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
     
-    if (!gameId) return;
-    
     if (timerRef.current) clearInterval(timerRef.current);
 
+    const currentGameId = gameStateRef.current.gameId;
+    const currentMult = gameStateRef.current.multiplier;
     const secureBet = lockedBetRef.current;
-    const economy = resolveGameEconomy({
-      gameId: 'quiz',
-      bet: secureBet,
-      difficulty,
-      multiplier,
-      currentStep: currentIndex,
-      bonusMultiplier: 1,
-      jackpotMultiplier: 1,
-      specialEventMultiplier: 1
-    });
-    
-    const gainCP = challengeId ? 0 : (isWin ? economy.payout : 0);
+
+    if (!currentGameId || !profile?.id) return;
+
+    const gainCP = challengeId ? 0 : (calculatedGain !== undefined ? calculatedGain : (isWin ? Math.floor(secureBet * currentMult) : 0));
 
     try {
       if (challengeId) {
@@ -316,7 +279,7 @@ function QuizGameContent() {
         is_active: false, 
         gain_cp: gainCP,
         is_won: isWin
-      }).eq('id', gameId);
+      }).eq('id', currentGameId);
 
       setHistory(prev => [{ 
         label: `${difficulty} • ${CATEGORIES.find(c => c.id === category)?.name || 'Général'}`, 
@@ -324,17 +287,61 @@ function QuizGameContent() {
         difficulty 
       }, ...prev].slice(0, 3));
       
-      setStatus(isWin ? 'ended' : 'lost');
-    } catch (e: any) {
+      setStatus(isWin || gainCP > 0 ? 'ended' : 'lost');
+    } catch (e) {
       console.error(e);
     } finally {
       isProcessingRef.current = false;
       setShowCorrection(false);
-      init(); 
+      void init(); 
+    }
+  }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
+
+  const handleAnswer = (ans: string | null) => {
+    if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
+    triggerHaptic();
+    
+    if (timerRef.current) clearInterval(timerRef.current);
+    setSelectedAnswer(ans);
+    setShowCorrection(true);
+
+    const difficultySettings = getDifficultySettings(difficulty);
+
+    if (ans === questions[currentIndex].correct) {
+      playQuizSound('correct');
+      const pointsToAdd = difficultySettings.points;
+      setSessionScore(prev => prev + pointsToAdd);
+
+      // MULTIPLICATEUR AUGMENTÉ IMMÉDIATEMENT APRÈS CHAQUE BONNE RÉPONSE
+      const nextM = parseFloat((multiplier + difficultySettings.step).toFixed(2));
+      setMultiplier(nextM);
+      
+      setExplanation(`✅ Bonne réponse (+${pointsToAdd} pts) | Multiplicateur: x${nextM.toFixed(2)}`);
+      
+      setTimeout(() => {
+        if (currentIndex < 4) {
+          setCurrentIndex(p => p + 1);
+          setSelectedAnswer(null);
+          setShowCorrection(false);
+          setTimeLeft(difficultySettings.time);
+        } else { 
+          // Fin du questionnaire avec victoires complètes et multiplicateur maximal
+          const finalGain = Math.floor(lockedBetRef.current * nextM);
+          void finalizeGame(true, finalGain); 
+        }
+      }, 1100);
+    } else {
+      playQuizSound('wrong');
+      setExplanation(`❌ Mauvaise réponse. La solution était : ${questions[currentIndex].correct}`);
+      setTimeout(() => {
+        // En cas d'erreur, encaissement du multiplicateur accumulé jusqu'ici (ou perte si < 1.0x)
+        const currentGain = Math.floor(lockedBetRef.current * multiplier);
+        void finalizeGame(multiplier >= 1.0, currentGain);
+      }, 1400);
     }
   };
 
-  // --- LOGIQUE TIMEOUT ---
+  // --- CHRONOMÈTRE / TEMPS ÉCOULÉ ---
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -351,7 +358,7 @@ function QuizGameContent() {
   return (
     <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950">
       
-      {/* 1. EN-TÊTE FIXE (HEADER) */}
+      {/* 1. EN-TÊTE FIXE */}
       <div className="flex-none flex items-center justify-between h-12">
         <button 
           onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} 
@@ -375,7 +382,7 @@ function QuizGameContent() {
         </div>
       </div>
 
-      {/* 2. ZONE CENTRALE AJUSTABLE (AUCUN SCROLL) */}
+      {/* 2. ZONE CENTRALE */}
       <div className="flex-1 my-auto flex flex-col justify-center min-h-0 overflow-hidden py-1">
         
         {status === 'maintenance' ? (
@@ -395,7 +402,6 @@ function QuizGameContent() {
               </div>
             ) : (
               <>
-                {/* BANNIÈRE / MODE */}
                 <div className="flex-none flex items-center justify-between rounded-xl border border-amber-400/20 bg-amber-500/5 px-3 py-1.5">
                   <div className="flex items-center gap-1.5 text-amber-300 text-[10px]">
                     <Sparkles size={12} />
@@ -406,7 +412,6 @@ function QuizGameContent() {
                   </div>
                 </div>
 
-                {/* DÉFI SPÉCIAL */}
                 {challengeId && (
                   <div className="flex-none bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-2.5 rounded-xl flex items-center justify-between shadow-md">
                     <div className="flex items-center gap-2">
@@ -417,7 +422,7 @@ function QuizGameContent() {
                   </div>
                 )}
 
-                {/* GRILLE DES CATÉGORIES (Compacte 4x2) */}
+                {/* CATÉGORIES */}
                 <div className="flex-none">
                   <span className="text-[9px] text-slate-400 mb-1 block">1. CATÉGORIE</span>
                   <div className="grid grid-cols-4 gap-1.5">
@@ -434,7 +439,7 @@ function QuizGameContent() {
                   </div>
                 </div>
 
-                {/* CHOIX DIFFICULTÉ */}
+                {/* DIFFICULTÉ */}
                 <div className="flex-none">
                   <span className="text-[9px] text-slate-400 mb-1 block">2. DIFFICULTÉ</span>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -451,7 +456,7 @@ function QuizGameContent() {
                   </div>
                 </div>
 
-                {/* MISE (CP) */}
+                {/* MISE */}
                 <div className="flex-none rounded-xl border border-white/10 bg-black/40 p-2.5">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-[9px] text-slate-400">3. MISE</span>
@@ -466,7 +471,6 @@ function QuizGameContent() {
                   />
                 </div>
 
-                {/* BOUTON JOUER */}
                 <button 
                   onClick={start} 
                   disabled={isProcessingRef.current} 
@@ -481,16 +485,16 @@ function QuizGameContent() {
 
         ) : status === 'playing' ? (
           
-          /* MODE JEU DYNAMIQUE 100% FIT SCREEN */
+          /* MODE JEU EN TEMPS RÉEL */
           <div className="flex flex-col justify-between h-full max-h-[500px] gap-2">
             
-            {/* EN-TÊTE DU JEU & SCORE */}
             <div className="flex-none space-y-1">
               <div className="flex justify-between items-center">
                 <div>
-                  <span className="text-[8px] text-slate-400">GAIN / MULTIPLICATEUR</span>
-                  <div className="text-lg text-emerald-400 font-black italic leading-none">
-                    {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
+                  <span className="text-[8px] text-slate-400">GAIN ESTIMÉ / MULTIPLICATEUR</span>
+                  <div className="text-lg text-emerald-400 font-black italic leading-none flex items-center gap-2">
+                    <span>x{multiplier.toFixed(2)}</span>
+                    <span className="text-xs text-amber-300">({Math.floor(betCP * multiplier)} CP)</span>
                   </div>
                 </div>
 
@@ -500,7 +504,7 @@ function QuizGameContent() {
                 </div>
               </div>
 
-              {/* TIMER / CHRONO */}
+              {/* TIMER */}
               <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mt-1">
                 <div 
                   className={`h-full transition-all duration-100 ${timeLeft < 2.5 ? 'bg-rose-500 animate-pulse' : 'bg-amber-400'}`} 
@@ -509,7 +513,7 @@ function QuizGameContent() {
               </div>
             </div>
 
-            {/* CARTE QUESTION (FIT CENTRAL) */}
+            {/* QUESTION */}
             <div className="flex-1 min-h-0 bg-white text-black p-3.5 rounded-2xl flex flex-col justify-center items-center shadow-lg relative text-center my-1">
               <span className="absolute top-2 right-2 text-[9px] text-slate-400 font-bold">
                 {timeLeft.toFixed(1)}s
@@ -519,7 +523,7 @@ function QuizGameContent() {
               </p>
             </div>
 
-            {/* GRILLE DES RÉPONSES */}
+            {/* OPTIONS DE RÉPONSES */}
             <div className="flex-none grid grid-cols-1 gap-1.5">
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
                 const isCorrect = a === questions[currentIndex].correct;
@@ -546,7 +550,6 @@ function QuizGameContent() {
               })}
             </div>
 
-            {/* MESSAGE D'EXPLICATION RAPIDE */}
             {explanation && (
               <div className="flex-none rounded-lg bg-amber-500/10 border border-amber-500/20 p-1.5 text-center text-[9px] text-amber-200 truncate">
                 {explanation}
@@ -557,7 +560,7 @@ function QuizGameContent() {
 
         ) : (
 
-          /* ÉCRAN DE RÉSULTAT DE FIN */
+          /* ÉCRAN DE RÉSULTAT */
           <div className="flex flex-col items-center justify-center h-full space-y-3 text-center my-auto">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
               {status === 'lost' && !challengeId ? <XCircle size={36}/> : <Trophy size={36}/>}
@@ -574,7 +577,7 @@ function QuizGameContent() {
 
             <div className="bg-slate-900/90 w-full p-4 rounded-xl border border-white/10">
               <span className="text-3xl font-black text-white italic">
-                {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(lockedBetRef.current * multiplier))}
+                {challengeId ? sessionScore : Math.floor(lockedBetRef.current * multiplier)}
               </span>
               <span className="text-xs text-amber-400 ml-1">{challengeId ? 'PTS' : 'CP'}</span>
             </div>
@@ -583,7 +586,7 @@ function QuizGameContent() {
               onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} 
               className="w-full py-3 bg-emerald-500 text-black rounded-xl font-black text-sm italic shadow-md active:scale-95 transition-all"
             >
-              {challengeId ? 'RETOURNER AU CLASSEMENT' : 'RECOUVER UNE PARTIE'}
+              {challengeId ? 'RETOURNER AU CLASSEMENT' : 'REJOUER UNE PARTIE'}
             </button>
           </div>
 
@@ -591,7 +594,7 @@ function QuizGameContent() {
 
       </div>
 
-      {/* 3. HISTORIQUE EN BAS (AFFICHÉ UNIQUEMENT SI IDLE ET PEU D'ESPACE) */}
+      {/* 3. HISTORIQUE EN BAS */}
       {status === 'idle' && history.length > 0 && (
         <div className="flex-none h-14 border-t border-white/5 pt-1.5">
           <div className="flex items-center gap-1 text-[8px] text-slate-400 mb-1">
