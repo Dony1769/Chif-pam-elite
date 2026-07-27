@@ -7,7 +7,7 @@ import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   Loader2, ChevronRight, CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
   Ticket, Share2, Copy, Gift, Plus, ArrowDownCircle, Sparkles, Crown,
-  TrendingUp, Settings, BarChart3, Bell, Check
+  TrendingUp, Settings, BarChart3, Bell, Check, logOut 
 } from 'lucide-react';
 import { 
   AreaChart, Area, Tooltip, ResponsiveContainer, XAxis, YAxis, ReferenceLine 
