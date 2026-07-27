@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
-  User, LogOut, Loader2, ChevronRight, 
-  CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
+  Loader2, ChevronRight, CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
   Ticket, Share2, Copy, Gift, Plus, ArrowDownCircle, Sparkles, Crown,
   TrendingUp, Settings, BarChart3, Bell, Check
 } from 'lucide-react';
@@ -38,6 +37,7 @@ interface Profile {
   username?: string | null;
   referral_code?: string | null;
   jetons_cp?: number;
+  balance?: number;
   xp?: number;
   level?: number;
   badge?: string;
@@ -45,15 +45,12 @@ interface Profile {
   rank?: string;
   avatar?: string;
   history?: ProfileHistoryEntry[];
-  play_time_minutes?: number;
-  max_combo?: number;
-  favorite_game?: string;
   public_profile?: boolean;
 }
 
 interface ChartPoint {
-  name: string;
-  gain: number;
+  date: string;
+  balance: number;
 }
 
 interface TransactionItem {
@@ -80,7 +77,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'settings'>('overview');
 
   // États Statistiques & Coupons
-  const [stats, setStats] = useState({ deposits: 0, withdrawals: 0, netBalance: 0 });
+  const [currentBalance, setCurrentBalance] = useState<number>(0);
   const [couponCode, setCouponCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -89,7 +86,6 @@ export default function ProfilePage() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [gamePassTitle, setGamePassTitle] = useState('Voyageur');
-  const [gamePassFavorite, setGamePassFavorite] = useState('Mines');
   const [gamePassPublic, setGamePassPublic] = useState(true);
   const [gamePassAvatar, setGamePassAvatar] = useState<(typeof GAME_PASS_AVATARS)[number]>(GAME_PASS_AVATARS[0]);
 
@@ -101,32 +97,56 @@ export default function ProfilePage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const processPerformanceData = useCallback((trans: TransactionItem[], mises: MiseItem[]) => {
-    const dailyData: { [key: string]: number } = {};
-    let totalDep = 0; 
-    let totalWith = 0; 
-    let netRunningBalance = 0;
+  // Traitement précis de l'historique du solde pour alimenter la courbe
+  const processPerformanceData = useCallback((trans: TransactionItem[], mises: MiseItem[], initialBalance: number) => {
+    type ActivityEvent = {
+      created_at: string;
+      impact: number;
+    };
+
+    const events: ActivityEvent[] = [];
 
     trans.forEach(t => {
-      const date = new Date(t.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
       const val = t.type === 'deposit' ? t.amount : -t.amount;
-      if (t.type === 'deposit') totalDep += t.amount;
-      if (t.type === 'withdrawal') totalWith += t.amount;
-      dailyData[date] = (dailyData[date] || 0) + val;
-      netRunningBalance += val;
+      events.push({ created_at: t.created_at, impact: val });
     });
 
     mises.forEach(m => {
-      const date = new Date(m.created_at).toLocaleDateString('fr-FR', { weekday: 'short' });
-      let impactMise = -m.montant; 
-      if (m.status === 'gagné' || m.status === 'gagne') impactMise += (m.montant * 50); 
-      dailyData[date] = (dailyData[date] || 0) + impactMise;
-      netRunningBalance += impactMise;
+      let impactMise = -m.montant;
+      if (m.status === 'gagné' || m.status === 'gagne') {
+        impactMise += (m.montant * 50);
+      }
+      events.push({ created_at: m.created_at, impact: impactMise });
     });
 
-    const formattedData = Object.keys(dailyData).map(key => ({ name: key, gain: dailyData[key] }));
-    setChartData(formattedData);
-    setStats({ deposits: totalDep, withdrawals: totalWith, netBalance: netRunningBalance });
+    // Tri chronologique des événements
+    events.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    let runningBalance = initialBalance;
+    const totalImpact = events.reduce((acc, ev) => acc + ev.impact, 0);
+    let startBalance = runningBalance - totalImpact;
+
+    let accum = startBalance < 0 ? 0 : startBalance;
+    const points: ChartPoint[] = [];
+
+    events.forEach(ev => {
+      accum += ev.impact;
+      const dateLabel = new Date(ev.created_at).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short'
+      });
+      points.push({
+        date: dateLabel,
+        balance: Math.max(0, accum)
+      });
+    });
+
+    if (points.length === 0) {
+      points.push({ date: 'Aujourd\'hui', balance: initialBalance });
+    }
+
+    setChartData(points);
+    setCurrentBalance(initialBalance);
   }, []);
 
   const fetchCompleteData = useCallback(async () => {
@@ -156,16 +176,12 @@ export default function ProfilePage() {
           rank: resolvedProfile.rank || storedGamePass?.rank || computed.rank,
           avatar: resolvedProfile.avatar || storedGamePass?.avatar || GAME_PASS_AVATARS[0],
           history: resolvedProfile.history || storedGamePass?.history || [createGamePassHistoryEntry('Bienvenue', 'Compte créé')],
-          play_time_minutes: resolvedProfile.play_time_minutes || storedGamePass?.play_time_minutes || 0,
-          max_combo: resolvedProfile.max_combo || storedGamePass?.max_combo || 0,
-          favorite_game: resolvedProfile.favorite_game || storedGamePass?.favorite_game || 'Mines',
           public_profile: resolvedProfile.public_profile ?? storedGamePass?.public_profile ?? true,
         };
 
         setProfile(mergedProfile);
         setNewUsername(resolvedProfile.username || '');
         setGamePassTitle(mergedProfile.title || 'Voyageur');
-        setGamePassFavorite(mergedProfile.favorite_game || 'Mines');
         setGamePassPublic(mergedProfile.public_profile ?? true);
         setGamePassAvatar((mergedProfile.avatar as (typeof GAME_PASS_AVATARS)[number]) || GAME_PASS_AVATARS[0]);
 
@@ -173,7 +189,7 @@ export default function ProfilePage() {
           localStorage.setItem('game-pass', JSON.stringify(mergedProfile));
         }
 
-        processPerformanceData(transactions || [], mises || []);
+        processPerformanceData(transactions || [], mises || [], resolvedProfile.balance || 0);
       }
     } catch (err) {
       console.error("Erreur lors du chargement des données :", err);
@@ -251,7 +267,6 @@ export default function ProfilePage() {
         ...(profile || {} as Profile),
         username: newUsername,
         title: gamePassTitle,
-        favorite_game: gamePassFavorite,
         public_profile: gamePassPublic,
         avatar: gamePassAvatar,
         xp: profile?.xp || 0,
@@ -270,7 +285,6 @@ export default function ProfilePage() {
         const { error: profError } = await supabase.from('profiles').update({
           username: newUsername,
           title: gamePassTitle,
-          favorite_game: gamePassFavorite,
           public_profile: gamePassPublic,
           avatar: gamePassAvatar,
           xp: nextProfile.xp || 0,
@@ -462,22 +476,6 @@ export default function ProfilePage() {
         {/* CONTENU ONGLET 1 : APERÇU */}
         {activeTab === 'overview' && (
           <div className="space-y-5">
-            {/* Statistiques rapides Game Pass */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">Jeu Favori</p>
-                <p className="mt-1 text-sm font-black text-white">{profile?.favorite_game || 'Mines'}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">Temps de jeu</p>
-                <p className="mt-1 text-sm font-black text-white">{profile?.play_time_minutes || 0} min</p>
-              </div>
-              <div className="col-span-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:col-span-1">
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">Combo Max</p>
-                <p className="mt-1 text-sm font-black text-emerald-400">{profile?.max_combo || 0}x</p>
-              </div>
-            </div>
-
             {/* Carte Parrainage */}
             <DSCard className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-600 to-emerald-900 p-6 text-white shadow-[0_20px_60px_rgba(16,185,129,0.18)]">
               <div className="absolute right-0 top-0 p-4 opacity-15 pointer-events-none">
@@ -525,35 +523,35 @@ export default function ProfilePage() {
         {/* CONTENU ONGLET 2 : FINANCES */}
         {activeTab === 'stats' && (
           <div className="space-y-5">
-            {/* Graphique de Performance */}
+            {/* Graphique de Solde Réel */}
             <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 p-6 shadow-xl">
               <div className="mb-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Bilan d&apos;activité</p>
-                <h2 className={`text-3xl font-black ${stats.netBalance >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-                  {stats.netBalance.toLocaleString()} HTG
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Évolution du Solde Principal</p>
+                <h2 className="text-3xl font-black text-emerald-400">
+                  {currentBalance.toLocaleString()} HTG
                 </h2>
               </div>
               <div className="h-44 w-full -ml-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
                     <defs>
-                      <linearGradient id="colorGain" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={stats.netBalance >= 0 ? '#10b981' : '#f43f5e'} stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor={stats.netBalance >= 0 ? '#10b981' : '#f43f5e'} stopOpacity={0}/>
+                      <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="name" hide />
+                    <XAxis dataKey="date" stroke="rgba(255,255,255,0.2)" fontSize={10} />
                     <YAxis hide domain={['auto', 'auto']} />
                     <Tooltip content={({ active, payload }) => active && payload && payload.length ? (
                       <div className="rounded-xl border border-white/10 bg-slate-950 p-2.5 shadow-xl">
-                        <p className="text-[9px] font-bold uppercase text-slate-400">{payload[0].payload.name}</p>
-                        <p className={`font-bold ${Number(payload[0].value) >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                        <p className="text-[9px] font-bold uppercase text-slate-400">{payload[0].payload.date}</p>
+                        <p className="font-bold text-emerald-400">
                           {Number(payload[0].value).toLocaleString()} HTG
                         </p>
                       </div>
                     ) : null} />
                     <ReferenceLine y={0} stroke="rgba(255,255,255,0.08)" />
-                    <Area type="monotone" dataKey="gain" stroke={stats.netBalance >= 0 ? '#10b981' : '#f43f5e'} fillOpacity={1} fill="url(#colorGain)" strokeWidth={2.5} />
+                    <Area type="monotone" dataKey="balance" stroke="#10b981" fillOpacity={1} fill="url(#colorBalance)" strokeWidth={2.5} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -612,11 +610,6 @@ export default function ProfilePage() {
                   <DSInput type="text" value={gamePassTitle} onChange={(e) => setGamePassTitle(e.target.value)} />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="ml-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Jeu préféré</label>
-                  <DSInput type="text" value={gamePassFavorite} onChange={(e) => setGamePassFavorite(e.target.value)} />
-                </div>
-
                 {/* Sélecteur d'Avatar */}
                 <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
                   <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Avatar Game Pass</p>
@@ -642,7 +635,7 @@ export default function ProfilePage() {
                 <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 cursor-pointer">
                   <div>
                     <p className="text-sm font-black text-white">Profil public</p>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Rendre visible dans le classements Game Pass</p>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Rendre visible dans les classements Game Pass</p>
                   </div>
                   <input 
                     type="checkbox" 
