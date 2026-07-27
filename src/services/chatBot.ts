@@ -72,7 +72,8 @@ export class ChatBotService {
     // Message d'attente par défaut si aucun mot-clé ne match
     return {
       content: JSON.stringify({
-        '🤖 [Bot Chif-Pam] : Mèsi pou mesaj ou a ! Yon administratè ap reponn ou nan yon ti moman. / Merci ! Un administrateur va vous répondre sous peu.',
+        type: 'text',
+        text: '🤖 [Bot Chif-Pam] : Mèsi pou mesaj ou a ! Yon administratè ap reponn ou nan yon ti moman. / Merci ! Un administrateur va vous répondre sous peu.',
       }),
     };
   }
