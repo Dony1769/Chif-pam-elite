@@ -7,7 +7,7 @@ import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   Loader2, ChevronRight, CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
   Ticket, Share2, Copy, Gift, Plus, ArrowDownCircle, Sparkles, Crown,
-  TrendingUp, Settings, BarChart3, Bell, Check, logOut 
+  TrendingUp, Settings, BarChart3, Bell, Check, LogOut
 } from 'lucide-react';
 import { 
   AreaChart, Area, Tooltip, ResponsiveContainer, XAxis, YAxis, ReferenceLine 
@@ -661,18 +661,19 @@ export default function ProfilePage() {
         )}
 
         {/* Bouton Déconnexion */}
-        <button 
-          onClick={handleLogout} 
-          className="flex w-full items-center justify-between rounded-[1.8rem] border border-rose-500/20 bg-rose-500/5 p-4 transition-all hover:bg-rose-500/10 active:scale-[0.98]"
-        >
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-rose-500/10 p-2">
-              <LogOut size={18} className="text-rose-500" />
-            </div>
-            <span className="text-xs font-black uppercase tracking-[0.24em] text-rose-500">Se déconnecter</span>
-          </div>
-          <ChevronRight size={18} className="text-rose-500/40" />
-        </button>
+     <button 
+       onClick={handleLogout} 
+       className="flex w-full items-center justify-between rounded-[1.8rem] border border-rose-500/20 bg-rose-500/5 p-4 transition-all hover:bg-rose-500/10 active:scale-[0.98]"
+     >
+       <div className="flex items-center gap-3">
+         <div className="rounded-xl bg-rose-500/10 p-2">
+           <LogOut size={18} className="text-rose-500" />
+         </div>
+         <span className="text-xs font-black uppercase tracking-[0.24em] text-rose-500">Se déconnecter</span>
+       </div>
+       <ChevronRight size={18} className="text-rose-500/40" />
+     </button>
+
 
       </div>
     </main>
