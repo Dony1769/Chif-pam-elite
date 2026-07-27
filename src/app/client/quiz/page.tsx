@@ -1,14 +1,32 @@
 "use client";
+
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, Coins, Target, Sparkles, Volume2, VolumeX, MessageCircleQuestion, History, BarChart3 } from 'lucide-react';
+import { 
+  Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
+  Laptop, Film, Award, BookOpen, MapPin, Construction, Wallet, 
+  Coins, Target, Sparkles, Volume2, VolumeX, MessageCircleQuestion, 
+  History, BarChart3 
+} from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
-import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
+import { NeonGameShell } from '@/components/game/NeonGameShell';
 
 // --- TYPAGE ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
+
+interface QuestionItem {
+  question: string;
+  correct: string;
+  answers: string[];
+}
+
+interface GameHistoryItem {
+  label: string;
+  score: number;
+  difficulty: string;
+}
 
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
   facile: { time: 13, step: 0.15, points: 10 },
@@ -26,14 +44,14 @@ const getDifficultySettings = (difficulty: DifficultyType) => {
 };
 
 const CATEGORIES = [
-  { id: 9, name: "Général", icon: <Brain size={18}/> },
-  { id: 23, name: "Histoire", icon: <Globe size={18}/> },
-  { id: 11, name: "Film", icon: <Film size={18}/> },
-  { id: 21, name: "Sports", icon: <Award size={18}/> },
-  { id: 12, name: "Musique", icon: <Music size={18}/> },
-  { id: 18, name: "Tech", icon: <Laptop size={18}/> },
-  { id: 10, name: "Livres", icon: <BookOpen size={18}/> },
-  { id: 22, name: "Géo", icon: <MapPin size={18}/> },
+  { id: 9, name: "Général", icon: <Brain size={16}/> },
+  { id: 23, name: "Histoire", icon: <Globe size={16}/> },
+  { id: 11, name: "Film", icon: <Film size={16}/> },
+  { id: 21, name: "Sports", icon: <Award size={16}/> },
+  { id: 12, name: "Musique", icon: <Music size={16}/> },
+  { id: 18, name: "Tech", icon: <Laptop size={16}/> },
+  { id: 10, name: "Livres", icon: <BookOpen size={16}/> },
+  { id: 22, name: "Géo", icon: <MapPin size={16}/> },
 ];
 
 function QuizGameContent() {
@@ -42,6 +60,7 @@ function QuizGameContent() {
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
+  // --- RETOUR HAPTIQUE ET SONORE ---
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate([10, 20, 10]);
@@ -51,7 +70,7 @@ function QuizGameContent() {
   const playQuizSound = (type: 'correct' | 'wrong' | 'tick') => {
     if (muted || typeof window === 'undefined') return;
     try {
-      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
@@ -78,29 +97,29 @@ function QuizGameContent() {
 
   // --- ÉTATS ---
   const [profile, setProfile] = useState<any>(null);
-  const [betCP, setBetCP] = useState(100);
+  const [betCP, setBetCP] = useState<number>(100);
   const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
-  const [category, setCategory] = useState(9);
+  const [category, setCategory] = useState<number>(9);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
-  const [maintenanceMsg, setMaintenanceMsg] = useState("Maintenance...");
+  const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Maintenance...");
   
-  const [questions, setQuestions] = useState<any[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [multiplier, setMultiplier] = useState(0.5);
+  const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [multiplier, setMultiplier] = useState<number>(0.5);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [sessionScore, setSessionScore] = useState(0);
+  const [sessionScore, setSessionScore] = useState<number>(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [showCorrection, setShowCorrection] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [combo, setCombo] = useState(1);
-  const [history, setHistory] = useState<Array<{ label: string; score: number; difficulty: string }>>([]);
+  const [showCorrection, setShowCorrection] = useState<boolean>(false);
+  const [muted, setMuted] = useState<boolean>(false);
+  const [, setCombo] = useState<number>(1);
+  const [history, setHistory] = useState<GameHistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
   
-  // --- SÉCURITÉ & REFS CRITIQUES ---
-  const lockedBetRef = useRef<number>(0); // Stocke la mise inviolable
-  const isProcessingRef = useRef<boolean>(false); // Empêche les doubles appels
-  const timerRef = useRef<any>(null); // Gestionnaire de temps
+  // --- REFS CRITIQUES ---
+  const lockedBetRef = useRef<number>(0);
+  const isProcessingRef = useRef<boolean>(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -114,7 +133,7 @@ function QuizGameContent() {
   useEffect(() => {
     init();
     if (challengeId && challengeFee) {
-        setBetCP(Number(challengeFee));
+      setBetCP(Number(challengeFee));
     }
   }, [init, challengeId, challengeFee]);
 
@@ -124,65 +143,71 @@ function QuizGameContent() {
       if (data && !data.is_active) {
         setMaintenanceMsg(data.maintenance_msg);
         setStatus('maintenance');
-      } else { setStatus('idle'); }
-    } catch (e) { setStatus('idle'); }
+      } else { 
+        setStatus('idle'); 
+      }
+    } catch { 
+      setStatus('idle'); 
+    }
   };
 
-  const translate = async (text: string) => {
+  const translate = async (text: string): Promise<string> => {
     try {
       const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fr&dt=t&q=${encodeURIComponent(text)}`);
       const data = await res.json();
       return data[0][0][0];
-    } catch { return text; }
+    } catch { 
+      return text; 
+    }
   };
 
   const start = async () => {
     if (isProcessingRef.current || !profile) return;
     triggerHaptic();
     
-    // Validation Mise
-    if (betCP < 10 && !challengeId) { alert("Mise minimum 10 CP"); return; }
+    if (betCP < 10 && !challengeId) { 
+      alert("Mise minimum 10 CP"); 
+      return; 
+    }
     
-    isProcessingRef.current = true; // Verrouillage immédiat
+    isProcessingRef.current = true;
     setStatus('loading');
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
-      
-      // 🔒 VERROUILLAGE MISE
       lockedBetRef.current = finalFee;
 
-      // 1. Paiement RPC
       const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
-          p_user_id: profile.id,
-          p_mise_cp: finalFee,
-          p_gain_cp: 0,
-          p_jeu_nom: challengeId ? `Challenge Quiz: ${challengeId}` : 'Quiz Elite Solo'
+        p_user_id: profile.id,
+        p_mise_cp: finalFee,
+        p_gain_cp: 0,
+        p_jeu_nom: challengeId ? `Challenge Quiz: ${challengeId}` : 'Quiz Elite Solo'
       });
 
       if (payError) throw new Error(payError.message);
       if (!result.success) throw new Error(result.message);
 
-      // 2. Initialisation Challenge
       if (challengeId) {
         await supabase.from('challenge_attempts').upsert({
-            challenge_id: challengeId,
-            user_id: profile.id,
+          challenge_id: challengeId,
+          user_id: profile.id,
         }, { onConflict: 'challenge_id,user_id' });
       }
 
-      // 3. Récupération Questions
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
-      const processed = await Promise.all(raw.results.map(async (q: any) => {
+      const processed: QuestionItem[] = await Promise.all(raw.results.map(async (q: any) => {
         const dQ = decodeURIComponent(q.question);
         const dC = decodeURIComponent(q.correct_answer);
-        const dI = q.incorrect_answers.map((a:string) => decodeURIComponent(a));
-        const [qF, cF, ...iF] = await Promise.all([translate(dQ), translate(dC), ...dI.map((a:string) => translate(a))]);
-        return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
+        const dI = q.incorrect_answers.map((a: string) => decodeURIComponent(a));
+        const [qF, cF, ...iF] = await Promise.all([translate(dQ), translate(dC), ...dI.map((a: string) => translate(a))]);
+        return { 
+          question: qF, 
+          correct: cF, 
+          answers: [cF, ...iF].sort(() => Math.random() - 0.5) 
+        };
       }));
 
-      // 4. Création Session
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
         mise_cp: finalFee,
@@ -204,9 +229,7 @@ function QuizGameContent() {
       setExplanation('');
       setStatus('playing');
       
-      // Déverrouillage pour le jeu
       isProcessingRef.current = false;
-
     } catch (e: any) {
       alert(e.message);
       setStatus('idle');
@@ -215,11 +238,10 @@ function QuizGameContent() {
   };
 
   const handleAnswer = (ans: string | null) => {
-    // Si déjà en correction ou verrouillé, on ignore
     if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
     triggerHaptic();
     
-    clearInterval(timerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
     setSelectedAnswer(ans);
     setShowCorrection(true);
 
@@ -232,7 +254,7 @@ function QuizGameContent() {
       const nextM = parseFloat((multiplier + difficultySettings.step).toFixed(2));
       setMultiplier(nextM);
       setCombo(prev => prev + 1);
-      setExplanation(`✅ Bonne réponse. Le niveau ${difficulty} vous offre ${pointsToAdd} points.`);
+      setExplanation(`✅ Bonne réponse (+${pointsToAdd} pts)`);
       
       setTimeout(() => {
         if (currentIndex < 4) {
@@ -241,31 +263,26 @@ function QuizGameContent() {
           setShowCorrection(false);
           setTimeLeft(getDifficultySettings(difficulty).time);
         } else { 
-          // C'était la dernière question -> VICTOIRE FINALE
           finalizeGame(true); 
         }
-      }, 1500);
+      }, 1300);
     } else {
       playQuizSound('wrong');
       setCombo(1);
-      setExplanation(`❌ Mauvaise réponse. La bonne réponse était : ${questions[currentIndex].correct}`);
+      setExplanation(`❌ Correction : ${questions[currentIndex].correct}`);
       setTimeout(() => {
-          finalizeGame(false);
+        finalizeGame(false);
       }, 1500);
     }
   };
 
-  // --- FIN DE PARTIE SÉCURISÉE ---
   const finalizeGame = async (isWin: boolean) => {
-    // 🛡️ ANTI DOUBLE-APPEL (Empêche Cashout + Timer 0 en même temps)
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
     
     if (!gameId) return;
-    
-    clearInterval(timerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
 
-    // 🔒 UTILISATION DE LA MISE SÉCURISÉE
     const secureBet = lockedBetRef.current;
     const economy = resolveGameEconomy({
       gameId: 'quiz',
@@ -278,211 +295,292 @@ function QuizGameContent() {
       specialEventMultiplier: 1
     });
     
-    // Calcul du gain
-    // Si isWin = true (soit fin du quiz, soit cashout manuel réussi)
-    // Si challengeId, pas de gain CP
     const gainCP = challengeId ? 0 : (isWin ? economy.payout : 0);
 
     try {
-        if (challengeId) {
-            await supabase.rpc('increment_challenge_score', {
-                p_user_id: profile.id,
-                p_challenge_id: challengeId,
-                p_score: sessionScore 
-            });
-        } else {
-            if (gainCP > 0) {
-                await supabase.rpc('jouer_partie_cp', {
-                    p_user_id: profile.id,
-                    p_mise_cp: 0,
-                    p_gain_cp: gainCP,
-                    p_jeu_nom: 'Quiz Victory'
-                });
-            }
+      if (challengeId) {
+        await supabase.rpc('increment_challenge_score', {
+          p_user_id: profile.id,
+          p_challenge_id: challengeId,
+          p_score: sessionScore 
+        });
+      } else {
+        if (gainCP > 0) {
+          await supabase.rpc('jouer_partie_cp', {
+            p_user_id: profile.id,
+            p_mise_cp: 0,
+            p_gain_cp: gainCP,
+            p_jeu_nom: 'Quiz Victory'
+          });
         }
+      }
 
-        await supabase.from('quiz_games').update({ 
-            is_active: false, 
-            gain_cp: gainCP,
-            is_won: isWin
-        }).eq('id', gameId);
+      await supabase.from('quiz_games').update({ 
+        is_active: false, 
+        gain_cp: gainCP,
+        is_won: isWin
+      }).eq('id', gameId);
 
-        setHistory(prev => [{ label: `${difficulty} • ${CATEGORIES.find(c => c.id === category)?.name || 'Général'}`, score: sessionScore, difficulty }, ...prev].slice(0, 6));
-        setStatus(isWin ? 'ended' : 'lost');
+      setHistory(prev => [{ 
+        label: `${difficulty} • ${CATEGORIES.find(c => c.id === category)?.name || 'Général'}`, 
+        score: sessionScore, 
+        difficulty 
+      }, ...prev].slice(0, 5));
+      
+      setStatus(isWin ? 'ended' : 'lost');
     } catch (e: any) {
-        console.error(e);
+      console.error(e);
     } finally {
-        isProcessingRef.current = false;
-        setShowCorrection(false);
-        init(); 
+      isProcessingRef.current = false;
+      setShowCorrection(false);
+      init(); 
     }
   };
 
-  // TIMER LOGIC
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
-      timerRef.current = setInterval(() => setTimeLeft(p => Math.max(0, parseFloat((p - 0.1).toFixed(1)))), 100);
+      timerRef.current = setInterval(() => {
+        setTimeLeft(p => Math.max(0, parseFloat((p - 0.1).toFixed(1))));
+      }, 100);
     } else if (timeLeft <= 0 && status === 'playing' && !showCorrection) {
-      // TEMPS ÉCOULÉ = PERDU
       handleAnswer(null); 
     }
-    return () => clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [timeLeft, status, showCorrection]);
 
   const difficultyBadge = difficulty === 'facile' ? 'ÉCLAIR' : difficulty === 'intermédiaire' ? 'PRÉCIS' : 'MAESTRO';
+  const totalCategoryTime = getDifficultySettings(difficulty).time;
+  const timerPercentage = Math.max(0, Math.min(100, (timeLeft / totalCategoryTime) * 100));
 
   return (
-    <NeonGameShell accent="amber" className="min-h-screen p-4 font-black uppercase flex flex-col items-center select-none">
-      <div className="mb-6 flex w-full max-w-md items-center justify-between">
-        <button onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.16)] active:scale-90">
-          <ChevronLeft/>
+    <NeonGameShell accent="amber" className="h-[100dvh] w-full p-3 font-black uppercase flex flex-col justify-between overflow-hidden select-none">
+      
+      {/* HEADER COMPACT AVEC SOLDE */}
+      <div className="flex w-full items-center justify-between gap-2 shrink-0 h-12">
+        <button 
+          onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} 
+          className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-2 text-amber-200 active:scale-90 transition-transform"
+        >
+          <ChevronLeft size={20}/>
         </button>
-        <div className="flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-4 py-2 shadow-lg">
-            <Coins size={16} className="text-amber-300" />
-            <span className="text-sm italic text-amber-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
+
+        <div className="flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1.5">
+          <Coins size={14} className="text-amber-300" />
+          <span className="text-xs italic text-amber-200">{profile?.jetons_cp?.toLocaleString() || 0} CP</span>
         </div>
+
+        <button 
+          onClick={() => setMuted(v => !v)} 
+          className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 active:scale-90 transition-transform"
+        >
+          {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 flex w-full max-w-md items-center justify-between rounded-[2rem] border border-amber-400/20 bg-black/30 px-4 py-3 backdrop-blur-xl">
-        <div className="flex items-center gap-2 text-amber-300">
-          <Sparkles size={16} />
-          <span className="text-[10px] uppercase tracking-[0.3em]">Premium Insights</span>
-        </div>
-        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-amber-200/80">
-          <Brain size={14} /> {difficultyBadge}
-        </div>
-      </motion.div>
-
-      <div className="w-full max-w-md space-y-4">
+      {/* CONTENU PRINCIPAL SANS SCROLL */}
+      <div className="flex-1 flex flex-col justify-center my-auto overflow-hidden">
         {status === 'maintenance' ? (
-           <div className="flex flex-col items-center py-20 bg-white/5 rounded-[3rem] border border-white/5">
-                <Construction size={60} className="text-amber-500 animate-pulse" />
-                <h2 className="text-2xl text-amber-500 mt-4 italic">MAINTENANCE</h2>
-                <p className="text-zinc-500 text-[10px] mt-2 px-10 text-center">{maintenanceMsg}</p>
-           </div>
+          <div className="flex flex-col items-center justify-center py-8 bg-white/5 rounded-3xl border border-white/5">
+            <Construction size={48} className="text-amber-500 animate-pulse" />
+            <h2 className="text-xl text-amber-500 mt-3 italic">MAINTENANCE</h2>
+            <p className="text-zinc-500 text-[10px] mt-2 px-6 text-center">{maintenanceMsg}</p>
+          </div>
         ) : status === 'idle' || status === 'loading' ? (
-          <div className="space-y-6">
+          /* CONFIGURATION DE LA PARTIE (ÉCRAN ACCUEIL DU JEU) */
+          <div className="flex flex-col justify-between h-full py-1 space-y-3 overflow-y-auto no-scrollbar">
+            
+            <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between rounded-2xl border border-amber-400/20 bg-black/40 px-3 py-2 backdrop-blur-md">
+              <div className="flex items-center gap-1.5 text-amber-300">
+                <Sparkles size={14} />
+                <span className="text-[9px] tracking-wider">Premium Insights</span>
+              </div>
+              <div className="flex items-center gap-1 text-[9px] text-amber-200/80">
+                <Brain size={12} /> {difficultyBadge}
+              </div>
+            </motion.div>
+
             {status === 'loading' ? (
-               <div className="flex flex-col items-center py-20"><Loader2 className="animate-spin text-emerald-500" size={50}/></div>
+              <div className="flex-1 flex flex-col items-center justify-center py-12">
+                <Loader2 className="animate-spin text-amber-400" size={48}/>
+                <span className="text-xs text-amber-300/80 mt-3 italic">Chargement...</span>
+              </div>
             ) : (
               <>
                 {challengeId && (
-                    <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-emerald-600 text-white p-6 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 shadow-2xl">
-                        <div className="flex items-center gap-2">
-                            <Target size={24} className="text-black" />
-                            <span className="text-lg tracking-tighter font-black italic">MISSION CIBLÉE</span>
-                        </div>
-                        <p className="text-[10px] opacity-80">CUMULEZ DES POINTS POUR LE CLASSEMENT</p>
-                    </motion.div>
+                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3 rounded-2xl flex items-center justify-between shadow-lg">
+                    <div className="flex items-center gap-2">
+                      <Target size={20} className="text-black" />
+                      <div>
+                        <p className="text-xs font-black italic">MISSION CIBLÉE</p>
+                        <p className="text-[8px] opacity-90">CUMULEZ DES POINTS AU CLASSEMENT</p>
+                      </div>
+                    </div>
+                  </motion.div>
                 )}
 
-                <div className="grid grid-cols-4 gap-2">
+                {/* CATEGORIES GRILLE COMPACTE 4x2 */}
+                <div className="grid grid-cols-4 gap-1.5">
                   {CATEGORIES.map(c => (
-                    <button key={c.id} onClick={() => setCategory(c.id)} className={`flex flex-col items-center gap-1 rounded-2xl border p-3 transition-all ${category === c.id ? 'border-amber-400 bg-amber-500 text-black shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-white/10 bg-white/5 text-slate-500'}`}>
-                      {c.icon} <span className="text-[7px] font-black italic">{c.name}</span>
+                    <button 
+                      key={c.id} 
+                      onClick={() => setCategory(c.id)} 
+                      className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all active:scale-95 ${
+                        category === c.id 
+                          ? 'border-amber-400 bg-amber-500 text-black font-black shadow-[0_0_12px_rgba(245,158,11,0.3)]' 
+                          : 'border-white/10 bg-white/5 text-slate-400'
+                      }`}
+                    >
+                      {c.icon} 
+                      <span className="text-[8px] mt-1 truncate w-full text-center">{c.name}</span>
                     </button>
                   ))}
                 </div>
 
-                <div className="rounded-[2rem] border border-amber-400/20 bg-black/30 p-3">
-                  <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-amber-300">
-                    <MessageCircleQuestion size={14} /> Assistant IA
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-[10px] text-slate-300">
-                    Prêt à challenger votre instinct. Le mode premium révèle la bonne réponse avec une explication fluide après chaque choix.
-                  </div>
+                {/* DIFFICULTÉ */}
+                <div className="flex gap-1.5">
+                  {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
+                    <button 
+                      key={d} 
+                      onClick={() => setDifficulty(d)} 
+                      className={`flex-1 rounded-xl border py-2.5 text-[9px] font-bold transition-all active:scale-95 ${
+                        difficulty === d 
+                          ? 'border-amber-400 bg-white text-black shadow-md' 
+                          : 'border-white/10 bg-white/5 text-slate-400'
+                      }`}
+                    >
+                      {d.toUpperCase()}
+                      <span className="block text-[7px] opacity-60">+{SETTINGS[d].points} PTS</span>
+                    </button>
+                  ))}
                 </div>
 
-                <div className="flex gap-2">
-                    {(Object.keys(SETTINGS) as DifficultyType[]).map((d) => (
-                        <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 rounded-xl border py-4 text-[8px] font-bold transition-all ${difficulty === d ? 'border-amber-400 bg-white text-black' : 'border-white/10 bg-white/5 text-slate-500'}`}>
-                            {d.toUpperCase()} <br/> <span className="text-[6px] opacity-50">+{SETTINGS[d].points} PTS</span>
-                        </button>
-                    ))}
-                </div>
-
-                <div className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-950/65 p-8 shadow-[0_0_40px_rgba(245,158,11,0.12)]">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><Brain size={80}/></div>
-                    <div className="flex justify-between items-center relative">
-                        <span className={`text-[10px] italic font-bold ${challengeId ? 'text-amber-500' : 'text-emerald-500'}`}>
-                            {challengeId ? "FRAIS DE MISSION (FIXE)" : "VALEUR DE LA SESSION"}
-                        </span>
-                    </div>
+                {/* SAISIE DE LA MISE */}
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3 flex items-center justify-between">
+                  <div>
+                    <span className={`text-[9px] italic block ${challengeId ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {challengeId ? "FRAIS DE MISSION" : "VOTRE MISE CP"}
+                    </span>
                     <input 
                       type="number" 
                       value={betCP} 
                       disabled={!!challengeId}
                       onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
-                      className={`bg-transparent text-left outline-none w-full text-5xl font-black italic tracking-tighter ${challengeId ? 'text-amber-500' : 'text-white'}`}
+                      className={`bg-transparent text-left outline-none w-32 text-2xl font-black italic ${challengeId ? 'text-amber-400' : 'text-white'}`}
                     />
+                  </div>
+                  <Brain size={32} className="text-white/10" />
                 </div>
-                
+
+                {/* HISTORIQUE COMPACT */}
+                {history.length > 0 && (
+                  <div className="rounded-xl border border-white/10 bg-black/30 p-2">
+                    <div className="flex items-center gap-1 text-[8px] text-slate-400 mb-1">
+                      <History size={10} /> RECENTS
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                      {history.map((item, idx) => (
+                        <div key={idx} className="shrink-0 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[8px] text-slate-300">
+                          {item.label} : <span className="text-emerald-400">{item.score} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* BOUTON LANCER */}
                 <button 
-                    onClick={start} 
-                    disabled={isProcessingRef.current} 
-                    className={`w-full rounded-[2.5rem] py-7 text-xl font-black italic shadow-[0_20px_40px_rgba(245,158,11,0.24)] transition-all active:scale-95 ${challengeId ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' : 'bg-gradient-to-r from-amber-400 to-emerald-500 text-white'}`}
+                  onClick={start} 
+                  disabled={isProcessingRef.current} 
+                  className={`w-full rounded-2xl py-4 text-lg font-black italic shadow-lg transition-all active:scale-95 ${
+                    challengeId 
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' 
+                      : 'bg-gradient-to-r from-amber-400 to-emerald-500 text-white'
+                  }`}
                 >
-                  {isProcessingRef.current ? <Loader2 className="animate-spin mx-auto"/> : challengeId ? 'LANCER LA SÉQUENCE' : 'INITIALISER LE QUIZ'}
+                  {isProcessingRef.current ? <Loader2 className="animate-spin mx-auto" size={20}/> : challengeId ? 'LANCER LA SÉQUENCE' : 'COMMENCER LE QUIZ'}
                 </button>
               </>
             )}
           </div>
         ) : status === 'playing' ? (
-          <div className="space-y-6">
-            <div className="flex justify-between items-end px-2">
+          /* DÉROULEMENT DU JEU : GARANTIE 100% SANS SCROLL */
+          <div className="flex flex-col justify-between h-full py-1">
+            
+            {/* EN-TÊTE DE JEU (SCORE + CASH OUT + PROGRESSION) */}
+            <div className="shrink-0 space-y-2">
+              <div className="flex items-center justify-between px-1">
                 <div>
-                    <p className="text-[10px] text-slate-500 italic">INFO_SESSION</p>
-                    <p className="text-3xl text-emerald-500 font-black italic">
-                        {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
-                    </p>
+                  <p className="text-[8px] text-slate-400 italic">SCORE / MULTIPLICATEUR</p>
+                  <p className="text-xl text-emerald-400 font-black italic">
+                    {challengeId ? `+${sessionScore} PTS` : `x${multiplier.toFixed(2)}`}
+                  </p>
                 </div>
-                
+
                 {!challengeId && multiplier > 1.2 && (
-                    <button 
-                        onClick={() => finalizeGame(true)} 
-                        className="bg-white text-black px-6 py-3 rounded-full text-[10px] font-black flex items-center gap-2 shadow-xl border border-white/20 active:scale-95 transition-transform"
-                    >
-                        <Wallet size={14}/> ENCAISSER {Math.floor(lockedBetRef.current * multiplier)} CP
-                    </button>
+                  <button 
+                    onClick={() => finalizeGame(true)} 
+                    className="bg-emerald-500 text-black px-3 py-1.5 rounded-full text-[9px] font-black flex items-center gap-1 shadow-md active:scale-95 transition-transform"
+                  >
+                    <Wallet size={12}/> ENCAISSER {Math.floor(lockedBetRef.current * multiplier)} CP
+                  </button>
                 )}
-            </div>
 
-            <div className="flex items-center justify-between rounded-[2rem] border border-white/10 bg-black/30 px-4 py-3 text-[10px] uppercase tracking-[0.3em] text-slate-300">
-              <span className="flex items-center gap-2"><BarChart3 size={14} /> progression</span>
-              <span className="text-emerald-300">{currentIndex + 1}/5</span>
-            </div>
-
-            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-              <div className={`h-full transition-all duration-100 ${timeLeft < 2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${(timeLeft / SETTINGS[difficulty].time) * 100}%` }}/>
-            </div>
-
-            <div className="rounded-[2rem] border border-amber-400/20 bg-gradient-to-br from-amber-500/10 via-black/30 to-emerald-500/10 p-6 shadow-[0_0_35px_rgba(245,158,11,0.14)]">
-              <div className="mb-4 flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-amber-200/80">
-                <span className="flex items-center gap-2"><Target size={14} /> chrono</span>
-                <span className={timeLeft < 2 ? 'text-rose-400' : 'text-emerald-300'}>{timeLeft.toFixed(1)}s</span>
+                <div className="flex items-center gap-1 text-[9px] text-slate-300 bg-black/40 px-2.5 py-1 rounded-full border border-white/10">
+                  <BarChart3 size={12} className="text-amber-400" />
+                  <span>{currentIndex + 1} / 5</span>
+                </div>
               </div>
-              <div className="bg-white text-black p-8 rounded-[2rem] text-center min-h-[220px] flex flex-col items-center justify-center shadow-2xl relative">
-                <span className="absolute top-4 text-[8px] text-slate-400 font-bold italic">SÉQUENCE {currentIndex + 1} / 5</span>
-                <p className="text-lg font-black italic tracking-tight uppercase leading-tight">{questions[currentIndex]?.question}</p>
+
+              {/* TIMER INTEGRÉ VISIBLE */}
+              <div className="w-full bg-black/40 rounded-full border border-white/10 p-0.5 relative overflow-hidden">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-100 ${
+                    timeLeft < 2.5 ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]' : 'bg-amber-400'
+                  }`} 
+                  style={{ width: `${timerPercentage}%` }}
+                />
               </div>
             </div>
 
-            <div className="grid gap-3">
+            {/* BLOC QUESTION & EXPLICATION */}
+            <div className="my-auto flex flex-col justify-center">
+              <div className="bg-slate-900/90 border border-amber-400/30 rounded-2xl p-4 text-center shadow-xl relative min-h-[120px] flex items-center justify-center">
+                <span className="absolute top-2 left-3 text-[7px] text-amber-400/80 font-bold tracking-widest">
+                  SECONDES RESTANTES : {timeLeft.toFixed(1)}S
+                </span>
+                <p className="text-sm md:text-base font-black italic leading-snug text-white">
+                  {questions[currentIndex]?.question}
+                </p>
+              </div>
+
+              {explanation && (
+                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="mt-2 text-center text-[9px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl py-1 px-2">
+                  {explanation}
+                </motion.div>
+              )}
+            </div>
+
+            {/* GRILLE DE RÉPONSES (2x2 POUR COMPACITÉ MAXIMUM SUR MOBILE) */}
+            <div className="grid grid-cols-2 gap-2 shrink-0">
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
                 const isCorrect = a === questions[currentIndex].correct;
                 const isSelected = a === selectedAnswer;
-                let style = "bg-white/5 border-white/5 text-white";
+                let style = "bg-white/5 border-white/10 text-white active:bg-white/10";
+                
                 if (showCorrection) {
-                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black scale-[1.02] shadow-lg";
-                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-50";
-                  else style = "opacity-20";
+                  if (isCorrect) style = "bg-emerald-500 border-emerald-400 text-black font-black scale-[1.02] shadow-md";
+                  else if (isSelected) style = "bg-rose-500 border-rose-500 text-white opacity-80";
+                  else style = "opacity-25 border-transparent";
                 }
+
                 return (
                   <button 
                     key={i} 
                     onClick={() => handleAnswer(a)} 
                     disabled={showCorrection || isProcessingRef.current} 
-                    className={`p-5 border rounded-2xl text-left transition-all font-black text-[11px] italic ${style}`}
+                    className={`p-3 border rounded-xl text-left transition-all text-[10px] font-black italic min-h-[52px] flex items-center justify-center text-center leading-tight ${style}`}
                   >
                     {a}
                   </button>
@@ -490,65 +588,51 @@ function QuizGameContent() {
               })}
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-black/30 p-4 shadow-inner">
-              <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-slate-400">
-                <span className="flex items-center gap-2"><History size={14} /> historique</span>
-                <button onClick={() => setMuted(v => !v)} className="rounded-full border border-white/10 p-2 text-slate-300">
-                  {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                </button>
-              </div>
-              <div className="grid gap-2">
-                {history.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 p-3 text-[10px] text-slate-500">Aucun historique pour le moment.</div>
-                ) : history.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] text-slate-300">
-                    <span>{item.label}</span>
-                    <span className="text-emerald-300">{item.score} pts</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {explanation && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-[2rem] border border-emerald-400/20 bg-emerald-500/10 p-4 text-[10px] uppercase tracking-[0.25em] text-emerald-200">
-                {explanation}
-              </motion.div>
-            )}
           </div>
         ) : (
-          <div className="text-center py-12 space-y-8">
-            <div className={`mx-auto w-24 h-24 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                {status === 'lost' && !challengeId ? <XCircle size={60} className="text-rose-500"/> : <Trophy size={60} className="text-emerald-500"/>}
+          /* ÉCRAN DE FIN DE PARTIE (RÉSULTATS) */
+          <div className="text-center py-4 space-y-4 my-auto">
+            <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center border-2 ${
+              status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/30' : 'bg-emerald-500/10 border-emerald-500/30'
+            }`}>
+              {status === 'lost' && !challengeId ? <XCircle size={40} className="text-rose-500"/> : <Trophy size={40} className="text-emerald-500"/>}
             </div>
 
-            <h2 className={`text-5xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-500'}`}>
-                {challengeId ? "MISSION COMPLÈTE" : (status === 'lost' ? "ÉCHEC" : "VICTOIRE")}
+            <h2 className={`text-2xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-500'}`}>
+              {challengeId ? "MISSION COMPLÈTE" : (status === 'lost' ? "ÉCHEC DE LA SESSION" : "VICTOIRE !")}
             </h2>
             
-            <div className="bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/10 backdrop-blur-xl relative">
-                <p className="text-[10px] text-zinc-500 mb-3 font-bold italic tracking-widest">
-                    {challengeId ? "POINTS AJOUTÉS AU CLASSEMENT" : "JETONS RÉCUPÉRÉS"}
-                </p>
-                <p className="text-6xl font-black text-white italic tracking-tighter">
-                    {/* On utilise lockedBetRef pour l'affichage final aussi pour être cohérent */}
-                    {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(lockedBetRef.current * multiplier))} 
-                    <span className="text-lg text-emerald-500 ml-2 font-black">{challengeId ? 'PTS' : 'CP'}</span>
-                </p>
+            <div className="bg-slate-900/80 p-5 rounded-2xl border border-white/10 backdrop-blur-md">
+              <p className="text-[8px] text-zinc-400 mb-1 font-bold italic tracking-widest">
+                {challengeId ? "POINTS AJOUTÉS AU CLASSEMENT" : "GAIN TOTAL OBTENU"}
+              </p>
+              <p className="text-4xl font-black text-white italic tracking-tighter">
+                {challengeId ? sessionScore : (status === 'lost' ? 0 : Math.floor(lockedBetRef.current * multiplier))} 
+                <span className="text-sm text-emerald-400 ml-1.5 font-black">{challengeId ? 'PTS' : 'CP'}</span>
+              </p>
             </div>
 
-            <button onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} className="w-full py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-2xl italic shadow-2xl active:scale-95 transition-all">
-                {challengeId ? 'VOIR MON RANG' : 'NOUVELLE SESSION'}
+            <button 
+              onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} 
+              className="w-full py-3.5 bg-emerald-500 text-black rounded-2xl font-black text-base italic shadow-lg active:scale-95 transition-all"
+            >
+              {challengeId ? 'VOIR MON RANG' : 'REJOUER UNE PARTIE'}
             </button>
           </div>
         )}
       </div>
+
     </NeonGameShell>
   );
 }
 
 export default function QuizElite() {
   return (
-    <Suspense fallback={<div className="h-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={50} /></div>}>
+    <Suspense fallback={
+      <div className="h-[100dvh] bg-[#020617] flex items-center justify-center">
+        <Loader2 className="animate-spin text-amber-400" size={40} />
+      </div>
+    }>
       <QuizGameContent />
     </Suspense>
   );
