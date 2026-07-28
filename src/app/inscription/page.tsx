@@ -30,12 +30,25 @@ function SignupForm() {
     if (ref) setReferralCode(ref.toUpperCase());
   }, [searchParams]);
 
+  // Fonction de gestion du changement sur le téléphone
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 1. On retire tout ce qui n'est pas un chiffre
+    const onlyNums = e.target.value.replace(/\D/g, '');
+    // 2. On limite la taille à 8 chiffres maximum
+    const trimmed = onlyNums.slice(0, 8);
+    setPhone(trimmed);
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
+    // Validation spécifique pour les 8 chiffres requis
+    if (phone.length !== 8) {
+      return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
+    }
+    
     const cleanPhone = normalizePhoneInput(phone);
-    if (cleanPhone.length < 8) return setError("Numéro de téléphone invalide ou trop court.");
     if (password.length < 6) return setError("Le mot de passe doit contenir au moins 6 caractères.");
     if (username.trim().length < 3) return setError("Le pseudo doit contenir au moins 3 caractères.");
 
@@ -131,17 +144,26 @@ function SignupForm() {
           </div>
         </div>
 
+        {/* CHAMP TELEPHONE APPORTE AVEC SEUIL +509 ET MAXIMUM 8 CHIFFRES */}
         <div className="space-y-1">
           <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Téléphone</label>
-          <div className="relative">
+          <div className="relative flex items-center">
             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
+            
+            {/* Indice +509 fixe */}
+            <span className="absolute left-11 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm z-10 select-none">
+              +509
+            </span>
+
             <DSInput 
               type="tel" 
+              inputMode="numeric"
               required 
               value={phone} 
-              onChange={(e) => setPhone(e.target.value)} 
-              placeholder="Ex: 4000 0000" 
-              className="pl-12 py-4 font-bold"
+              onChange={handlePhoneChange} 
+              maxLength={8}
+              placeholder="0000 0000" 
+              className="pl-24 py-4 font-bold tracking-widest"
             />
           </div>
         </div>
