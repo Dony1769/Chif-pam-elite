@@ -6,10 +6,9 @@ import {
   Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
   Laptop, Film, Award, BookOpen, MapPin, Construction,
   Coins, Target, Sparkles, Volume2, VolumeX, 
-  History, Zap
+  History, Zap, ExternalLink, RefreshCw
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
 import { getGameEconomySettings } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
 
@@ -59,6 +58,9 @@ const CATEGORIES = [
   { id: 22, name: "Géo", icon: <MapPin size={14}/> },
 ];
 
+const MONETAG_AD_URL = "https://omg10.com/4/11431323";
+const MIN_AD_TIME_MS = 6000; // 6 secondes requises sur la publicité
+
 function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -85,11 +87,18 @@ function QuizGameContent() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
 
-  // --- REFS POUR ACCÈS EN TEMPS RÉEL ---
+  // --- ÉTATS SECONDE CHANCE ---
+  const [hasUsedSecondChance, setHasUsedSecondChance] = useState<boolean>(false);
+  const [isAdPending, setIsAdPending] = useState<boolean>(false);
+  const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
+  const [secondChanceLoading, setSecondChanceLoading] = useState<boolean>(false);
+
+  // --- REFS POUR ACCÈS EN TEMPS RÉEL ET SÉCURITÉ ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
+  const adClickTimestampRef = useRef<number | null>(null);
 
   useEffect(() => {
     gameStateRef.current = { multiplier, gameId };
@@ -180,6 +189,8 @@ function QuizGameContent() {
     
     isProcessingRef.current = true;
     setStatus('loading');
+    setHasUsedSecondChance(false);
+    setAdErrorMsg(null);
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
@@ -297,6 +308,89 @@ function QuizGameContent() {
     }
   }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
 
+  // --- GESTION DE LA SECONDE CHANCE VIA PUBLICITÉ ---
+  const applySecondChance = async () => {
+    if (!profile || secondChanceLoading) return;
+
+    const secondChanceFee = Math.floor(lockedBetRef.current * 0.5);
+
+    if ((profile.jetons_cp || 0) < secondChanceFee) {
+      setAdErrorMsg(`Solde insuffisant. Il vous faut ${secondChanceFee} CP pour la seconde chance.`);
+      setIsAdPending(false);
+      return;
+    }
+
+    setSecondChanceLoading(true);
+    setAdErrorMsg(null);
+
+    try {
+      // Préparation et déduction des 50% de la mise
+      const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
+        p_user_id: profile.id,
+        p_mise_cp: secondChanceFee,
+        p_gain_cp: 0,
+        p_jeu_nom: 'Quiz Seconde Chance (50%)'
+      });
+
+      if (payError) throw new Error(payError.message);
+      if (!result.success) throw new Error(result.message);
+
+      // On accorde la seconde chance
+      setHasUsedSecondChance(true);
+      setIsAdPending(false);
+      setSelectedAnswer(null);
+      setShowCorrection(false);
+      setExplanation('🔄 Seconde Chance activée ! Reprise de la partie...');
+
+      // Réinitialisation du temps pour la question courante
+      const difficultySettings = getDifficultySettings(difficulty);
+      setTimeLeft(difficultySettings.time);
+      setStatus('playing');
+
+      await init(); // Mettre à jour le solde utilisateur
+    } catch (e: any) {
+      setAdErrorMsg(e.message || "Erreur lors du traitement de la seconde chance.");
+    } finally {
+      setSecondChanceLoading(false);
+    }
+  };
+
+  const handleOpenAdForSecondChance = () => {
+    const fee = Math.floor(lockedBetRef.current * 0.5);
+    if ((profile?.jetons_cp || 0) < fee) {
+      setAdErrorMsg(`Solde insuffisant (${fee} CP requis).`);
+      return;
+    }
+
+    adClickTimestampRef.current = Date.now();
+    setIsAdPending(true);
+    setAdErrorMsg(null);
+
+    // Ouverture de la pub dans un nouvel onglet
+    window.open(MONETAG_AD_URL, '_blank');
+  };
+
+  // Écouteur pour vérifier si l'utilisateur est resté au moins 6s sur le lien pub
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isAdPending && adClickTimestampRef.current) {
+        const timeSpent = Date.now() - adClickTimestampRef.current;
+        if (timeSpent >= MIN_AD_TIME_MS) {
+          void applySecondChance();
+        } else {
+          const remainingSec = Math.ceil((MIN_AD_TIME_MS - timeSpent) / 1000);
+          setAdErrorMsg(`Temps insuffisant ! Vous devez passer au moins 6s sur la page (${remainingSec}s manquantes).`);
+          setIsAdPending(false);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAdPending, profile]);
+
   const handleAnswer = (ans: string | null) => {
     if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
     triggerHaptic();
@@ -312,7 +406,6 @@ function QuizGameContent() {
       const pointsToAdd = difficultySettings.points;
       setSessionScore(prev => prev + pointsToAdd);
 
-      // MULTIPLICATEUR AUGMENTÉ IMMÉDIATEMENT APRÈS CHAQUE BONNE RÉPONSE
       const nextM = parseFloat((multiplier + difficultySettings.step).toFixed(2));
       setMultiplier(nextM);
       
@@ -325,7 +418,6 @@ function QuizGameContent() {
           setShowCorrection(false);
           setTimeLeft(difficultySettings.time);
         } else { 
-          // Fin du questionnaire avec victoires complètes et multiplicateur maximal
           const finalGain = Math.floor(lockedBetRef.current * nextM);
           void finalizeGame(true, finalGain); 
         }
@@ -333,10 +425,18 @@ function QuizGameContent() {
     } else {
       playQuizSound('wrong');
       setExplanation(`❌ Mauvaise réponse. La solution était : ${questions[currentIndex].correct}`);
+      
       setTimeout(() => {
-        // En cas d'erreur, encaissement du multiplicateur accumulé jusqu'ici (ou perte si < 1.0x)
         const currentGain = Math.floor(lockedBetRef.current * multiplier);
-        void finalizeGame(multiplier >= 1.0, currentGain);
+        
+        // Si le multiplicateur est >= 1.0x ou qu'on est en Mode Challenge ou qu'on a déjà utilisé la 2e chance, on termine.
+        if (multiplier >= 1.0 || challengeId || hasUsedSecondChance) {
+          void finalizeGame(multiplier >= 1.0, currentGain);
+        } else {
+          // Éligible à la seconde chance : écran de défaite temporaire pour rejouer via pub
+          setStatus('lost');
+          if (timerRef.current) clearInterval(timerRef.current);
+        }
       }, 1400);
     }
   };
@@ -354,6 +454,9 @@ function QuizGameContent() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [timeLeft, status, showCorrection]);
+
+  const secondChanceCost = Math.floor(lockedBetRef.current * 0.5);
+  const isEligibleForSecondChance = !challengeId && multiplier < 1.0 && !hasUsedSecondChance;
 
   return (
     <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950">
@@ -560,7 +663,7 @@ function QuizGameContent() {
 
         ) : (
 
-          /* ÉCRAN DE RÉSULTAT */
+          /* ÉCRAN DE RÉSULTAT / SECONDE CHANCE */
           <div className="flex flex-col items-center justify-center h-full space-y-3 text-center my-auto">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
               {status === 'lost' && !challengeId ? <XCircle size={36}/> : <Trophy size={36}/>}
@@ -568,25 +671,80 @@ function QuizGameContent() {
 
             <div>
               <h2 className={`text-2xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-400'}`}>
-                {challengeId ? "MISSION TERMINÉE" : (status === 'lost' ? "PERDU" : "VICTOIRE")}
+                {challengeId ? "MISSION TERMINÉE" : (status === 'lost' ? "ÉCHEC" : "VICTOIRE")}
               </h2>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {challengeId ? "POINTS AJOUTÉS AU SCORE" : "GAINS OBTENUS"}
               </p>
             </div>
 
-            <div className="bg-slate-900/90 w-full p-4 rounded-xl border border-white/10">
+            <div className="bg-slate-900/90 w-full p-3.5 rounded-xl border border-white/10">
               <span className="text-3xl font-black text-white italic">
                 {challengeId ? sessionScore : Math.floor(lockedBetRef.current * multiplier)}
               </span>
               <span className="text-xs text-amber-400 ml-1">{challengeId ? 'PTS' : 'CP'}</span>
             </div>
 
+            {/* BLOC SECONDE CHANCE PAYANTE VIA SPONSOR/PUB */}
+            {status === 'lost' && isEligibleForSecondChance && (
+              <div className="w-full bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex flex-col gap-2">
+                <div className="flex items-center justify-between text-left">
+                  <div>
+                    <span className="text-xs text-amber-300 font-black block">SECONDE CHANCE</span>
+                    <span className="text-[9px] text-slate-300 font-normal">
+                      Coût : <strong className="text-amber-400">{secondChanceCost} CP</strong> (50% de la mise)
+                    </span>
+                  </div>
+                  <Sparkles size={18} className="text-amber-400 animate-spin" />
+                </div>
+
+                <p className="text-[8px] text-slate-400 text-left leading-snug">
+                  Visitez notre partenaire pendant au moins 6s pour débloquer votre seconde chance.
+                </p>
+
+                {adErrorMsg && (
+                  <p className="text-[9px] text-rose-400 font-bold text-center bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/20">
+                    {adErrorMsg}
+                  </p>
+                )}
+
+                <button
+                  onClick={handleOpenAdForSecondChance}
+                  disabled={isAdPending || secondChanceLoading}
+                  className="w-full py-2.5 bg-amber-400 text-black rounded-lg font-black text-xs italic shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {secondChanceLoading ? (
+                    <Loader2 className="animate-spin" size={14} />
+                  ) : isAdPending ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={14} />
+                      <span>EN ATTENTE DES 6 SECONDES...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink size={14} />
+                      <span>S'ÉQUIPER DE LA SECONDE CHANCE</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
             <button 
-              onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} 
-              className="w-full py-3 bg-emerald-500 text-black rounded-xl font-black text-sm italic shadow-md active:scale-95 transition-all"
+              onClick={() => {
+                if (challengeId) {
+                  router.push('/client/rank?challengeId=' + challengeId);
+                } else {
+                  if (status === 'lost' && isEligibleForSecondChance) {
+                    void finalizeGame(false, 0);
+                  } else {
+                    setStatus('idle');
+                  }
+                }
+              }} 
+              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-sm italic shadow-md active:scale-95 transition-all"
             >
-              {challengeId ? 'RETOURNER AU CLASSEMENT' : 'REJOUER UNE PARTIE'}
+              {challengeId ? 'RETOURNER AU CLASSEMENT' : (status === 'lost' ? 'ABANDONNER & QUITTER' : 'REJOUER UNE PARTIE')}
             </button>
           </div>
 
