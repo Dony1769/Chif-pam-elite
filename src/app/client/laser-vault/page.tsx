@@ -24,9 +24,6 @@ interface MathQuestion {
   answer: number;
 }
 
-const MONETAG_URL = "https://omg10.com/4/11431323";
-const REQUIRED_AD_TIME_MS = 6000; // 6 secondes
-
 // --- UTILITAIRES EFFETS ET SON ---
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
   if (typeof window === 'undefined') return;
@@ -59,7 +56,7 @@ const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
       oscillator.stop(now + 0.45);
     }
   } catch {
-    // AudioContext bloqué par le navigateur
+    // AudioContext bloqué
   }
 };
 
@@ -69,7 +66,7 @@ const triggerHaptic = () => {
   }
 };
 
-// --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS OPTIMISÉE ---
+// --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS ---
 const getQuestionTimeMs = (questionNumber: number) => {
   const baseTimeMs = 6000;
   const reductionMs = (questionNumber - 1) * 600;
@@ -81,7 +78,7 @@ const getNextMultiplier = (answered: number) => {
   return steps[Math.min(answered, steps.length - 1)] ?? 4.0;
 };
 
-// --- GENERATION DES QUESTIONS OPTIMISEE ---
+// --- GENERATION DES QUESTIONS ---
 const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
   const level = questionsAnswered < 3 ? 1 : questionsAnswered < 7 ? 2 : 3;
 
@@ -171,9 +168,11 @@ function QuickCalcGameContent() {
   const [initialTime, setInitialTime] = useState(6000);
   const [shakeAnswer, setShakeAnswer] = useState(false);
 
-  // --- ÉTATS POUR LA SECONDE CHANCE PUB ---
+  // --- ÉTATS POUR LA SECONDE CHANCE ET PUB ---
   const [secondChanceUsed, setSecondChanceUsed] = useState(false);
-  const [processingSecondChance, setProcessingSecondChance] = useState(false);
+  const [adClickTime, setAdClickTime] = useState<number | null>(null);
+  const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
+  const [validatingSecondChance, setValidatingSecondChance] = useState(false);
 
   const lockedBetRef = useRef(0);
   const isProcessingRef = useRef(false);
@@ -235,6 +234,8 @@ function QuickCalcGameContent() {
     setLoading(true);
     isProcessingRef.current = false;
     setSecondChanceUsed(false);
+    setAdClickTime(null);
+    setAdErrorMsg(null);
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
@@ -336,78 +337,101 @@ function QuickCalcGameContent() {
     }
   }, [challengeId, init, profile?.id, questionsAnswered]);
 
-  // --- LOGIQUE DE VÉRIFICATION DU RETOUR D'ANNONCE (SECONDE CHANCE) ---
-  const handleAdRedirection = () => {
-    const feeSecondChance = Math.floor(lockedBetRef.current * 0.5);
-    if ((profile?.jetons_cp || 0) < feeSecondChance) {
-      alert(`Solde insuffisant pour la seconde chance. Vous avez besoin de ${feeSecondChance} CP (50% de la mise).`);
+  // --- LOGIQUE DE VÉRIFICATION DE LA SECONDE CHANCE APRÈS CLIC ADS ---
+  const handleVerifySecondChance = useCallback(async (timestamp: number) => {
+    const elapsedSeconds = (Date.now() - timestamp) / 1000;
+    
+    if (elapsedSeconds < 6) {
+      setAdErrorMsg(`Temps insuffisant (${Math.ceil(6 - elapsedSeconds)}s restantes). Vous n'avez pas obtenu la seconde chance.`);
+      setAdClickTime(null);
+      if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
       return;
     }
 
-    localStorage.setItem('second_chance_start_time', Date.now().toString());
-    window.open(MONETAG_URL, '_blank');
-  };
+    setValidatingSecondChance(true);
+    setAdErrorMsg(null);
 
+    const costCP = Math.floor(lockedBetRef.current * 0.5);
+
+    if ((profile?.jetons_cp || 0) < costCP) {
+      setAdErrorMsg(`Solde insuffisant pour la seconde chance (${costCP} CP requis).`);
+      setValidatingSecondChance(false);
+      setAdClickTime(null);
+      if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
+      return;
+    }
+
+    try {
+      const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
+        p_user_id: profile?.id,
+        p_mise_cp: costCP,
+        p_gain_cp: 0,
+        p_jeu_nom: 'Quick Calc Second Chance',
+      });
+
+      if (rpcError || !result?.success) {
+        throw new Error(result?.message || 'Erreur lors du prélèvement de la seconde chance');
+      }
+
+      // Seconde chance accordée
+      setSecondChanceUsed(true);
+      isProcessingRef.current = false;
+      const nextTime = getQuestionTimeMs(questionsAnswered + 1);
+      setTimeRemaining(nextTime);
+      setInitialTime(nextTime);
+      setInput('');
+      setStatus('playing');
+      playSound('beep');
+    } catch (err: unknown) {
+      setAdErrorMsg(err instanceof Error ? err.message : 'Erreur de seconde chance');
+    } finally {
+      setValidatingSecondChance(false);
+      setAdClickTime(null);
+      if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
+      void init();
+    }
+  }, [init, profile?.id, profile?.jetons_cp, questionsAnswered]);
+
+  // Écoute de retour du joueur sur le jeu
   useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && status === 'lost' && !secondChanceUsed) {
-        const startTimeStr = localStorage.getItem('second_chance_start_time');
-        if (!startTimeStr) return;
-
-        localStorage.removeItem('second_chance_start_time');
-        const startTime = parseInt(startTimeStr, 10);
-        const elapsedTime = Date.now() - startTime;
-
-        if (elapsedTime < REQUIRED_AD_TIME_MS) {
-          alert(`Seconde chance annulée : Vous devez rester au moins 6 secondes sur la page sponsorisée (temps effectué : ${(elapsedTime / 1000).toFixed(1)}s).`);
-          return;
-        }
-
-        const feeSecondChance = Math.floor(lockedBetRef.current * 0.5);
-        if ((profile?.jetons_cp || 0) < feeSecondChance) {
-          alert('Solde CP insuffisant pour appliquer la seconde chance.');
-          return;
-        }
-
-        setProcessingSecondChance(true);
-        try {
-          const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-            p_user_id: profile?.id,
-            p_mise_cp: feeSecondChance,
-            p_gain_cp: 0,
-            p_jeu_nom: 'Quick Calc Seconde Chance',
-          });
-
-          if (rpcError || !result?.success) {
-            throw new Error(result?.message || 'Erreur lors du prélèvement de la seconde chance.');
-          }
-
-          setSecondChanceUsed(true);
-          isProcessingRef.current = false;
-          
-          const currentCount = questionsAnswered;
-          const nextTime = getQuestionTimeMs(currentCount + 1);
-          setTimeRemaining(nextTime);
-          setInitialTime(nextTime);
-          setInput('');
-          setQuestion(generateMathQuestion(currentCount));
-          setStatus('playing');
-          playSound('beep');
-
-          void init();
-        } catch (err: unknown) {
-          alert(err instanceof Error ? err.message : 'Erreur lors de l’activation de la seconde chance');
-        } finally {
-          setProcessingSecondChance(false);
-        }
+    const checkAdReturn = () => {
+      const storedTime = localStorage.getItem('ad_click_timestamp');
+      const activeTime = adClickTime || (storedTime ? Number(storedTime) : null);
+      if (activeTime && status === 'lost') {
+        void handleVerifySecondChance(activeTime);
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAdReturn();
+      }
     };
-  }, [init, profile?.id, profile?.jetons_cp, questionsAnswered, secondChanceUsed, status]);
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', checkAdReturn);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', checkAdReturn);
+    };
+  }, [adClickTime, handleVerifySecondChance, status]);
+
+  const handleTriggerAdClick = () => {
+    const costCP = Math.floor(lockedBetRef.current * 0.5);
+    if ((profile?.jetons_cp || 0) < costCP) {
+      setAdErrorMsg(`Solde insuffisant. Vous devez avoir au moins ${costCP} CP.`);
+      return;
+    }
+
+    const now = Date.now();
+    setAdClickTime(now);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ad_click_timestamp', now.toString());
+    }
+
+    window.open('https://omg10.com/4/11431323', '_blank');
+  };
 
   useEffect(() => {
     if (status !== 'playing') return;
@@ -473,9 +497,13 @@ function QuickCalcGameContent() {
     return <div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
   }
 
+  // Calcul pour affichage de la seconde chance
+  const isEligibleForSecondChance = !challengeId && multiplier < 1.0 && !secondChanceUsed;
+  const secondChanceCost = Math.floor(betCP * 0.5);
+
   return (
     <NeonGameShell accent="cyan" className="fixed inset-0 select-none overflow-hidden h-[100dvh]">
-      {/* Script d'injection Monetag */}
+      {/* Monetag Ad Script Integration */}
       <MonetagAdScript zoneId="11431323" />
 
       {/* HEADER COMPACT */}
@@ -604,7 +632,7 @@ function QuickCalcGameContent() {
         )}
       </div>
 
-      {/* ÉCRAN DE FIN DE PARTIE */}
+      {/* ÉCRAN DE FIN DE PARTIE & SECONDE CHANCE */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020617]/98 p-6 text-center backdrop-blur-2xl">
@@ -615,7 +643,8 @@ function QuickCalcGameContent() {
               <h2 className="mb-2 text-3xl font-black uppercase italic tracking-tighter">
                 {challengeId ? 'SCORE TRANSMIS' : status === 'lost' && multiplier < 1.0 ? 'TEMPS ÉCOULÉ' : 'PARTIE TERMINÉE'}
               </h2>
-              <div className="mb-6 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
+
+              <div className="mb-4 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
                 <p className="mb-2 text-[8px] font-bold uppercase italic tracking-[0.3em] text-slate-400">{challengeId ? 'POINTS ARENA' : 'CP REMPORTÉS'}</p>
                 <p className="text-5xl font-black italic tracking-tighter text-white">
                   {challengeId ? questionsAnswered * 100 : Math.floor(betCP * multiplier)}
@@ -623,28 +652,36 @@ function QuickCalcGameContent() {
                 </p>
               </div>
 
-              {/* BOUTON SECONDE CHANCE (Conditionné : Mode Solo uniquement, Multiplicateur < 1.0 et non encore utilisé) */}
-              {!challengeId && status === 'lost' && multiplier < 1.0 && !secondChanceUsed && (
-                <div className="mb-4">
-                  <button
-                    onClick={handleAdRedirection}
-                    disabled={processingSecondChance}
-                    className="w-full relative group overflow-hidden rounded-[1.5rem] bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 p-4 text-white font-black italic shadow-2xl transition-all hover:scale-[1.02] active:scale-95"
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      {processingSecondChance ? (
-                        <Loader2 className="animate-spin" size={20} />
-                      ) : (
-                        <>
-                          <RefreshCw size={18} className="animate-spin-slow" />
-                          <span className="text-sm uppercase tracking-wider">Seconde Chance (-{Math.floor(betCP * 0.5)} CP)</span>
-                          <ExternalLink size={16} />
-                        </>
-                      )}
-                    </div>
-                    <p className="mt-1 text-[8px] font-normal not-italic text-amber-100/80">
-                      Reste 6s sur le site partenaire pour débloquer votre relance
+              {/* OPTION DE SECONDE CHANCE DÉCLENCHÉE SI ÉLIGIBLE */}
+              {isEligibleForSecondChance && (
+                <div className="mb-4 rounded-[1.5rem] border border-amber-500/30 bg-amber-500/10 p-4 backdrop-blur-md">
+                  <div className="flex items-center justify-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
+                    <RefreshCw size={14} className="animate-spin" /> Seconde Chance Disponible
+                  </div>
+                  <p className="text-[10px] text-slate-300 mb-3">
+                    Restez <span className="font-bold text-amber-300">6 secondes</span> sur le site sponsorisé pour continuer la partie.
+                    <br />
+                    <span className="text-[9px] text-amber-400/80">Coût additionnel : -{secondChanceCost} CP (50% de la mise)</span>
+                  </p>
+
+                  {adErrorMsg && (
+                    <p className="mb-2 text-[9px] font-bold text-rose-400 bg-rose-950/50 p-2 rounded-lg border border-rose-800/40">
+                      {adErrorMsg}
                     </p>
+                  )}
+
+                  <button
+                    onClick={handleTriggerAdClick}
+                    disabled={validatingSecondChance}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-sm font-black text-white shadow-lg transition-transform active:scale-95 disabled:opacity-50"
+                  >
+                    {validatingSecondChance ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <>
+                        SECONDE CHANCE (-{secondChanceCost} CP) <ExternalLink size={14} />
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -660,7 +697,7 @@ function QuickCalcGameContent() {
   );
 }
 
-// --- ENVELOPPE SUSPENSE OBLIGATOIRE POUR SEARCH PARAMS EN NEXT.JS 13+ ---
+// --- ENVELOPPE SUSPENSE POUR SEARCH PARAMS EN NEXT.JS 13+ ---
 export default function LaserVaultPage() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
