@@ -22,6 +22,15 @@ interface QuestionItem {
   answers: string[];
 }
 
+interface OpenTDBQuestion {
+  category: string;
+  type: string;
+  difficulty: string;
+  question: string;
+  correct_answer: string;
+  incorrect_answers: string[];
+}
+
 interface HistoryItem {
   label: string;
   score: number;
@@ -73,7 +82,9 @@ function QuizGameContent() {
   const [betCP, setBetCP] = useState<number>(10);
   const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
   const [category, setCategory] = useState<number>(9);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'second_chance_offer' | 'second_chance_pending' | 'maintenance'>('loading');
+  const [status, setStatus] = useState<
+    'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'second_chance_offer' | 'second_chance_pending' | 'maintenance'
+  >('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Maintenance en cours...");
   
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
@@ -88,20 +99,28 @@ function QuizGameContent() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
   
-  // --- ÉTATS POUR LA SECONDE CHANCE ---
+  // --- ÉTATS SECONDE CHANCE & PUB ---
   const [hasUsedSecondChance, setHasUsedSecondChance] = useState<boolean>(false);
   const [adErrorMessage, setAdErrorMessage] = useState<string | null>(null);
   const [isVerifyingAd, setIsVerifyingAd] = useState<boolean>(false);
 
-  // --- REFS POUR ACCÈS EN TEMPS RÉEL ---
+  // --- REFS POUR INTÉGRITÉ ET PERFORMANCE ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
+  const isVerifyingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
+  const adTokenRef = useRef<string | null>(null);
+  const adLeaveTimeRef = useRef<number | null>(null);
+
+  const gameStateRef = useRef({ 
+    multiplier: 0.5, 
+    gameId: null as string | null,
+    status: status
+  });
 
   useEffect(() => {
-    gameStateRef.current = { multiplier, gameId };
-  }, [multiplier, gameId]);
+    gameStateRef.current = { multiplier, gameId, status };
+  }, [multiplier, gameId, status]);
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -119,6 +138,7 @@ function QuizGameContent() {
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
+
       if (type === 'correct') {
         osc.frequency.setValueAtTime(880, ctx.currentTime);
         gain.gain.setValueAtTime(0.04, ctx.currentTime);
@@ -154,7 +174,7 @@ function QuizGameContent() {
   const init = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      const { data: prof } = await supabase.from('profiles').select('id, jetons_cp').eq('id', user.id).single();
       setProfile(prof as ProfileLike | null);
     }
     await checkMaintenance();
@@ -167,11 +187,13 @@ function QuizGameContent() {
     }
   }, [init, challengeId, challengeFee]);
 
-  const translate = async (text: string) => {
+  // Traduction sécurisée avec fallback
+  const translateText = async (text: string): Promise<string> => {
     try {
       const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fr&dt=t&q=${encodeURIComponent(text)}`);
+      if (!res.ok) return text;
       const data = await res.json();
-      return data[0][0][0];
+      return data[0]?.[0]?.[0] || text;
     } catch { 
       return text; 
     }
@@ -203,7 +225,7 @@ function QuizGameContent() {
       });
 
       if (payError) throw new Error(payError.message);
-      if (!result.success) throw new Error(result.message);
+      if (!result?.success) throw new Error(result?.message || "Erreur lors du débit.");
 
       if (challengeId) {
         await supabase.from('challenge_attempts').upsert({
@@ -214,13 +236,30 @@ function QuizGameContent() {
 
       const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
       const raw = await res.json();
-      const processed = await Promise.all(raw.results.map(async (q: any) => {
-        const dQ = decodeURIComponent(q.question);
-        const dC = decodeURIComponent(q.correct_answer);
-        const dI = q.incorrect_answers.map((a: string) => decodeURIComponent(a));
-        const [qF, cF, ...iF] = await Promise.all([translate(dQ), translate(dC), ...dI.map((a: string) => translate(a))]);
-        return { question: qF, correct: cF, answers: [cF, ...iF].sort(() => Math.random() - 0.5) };
-      }));
+
+      if (!raw.results || raw.results.length === 0) {
+        throw new Error("Impossible de charger les questions. Réessayez.");
+      }
+
+      const processed: QuestionItem[] = await Promise.all(
+        raw.results.map(async (q: OpenTDBQuestion) => {
+          const dQ = decodeURIComponent(q.question);
+          const dC = decodeURIComponent(q.correct_answer);
+          const dI = q.incorrect_answers.map((a: string) => decodeURIComponent(a));
+          
+          const [qF, cF, ...iF] = await Promise.all([
+            translateText(dQ), 
+            translateText(dC), 
+            ...dI.map((a: string) => translateText(a))
+          ]);
+          
+          return { 
+            question: qF, 
+            correct: cF, 
+            answers: [cF, ...iF].sort(() => Math.random() - 0.5) 
+          };
+        })
+      );
 
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
@@ -243,12 +282,11 @@ function QuizGameContent() {
       setTimeLeft(difficultySettings.time);
       setExplanation('');
       setStatus('playing');
-      
-      isProcessingRef.current = false;
 
     } catch (e: any) {
       alert(e.message || "Erreur lors du lancement");
       setStatus('idle');
+    } finally {
       isProcessingRef.current = false;
     }
   };
@@ -264,9 +302,11 @@ function QuizGameContent() {
     const currentMult = gameStateRef.current.multiplier;
     const secureBet = lockedBetRef.current;
 
-    if (!currentGameId || !profile?.id) return;
+    if (!currentGameId || !profile?.id) {
+      isProcessingRef.current = false;
+      return;
+    }
 
-    // Calcul du gain final : si la pub n'a pas été prise et le multiplicateur est < 1.0x, on applique (mise * multiplicateur)
     const gainCP = challengeId ? 0 : (calculatedGain !== undefined ? calculatedGain : Math.floor(secureBet * currentMult));
 
     try {
@@ -276,15 +316,13 @@ function QuizGameContent() {
           p_challenge_id: challengeId,
           p_score: sessionScore 
         });
-      } else {
-        if (gainCP > 0) {
-          await supabase.rpc('jouer_partie_cp', {
-            p_user_id: profile.id,
-            p_mise_cp: 0,
-            p_gain_cp: gainCP,
-            p_jeu_nom: 'Quiz Victory / Encaissement'
-          });
-        }
+      } else if (gainCP > 0) {
+        await supabase.rpc('jouer_partie_cp', {
+          p_user_id: profile.id,
+          p_mise_cp: 0,
+          p_gain_cp: gainCP,
+          p_jeu_nom: 'Quiz Victory / Encaissement'
+        });
       }
 
       await supabase.from('quiz_games').update({ 
@@ -301,7 +339,7 @@ function QuizGameContent() {
       
       setStatus(isWin || gainCP > 0 ? 'ended' : 'lost');
     } catch (e) {
-      console.error(e);
+      console.error("Erreur lors de la finalisation :", e);
     } finally {
       isProcessingRef.current = false;
       setShowCorrection(false);
@@ -309,32 +347,35 @@ function QuizGameContent() {
     }
   }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
 
-  // --- LOGIQUE SECONDE CHANCE ET PUB ---
+  // --- LOGIQUE SECONDE CHANCE ET PUB SÉCURISÉE ---
   const triggerSecondChanceAd = () => {
     setAdErrorMessage(null);
-    const leaveTime = Date.now();
-    localStorage.setItem('quiz_ad_leave_time', leaveTime.toString());
-    localStorage.setItem('quiz_ad_game_id', gameId || '');
+    
+    // Génération d'un token éphémère en mémoire pour contrer les falsifications
+    const token = typeof window !== 'undefined' && window.crypto?.randomUUID 
+      ? window.crypto.randomUUID() 
+      : Math.random().toString(36).substring(2);
 
-    // Ouverture du lien Monetag dans un nouvel onglet
-    window.open(MONETAG_AD_URL, '_blank');
+    adTokenRef.current = token;
+    adLeaveTimeRef.current = Date.now();
+
+    window.open(MONETAG_AD_URL, '_blank', 'noopener,noreferrer');
     setStatus('second_chance_pending');
   };
 
   const verifySecondChanceAd = useCallback(async () => {
-    const leaveTimeStr = localStorage.getItem('quiz_ad_leave_time');
-    if (!leaveTimeStr || !profile?.id) return;
-
+    if (isVerifyingRef.current || !profile?.id || !adLeaveTimeRef.current) return;
+    
+    isVerifyingRef.current = true;
     setIsVerifyingAd(true);
-    const leaveTime = parseInt(leaveTimeStr, 10);
-    const elapsedTime = Date.now() - leaveTime;
 
-    // Réinitialisation des clés locales
-    localStorage.removeItem('quiz_ad_leave_time');
-    localStorage.removeItem('quiz_ad_game_id');
+    const elapsedTime = Date.now() - adLeaveTimeRef.current;
+
+    // Reset des tokens de contrôle
+    adLeaveTimeRef.current = null;
+    adTokenRef.current = null;
 
     if (elapsedTime >= MIN_REQUIRED_AD_TIME_MS) {
-      // Temps suffisant écoule (>= 6s) : Déduction de 50% de la mise principale
       const feePenalty = Math.floor(lockedBetRef.current * 0.5);
 
       try {
@@ -345,11 +386,10 @@ function QuizGameContent() {
           p_jeu_nom: 'Quiz Seconde Chance (Pénalité 50%)'
         });
 
-        if (payError || !result.success) {
-          throw new Error(result?.message || "Solde insuffisant pour la déduction de 50%.");
+        if (payError || !result?.success) {
+          throw new Error(result?.message || "Solde insuffisant pour déduire 50% de la mise.");
         }
 
-        // Succès : relance de la question courante
         setHasUsedSecondChance(true);
         setSelectedAnswer(null);
         setShowCorrection(false);
@@ -362,31 +402,30 @@ function QuizGameContent() {
         setStatus('second_chance_offer');
       } finally {
         setIsVerifyingAd(false);
+        isVerifyingRef.current = false;
       }
     } else {
-      // Temps insuffisant (< 6 secondes)
       setIsVerifyingAd(false);
+      isVerifyingRef.current = false;
       const remainingSec = Math.ceil((MIN_REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
-      setAdErrorMessage(`Temps insuffisant sur le lien sponsor (${Math.round(elapsedTime/1000)}s / 6s). Il manquait ${remainingSec}s.`);
+      setAdErrorMessage(`Temps insuffisant sur le lien sponsor (${Math.round(elapsedTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
       setStatus('second_chance_offer');
     }
   }, [profile?.id, difficulty, init]);
 
-  // Écouteur de retour sur l'onglet pour valider la pub
+  // Écouteur de retour sur l'onglet
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && status === 'second_chance_pending') {
+      if (document.visibilityState === 'visible' && gameStateRef.current.status === 'second_chance_pending') {
         void verifySecondChanceAd();
       }
     };
 
     window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
     };
-  }, [status, verifySecondChanceAd]);
+  }, [verifySecondChanceAd]);
 
   const handleAnswer = (ans: string | null) => {
     if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
@@ -398,7 +437,7 @@ function QuizGameContent() {
 
     const difficultySettings = getDifficultySettings(difficulty);
 
-    if (ans === questions[currentIndex].correct) {
+    if (ans === questions[currentIndex]?.correct) {
       playQuizSound('correct');
       const pointsToAdd = difficultySettings.points;
       setSessionScore(prev => prev + pointsToAdd);
@@ -421,17 +460,12 @@ function QuizGameContent() {
       }, 1100);
     } else {
       playQuizSound('wrong');
-      setExplanation(`❌ Mauvaise réponse. Solution : ${questions[currentIndex].correct}`);
+      setExplanation(`❌ Mauvaise réponse. Solution : ${questions[currentIndex]?.correct}`);
 
       setTimeout(() => {
-        // VÉRIFICATION DES CONDITIONS DE SECONDE CHANCE :
-        // 1. Pas en mode Challenge
-        // 2. Multiplicateur < 1.00x
-        // 3. Pas encore utilisé de seconde chance dans cette partie
         if (!challengeId && multiplier < 1.00 && !hasUsedSecondChance) {
           setStatus('second_chance_offer');
         } else {
-          // Encaissement partiel automatique si multiplicateur >= 1.00x ou refus
           const currentGain = Math.floor(lockedBetRef.current * multiplier);
           void finalizeGame(multiplier >= 1.0, currentGain);
         }
@@ -439,7 +473,7 @@ function QuizGameContent() {
     }
   };
 
-  // --- CHRONOMÈTRE ---
+  // --- CHRONOMÈTRE STABILISÉ ---
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -456,7 +490,6 @@ function QuizGameContent() {
   return (
     <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950 relative">
       
-      {/* Script d'affichage publicitaire Monetag en arrière-plan */}
       <MonetagAdScript zoneId="11431323" />
 
       {/* 1. EN-TÊTE FIXE */}
@@ -471,7 +504,9 @@ function QuizGameContent() {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 backdrop-blur-md">
             <Coins size={14} className="text-amber-400 animate-pulse" />
-            <span className="text-xs text-amber-200 tracking-wider">{profile?.jetons_cp?.toLocaleString() || 0} <span className="text-[9px] text-amber-400">CP</span></span>
+            <span className="text-xs text-amber-200 tracking-wider">
+              {profile?.jetons_cp?.toLocaleString() || 0} <span className="text-[9px] text-amber-400">CP</span>
+            </span>
           </div>
 
           <button 
@@ -695,7 +730,7 @@ function QuizGameContent() {
             {status === 'second_chance_pending' ? (
               <div className="w-full py-3.5 bg-amber-500/20 border border-amber-400 text-amber-300 rounded-xl font-black text-xs italic flex items-center justify-center gap-2">
                 <Loader2 size={16} className="animate-spin" />
-                <span>EN ATTENTE DE VERIFICATION (6s MIN)...</span>
+                <span>EN ATTENTE DE VÉRIFICATION (6s MIN)...</span>
               </div>
             ) : (
               <div className="w-full space-y-2">
@@ -780,7 +815,11 @@ function QuizGameContent() {
 
 export default function QuizElite() {
   return (
-    <Suspense fallback={<div className="h-[100dvh] bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-amber-500" size={32} /></div>}>
+    <Suspense fallback={
+      <div className="h-[100dvh] bg-[#020617] flex items-center justify-center">
+        <Loader2 className="animate-spin text-amber-500" size={32} />
+      </div>
+    }>
       <QuizGameContent />
     </Suspense>
   );
