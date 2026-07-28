@@ -4,8 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete } from 'lucide-react';
+import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete, RefreshCw, ExternalLink } from 'lucide-react';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
+import MonetagAdScript from '@/components/ads/MonetagAdScript';
 
 // --- INTERFACES & TYPES ---
 interface ProfileLike {
@@ -22,6 +23,9 @@ interface MathQuestion {
   display: string;
   answer: number;
 }
+
+const MONETAG_URL = "https://omg10.com/4/11431323";
+const REQUIRED_AD_TIME_MS = 6000; // 6 secondes
 
 // --- UTILITAIRES EFFETS ET SON ---
 const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
@@ -66,14 +70,12 @@ const triggerHaptic = () => {
 };
 
 // --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS OPTIMISÉE ---
-// Le temps initial commence à 8s et diminue progressivement jusqu'à un minimum de 2.5s
 const getQuestionTimeMs = (questionNumber: number) => {
   const baseTimeMs = 6000;
   const reductionMs = (questionNumber - 1) * 600;
   return Math.max(2500, baseTimeMs - reductionMs);
 };
 
-// Échelle ajustée pour protéger la marge admin (Rendement sous 1.0x sur les 4 premières questions)
 const getNextMultiplier = (answered: number) => {
   const steps = [0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
   return steps[Math.min(answered, steps.length - 1)] ?? 4.0;
@@ -81,7 +83,6 @@ const getNextMultiplier = (answered: number) => {
 
 // --- GENERATION DES QUESTIONS OPTIMISEE ---
 const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
-  // Ajustement plus rapide des paliers de difficulté
   const level = questionsAnswered < 3 ? 1 : questionsAnswered < 7 ? 2 : 3;
 
   if (level === 1) {
@@ -115,7 +116,6 @@ const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
     return { display: `${left} - ${right}`, answer: left - right };
   }
 
-  // Niveau 3 : Calculs rapides sous forte pression
   const operation = Math.floor(Math.random() * 4);
   if (operation === 0) {
     const a = Math.floor(Math.random() * 80) + 20;
@@ -170,6 +170,10 @@ function QuickCalcGameContent() {
   const [timeRemaining, setTimeRemaining] = useState(6000);
   const [initialTime, setInitialTime] = useState(6000);
   const [shakeAnswer, setShakeAnswer] = useState(false);
+
+  // --- ÉTATS POUR LA SECONDE CHANCE PUB ---
+  const [secondChanceUsed, setSecondChanceUsed] = useState(false);
+  const [processingSecondChance, setProcessingSecondChance] = useState(false);
 
   const lockedBetRef = useRef(0);
   const isProcessingRef = useRef(false);
@@ -230,6 +234,7 @@ function QuickCalcGameContent() {
 
     setLoading(true);
     isProcessingRef.current = false;
+    setSecondChanceUsed(false);
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
@@ -331,6 +336,79 @@ function QuickCalcGameContent() {
     }
   }, [challengeId, init, profile?.id, questionsAnswered]);
 
+  // --- LOGIQUE DE VÉRIFICATION DU RETOUR D'ANNONCE (SECONDE CHANCE) ---
+  const handleAdRedirection = () => {
+    const feeSecondChance = Math.floor(lockedBetRef.current * 0.5);
+    if ((profile?.jetons_cp || 0) < feeSecondChance) {
+      alert(`Solde insuffisant pour la seconde chance. Vous avez besoin de ${feeSecondChance} CP (50% de la mise).`);
+      return;
+    }
+
+    localStorage.setItem('second_chance_start_time', Date.now().toString());
+    window.open(MONETAG_URL, '_blank');
+  };
+
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && status === 'lost' && !secondChanceUsed) {
+        const startTimeStr = localStorage.getItem('second_chance_start_time');
+        if (!startTimeStr) return;
+
+        localStorage.removeItem('second_chance_start_time');
+        const startTime = parseInt(startTimeStr, 10);
+        const elapsedTime = Date.now() - startTime;
+
+        if (elapsedTime < REQUIRED_AD_TIME_MS) {
+          alert(`Seconde chance annulée : Vous devez rester au moins 6 secondes sur la page sponsorisée (temps effectué : ${(elapsedTime / 1000).toFixed(1)}s).`);
+          return;
+        }
+
+        const feeSecondChance = Math.floor(lockedBetRef.current * 0.5);
+        if ((profile?.jetons_cp || 0) < feeSecondChance) {
+          alert('Solde CP insuffisant pour appliquer la seconde chance.');
+          return;
+        }
+
+        setProcessingSecondChance(true);
+        try {
+          const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
+            p_user_id: profile?.id,
+            p_mise_cp: feeSecondChance,
+            p_gain_cp: 0,
+            p_jeu_nom: 'Quick Calc Seconde Chance',
+          });
+
+          if (rpcError || !result?.success) {
+            throw new Error(result?.message || 'Erreur lors du prélèvement de la seconde chance.');
+          }
+
+          setSecondChanceUsed(true);
+          isProcessingRef.current = false;
+          
+          const currentCount = questionsAnswered;
+          const nextTime = getQuestionTimeMs(currentCount + 1);
+          setTimeRemaining(nextTime);
+          setInitialTime(nextTime);
+          setInput('');
+          setQuestion(generateMathQuestion(currentCount));
+          setStatus('playing');
+          playSound('beep');
+
+          void init();
+        } catch (err: unknown) {
+          alert(err instanceof Error ? err.message : 'Erreur lors de l’activation de la seconde chance');
+        } finally {
+          setProcessingSecondChance(false);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [init, profile?.id, profile?.jetons_cp, questionsAnswered, secondChanceUsed, status]);
+
   useEffect(() => {
     if (status !== 'playing') return;
 
@@ -397,6 +475,9 @@ function QuickCalcGameContent() {
 
   return (
     <NeonGameShell accent="cyan" className="fixed inset-0 select-none overflow-hidden h-[100dvh]">
+      {/* Script d'injection Monetag */}
+      <MonetagAdScript zoneId="11431323" />
+
       {/* HEADER COMPACT */}
       <div className="z-50 flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-xl shrink-0">
         <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-200 active:scale-90">
@@ -534,13 +615,40 @@ function QuickCalcGameContent() {
               <h2 className="mb-2 text-3xl font-black uppercase italic tracking-tighter">
                 {challengeId ? 'SCORE TRANSMIS' : status === 'lost' && multiplier < 1.0 ? 'TEMPS ÉCOULÉ' : 'PARTIE TERMINÉE'}
               </h2>
-              <div className="mb-8 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
+              <div className="mb-6 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
                 <p className="mb-2 text-[8px] font-bold uppercase italic tracking-[0.3em] text-slate-400">{challengeId ? 'POINTS ARENA' : 'CP REMPORTÉS'}</p>
                 <p className="text-5xl font-black italic tracking-tighter text-white">
                   {challengeId ? questionsAnswered * 100 : Math.floor(betCP * multiplier)}
                   <span className="ml-1 text-base font-black text-emerald-400">{challengeId ? 'PTS' : 'CP'}</span>
                 </p>
               </div>
+
+              {/* BOUTON SECONDE CHANCE (Conditionné : Mode Solo uniquement, Multiplicateur < 1.0 et non encore utilisé) */}
+              {!challengeId && status === 'lost' && multiplier < 1.0 && !secondChanceUsed && (
+                <div className="mb-4">
+                  <button
+                    onClick={handleAdRedirection}
+                    disabled={processingSecondChance}
+                    className="w-full relative group overflow-hidden rounded-[1.5rem] bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 p-4 text-white font-black italic shadow-2xl transition-all hover:scale-[1.02] active:scale-95"
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      {processingSecondChance ? (
+                        <Loader2 className="animate-spin" size={20} />
+                      ) : (
+                        <>
+                          <RefreshCw size={18} className="animate-spin-slow" />
+                          <span className="text-sm uppercase tracking-wider">Seconde Chance (-{Math.floor(betCP * 0.5)} CP)</span>
+                          <ExternalLink size={16} />
+                        </>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[8px] font-normal not-italic text-amber-100/80">
+                      Reste 6s sur le site partenaire pour débloquer votre relance
+                    </p>
+                  </button>
+                </div>
+              )}
+
               <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="w-full rounded-[1.5rem] bg-emerald-600 py-4 text-lg font-black italic text-white shadow-xl hover:bg-emerald-500">
                 {challengeId ? 'VOIR LE CLASSEMENT' : 'RETOUR AU HUB'}
               </button>
