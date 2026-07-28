@@ -14,9 +14,9 @@ import {
   HeartPulse, 
   Zap, 
   Sparkles,
-  AlertTriangle 
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
-import RewardedVideo from '@/components/ads/RewardedVideo';
 import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
@@ -40,7 +40,10 @@ interface BiometricGameRecord {
   gain_cp?: number;
 }
 
-type GameStatus = 'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance' | 'watching_ad';
+type GameStatus = 'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance' | 'awaiting_ad_return';
+
+const MONETAG_AD_URL = "https://omg10.com/4/11431323";
+const REQUIRED_AD_TIME_MS = 6000; // 6 secondes
 
 // --- SYSTÈME AUDIO ÉVOLUÉ (Web Audio API) ---
 const playAdvancedSound = (type: 'click' | 'success' | 'fail' | 'cashout' | 'scan') => {
@@ -78,9 +81,9 @@ const playAdvancedSound = (type: 'click' | 'success' | 'fail' | 'cashout' | 'sca
 
       case 'success':
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now); // C5
-        osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
-        osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.08);
+        osc.frequency.setValueAtTime(783.99, now + 0.16);
         gain.gain.setValueAtTime(0.2, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
         osc.start(now);
@@ -108,7 +111,7 @@ const playAdvancedSound = (type: 'click' | 'success' | 'fail' | 'cashout' | 'sca
         break;
     }
   } catch {
-    // Ignorer si l'AudioContext est restreint par le navigateur
+    // Ignorer si bloqué par le navigateur
   }
 };
 
@@ -142,13 +145,13 @@ function BiometricGameContent() {
   const [canRevive, setCanRevive] = useState<boolean>(true);
   const [combo, setCombo] = useState<number>(1);
   const [shakeGrid, setShakeGrid] = useState<boolean>(false);
+  const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
 
-  // 🔒 SÉCURITÉ REFS
+  // REFS
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
 
-  // Synchro des références
   useEffect(() => {
     gameStateRef.current = { multiplier, gameId };
   }, [multiplier, gameId]);
@@ -186,7 +189,70 @@ function BiometricGameContent() {
     init(); 
   }, [init]);
 
-  // --- GÉNÉRATION DES MOTIFS ---
+  // --- VÉRIFICATION DU RETOUR APPRÈS CLIC SUR LA PUB ---
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && status === 'awaiting_ad_return') {
+        const adStartTime = localStorage.getItem('biometric_ad_start_time');
+        if (!adStartTime) {
+          setStatus('lost');
+          return;
+        }
+
+        const elapsedTime = Date.now() - parseInt(adStartTime, 10);
+        localStorage.removeItem('biometric_ad_start_time');
+
+        if (elapsedTime >= REQUIRED_AD_TIME_MS) {
+          // Temps respecté (>= 6s) -> Déduction de 50% de la mise
+          const penaltyFee = Math.floor(lockedBetRef.current * 0.5);
+          
+          if (profile && profile.jetons_cp < penaltyFee) {
+            setAdErrorMsg("Solde insuffisant pour la relance (50% de la mise requis).");
+            setStatus('lost');
+            return;
+          }
+
+          setLoading(true);
+          try {
+            const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
+              p_user_id: profile?.id, 
+              p_mise_cp: penaltyFee, 
+              p_gain_cp: 0, 
+              p_jeu_nom: 'Biometric Revive Fee'
+            });
+
+            if (rpcError || !result?.success) {
+              throw new Error("Erreur de déduction pour la seconde chance.");
+            }
+
+            setCanRevive(false);
+            setCombo(1);
+            setAdErrorMsg(null);
+            isProcessingRef.current = false;
+            setStatus('showing');
+            generatePattern(gridSize);
+            playAdvancedSound('scan');
+            await init();
+          } catch (e: unknown) {
+            const err = e as Error;
+            setAdErrorMsg(err.message || "Échec de l'activation de la seconde chance.");
+            setStatus('lost');
+          } finally {
+            setLoading(false);
+          }
+        } else {
+          const remainingSec = Math.ceil((REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
+          setAdErrorMsg(`Temps insuffisant sur le lien pub (${remainingSec}s manquantes). Seconde chance annulée.`);
+          setStatus('lost');
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [status, profile, gridSize, init]);
+
+  // --- GENERATION DES MOTIFS ---
   const generatePattern = useCallback((size: number) => {
     const cells = size * size;
     const count = size + 1; 
@@ -202,7 +268,7 @@ function BiometricGameContent() {
     playAdvancedSound('scan');
   }, []);
   
-  // --- GESTION DES CHRONOMÈTRES ET TIMERS DE PHASE ---
+  // --- TIMERS DE PHASE ---
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     let intervalId: NodeJS.Timeout;
@@ -239,6 +305,7 @@ function BiometricGameContent() {
     
     triggerHapticFeedback([20, 50, 20]);
     setLoading(true);
+    setAdErrorMsg(null);
     isProcessingRef.current = false;
 
     try {
@@ -279,7 +346,6 @@ function BiometricGameContent() {
     }
   };
 
-  // --- CLIC SUR UNE CASE DU SCANNER ---
   const handleCellClick = (idx: number) => {
     if (status !== 'input' || userPattern.includes(idx)) return;
     
@@ -287,7 +353,6 @@ function BiometricGameContent() {
     const nextUserPattern = [...userPattern, idx];
     setUserPattern(nextUserPattern);
 
-    // Erreur de sélection
     if (!pattern.includes(idx)) { 
       handleFailure(); 
       return; 
@@ -296,7 +361,6 @@ function BiometricGameContent() {
     playAdvancedSound('click');
     setCombo(prev => prev + 1);
 
-    // Séquence validée avec succès
     if (nextUserPattern.length === pattern.length) {
       playAdvancedSound('success');
       setSessionsSolved(s => s + 1);
@@ -312,25 +376,17 @@ function BiometricGameContent() {
     }
   };
 
-  // --- GESTION DE L'ÉCHEC ---
   const handleFailure = async () => {
     triggerHapticFeedback([100, 50, 100]);
     playAdvancedSound('fail');
     setShakeGrid(true);
     setTimeout(() => setShakeGrid(false), 500);
 
-    const currentMult = gameStateRef.current.multiplier;
-    // Zone Safe (< 1.0) hors challenge : sauvetage automatique
-    if (currentMult < 1.0 && !challengeId) {
-      finalizeGame(true);
-      return;
-    }
-
     setCombo(1);
     setStatus('lost');
   };
 
-  // --- FIN DE PARTIE SÉCURISÉE (CASH OUT OU PERTE) ---
+  // --- CRAMPONNER LE GAIN ET CLÔTURER ---
   const finalizeGame = async (wasAutoSaved: boolean = false) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -353,7 +409,7 @@ function BiometricGameContent() {
       specialEventMultiplier: 1
     });
 
-    if (wasAutoSaved || status === 'input' || status === 'showing') {
+    if (wasAutoSaved || status === 'input' || status === 'showing' || status === 'lost') {
       gainFinal = economy.payout;
     } else {
       gainFinal = 0;
@@ -390,17 +446,13 @@ function BiometricGameContent() {
     }
   };
 
-  // --- RECONSTITUTION PAR PUBLICITÉ ---
-  const handleAdComplete = () => {
-    setCanRevive(false);
-    setCombo(1);
-    isProcessingRef.current = false;
-    setStatus('showing');
-    generatePattern(gridSize);
-    playAdvancedSound('scan');
+  // --- DÉCLENCHEMENT DU CLIC SUR LA PUB ---
+  const handleAdClick = () => {
+    localStorage.setItem('biometric_ad_start_time', Date.now().toString());
+    setStatus('awaiting_ad_return');
+    window.open(MONETAG_AD_URL, '_blank');
   };
 
-  // --- MODIFICATEURS DE MISE RAPIDE ---
   const adjustBet = (amount: number | 'max' | 'double') => {
     triggerHapticFeedback(10);
     if (!profile) return;
@@ -427,17 +479,12 @@ function BiometricGameContent() {
     );
   }
 
+  // Calcul du gain si abandon en zone < 1.00
+  const currentCalculatedGain = Math.floor(lockedBetRef.current * multiplier);
+
   return (
     <NeonGameShell accent="emerald" className="h-screen font-sans select-none">
       
-      {status === 'watching_ad' && (
-        <RewardedVideo 
-          onReward={handleAdComplete} 
-          onClose={() => setStatus('lost')} 
-          zoneId={5848554} 
-        />
-      )}
-
       {/* EN-TÊTE UX / SOLDE */}
       <div className="flex items-center justify-between border-b border-white/10 bg-black/40 px-5 py-4 backdrop-blur-xl z-50">
         <button 
@@ -485,7 +532,6 @@ function BiometricGameContent() {
                   <p className="text-[9px] uppercase tracking-[0.2em] text-emerald-400/70 mt-1">Analyse Iris • Empreinte Digitale</p>
                 </div>
 
-                {/* Saisie & Boutons de mise rapide */}
                 <div className="mb-6 rounded-3xl border border-white/10 bg-black/60 p-4 shadow-inner">
                   <p className="mb-2 text-[10px] font-bold tracking-widest text-emerald-400 uppercase">
                     {challengeId ? 'FRAIS DE MISSION' : 'VOTRE MISE CP'}
@@ -521,7 +567,6 @@ function BiometricGameContent() {
         ) : (
           <div className="w-full max-w-sm flex flex-col items-center">
             
-            {/* HUD / TABLEAU DE BORD EN JEU */}
             <div className="mb-4 grid w-full grid-cols-4 gap-2">
               <div className="rounded-2xl border border-white/10 bg-black/40 p-2.5 text-center backdrop-blur-xl">
                 <p className="text-[8px] font-bold uppercase tracking-widest text-zinc-400">Timer</p>
@@ -550,7 +595,6 @@ function BiometricGameContent() {
               </div>
             </div>
 
-            {/* BARRE DE TIMING VISUELLE EN PHASE INPUT */}
             <div className="w-full mb-3 h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
               <motion.div 
                 className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400"
@@ -570,13 +614,11 @@ function BiometricGameContent() {
               <ProgressBar value={Math.min(100, (sessionsSolved / 6) * 100)} max={100} label="Progression Séquence" accent="emerald" />
             </div>
 
-            {/* MATRICE DU SCANNER */}
             <motion.div 
               animate={shakeGrid ? { x: [-10, 10, -10, 10, 0] } : {}}
               transition={{ duration: 0.4 }}
               className="relative rounded-[2.5rem] border border-cyan-400/20 bg-black/60 p-4 shadow-[0_0_50px_rgba(34,211,238,0.15)]"
             >
-              {/* Laser de Scan */}
               <motion.div 
                 animate={{ y: [0, 240, 0] }} 
                 transition={{ repeat: Infinity, duration: 2.2, ease: 'linear' }} 
@@ -610,7 +652,6 @@ function BiometricGameContent() {
               </div>
             </motion.div>
 
-            {/* ACTION ENCAISSEMENT */}
             {multiplier >= 1.0 && (
               <motion.button 
                 initial={{ y: 20, opacity: 0 }} 
@@ -625,64 +666,97 @@ function BiometricGameContent() {
             
             {multiplier < 1.0 && !challengeId && (
               <p className="mt-4 text-[9px] text-emerald-400/60 tracking-[0.2em] font-bold uppercase animate-pulse">
-                Mode Sauvetage Actif : Mise protégée
+                Zone de sauvetage : {currentCalculatedGain} CP
               </p>
             )}
           </div>
         )}
       </div>
 
-      {/* MODAL DE RÉSULTAT */}
+      {/* MODAL DE RÉSULTAT ET DE SECONDE CHANCE */}
       <AnimatePresence>
-        {(status === 'lost' || status === 'won') && (
+        {(status === 'lost' || status === 'won' || status === 'awaiting_ad_return') && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }} 
             animate={{ opacity: 1, scale: 1 }} 
             exit={{ opacity: 0, scale: 0.9 }}
             className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center"
           >
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
-              {status === 'lost' ? <ShieldX size={40} className="text-rose-500" /> : <ShieldCheck size={40} className="text-emerald-400" />}
-            </div>
-            
-            <h2 className="text-3xl font-black italic mb-1 tracking-tight uppercase text-white">
-              {status === 'lost' ? 'Scan Interrompu' : 'Analyse Validée'}
-            </h2>
-            
-            <div className="bg-white/5 p-6 rounded-3xl w-full max-w-xs my-6 border border-white/10 shadow-inner">
-              <p className="text-[10px] text-zinc-400 mb-1 font-bold tracking-widest uppercase">Gains Obtenus</p>
-              <p className="text-5xl font-black italic tracking-tighter text-white">
-                {status === 'won' ? Math.floor(lockedBetRef.current * multiplier) : 0} 
-                <span className="text-sm text-emerald-400 ml-1 font-bold">CP</span>
-              </p>
-            </div>
+            {status === 'awaiting_ad_return' ? (
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 size={56} className="animate-spin text-cyan-400" />
+                <h3 className="text-xl font-bold text-white uppercase tracking-wider">Vérification du lien sponsorisé...</h3>
+                <p className="text-xs text-zinc-400 max-w-xs">
+                  Passez au moins 6 secondes sur la page sponsorisée ouverte dans votre nouvel onglet puis revenez ici.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
+                  {status === 'lost' ? <ShieldX size={40} className="text-rose-500" /> : <ShieldCheck size={40} className="text-emerald-400" />}
+                </div>
+                
+                <h2 className="text-3xl font-black italic mb-1 tracking-tight uppercase text-white">
+                  {status === 'lost' ? 'Scan Interrompu' : 'Analyse Validée'}
+                </h2>
 
-            <div className="flex flex-col gap-3 w-full max-w-xs">
-              {status === 'lost' && canRevive && (
-                <button 
-                  onClick={() => setStatus('watching_ad')} 
-                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-2xl font-black text-sm active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
-                >
-                  <HeartPulse className="animate-pulse" size={18}/> SECONDE CHANCE (PUB)
-                </button>
-              )}
-              
-              <button 
-                onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} 
-                className="w-full py-3.5 bg-white/5 text-slate-300 hover:bg-white/10 rounded-2xl font-bold text-xs active:scale-95 transition-all"
-              >
-                QUITTER LE JEU
-              </button>
-              
-              {status === 'won' && (
-                <button 
-                  onClick={() => setStatus('idle')} 
-                  className="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black text-base active:scale-95 shadow-lg shadow-emerald-500/20"
-                >
-                  NOUVELLE SESSION
-                </button>
-              )}
-            </div>
+                {adErrorMsg && (
+                  <p className="mt-2 text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-xl max-w-xs">
+                    {adErrorMsg}
+                  </p>
+                )}
+                
+                <div className="bg-white/5 p-5 rounded-3xl w-full max-w-xs my-4 border border-white/10 shadow-inner">
+                  <p className="text-[10px] text-zinc-400 mb-1 font-bold tracking-widest uppercase">Gains Obtenus</p>
+                  <p className="text-4xl font-black italic tracking-tighter text-white">
+                    {status === 'won' ? Math.floor(lockedBetRef.current * multiplier) : currentCalculatedGain} 
+                    <span className="text-sm text-emerald-400 ml-1 font-bold">CP</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3 w-full max-w-xs">
+                  {/* Option Pub / Seconde Chance si : Perdu + Mode hors challenge + Multiplicateur < 1.00 */}
+                  {status === 'lost' && canRevive && !challengeId && multiplier < 1.00 && (
+                    <button 
+                      onClick={handleAdClick} 
+                      className="w-full py-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-2xl font-black text-xs active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-950/40 border border-cyan-300/30"
+                    >
+                      <span className="flex items-center gap-2">
+                        <HeartPulse className="animate-pulse" size={18}/> SECONDE CHANCE (LIEN PUB) <ExternalLink size={14} />
+                      </span>
+                      <span className="text-[9px] font-medium text-cyan-100/80">
+                        Coût : {Math.floor(lockedBetRef.current * 0.5)} CP (50% de la mise) • Visite 6s
+                      </span>
+                    </button>
+                  )}
+                  
+                  {status === 'lost' && (
+                    <button 
+                      onClick={() => finalizeGame(true)} 
+                      className="w-full py-3.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 rounded-2xl font-bold text-xs active:scale-95 transition-all"
+                    >
+                      RÉCUPÉRER MES {currentCalculatedGain} CP & QUITTER
+                    </button>
+                  )}
+
+                  {status === 'won' && (
+                    <button 
+                      onClick={() => setStatus('idle')} 
+                      className="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black text-base active:scale-95 shadow-lg shadow-emerald-500/20"
+                    >
+                      NOUVELLE SESSION
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => router.push(challengeId ? '/client/challenges' : '/client/home')} 
+                    className="w-full py-3 text-zinc-400 hover:text-white rounded-2xl font-bold text-xs active:scale-95 transition-all"
+                  >
+                    QUITTER LE JEU
+                  </button>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
