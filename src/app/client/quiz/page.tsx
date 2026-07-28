@@ -6,11 +6,12 @@ import {
   Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
   Laptop, Film, Award, BookOpen, MapPin, Construction,
   Coins, Target, Sparkles, Volume2, VolumeX, 
-  History, Zap, ExternalLink, RefreshCw
+  History, Zap, ExternalLink, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getGameEconomySettings } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
+import MonetagAdScript from '@/components/ads/MonetagAdScript';
 
 // --- TYPES & INTERFACES ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
@@ -31,6 +32,9 @@ interface ProfileLike {
   id: string;
   jetons_cp?: number;
 }
+
+const MONETAG_AD_URL = "https://omg10.com/4/11431323";
+const MIN_REQUIRED_AD_TIME_MS = 6000; // 6 secondes obligatoires sur la pub
 
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
   facile: { time: 13, step: 0.15, points: 10 },
@@ -58,9 +62,6 @@ const CATEGORIES = [
   { id: 22, name: "Géo", icon: <MapPin size={14}/> },
 ];
 
-const MONETAG_AD_URL = "https://omg10.com/4/11431323";
-const MIN_AD_TIME_MS = 6000; // 6 secondes requises sur la publicité
-
 function QuizGameContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,7 +73,7 @@ function QuizGameContent() {
   const [betCP, setBetCP] = useState<number>(10);
   const [difficulty, setDifficulty] = useState<DifficultyType>('intermédiaire');
   const [category, setCategory] = useState<number>(9);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'maintenance'>('loading');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'ended' | 'lost' | 'second_chance_offer' | 'second_chance_pending' | 'maintenance'>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Maintenance en cours...");
   
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
@@ -86,19 +87,17 @@ function QuizGameContent() {
   const [muted, setMuted] = useState<boolean>(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
-
-  // --- ÉTATS SECONDE CHANCE ---
+  
+  // --- ÉTATS POUR LA SECONDE CHANCE ---
   const [hasUsedSecondChance, setHasUsedSecondChance] = useState<boolean>(false);
-  const [isAdPending, setIsAdPending] = useState<boolean>(false);
-  const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
-  const [secondChanceLoading, setSecondChanceLoading] = useState<boolean>(false);
+  const [adErrorMessage, setAdErrorMessage] = useState<string | null>(null);
+  const [isVerifyingAd, setIsVerifyingAd] = useState<boolean>(false);
 
-  // --- REFS POUR ACCÈS EN TEMPS RÉEL ET SÉCURITÉ ---
+  // --- REFS POUR ACCÈS EN TEMPS RÉEL ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
-  const adClickTimestampRef = useRef<number | null>(null);
 
   useEffect(() => {
     gameStateRef.current = { multiplier, gameId };
@@ -190,7 +189,7 @@ function QuizGameContent() {
     isProcessingRef.current = true;
     setStatus('loading');
     setHasUsedSecondChance(false);
-    setAdErrorMsg(null);
+    setAdErrorMessage(null);
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
@@ -254,6 +253,7 @@ function QuizGameContent() {
     }
   };
 
+  // --- FINALISATION DU JEU ---
   const finalizeGame = useCallback(async (isWin: boolean, calculatedGain?: number) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -266,7 +266,8 @@ function QuizGameContent() {
 
     if (!currentGameId || !profile?.id) return;
 
-    const gainCP = challengeId ? 0 : (calculatedGain !== undefined ? calculatedGain : (isWin ? Math.floor(secureBet * currentMult) : 0));
+    // Calcul du gain final : si la pub n'a pas été prise et le multiplicateur est < 1.0x, on applique (mise * multiplicateur)
+    const gainCP = challengeId ? 0 : (calculatedGain !== undefined ? calculatedGain : Math.floor(secureBet * currentMult));
 
     try {
       if (challengeId) {
@@ -281,7 +282,7 @@ function QuizGameContent() {
             p_user_id: profile.id,
             p_mise_cp: 0,
             p_gain_cp: gainCP,
-            p_jeu_nom: 'Quiz Victory'
+            p_jeu_nom: 'Quiz Victory / Encaissement'
           });
         }
       }
@@ -308,88 +309,84 @@ function QuizGameContent() {
     }
   }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
 
-  // --- GESTION DE LA SECONDE CHANCE VIA PUBLICITÉ ---
-  const applySecondChance = async () => {
-    if (!profile || secondChanceLoading) return;
+  // --- LOGIQUE SECONDE CHANCE ET PUB ---
+  const triggerSecondChanceAd = () => {
+    setAdErrorMessage(null);
+    const leaveTime = Date.now();
+    localStorage.setItem('quiz_ad_leave_time', leaveTime.toString());
+    localStorage.setItem('quiz_ad_game_id', gameId || '');
 
-    const secondChanceFee = Math.floor(lockedBetRef.current * 0.5);
-
-    if ((profile.jetons_cp || 0) < secondChanceFee) {
-      setAdErrorMsg(`Solde insuffisant. Il vous faut ${secondChanceFee} CP pour la seconde chance.`);
-      setIsAdPending(false);
-      return;
-    }
-
-    setSecondChanceLoading(true);
-    setAdErrorMsg(null);
-
-    try {
-      // Préparation et déduction des 50% de la mise
-      const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
-        p_user_id: profile.id,
-        p_mise_cp: secondChanceFee,
-        p_gain_cp: 0,
-        p_jeu_nom: 'Quiz Seconde Chance (50%)'
-      });
-
-      if (payError) throw new Error(payError.message);
-      if (!result.success) throw new Error(result.message);
-
-      // On accorde la seconde chance
-      setHasUsedSecondChance(true);
-      setIsAdPending(false);
-      setSelectedAnswer(null);
-      setShowCorrection(false);
-      setExplanation('🔄 Seconde Chance activée ! Reprise de la partie...');
-
-      // Réinitialisation du temps pour la question courante
-      const difficultySettings = getDifficultySettings(difficulty);
-      setTimeLeft(difficultySettings.time);
-      setStatus('playing');
-
-      await init(); // Mettre à jour le solde utilisateur
-    } catch (e: any) {
-      setAdErrorMsg(e.message || "Erreur lors du traitement de la seconde chance.");
-    } finally {
-      setSecondChanceLoading(false);
-    }
-  };
-
-  const handleOpenAdForSecondChance = () => {
-    const fee = Math.floor(lockedBetRef.current * 0.5);
-    if ((profile?.jetons_cp || 0) < fee) {
-      setAdErrorMsg(`Solde insuffisant (${fee} CP requis).`);
-      return;
-    }
-
-    adClickTimestampRef.current = Date.now();
-    setIsAdPending(true);
-    setAdErrorMsg(null);
-
-    // Ouverture de la pub dans un nouvel onglet
+    // Ouverture du lien Monetag dans un nouvel onglet
     window.open(MONETAG_AD_URL, '_blank');
+    setStatus('second_chance_pending');
   };
 
-  // Écouteur pour vérifier si l'utilisateur est resté au moins 6s sur le lien pub
+  const verifySecondChanceAd = useCallback(async () => {
+    const leaveTimeStr = localStorage.getItem('quiz_ad_leave_time');
+    if (!leaveTimeStr || !profile?.id) return;
+
+    setIsVerifyingAd(true);
+    const leaveTime = parseInt(leaveTimeStr, 10);
+    const elapsedTime = Date.now() - leaveTime;
+
+    // Réinitialisation des clés locales
+    localStorage.removeItem('quiz_ad_leave_time');
+    localStorage.removeItem('quiz_ad_game_id');
+
+    if (elapsedTime >= MIN_REQUIRED_AD_TIME_MS) {
+      // Temps suffisant écoule (>= 6s) : Déduction de 50% de la mise principale
+      const feePenalty = Math.floor(lockedBetRef.current * 0.5);
+
+      try {
+        const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
+          p_user_id: profile.id,
+          p_mise_cp: feePenalty,
+          p_gain_cp: 0,
+          p_jeu_nom: 'Quiz Seconde Chance (Pénalité 50%)'
+        });
+
+        if (payError || !result.success) {
+          throw new Error(result?.message || "Solde insuffisant pour la déduction de 50%.");
+        }
+
+        // Succès : relance de la question courante
+        setHasUsedSecondChance(true);
+        setSelectedAnswer(null);
+        setShowCorrection(false);
+        setExplanation("🔄 Seconde chance activée (-50% de mise déduit) !");
+        setTimeLeft(getDifficultySettings(difficulty).time);
+        setStatus('playing');
+        void init();
+      } catch (err: any) {
+        setAdErrorMessage(err.message || "Erreur de paiement lors de l'activation.");
+        setStatus('second_chance_offer');
+      } finally {
+        setIsVerifyingAd(false);
+      }
+    } else {
+      // Temps insuffisant (< 6 secondes)
+      setIsVerifyingAd(false);
+      const remainingSec = Math.ceil((MIN_REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
+      setAdErrorMessage(`Temps insuffisant sur le lien sponsor (${Math.round(elapsedTime/1000)}s / 6s). Il manquait ${remainingSec}s.`);
+      setStatus('second_chance_offer');
+    }
+  }, [profile?.id, difficulty, init]);
+
+  // Écouteur de retour sur l'onglet pour valider la pub
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isAdPending && adClickTimestampRef.current) {
-        const timeSpent = Date.now() - adClickTimestampRef.current;
-        if (timeSpent >= MIN_AD_TIME_MS) {
-          void applySecondChance();
-        } else {
-          const remainingSec = Math.ceil((MIN_AD_TIME_MS - timeSpent) / 1000);
-          setAdErrorMsg(`Temps insuffisant ! Vous devez passer au moins 6s sur la page (${remainingSec}s manquantes).`);
-          setIsAdPending(false);
-        }
+      if (document.visibilityState === 'visible' && status === 'second_chance_pending') {
+        void verifySecondChanceAd();
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
-  }, [isAdPending, profile]);
+  }, [status, verifySecondChanceAd]);
 
   const handleAnswer = (ans: string | null) => {
     if (showCorrection || status !== 'playing' || isProcessingRef.current) return;
@@ -424,24 +421,25 @@ function QuizGameContent() {
       }, 1100);
     } else {
       playQuizSound('wrong');
-      setExplanation(`❌ Mauvaise réponse. La solution était : ${questions[currentIndex].correct}`);
-      
+      setExplanation(`❌ Mauvaise réponse. Solution : ${questions[currentIndex].correct}`);
+
       setTimeout(() => {
-        const currentGain = Math.floor(lockedBetRef.current * multiplier);
-        
-        // Si le multiplicateur est >= 1.0x ou qu'on est en Mode Challenge ou qu'on a déjà utilisé la 2e chance, on termine.
-        if (multiplier >= 1.0 || challengeId || hasUsedSecondChance) {
-          void finalizeGame(multiplier >= 1.0, currentGain);
+        // VÉRIFICATION DES CONDITIONS DE SECONDE CHANCE :
+        // 1. Pas en mode Challenge
+        // 2. Multiplicateur < 1.00x
+        // 3. Pas encore utilisé de seconde chance dans cette partie
+        if (!challengeId && multiplier < 1.00 && !hasUsedSecondChance) {
+          setStatus('second_chance_offer');
         } else {
-          // Éligible à la seconde chance : écran de défaite temporaire pour rejouer via pub
-          setStatus('lost');
-          if (timerRef.current) clearInterval(timerRef.current);
+          // Encaissement partiel automatique si multiplicateur >= 1.00x ou refus
+          const currentGain = Math.floor(lockedBetRef.current * multiplier);
+          void finalizeGame(multiplier >= 1.0, currentGain);
         }
       }, 1400);
     }
   };
 
-  // --- CHRONOMÈTRE / TEMPS ÉCOULÉ ---
+  // --- CHRONOMÈTRE ---
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -455,12 +453,12 @@ function QuizGameContent() {
     };
   }, [timeLeft, status, showCorrection]);
 
-  const secondChanceCost = Math.floor(lockedBetRef.current * 0.5);
-  const isEligibleForSecondChance = !challengeId && multiplier < 1.0 && !hasUsedSecondChance;
-
   return (
-    <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950">
+    <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950 relative">
       
+      {/* Script d'affichage publicitaire Monetag en arrière-plan */}
+      <MonetagAdScript zoneId="11431323" />
+
       {/* 1. EN-TÊTE FIXE */}
       <div className="flex-none flex items-center justify-between h-12">
         <button 
@@ -661,9 +659,71 @@ function QuizGameContent() {
 
           </div>
 
+        ) : status === 'second_chance_offer' || status === 'second_chance_pending' ? (
+
+          /* OFFRE DE SECONDE CHANCE */
+          <div className="flex flex-col items-center justify-center h-full space-y-3 text-center my-auto p-2">
+            <div className="w-14 h-14 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-400 flex items-center justify-center animate-bounce">
+              <RefreshCw size={28} />
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black italic text-amber-400">SECONDE CHANCE DISPONIBLE !</h2>
+              <p className="text-[10px] text-slate-300 mt-1">
+                Visitez le lien partenaire pendant <span className="text-amber-400 font-bold">au moins 6 secondes</span> pour rejouer cette question.
+              </p>
+            </div>
+
+            <div className="bg-slate-900/90 w-full p-3 rounded-xl border border-amber-400/30 text-left space-y-1.5">
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-slate-400">Coût de la seconde chance :</span>
+                <span className="text-rose-400 font-bold">-{Math.floor(lockedBetRef.current * 0.5)} CP (50%)</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-slate-400">Solde actuel :</span>
+                <span className="text-amber-300 font-bold">{profile?.jetons_cp || 0} CP</span>
+              </div>
+            </div>
+
+            {adErrorMessage && (
+              <div className="flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/30 p-2 rounded-lg text-rose-300 text-[9px] text-left">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>{adErrorMessage}</span>
+              </div>
+            )}
+
+            {status === 'second_chance_pending' ? (
+              <div className="w-full py-3.5 bg-amber-500/20 border border-amber-400 text-amber-300 rounded-xl font-black text-xs italic flex items-center justify-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                <span>EN ATTENTE DE VERIFICATION (6s MIN)...</span>
+              </div>
+            ) : (
+              <div className="w-full space-y-2">
+                <button 
+                  onClick={triggerSecondChanceAd}
+                  disabled={isVerifyingAd || (profile?.jetons_cp || 0) < Math.floor(lockedBetRef.current * 0.5)}
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-emerald-400 text-black rounded-xl font-black text-xs italic shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <ExternalLink size={16} />
+                  <span>PRENDRE LA SECONDE CHANCE</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    const currentGain = Math.floor(lockedBetRef.current * multiplier);
+                    void finalizeGame(multiplier >= 1.0, currentGain);
+                  }}
+                  className="w-full py-2.5 bg-white/5 border border-white/10 text-slate-400 rounded-xl font-black text-[10px] italic hover:bg-white/10 transition-all"
+                >
+                  ABANDONNER & ENCAISSER ({Math.floor(lockedBetRef.current * multiplier)} CP)
+                </button>
+              </div>
+            )}
+          </div>
+
         ) : (
 
-          /* ÉCRAN DE RÉSULTAT / SECONDE CHANCE */
+          /* ÉCRAN DE RÉSULTAT */
           <div className="flex flex-col items-center justify-center h-full space-y-3 text-center my-auto">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 ${status === 'lost' && !challengeId ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
               {status === 'lost' && !challengeId ? <XCircle size={36}/> : <Trophy size={36}/>}
@@ -671,80 +731,25 @@ function QuizGameContent() {
 
             <div>
               <h2 className={`text-2xl font-black italic ${status === 'lost' && !challengeId ? 'text-rose-500' : 'text-emerald-400'}`}>
-                {challengeId ? "MISSION TERMINÉE" : (status === 'lost' ? "ÉCHEC" : "VICTOIRE")}
+                {challengeId ? "MISSION TERMINÉE" : (status === 'lost' ? "PERDU" : "VICTOIRE")}
               </h2>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {challengeId ? "POINTS AJOUTÉS AU SCORE" : "GAINS OBTENUS"}
               </p>
             </div>
 
-            <div className="bg-slate-900/90 w-full p-3.5 rounded-xl border border-white/10">
+            <div className="bg-slate-900/90 w-full p-4 rounded-xl border border-white/10">
               <span className="text-3xl font-black text-white italic">
                 {challengeId ? sessionScore : Math.floor(lockedBetRef.current * multiplier)}
               </span>
               <span className="text-xs text-amber-400 ml-1">{challengeId ? 'PTS' : 'CP'}</span>
             </div>
 
-            {/* BLOC SECONDE CHANCE PAYANTE VIA SPONSOR/PUB */}
-            {status === 'lost' && isEligibleForSecondChance && (
-              <div className="w-full bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex flex-col gap-2">
-                <div className="flex items-center justify-between text-left">
-                  <div>
-                    <span className="text-xs text-amber-300 font-black block">SECONDE CHANCE</span>
-                    <span className="text-[9px] text-slate-300 font-normal">
-                      Coût : <strong className="text-amber-400">{secondChanceCost} CP</strong> (50% de la mise)
-                    </span>
-                  </div>
-                  <Sparkles size={18} className="text-amber-400 animate-spin" />
-                </div>
-
-                <p className="text-[8px] text-slate-400 text-left leading-snug">
-                  Visitez notre partenaire pendant au moins 6s pour débloquer votre seconde chance.
-                </p>
-
-                {adErrorMsg && (
-                  <p className="text-[9px] text-rose-400 font-bold text-center bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/20">
-                    {adErrorMsg}
-                  </p>
-                )}
-
-                <button
-                  onClick={handleOpenAdForSecondChance}
-                  disabled={isAdPending || secondChanceLoading}
-                  className="w-full py-2.5 bg-amber-400 text-black rounded-lg font-black text-xs italic shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                >
-                  {secondChanceLoading ? (
-                    <Loader2 className="animate-spin" size={14} />
-                  ) : isAdPending ? (
-                    <>
-                      <RefreshCw className="animate-spin" size={14} />
-                      <span>EN ATTENTE DES 6 SECONDES...</span>
-                    </>
-                  ) : (
-                    <>
-                      <ExternalLink size={14} />
-                      <span>S'ÉQUIPER DE LA SECONDE CHANCE</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-
             <button 
-              onClick={() => {
-                if (challengeId) {
-                  router.push('/client/rank?challengeId=' + challengeId);
-                } else {
-                  if (status === 'lost' && isEligibleForSecondChance) {
-                    void finalizeGame(false, 0);
-                  } else {
-                    setStatus('idle');
-                  }
-                }
-              }} 
-              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-sm italic shadow-md active:scale-95 transition-all"
+              onClick={() => challengeId ? router.push('/client/rank?challengeId=' + challengeId) : setStatus('idle')} 
+              className="w-full py-3 bg-emerald-500 text-black rounded-xl font-black text-sm italic shadow-md active:scale-95 transition-all"
             >
-              {challengeId ? 'RETOURNER AU CLASSEMENT' : (status === 'lost' ? 'ABANDONNER & QUITTER' : 'REJOUER UNE PARTIE')}
+              {challengeId ? 'RETOURNER AU CLASSEMENT' : 'REJOUER UNE PARTIE'}
             </button>
           </div>
 
