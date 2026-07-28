@@ -316,7 +316,7 @@ export default function FinancePage() {
                     <ArrowUpCircle size={14} /> Dépôt rapide (Min 25 HTG)
                   </div>
                   <h3 className="text-xl font-black tracking-tight text-white uppercase">Ajouter des fonds</h3>
-                  <p className="mt-2 max-w-xs text-sm text-slate-300">Achetez des jetons de jeu à partir de 25 HTG seulement.</p>
+                  <p className="mt-2 max-w-xs text-sm text-slate-300">Faire une demande dépôt à partir de 25 HTG seulement.</p>
                 </div>
                 <div className="rounded-2xl border border-emerald-400/30 bg-slate-950/40 p-3 text-emerald-400">
                   <ArrowUpCircle size={24} />
@@ -335,7 +335,7 @@ export default function FinancePage() {
                       <ArrowDownCircle size={14} /> Retrait instantané (Min 100 HTG)
                     </div>
                     <h3 className="text-xl font-black tracking-tight text-white uppercase">Sortir votre solde</h3>
-                    <p className="mt-2 max-w-xs text-sm text-slate-400">Convertissez vos points en argent réel dès 100 HTG.</p>
+                    <p className="mt-2 max-w-xs text-sm text-slate-400">Faire une demande de retrait à partir de 100 HTG.</p>
                   </div>
                   <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 text-amber-400">
                     <ArrowDownCircle size={24} />
