@@ -1,116 +1,124 @@
-'use client'
+"use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, MessageSquareHeart, Paperclip, Send, ExternalLink } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { ChatService } from '@/services/chat'
-import { ChatBotService } from '@/services/chatBot'
-import { type ChatMessage, parseMessageContent } from '@/types/chat'
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, MessageSquareHeart, Paperclip, Send, ExternalLink } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { ChatService } from '@/services/chat';
+import { ChatBotService } from '@/services/chatBot';
+import { type ChatMessage, parseMessageContent } from '@/types/chat';
 
 export default function ClientChatPage() {
-  const router = useRouter()
-  const [userId, setUserId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loading, setLoading] = useState(true)
-  const [composerText, setComposerText] = useState('')
-  const [isSending, setIsSending] = useState(false)
-  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const router = useRouter();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [composerText, setComposerText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    let isMounted = true
-    let channel: ReturnType<typeof supabase.channel> | null = null
+    let isMounted = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const initChat = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser()
+      const { data: { user }, error } = await supabase.auth.getUser();
       if (error || !user?.id) {
-        if (isMounted) setLoading(false)
-        return
+        if (isMounted) setLoading(false);
+        return;
       }
 
-      const currentUserId = user.id
-      if (isMounted) setUserId(currentUserId)
+      const currentUserId = user.id;
+      if (isMounted) setUserId(currentUserId);
 
       try {
-        const history = await ChatService.fetchMessagesForClient(supabase, currentUserId)
-        if (!isMounted) return
-        setMessages(history)
-        await ChatService.markConversationReadByClient(supabase, currentUserId)
+        const history = await ChatService.fetchMessagesForClient(supabase, currentUserId);
+        if (!isMounted) return;
+        setMessages(history);
+        await ChatService.markConversationReadByClient(supabase, currentUserId);
       } catch (error) {
-        console.error('Erreur lors du chargement de l’historique client:', error)
+        console.error('Erreur lors du chargement de l’historique client:', error);
       } finally {
-        if (isMounted) setLoading(false)
+        if (isMounted) setLoading(false);
       }
 
       channel = ChatService.subscribeToClientMessages(supabase, currentUserId, (msg) => {
-        if (!isMounted) return
-        setMessages((prev) => [...prev, msg])
-      })
-    }
+        if (!isMounted) return;
+        setMessages((prev) => [...prev, msg]);
+      });
+    };
 
-    void initChat()
+    void initChat();
 
     return () => {
-      isMounted = false
+      isMounted = false;
       if (channel) {
-        supabase.removeChannel(channel)
+        supabase.removeChannel(channel);
       }
-    }
-  }, [])
+    };
+  }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
 
   const handleSendText = async () => {
-    if (!userId || !composerText.trim() || isSending) return
+    if (!userId || !composerText.trim() || isSending) return;
 
-    const content = composerText.trim()
-    setComposerText('')
-    setIsSending(true)
+    const content = composerText.trim();
+    setComposerText('');
+    setIsSending(true);
 
     try {
-      const sent = await ChatService.sendTextMessage(supabase, userId, content, false)
+      const sent = await ChatService.sendTextMessage(supabase, userId, content, false);
       if (sent) {
-        setMessages((prev) => [...prev, sent])
+        setMessages((prev) => [...prev, sent]);
 
-        // Déclenchement automatique du Bot de réponse si c'est le premier message ou une demande d'aide
+        // Déclenchement automatique du Bot de réponse si éligible
         setTimeout(async () => {
-          const autoReply = ChatBotService.generateAutoReply(content)
-          const botMessage = await ChatService.sendTextMessage(supabase, userId, autoReply.content, true)
-          if (botMessage) {
-            setMessages((prev) => [...prev, botMessage])
+          // Transmission de userId pour la gestion de session anti-répétition
+          const autoReply = ChatBotService.generateAutoReply(content, userId);
+
+          // VÉRIFICATION CRITIQUE : Seul un autoReply non null est envoyé
+          if (autoReply !== null) {
+            // Conversion de l'objet reply en chaîne JSON pour la persistance dans Supabase
+            const replyContent = JSON.stringify(autoReply);
+            const botMessage = await ChatService.sendTextMessage(supabase, userId, replyContent, true);
+            
+            if (botMessage) {
+              setMessages((prev) => [...prev, botMessage]);
+            }
           }
-        }, 1000)
+        }, 1000);
       }
     } catch (error) {
-      console.error('Erreur lors de l’envoi du texte:', error)
-      setComposerText(content)
+      console.error('Erreur lors de l’envoi du texte:', error);
+      setComposerText(content);
     } finally {
-      setIsSending(false)
+      setIsSending(false);
     }
-  }
+  };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!userId || !file || isSending) return
+    const file = event.target.files?.[0];
+    if (!userId || !file || isSending) return;
 
-    setIsSending(true)
+    setIsSending(true);
 
     try {
-      const sent = await ChatService.uploadImageAndSend(supabase, userId, file, false)
+      const sent = await ChatService.uploadImageAndSend(supabase, userId, file, false);
       if (sent) {
-        setMessages((prev) => [...prev, sent])
+        setMessages((prev) => [...prev, sent]);
       }
     } catch (error) {
-      console.error('Erreur lors du téléversement de l’image:', error)
+      console.error('Erreur lors du téléversement de l’image:', error);
     } finally {
-      setIsSending(false)
-      event.target.value = ''
+      setIsSending(false);
+      event.target.value = '';
     }
-  }
+  };
 
-  const supportTitle = useMemo(() => 'Support Chif-Pam', [])
+  const supportTitle = useMemo(() => 'Support Chif-Pam', []);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#020617] text-slate-100">
@@ -145,8 +153,8 @@ export default function ClientChatPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {messages.map((msg) => {
-              const parsed = parseMessageContent(msg.content)
-              const isClientMessage = msg.is_admin_message === false
+              const parsed = parseMessageContent(msg.content);
+              const isClientMessage = msg.is_admin_message === false;
 
               return (
                 <div key={msg.id} className={`flex ${isClientMessage ? 'justify-end' : 'justify-start'}`}>
@@ -173,7 +181,7 @@ export default function ClientChatPage() {
                     </div>
                   </div>
                 </div>
-              )
+              );
             })}
             <div ref={bottomRef} />
           </div>
@@ -187,8 +195,8 @@ export default function ClientChatPage() {
             onChange={(event) => setComposerText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                void handleSendText()
+                event.preventDefault();
+                void handleSendText();
               }
             }}
             placeholder="Écrire un message..."
@@ -209,5 +217,5 @@ export default function ClientChatPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }
