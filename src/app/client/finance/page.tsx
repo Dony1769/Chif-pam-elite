@@ -7,22 +7,20 @@ import { ClientFinanceService } from '@/services/client/finance';
 import { 
   ArrowUpCircle, ArrowDownCircle, Upload, Loader2, Clock, 
   Smartphone, ChevronLeft, TrendingUp, Wallet, CheckCircle2, Copy, Sparkles, ShieldCheck,
-  AlertCircle, X
+  AlertCircle, X, ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
 const AdsterraNativeBanner = dynamic(() => import('@/components/ads/AdsterraNativeBanner'), { ssr: false });
 
-// Structure pour la gestion des notifications UI (Toasts)
 type ToastState = {
   type: 'success' | 'error';
   message: string;
 } | null;
 
-// Constantes de configuration financière
-const MIN_DEPOSIT_AMOUNT = 25; // Minimum 25 HTG
-const MIN_WITHDRAWAL_AMOUNT = 100; // Minimum 100 HTG
+const MIN_DEPOSIT_AMOUNT = 25;
+const MIN_WITHDRAWAL_AMOUNT = 100;
 
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
@@ -43,7 +41,6 @@ export default function FinancePage() {
   const [copied, setCopied] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // État du Toast de notification
   const [toast, setToast] = useState<ToastState>(null);
 
   const [amount, setAmount] = useState("");
@@ -90,16 +87,15 @@ export default function FinancePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Traitement de la demande de Dépôt
+  // Traitement du Dépôt (Automatisé pour MonCash, Manuel pour NatCash)
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
 
-    if (!file || isNaN(amt) || !method) {
-      return showToast("error", "Veuillez remplir tous les champs et importer une preuve de paiement.");
+    if (isNaN(amt) || !method) {
+      return showToast("error", "Veuillez préciser un montant valide.");
     }
 
-    // Vérification du dépôt minimum (25 HTG)
     if (amt < MIN_DEPOSIT_AMOUNT) {
       return showToast("error", `Le montant minimum pour un dépôt est de ${MIN_DEPOSIT_AMOUNT} HTG.`);
     }
@@ -109,6 +105,30 @@ export default function FinancePage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error('Session expirée. Veuillez vous reconnecter.');
+      }
+
+      // --- BRANCHE MONCASH AUTOMATISÉE ---
+      if (method === 'MonCash') {
+        const response = await fetch('/api/payments/moncash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: amt, userId: user.id }),
+        });
+
+        const resData = await response.json();
+
+        if (!response.ok || !resData.paymentUrl) {
+          throw new Error(resData.error || 'Erreur lors de la préparation du paiement MonCash.');
+        }
+
+        // Redirection vers le portail de paiement sécurisé MonCash
+        window.location.href = resData.paymentUrl;
+        return;
+      }
+
+      // --- BRANCHE MANUELLE (NatCash) ---
+      if (!file) {
+        throw new Error("Veuillez importer une preuve de paiement pour le dépôt NatCash.");
       }
 
       const fileExt = file.name.split('.').pop();
@@ -135,7 +155,7 @@ export default function FinancePage() {
     }
   };
 
-  // Traitement de la demande de Retrait
+  // Traitement du Retrait
   const handleWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
@@ -149,7 +169,6 @@ export default function FinancePage() {
       return showToast("error", "Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
     
-    // Vérification du retrait minimum (100 HTG)
     if (amt < MIN_WITHDRAWAL_AMOUNT) {
       return showToast("error", `Le montant minimum pour un retrait est de ${MIN_WITHDRAWAL_AMOUNT} HTG.`);
     }
@@ -350,7 +369,7 @@ export default function FinancePage() {
           </motion.div>
         )}
 
-        {/* Choix de la méthode de paiement */}
+        {/* Sélection du mode de paiement */}
         {(view === 'deposit' || view === 'withdrawal') && !method && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -393,24 +412,42 @@ export default function FinancePage() {
             onSubmit={handleDeposit}
             className="mt-5 space-y-5 rounded-[2rem] border border-emerald-400/20 bg-slate-900/70 p-5 shadow-[0_24px_80px_rgba(16,185,129,0.13)] backdrop-blur-2xl sm:p-6"
           >
-            <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400">Dépôt via {method}</p>
-                  <h3 className="mt-1 text-lg font-black text-white">Numéro du compte récepteur</h3>
+            {/* Si c'est MonCash, on affiche l'option automatique */}
+            {method === 'MonCash' ? (
+              <div className="rounded-[1.5rem] border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-emerald-400">Paiement direct MonCash Connect</p>
+                    <h3 className="mt-1 text-base font-bold text-white">Recharge automatique & instantanée</h3>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-500/20 p-3 text-emerald-400">
+                    <Sparkles size={20} />
+                  </div>
                 </div>
-                <div className="rounded-2xl bg-emerald-500/10 p-3 text-emerald-400">
-                  <Wallet size={18} />
+                <p className="mt-2 text-xs text-slate-300">
+                  Vous serez redirigé vers la passerelle MonCash pour effectuer la transaction. Votre solde sera crédité immédiatement après confirmation.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400">Dépôt via {method}</p>
+                    <h3 className="mt-1 text-lg font-black text-white">Numéro du compte récepteur</h3>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-500/10 p-3 text-emerald-400">
+                    <Wallet size={18} />
+                  </div>
+                </div>
+                <div
+                  onClick={() => copyToClipboard(adminNumbers[method])}
+                  className="mt-4 flex cursor-pointer items-center justify-between rounded-[1.2rem] border border-emerald-400/30 bg-emerald-500/10 px-4 py-3.5 transition-all duration-200 hover:bg-emerald-500/20 active:scale-[0.99]"
+                >
+                  <span className="text-base font-bold tracking-wider text-white">{adminNumbers[method]}</span>
+                  {copied ? <CheckCircle2 size={18} className="text-emerald-400" /> : <Copy size={18} className="text-slate-400" />}
                 </div>
               </div>
-              <div
-                onClick={() => copyToClipboard(adminNumbers[method])}
-                className="mt-4 flex cursor-pointer items-center justify-between rounded-[1.2rem] border border-emerald-400/30 bg-emerald-500/10 px-4 py-3.5 transition-all duration-200 hover:bg-emerald-500/20 active:scale-[0.99]"
-              >
-                <span className="text-base font-bold tracking-wider text-white">{adminNumbers[method]}</span>
-                {copied ? <CheckCircle2 size={18} className="text-emerald-400" /> : <Copy size={18} className="text-slate-400" />}
-              </div>
-            </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex justify-between items-center">
@@ -429,20 +466,32 @@ export default function FinancePage() {
               />
             </div>
 
-            <label className="flex w-full flex-col items-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 p-6 text-center cursor-pointer transition-all duration-200 hover:border-emerald-400/40">
-              <Upload size={24} className="mb-2 text-emerald-400" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
-                {file ? file.name : 'Importer le reçu ou capture d\'écran'}
-              </span>
-              <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" />
-            </label>
+            {/* Téléversement de reçu requis uniquement pour NatCash */}
+            {method !== 'MonCash' && (
+              <label className="flex w-full flex-col items-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 p-6 text-center cursor-pointer transition-all duration-200 hover:border-emerald-400/40">
+                <Upload size={24} className="mb-2 text-emerald-400" />
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
+                  {file ? file.name : 'Importer le reçu ou capture d\'écran'}
+                </span>
+                <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" />
+              </label>
+            )}
 
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setMethod(null)} className="flex-1 rounded-[1.2rem] border border-white/10 bg-slate-950/70 py-4 text-xs font-black uppercase tracking-widest text-slate-300 transition-all duration-200 hover:bg-slate-800/70">
                 Annuler
               </button>
-              <button type="submit" disabled={issubmitting} className="flex-1 rounded-[1.2rem] bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 text-xs font-black uppercase tracking-widest text-slate-950 shadow-[0_20px_40px_rgba(16,185,129,0.2)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70">
-                {issubmitting ? <Loader2 className="mx-auto animate-spin" /> : 'Confirmer le Dépôt'}
+              <button type="submit" disabled={issubmitting} className="flex-1 inline-flex items-center justify-center gap-2 rounded-[1.2rem] bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 text-xs font-black uppercase tracking-widest text-slate-950 shadow-[0_20px_40px_rgba(16,185,129,0.2)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70">
+                {issubmitting ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : method === 'MonCash' ? (
+                  <>
+                    <span>Payer via MonCash</span>
+                    <ExternalLink size={14} />
+                  </>
+                ) : (
+                  'Confirmer le Dépôt'
+                )}
               </button>
             </div>
           </motion.form>
