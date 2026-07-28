@@ -1,6 +1,6 @@
 /**
  * Service de Bot de support automatique pour Chif-Pam
- * Fichier : src/services/chatBot.ts
+ * Fichier :src/services/chatBot.ts
  */
 
 export interface PresetResponse {
