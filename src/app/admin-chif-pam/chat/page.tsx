@@ -1,16 +1,26 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Loader2, MessageSquare, Paperclip, Send, Image as ImageIcon, Zap, ExternalLink } from 'lucide-react'
+import { Loader2, MessageSquare, Paperclip, Send, Image as ImageIcon, Zap, ExternalLink, User } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ChatService } from '@/services/chat'
 import { PRESET_RESPONSES, PresetResponse } from '@/services/chatBot'
-import { type ChatMessage, type AdminConversation, parseMessageContent } from '@/types/chat'
+import { type ChatMessage, parseMessageContent } from '@/types/chat'
+
+// Structure enrichie pour inclure les détails du profil utilisateur
+interface AdminConversationWithProfile {
+  client_id: string
+  last_message_content: string | null
+  last_message_created_at: string | null
+  admin_unread_count: number
+  username?: string | null
+  phone?: string | null
+}
 
 export default function AdminChatPage() {
   const router = useRouter()
-  const [conversations, setConversations] = useState<AdminConversation[]>([])
+  const [conversations, setConversations] = useState<AdminConversationWithProfile[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
@@ -19,29 +29,63 @@ export default function AdminChatPage() {
   const [showPresets, setShowPresets] = useState(false)
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
+  // 1. Chargement des conversations et enrichissement avec la table profiles
+  const refreshConversations = async () => {
+    try {
+      const rawConversations = await ChatService.fetchAdminConversations(supabase)
+
+      if (!rawConversations || rawConversations.length === 0) {
+        setConversations([])
+        return
+      }
+
+      // Extraction des IDs clients uniques
+      const clientIds = rawConversations.map((c) => c.client_id)
+
+      // Récupération des pseudos depuis la table 'profiles'
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username, phone')
+        .in('id', clientIds)
+
+      // Fusion des données de profil avec la liste des conversations
+      const enrichedConversations: AdminConversationWithProfile[] = rawConversations.map((conv) => {
+        const profile = profiles?.find((p) => p.id === conv.client_id)
+        return {
+          ...conv,
+          username: profile?.username || null,
+          phone: profile?.phone || null,
+        }
+      })
+
+      setConversations(enrichedConversations)
+
+      return enrichedConversations
+    } catch (error) {
+      console.error('Erreur lors du chargement des conversations admin:', error)
+    }
+  }
+
+  // Chargement initial des conversations
   useEffect(() => {
     let isMounted = true
 
-    const loadConversations = async () => {
-      try {
-        const data = await ChatService.fetchAdminConversations(supabase)
-        if (!isMounted) return
-        setConversations(data)
-        if (!selectedClientId && data.length > 0) {
-          setSelectedClientId(data[0].client_id)
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des conversations admin:', error)
+    const initConversations = async () => {
+      const convs = await refreshConversations()
+      if (isMounted && convs && convs.length > 0 && !selectedClientId) {
+        // Sélectionne le premier client uniquement au tout premier chargement
+        setSelectedClientId(convs[0].client_id)
       }
     }
 
-    void loadConversations()
+    void initConversations()
 
     return () => {
       isMounted = false
     }
-  }, [selectedClientId])
+  }, [])
 
+  // 2. Chargement des messages pour le client sélectionné et abonnement Realtime
   useEffect(() => {
     if (!selectedClientId) {
       setMessages([])
@@ -57,10 +101,10 @@ export default function AdminChatPage() {
         const data = await ChatService.fetchMessagesForClient(supabase, selectedClientId)
         if (!isMounted) return
         setMessages(data)
+
+        // Marquer comme lu pour ce client précis
         await ChatService.markConversationReadByAdmin(supabase, selectedClientId)
-        const refreshedConversations = await ChatService.fetchAdminConversations(supabase)
-        if (!isMounted) return
-        setConversations(refreshedConversations)
+        await refreshConversations()
       } catch (error) {
         console.error('Erreur lors du chargement des messages client:', error)
       } finally {
@@ -72,19 +116,16 @@ export default function AdminChatPage() {
 
     void loadMessages()
 
+    // Écoute en temps réel ciblée exclusivement sur le client sélectionné
     channel = ChatService.subscribeToClientMessages(supabase, selectedClientId, (msg) => {
       if (!isMounted) return
       setMessages((prev) => [...prev, msg])
+
       void ChatService.markConversationReadByAdmin(supabase, selectedClientId).catch((error) => {
         console.error('Erreur lors du marquage comme lu:', error)
       })
-      void ChatService.fetchAdminConversations(supabase)
-        .then((next) => {
-          if (isMounted) setConversations(next)
-        })
-        .catch((error) => {
-          console.error('Erreur lors du rafraîchissement des conversations:', error)
-        })
+      
+      void refreshConversations()
     })
 
     return () => {
@@ -95,10 +136,12 @@ export default function AdminChatPage() {
     }
   }, [selectedClientId])
 
+  // Scroll automatique au bas du fil de discussion
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  // 3. Envoi de message texte / action (Ciblé uniquement sur selectedClientId)
   const handleSendText = async (customContent?: string) => {
     if (!selectedClientId || isSending) return
     const contentToSend = customContent || composerText.trim()
@@ -108,11 +151,11 @@ export default function AdminChatPage() {
     if (!customContent) setComposerText('')
 
     try {
+      // Envoi du message à un unique client destinataire
       const sentMessage = await ChatService.sendTextMessage(supabase, selectedClientId, contentToSend, true)
       if (sentMessage) {
         setMessages((prev) => [...prev, sentMessage])
-        const refreshedConversations = await ChatService.fetchAdminConversations(supabase)
-        setConversations(refreshedConversations)
+        await refreshConversations()
       }
     } catch (error) {
       console.error('Erreur lors de l’envoi du message:', error)
@@ -123,6 +166,7 @@ export default function AdminChatPage() {
     }
   }
 
+  // Envoi de réponse rapide préconçue
   const handleSendPreset = (preset: PresetResponse) => {
     const actionPayload = JSON.stringify({
       type: 'action',
@@ -133,6 +177,7 @@ export default function AdminChatPage() {
     void handleSendText(actionPayload)
   }
 
+  // Upload d'image
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!selectedClientId || !file || isSending) return
@@ -143,8 +188,7 @@ export default function AdminChatPage() {
       const sentMessage = await ChatService.uploadImageAndSend(supabase, selectedClientId, file, true)
       if (sentMessage) {
         setMessages((prev) => [...prev, sentMessage])
-        const refreshedConversations = await ChatService.fetchAdminConversations(supabase)
-        setConversations(refreshedConversations)
+        await refreshConversations()
       }
     } catch (error) {
       console.error('Erreur lors du téléversement du fichier:', error)
@@ -156,8 +200,17 @@ export default function AdminChatPage() {
 
   const selectedConversation = conversations.find((item) => item.client_id === selectedClientId) ?? null
 
+  // Fonction utilitaire pour le nom d'affichage
+  const getDisplayName = (conv: AdminConversationWithProfile | null) => {
+    if (!conv) return 'Sélectionnez une conversation'
+    if (conv.username) return `@${conv.username}`
+    if (conv.phone) return `+${conv.phone}`
+    return `Client (${conv.client_id.substring(0, 8)}...)`
+  }
+
   return (
     <div className="flex h-full min-h-screen flex-col bg-[#020617] text-slate-100 md:flex-row">
+      {/* Barre latérale des conversations */}
       <aside className="w-full border-b border-white/10 bg-slate-950/80 md:w-[320px] md:border-b-0 md:border-r">
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -172,6 +225,8 @@ export default function AdminChatPage() {
           ) : (
             conversations.map((conversation) => {
               const isActive = conversation.client_id === selectedClientId
+              const displayName = getDisplayName(conversation)
+
               return (
                 <button
                   key={conversation.client_id}
@@ -182,7 +237,9 @@ export default function AdminChatPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-semibold text-slate-100">{conversation.client_id}</span>
+                    <span className="truncate font-semibold text-slate-100">
+                      {displayName}
+                    </span>
                     {conversation.admin_unread_count > 0 && (
                       <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white">
                         {conversation.admin_unread_count}
@@ -209,15 +266,21 @@ export default function AdminChatPage() {
         </div>
       </aside>
 
+      {/* Zone principale de chat */}
       <main className="flex min-h-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/70 px-4 py-3">
-          <div>
-            <h1 className="text-base font-semibold text-white">
-              {selectedConversation ? selectedConversation.client_id : 'Sélectionnez une conversation'}
-            </h1>
-            <p className="text-sm text-slate-400">
-              {selectedConversation ? 'Conversation active' : 'Choisissez un client dans la liste'}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+              <User size={20} />
+            </div>
+            <div>
+              <h1 className="text-base font-semibold text-white">
+                {getDisplayName(selectedConversation)}
+              </h1>
+              <p className="text-xs text-slate-400">
+                {selectedConversation ? `ID: ${selectedConversation.client_id}` : 'Choisissez un client dans la liste'}
+              </p>
+            </div>
           </div>
         </header>
 
@@ -275,7 +338,7 @@ export default function AdminChatPage() {
             </section>
 
             <footer className="relative border-t border-white/10 bg-slate-950/80 p-3">
-              {/* Menu de réponses rapides (Preset Responses) */}
+              {/* Menu des réponses rapides */}
               {showPresets && (
                 <div className="absolute bottom-full left-3 right-3 mb-2 rounded-2xl border border-white/10 bg-slate-900/95 p-3 shadow-xl backdrop-blur-xl">
                   <p className="mb-2 text-xs font-bold uppercase tracking-wider text-emerald-400">
