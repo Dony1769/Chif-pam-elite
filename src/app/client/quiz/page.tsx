@@ -109,10 +109,12 @@ function QuizGameContent() {
   const isProcessingRef = useRef<boolean>(false);
   const isVerifyingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   
-  // Horodatage sécurisé pour la pub
+  // Horodatage sécurisé et temps cumulé pour éviter la fraude de visibilité
   const adStartTimestampRef = useRef<number | null>(null);
-  const adTokenRef = useRef<string | null>(null);
+  const adAccumulatedTimeRef = useRef<number>(0);
+  const lastBlurTimestampRef = useRef<number | null>(null);
 
   const gameStateRef = useRef({ 
     multiplier: 0.5, 
@@ -130,12 +132,22 @@ function QuizGameContent() {
     }
   };
 
+  // Gestion optimisée du sous-système audio avec recyclage de l'AudioContext
   const playQuizSound = (type: 'correct' | 'wrong' | 'tick') => {
     if (muted || typeof window === 'undefined') return;
     try {
       const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
@@ -157,7 +169,7 @@ function QuizGameContent() {
       osc.start();
       osc.stop(ctx.currentTime + 0.2);
     } catch {
-      // Audio ignoré si non supporté
+      // Audio ignoré en cas de blocage navigateur
     }
   };
 
@@ -189,6 +201,11 @@ function QuizGameContent() {
     if (challengeId && challengeFee) {
       setBetCP(Number(challengeFee));
     }
+    return () => {
+      if (audioCtxRef.current) {
+        void audioCtxRef.current.close();
+      }
+    };
   }, [init, challengeId, challengeFee]);
 
   const translateText = async (text: string): Promise<string> => {
@@ -238,6 +255,11 @@ function QuizGameContent() {
     if (betCP < 10 && !challengeId) { 
       alert("Mise minimum : 10 CP"); 
       return; 
+    }
+
+    if ((profile.jetons_cp || 0) < betCP && !challengeId) {
+      alert("Solde insuffisant de CP pour lancer la partie.");
+      return;
     }
     
     isProcessingRef.current = true;
@@ -353,41 +375,38 @@ function QuizGameContent() {
     }
   }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
 
-  // --- DÉCLENCHEMENT SECONDE CHANCE ET PUB ---
+  // --- DÉCLENCHEMENT SECONDE CHANCE ET PUB ANTI-FRAUDE ---
   const triggerSecondChanceAd = () => {
     setAdErrorMessage(null);
-    
-    const uniqueToken = typeof window !== 'undefined' && window.crypto?.randomUUID 
-      ? window.crypto.randomUUID() 
-      : Math.random().toString(36).substring(2);
-
-    adTokenRef.current = uniqueToken;
+    adAccumulatedTimeRef.current = 0;
     adStartTimestampRef.current = Date.now();
+    lastBlurTimestampRef.current = Date.now();
 
     window.open(MONETAG_AD_URL, '_blank', 'noopener,noreferrer');
     setStatus('second_chance_pending');
   };
 
-  // VÉRIFICATION SÉCURISÉE DE LA PUB ET DÉMARRAGE DIRECT AU NIVEAU 1
+  // VÉRIFICATION DE LEURS TEMPS HORS ONGLET (POUR S'ASSURER DU VISIONNAGE)
   const verifySecondChanceAd = useCallback(async () => {
-    if (isVerifyingRef.current || !profile?.id || !adStartTimestampRef.current || !adTokenRef.current) return;
+    if (isVerifyingRef.current || !profile?.id || !adStartTimestampRef.current) return;
     
     isVerifyingRef.current = true;
     setIsVerifyingAd(true);
 
-    const elapsedTime = Date.now() - adStartTimestampRef.current;
+    // Calcul du temps écoulé réel passé hors de la page principale
+    if (lastBlurTimestampRef.current) {
+      adAccumulatedTimeRef.current += (Date.now() - lastBlurTimestampRef.current);
+      lastBlurTimestampRef.current = null;
+    }
 
-    // Réinitialisation des verrous temporaires
+    const totalSpentTime = adAccumulatedTimeRef.current;
     adStartTimestampRef.current = null;
-    adTokenRef.current = null;
 
-    if (elapsedTime >= MIN_REQUIRED_AD_TIME_MS) {
-      // Calcul de la pénalité de 50% sur la mise initiale
+    if (totalSpentTime >= MIN_REQUIRED_AD_TIME_MS) {
       const initialBet = lockedBetRef.current;
       const feePenalty = Math.floor(initialBet * 0.5);
 
       try {
-        // 1. Déduction effective de la pénalité sur le solde Supabase
         const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: feePenalty,
@@ -399,19 +418,16 @@ function QuizGameContent() {
           throw new Error(result?.message || "Erreur de solde lors du débit de la pénalité de 50%.");
         }
 
-        // 2. Mise à jour de la nouvelle mise retenue pour la session
         const newRemainingBet = initialBet - feePenalty;
         lockedBetRef.current = newRemainingBet;
 
-        // 3. Chargement de nouvelles questions pour recommencer
         const newQuestions = await fetchQuestions(category);
 
-        // 4. RÉINITIALISATION DU JEU ET DÉMARRAGE IMMÉDIAT AU NIVEAU 1 (QUESTION 1/5)
         setHasUsedSecondChance(true);
         setQuestions(newQuestions);
-        setCurrentIndex(0); // Retour direct au niveau 1
-        setSessionScore(0); // Score remis à zéro
-        setMultiplier(0.5); // Multiplicateur de départ
+        setCurrentIndex(0);
+        setSessionScore(0);
+        setMultiplier(0.5);
         setSelectedAnswer(null);
         setShowCorrection(false);
         
@@ -419,8 +435,6 @@ function QuizGameContent() {
         setTimeLeft(difficultySettings.time);
 
         setExplanation(`🔄 Seconde chance activée ! Pénalité de 50% déduite. Nouvelle mise : ${newRemainingBet} CP.`);
-        
-        // Bascule directe en mode jeu (pas de retour au menu principal)
         setStatus('playing');
         void init();
       } catch (err: unknown) {
@@ -434,16 +448,20 @@ function QuizGameContent() {
     } else {
       setIsVerifyingAd(false);
       isVerifyingRef.current = false;
-      const remainingSec = Math.ceil((MIN_REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
-      setAdErrorMessage(`Temps insuffisant sur l'annonce (${Math.round(elapsedTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
+      const remainingSec = Math.ceil((MIN_REQUIRED_AD_TIME_MS - totalSpentTime) / 1000);
+      setAdErrorMessage(`Temps insuffisant sur l'annonce (${Math.round(totalSpentTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
       setStatus('second_chance_offer');
     }
   }, [profile?.id, category, difficulty, init]);
 
-  // Écouteur de changement de visibilité (retour sur le jeu après la pub)
+  // Écouteur de changement d'état de visibilité de l'onglet
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && gameStateRef.current.status === 'second_chance_pending') {
+      if (gameStateRef.current.status !== 'second_chance_pending') return;
+
+      if (document.visibilityState === 'hidden') {
+        lastBlurTimestampRef.current = Date.now();
+      } else if (document.visibilityState === 'visible') {
         void verifySecondChanceAd();
       }
     };
@@ -491,7 +509,6 @@ function QuizGameContent() {
 
       setTimeout(() => {
         if (!challengeId && !hasUsedSecondChance) {
-          // Offre de Seconde Chance
           setStatus('second_chance_offer');
         } else {
           const currentGain = Math.floor(lockedBetRef.current * multiplier);
