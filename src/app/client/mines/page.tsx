@@ -16,7 +16,7 @@ const triggerHaptic = () => {
     try {
       navigator.vibrate([10, 25, 10]);
     } catch {
-      // Ignorer si non supporté
+      // Ignorer si non supporté sur l'appareil
     }
   }
 };
@@ -30,8 +30,13 @@ interface ParticleEffect {
   type: 'spark' | 'explosion';
 }
 
+interface RpcJouerPartieResult {
+  success: boolean;
+  message?: string;
+}
+
 const MONETAG_REDIRECT_URL = "https://omg10.com/4/11431323";
-const REQUIRED_AD_TIME_MS = 6000; // 6 secondes requises
+const REQUIRED_AD_TIME_MS = 6000; // 6 secondes requises sur la pub
 
 export default function MinesElite() {
   const router = useRouter();
@@ -68,7 +73,7 @@ export default function MinesElite() {
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
 
-  // Contrôle d'hydratation
+  // Contrôle d'hydratation côté client
   useEffect(() => {
     setIsMounted(true);
     return () => {
@@ -76,7 +81,7 @@ export default function MinesElite() {
     };
   }, []);
 
-  // Synchronisation du nombre de mines selon la difficulté
+  // Synchronisation du nombre de mines selon la difficulté sélectionnée
   useEffect(() => {
     const counts: Record<DifficultyLevel, number> = { facile: 5, intermédiaire: 8, difficile: 11 };
     setMines(counts[difficulty]);
@@ -148,7 +153,7 @@ export default function MinesElite() {
     };
   }, [router]);
 
-  // VÉRIFICATION DU TEMPS SUR LA PUB APRES RETOUR SUR L'ONGLET
+  // Vérification du temps passé sur la pub après retour sur la fenêtre
   useEffect(() => {
     const handleFocusOrVisibility = () => {
       if (!adWaiting || isProcessingRef.current) return;
@@ -160,12 +165,10 @@ export default function MinesElite() {
       const now = Date.now();
       const elapsed = now - clickTime;
 
-      // Nettoyage immédiat pour éviter toute réutilisation malveillante
       localStorage.removeItem('monetag_click_time');
       setAdWaiting(false);
 
       if (elapsed >= REQUIRED_AD_TIME_MS) {
-        // Validation et relance directe au Niveau 1
         applySecondChance();
       } else {
         const remainingSec = Math.ceil((REQUIRED_AD_TIME_MS - elapsed) / 1000);
@@ -232,7 +235,9 @@ export default function MinesElite() {
         p_jeu_nom: 'Mines Elite'
       });
 
-      if (error || !ok?.success) {
+      const rpcResult = ok as RpcJouerPartieResult | null;
+
+      if (error || !rpcResult?.success) {
         throw new Error(error?.message || 'Fonds insuffisants ou erreur de transaction.');
       }
 
@@ -305,8 +310,6 @@ export default function MinesElite() {
 
     const currentMult = getMultiplier();
     const secureBet = lockedBetRef.current;
-
-    // Seconde chance éligible en cas d'échec si non encore utilisée dans la session
     const isEligibleForSecondChance = isBombHit && !secondChanceUsed;
 
     const economy = resolveGameEconomy({
@@ -321,7 +324,7 @@ export default function MinesElite() {
       specialEventMultiplier: 1
     });
 
-    let winAmount = isBombHit ? 0 : economy.payout;
+    const winAmount = isBombHit ? 0 : economy.payout;
 
     setCombo(0);
     setStatus('ended');
@@ -359,7 +362,6 @@ export default function MinesElite() {
     }
   };
 
-  // OUVERTURE DU LIEN SPONSORISÉ
   const handleOpenAdForSecondChance = () => {
     if (isProcessingRef.current || !canUseSecondChance) return;
 
@@ -375,7 +377,6 @@ export default function MinesElite() {
     window.open(MONETAG_REDIRECT_URL, '_blank');
   };
 
-  // APPLICATION DU RESTART NIVEAU 1 AVEC DÉDUCTIONS (50%)
   const applySecondChance = async () => {
     if (!userId || !gameId || isProcessingRef.current) return;
 
@@ -385,7 +386,6 @@ export default function MinesElite() {
     const extraFee = Math.floor(lockedBetRef.current * 0.5);
 
     try {
-      // 1. Déduction sécurisée via Supabase RPC
       const { data: ok, error } = await supabase.rpc('jouer_partie_cp', { 
         p_user_id: userId,
         p_mise_cp: extraFee,
@@ -393,21 +393,20 @@ export default function MinesElite() {
         p_jeu_nom: 'Mines Seconde Chance'
       });
 
-      if (error || !ok?.success) {
+      const rpcResult = ok as RpcJouerPartieResult | null;
+
+      if (error || !rpcResult?.success) {
         throw new Error('Transaction refusée : solde CP insuffisant.');
       }
 
-      // 2. Mise à jour du solde local et réévaluation de la mise attribuée
       setJetonsCP(prev => prev - extraFee);
-      lockedBetRef.current = extraFee; // La nouvelle mise devient les 50%
+      lockedBetRef.current = extraFee;
       setBet(extraFee);
 
-      // 3. Génération d'une nouvelle grille de mines
       const newMinePositions = Array.from({ length: 25 }, (_, i) => i)
         .sort(() => Math.random() - 0.5)
         .slice(0, mines);
 
-      // 4. Synchronisation base de données
       await supabase
         .from('mines_games')
         .update({ 
@@ -418,9 +417,8 @@ export default function MinesElite() {
         })
         .eq('id', gameId);
 
-      // 5. Réinitialisation complète vers le Niveau 1 (Partie active immédiate)
       setMinePositions(newMinePositions);
-      setRevealed([]); // Retour case départ (0 case découverte = Niveau 1)
+      setRevealed([]);
       setCombo(0);
       setEffects([]);
       setTimeLeft(20);
@@ -433,7 +431,7 @@ export default function MinesElite() {
       setAdError(error?.message || 'Échec de l\'activation de la seconde chance.');
       setTimeout(() => setAdError(null), 4000);
       setStatus('ended');
-    } font-bold {
+    } finally {
       setLoading(false);
       isProcessingRef.current = false;
     }
