@@ -19,9 +19,19 @@ interface MaintenanceState {
   msg: string;
 }
 
-interface MathQuestion {
+interface MathQuestionInternal {
   display: string;
-  answer: number;
+  answerHash: string; // Hachage SHA-256 pour masquer la réponse dans l'état React
+  rawAnswerLength: number;
+}
+
+// --- UTILITAIRES DE HACHAGE (SÉCURITÉ ANTI-INSPECTION) ---
+async function hashAnswer(answer: number): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`salt_cp_calc_${answer.toString()}`);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // --- UTILITAIRES EFFETS ET SON ---
@@ -66,7 +76,7 @@ const triggerHaptic = () => {
   }
 };
 
-// --- LOGIQUE DE GESTION DES TEMPS ET MULTIPLICATEURS ---
+// --- LOGIQUE TEMPORELLE ET MULTIPLICATEURS ---
 const getQuestionTimeMs = (questionNumber: number) => {
   const baseTimeMs = 6000;
   const reductionMs = (questionNumber - 1) * 600;
@@ -78,64 +88,77 @@ const getNextMultiplier = (answered: number) => {
   return steps[Math.min(answered, steps.length - 1)] ?? 4.0;
 };
 
-// --- GENERATION DES QUESTIONS ---
-const generateMathQuestion = (questionsAnswered: number): MathQuestion => {
+// --- GÉNÉRATEUR SÉCURISÉ DE QUESTIONS ---
+const generateMathQuestionSecure = async (questionsAnswered: number): Promise<MathQuestionInternal> => {
   const level = questionsAnswered < 3 ? 1 : questionsAnswered < 7 ? 2 : 3;
+  let display = '';
+  let answer = 0;
 
   if (level === 1) {
     const a = Math.floor(Math.random() * 9) + 1;
     const b = Math.floor(Math.random() * 9) + 1;
-    const isAddition = Math.random() > 0.5;
-    if (isAddition) {
-      return { display: `${a} + ${b}`, answer: a + b };
+    if (Math.random() > 0.5) {
+      display = `${a} + ${b}`;
+      answer = a + b;
+    } else {
+      const left = Math.max(a, b);
+      const right = Math.min(a, b);
+      display = `${left} - ${right}`;
+      answer = left - right;
     }
-    const left = Math.max(a, b);
-    const right = Math.min(a, b);
-    return { display: `${left} - ${right}`, answer: left - right };
-  }
-
-  if (level === 2) {
-    const useMultiplication = Math.random() > 0.4;
-    if (useMultiplication) {
+  } else if (level === 2) {
+    if (Math.random() > 0.4) {
       const a = Math.floor(Math.random() * 7) + 3;
       const b = Math.floor(Math.random() * 7) + 3;
-      return { display: `${a} × ${b}`, answer: a * b };
+      display = `${a} × ${b}`;
+      answer = a * b;
+    } else {
+      const a = Math.floor(Math.random() * 40) + 10;
+      const b = Math.floor(Math.random() * 40) + 10;
+      if (Math.random() > 0.5) {
+        display = `${a} + ${b}`;
+        answer = a + b;
+      } else {
+        const left = Math.max(a, b);
+        const right = Math.min(a, b);
+        display = `${left} - ${right}`;
+        answer = left - right;
+      }
     }
-
-    const a = Math.floor(Math.random() * 40) + 10;
-    const b = Math.floor(Math.random() * 40) + 10;
-    const isAddition = Math.random() > 0.5;
-    if (isAddition) {
-      return { display: `${a} + ${b}`, answer: a + b };
+  } else {
+    const op = Math.floor(Math.random() * 4);
+    if (op === 0) {
+      const a = Math.floor(Math.random() * 80) + 20;
+      const b = Math.floor(Math.random() * 80) + 20;
+      display = `${a} + ${b}`;
+      answer = a + b;
+    } else if (op === 1) {
+      const a = Math.floor(Math.random() * 80) + 20;
+      const b = Math.floor(Math.random() * 80) + 20;
+      const left = Math.max(a, b);
+      const right = Math.min(a, b);
+      display = `${left} - ${right}`;
+      answer = left - right;
+    } else if (op === 2) {
+      const a = Math.floor(Math.random() * 9) + 3;
+      const b = Math.floor(Math.random() * 9) + 3;
+      display = `${a} × ${b}`;
+      answer = a * b;
+    } else {
+      const ans = Math.floor(Math.random() * 15) + 3;
+      const divisor = Math.floor(Math.random() * 8) + 2;
+      const dividend = ans * divisor;
+      display = `${dividend} ÷ ${divisor}`;
+      answer = ans;
     }
-    const left = Math.max(a, b);
-    const right = Math.min(a, b);
-    return { display: `${left} - ${right}`, answer: left - right };
   }
 
-  const operation = Math.floor(Math.random() * 4);
-  if (operation === 0) {
-    const a = Math.floor(Math.random() * 80) + 20;
-    const b = Math.floor(Math.random() * 80) + 20;
-    return { display: `${a} + ${b}`, answer: a + b };
-  }
-  if (operation === 1) {
-    const a = Math.floor(Math.random() * 80) + 20;
-    const b = Math.floor(Math.random() * 80) + 20;
-    const left = Math.max(a, b);
-    const right = Math.min(a, b);
-    return { display: `${left} - ${right}`, answer: left - right };
-  }
-  if (operation === 2) {
-    const a = Math.floor(Math.random() * 9) + 3;
-    const b = Math.floor(Math.random() * 9) + 3;
-    return { display: `${a} × ${b}`, answer: a * b };
-  }
-
-  const answer = Math.floor(Math.random() * 15) + 3;
-  const divisor = Math.floor(Math.random() * 8) + 2;
-  const dividend = answer * divisor;
-  return { display: `${dividend} ÷ ${divisor}`, answer };
+  const answerHash = await hashAnswer(answer);
+  return {
+    display,
+    answerHash,
+    rawAnswerLength: answer.toString().length,
+  };
 };
 
 const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }) => (
@@ -158,7 +181,7 @@ function QuickCalcGameContent() {
   const [loadingCheck, setLoadingCheck] = useState(true);
   const [status, setStatus] = useState<'idle' | 'playing' | 'lost' | 'won' | 'maintenance' | 'loading'>('loading');
   const [betCP, setBetCP] = useState(10);
-  const [question, setQuestion] = useState<MathQuestion | null>(null);
+  const [question, setQuestion] = useState<MathQuestionInternal | null>(null);
   const [input, setInput] = useState('');
   const [multiplier, setMultiplier] = useState(0.2);
   const [loading, setLoading] = useState(false);
@@ -168,7 +191,7 @@ function QuickCalcGameContent() {
   const [initialTime, setInitialTime] = useState(6000);
   const [shakeAnswer, setShakeAnswer] = useState(false);
 
-  // --- ÉTATS POUR LA SECONDE CHANCE ET PUB ---
+  // ÉTATS POUR LA SECONDE CHANCE ET ADS
   const [secondChanceUsed, setSecondChanceUsed] = useState(false);
   const [adClickTime, setAdClickTime] = useState<number | null>(null);
   const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
@@ -176,22 +199,23 @@ function QuickCalcGameContent() {
 
   const lockedBetRef = useRef(0);
   const isProcessingRef = useRef(false);
-  const gameStateRef = useRef({ multiplier: 0.2, gameId: null as string | null });
+  const lastTickTimeRef = useRef<number>(0);
+  const gameStateRef = useRef({ multiplier: 0.2, gameId: null as string | null, questionsAnswered: 0 });
 
   useEffect(() => {
-    gameStateRef.current = { multiplier, gameId };
-  }, [multiplier, gameId]);
+    gameStateRef.current = { multiplier, gameId, questionsAnswered };
+  }, [multiplier, gameId, questionsAnswered]);
 
   const checkAccess = useCallback(async () => {
     try {
       const { data } = await supabase.from('game_settings').select('is_active, maintenance_msg').eq('game_id', 'vault').single();
       if (data && !data.is_active) {
-        setMaintenance({ active: true, msg: data.maintenance_msg || 'Maintenance.' });
+        setMaintenance({ active: true, msg: data.maintenance_msg || 'Maintenance en cours.' });
         setStatus('maintenance');
       } else {
         setStatus('idle');
         if (challengeId && challengeFee) {
-          setBetCP(Number(challengeFee));
+          setBetCP(Math.max(10, Number(challengeFee)));
         }
       }
     } catch {
@@ -205,7 +229,7 @@ function QuickCalcGameContent() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        const { data: prof } = await supabase.from('profiles').select('id, jetons_cp').eq('id', user.id).single();
         setProfile(prof as ProfileLike | null);
       }
       await checkAccess();
@@ -220,15 +244,19 @@ function QuickCalcGameContent() {
   }, [init]);
 
   const startGame = useCallback(async () => {
-    if (betCP < 10) {
+    const effectiveFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
+    
+    if (effectiveFee < 10) {
       alert('Mise minimum : 10 CP');
       return;
     }
     triggerHaptic();
-    if (betCP > (profile?.jetons_cp || 0)) {
-      alert('Solde insuffisant');
+
+    if (effectiveFee > (profile?.jetons_cp || 0)) {
+      alert('Solde CP insuffisant');
       return;
     }
+
     if (loading || status === 'playing') return;
 
     setLoading(true);
@@ -238,24 +266,23 @@ function QuickCalcGameContent() {
     setAdErrorMsg(null);
 
     try {
-      const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
-      lockedBetRef.current = finalFee;
+      lockedBetRef.current = effectiveFee;
 
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
         p_user_id: profile?.id,
-        p_mise_cp: finalFee,
+        p_mise_cp: effectiveFee,
         p_gain_cp: 0,
         p_jeu_nom: challengeId ? 'Arena: Quick Calc' : 'Quick Calc Solo',
       });
 
       if (rpcError || !result?.success) {
-        throw new Error(result?.message || 'Solde CP insuffisant');
+        throw new Error(result?.message || 'Erreur lors de la déduction des CP');
       }
 
       const { data: game, error: gameErr } = await supabase
         .from('vault_games')
-        .insert([{ user_id: profile?.id, mise_cp: finalFee, is_active: true, challenge_id: challengeId || null }])
-        .select()
+        .insert([{ user_id: profile?.id, mise_cp: effectiveFee, is_active: true, challenge_id: challengeId || null }])
+        .select('id')
         .single();
 
       if (gameErr) throw gameErr;
@@ -264,14 +291,19 @@ function QuickCalcGameContent() {
       setMultiplier(0.2);
       setQuestionsAnswered(0);
       setInput('');
+      
+      const firstQuestion = await generateMathQuestionSecure(0);
       const firstTimeMs = getQuestionTimeMs(1);
+      
+      setQuestion(firstQuestion);
       setTimeRemaining(firstTimeMs);
       setInitialTime(firstTimeMs);
-      setQuestion(generateMathQuestion(0));
+      
+      lastTickTimeRef.current = performance.now();
       setStatus('playing');
       playSound('beep');
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : 'Erreur de partie');
+      alert(error instanceof Error ? error.message : 'Impossible de démarrer la partie');
     } finally {
       setLoading(false);
     }
@@ -283,11 +315,12 @@ function QuickCalcGameContent() {
 
     const currentMult = gameStateRef.current.multiplier;
     const currentGameId = gameStateRef.current.gameId;
+    const currentAnswered = gameStateRef.current.questionsAnswered;
     const secureBet = lockedBetRef.current;
 
     if (!currentGameId || !profile?.id) return;
 
-    const finalScore = questionsAnswered * 100;
+    const finalScore = currentAnswered * 100;
     const gainFinal = Math.floor(secureBet * currentMult);
 
     try {
@@ -324,25 +357,27 @@ function QuickCalcGameContent() {
 
       await supabase.from('vault_games').update({ is_active: false, gain_cp: gainFinal }).eq('id', currentGameId);
 
-      setStatus(challengeId ? (questionsAnswered > 0 ? 'won' : 'lost') : gainFinal >= secureBet ? 'won' : 'lost');
-      if (gainFinal >= secureBet || (challengeId && questionsAnswered > 0)) {
+      const isWinState = challengeId ? currentAnswered > 0 : gainFinal >= secureBet;
+      setStatus(isWinState ? 'won' : 'lost');
+      
+      if (isWinState) {
         playSound('win');
       } else {
         playSound('error');
       }
     } catch (error) {
-      console.error(error);
+      console.error('Erreur de finalisation :', error);
     } finally {
       void init();
     }
-  }, [challengeId, init, profile?.id, questionsAnswered]);
+  }, [challengeId, init, profile?.id]);
 
-  // --- LOGIQUE DE VÉRIFICATION DE LA SECONDE CHANCE APRÈS CLIC ADS ---
+  // VÉRIFICATION DE LA SECONDE CHANCE CÔTÉ CLIENT
   const handleVerifySecondChance = useCallback(async (timestamp: number) => {
     const elapsedSeconds = (Date.now() - timestamp) / 1000;
     
     if (elapsedSeconds < 6) {
-      setAdErrorMsg(`Temps insuffisant (${Math.ceil(6 - elapsedSeconds)}s restantes). Vous n'avez pas obtenu la seconde chance.`);
+      setAdErrorMsg(`Temps insuffisant (${Math.ceil(6 - elapsedSeconds)}s restantes). Veuillez rester 6s sur la pub.`);
       setAdClickTime(null);
       if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
       return;
@@ -370,20 +405,24 @@ function QuickCalcGameContent() {
       });
 
       if (rpcError || !result?.success) {
-        throw new Error(result?.message || 'Erreur lors du prélèvement de la seconde chance');
+        throw new Error(result?.message || 'Erreur lors du prélèvement CP');
       }
 
-      // Seconde chance accordée
       setSecondChanceUsed(true);
       isProcessingRef.current = false;
+      
       const nextTime = getQuestionTimeMs(questionsAnswered + 1);
+      const nextQuestion = await generateMathQuestionSecure(questionsAnswered);
+
+      setQuestion(nextQuestion);
       setTimeRemaining(nextTime);
       setInitialTime(nextTime);
       setInput('');
+      lastTickTimeRef.current = performance.now();
       setStatus('playing');
       playSound('beep');
     } catch (err: unknown) {
-      setAdErrorMsg(err instanceof Error ? err.message : 'Erreur de seconde chance');
+      setAdErrorMsg(err instanceof Error ? err.message : 'Erreur lors de la seconde chance');
     } finally {
       setValidatingSecondChance(false);
       setAdClickTime(null);
@@ -392,7 +431,6 @@ function QuickCalcGameContent() {
     }
   }, [init, profile?.id, profile?.jetons_cp, questionsAnswered]);
 
-  // Écoute de retour du joueur sur le jeu
   useEffect(() => {
     const checkAdReturn = () => {
       const storedTime = localStorage.getItem('ad_click_timestamp');
@@ -433,23 +471,31 @@ function QuickCalcGameContent() {
     window.open('https://omg10.com/4/11431323', '_blank');
   };
 
+  // BOUCLE DU TIMER BASÉE SUR PERFORMANCE.NOW()
   useEffect(() => {
     if (status !== 'playing') return;
 
+    lastTickTimeRef.current = performance.now();
+
     const timer = window.setInterval(() => {
+      const now = performance.now();
+      const delta = now - lastTickTimeRef.current;
+      lastTickTimeRef.current = now;
+
       setTimeRemaining((prev) => {
-        if (prev <= 100) {
+        if (prev <= delta) {
           void finalizeGame('timeout');
           return 0;
         }
-        return prev - 100;
+        return prev - delta;
       });
-    }, 100);
+    }, 50);
 
     return () => window.clearInterval(timer);
   }, [finalizeGame, status]);
 
-  const handleInputKey = useCallback((value: string) => {
+  // SAISIE ET VÉRIFICATION HACHÉE
+  const handleInputKey = useCallback(async (value: string) => {
     if (status !== 'playing' || !question) return;
 
     if (value === 'DEL') {
@@ -458,9 +504,8 @@ function QuickCalcGameContent() {
     }
 
     const nextInput = `${input}${value}`;
-    const expectedLength = question.answer.toString().length;
 
-    if (nextInput.length > expectedLength) {
+    if (nextInput.length > question.rawAnswerLength) {
       triggerHaptic();
       playSound('error');
       setShakeAnswer(true);
@@ -470,17 +515,32 @@ function QuickCalcGameContent() {
     }
 
     setInput(nextInput);
-    if (nextInput === question.answer.toString()) {
-      triggerHaptic();
-      playSound('win');
-      const nextCount = questionsAnswered + 1;
-      setQuestionsAnswered(nextCount);
-      setMultiplier(getNextMultiplier(nextCount));
-      const nextTime = getQuestionTimeMs(nextCount + 1);
-      setTimeRemaining(nextTime);
-      setInitialTime(nextTime);
-      setInput('');
-      setQuestion(generateMathQuestion(nextCount));
+
+    if (nextInput.length === question.rawAnswerLength) {
+      const computedHash = await hashAnswer(Number(nextInput));
+      
+      if (computedHash === question.answerHash) {
+        triggerHaptic();
+        playSound('win');
+        const nextCount = questionsAnswered + 1;
+        setQuestionsAnswered(nextCount);
+        setMultiplier(getNextMultiplier(nextCount));
+        
+        const nextTime = getQuestionTimeMs(nextCount + 1);
+        const nextQuestion = await generateMathQuestionSecure(nextCount);
+        
+        setQuestion(nextQuestion);
+        setTimeRemaining(nextTime);
+        setInitialTime(nextTime);
+        setInput('');
+        lastTickTimeRef.current = performance.now();
+      } else {
+        triggerHaptic();
+        playSound('error');
+        setShakeAnswer(true);
+        window.setTimeout(() => setShakeAnswer(false), 350);
+        setInput('');
+      }
     }
   }, [input, question, questionsAnswered, status]);
 
@@ -494,21 +554,26 @@ function QuickCalcGameContent() {
   const isTimeWarning = timePercent < 25;
 
   if (loadingCheck || status === 'loading') {
-    return <div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>;
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#020617]">
+        <Loader2 className="animate-spin text-emerald-500" size={40} />
+      </div>
+    );
   }
 
-  // Calcul pour affichage de la seconde chance
   const isEligibleForSecondChance = !challengeId && multiplier < 1.0 && !secondChanceUsed;
   const secondChanceCost = Math.floor(betCP * 0.5);
 
   return (
     <NeonGameShell accent="cyan" className="fixed inset-0 select-none overflow-hidden h-[100dvh]">
-      {/* Monetag Ad Script Integration */}
       <MonetagAdScript zoneId="11431323" />
 
       {/* HEADER COMPACT */}
       <div className="z-50 flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-xl shrink-0">
-        <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-200 active:scale-90">
+        <button
+          onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')}
+          className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-200 active:scale-90 transition-transform"
+        >
           <ChevronLeft size={18} />
         </button>
         <div className="flex flex-col items-end">
@@ -525,13 +590,13 @@ function QuickCalcGameContent() {
         {status === 'maintenance' ? (
           <div className="flex flex-1 flex-col items-center justify-center text-center">
             <ServerOff className="mb-4 animate-pulse text-amber-500" size={48} />
-            <h1 className="text-xl uppercase italic text-amber-500">Maintenance</h1>
+            <h1 className="text-xl uppercase italic text-amber-500 font-bold">Maintenance</h1>
             <p className="mt-2 text-[10px] tracking-widest text-slate-500">{maintenance?.msg}</p>
           </div>
         ) : status === 'idle' ? (
           <div className="flex w-full max-w-xs flex-1 items-center justify-center">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full rounded-[2.5rem] border border-cyan-400/20 bg-slate-950/80 p-6 text-center shadow-2xl backdrop-blur-2xl">
-              <div className="mb-4 flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.35em] text-cyan-300">
+              <div className="mb-4 flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.35em] text-cyan-300 font-bold">
                 <Sparkles size={14} /> Quick Calc
               </div>
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10">
@@ -548,7 +613,7 @@ function QuickCalcGameContent() {
                     <button onClick={() => setBetCP((prev) => Math.max(10, prev - 10))} className="rounded-xl bg-white/5 p-2 transition-all hover:bg-white/10 active:scale-90"><Lock size={14} /></button>
                     <div className="w-20">
                       <input type="number" min="10" value={betCP} onChange={(event) => setBetCP(Math.max(10, Number(event.target.value)))} className="w-full bg-transparent text-center text-2xl font-black text-white outline-none" />
-                      <p className="text-[8px] text-slate-500">CP</p>
+                      <p className="text-[8px] text-slate-500 font-bold">CP</p>
                     </div>
                     <button onClick={() => setBetCP((prev) => prev + 10)} className="rounded-xl bg-white/5 p-2 transition-all hover:bg-white/10 active:scale-90"><Sparkles size={14} /></button>
                   </div>
@@ -565,7 +630,7 @@ function QuickCalcGameContent() {
             
             {/* ECRAN DU JEU ET CHRONOMETRE */}
             <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-cyan-400/25 bg-slate-950/80 shadow-[0_0_30px_rgba(34,211,238,0.15)] flex flex-col justify-between p-4">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_35%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.1),transparent_35%)] pointer-events-none" />
 
               <motion.div style={{ height: `${100 - timePercent}%` }} animate={{ backgroundColor: isTimeWarning ? 'rgba(239,68,68,0.15)' : 'rgba(34,211,238,0.08)' }} className="absolute bottom-0 left-0 right-0 transition-all pointer-events-none" />
 
@@ -584,7 +649,7 @@ function QuickCalcGameContent() {
 
                 <div className="rounded-xl border border-white/10 bg-black/80 px-2.5 py-1 text-center">
                   <p className="text-[6px] font-bold uppercase text-zinc-500">TEMPS</p>
-                  <p className={`text-xs font-black ${isTimeWarning ? 'animate-pulse text-rose-500' : 'text-cyan-400'}`}>{(timeRemaining / 1000).toFixed(1)}s</p>
+                  <p className={`text-xs font-black ${isTimeWarning ? 'animate-pulse text-rose-500' : 'text-cyan-400'}`}>{(Math.max(0, timeRemaining) / 1000).toFixed(1)}s</p>
                 </div>
               </div>
 
@@ -616,12 +681,12 @@ function QuickCalcGameContent() {
             <div className="shrink-0 space-y-1.5 pb-2">
               <div className="grid grid-cols-3 gap-1.5">
                 {['7', '8', '9', '4', '5', '6', '1', '2', '3'].map((value) => (
-                  <motion.button key={value} whileTap={{ scale: 0.92 }} onClick={() => handleInputKey(value)} className="h-11 rounded-xl border border-cyan-400/20 bg-white/5 text-xl font-black text-white shadow-sm hover:bg-white/10 active:bg-cyan-500/20">
+                  <motion.button key={value} whileTap={{ scale: 0.92 }} onClick={() => void handleInputKey(value)} className="h-11 rounded-xl border border-cyan-400/20 bg-white/5 text-xl font-black text-white shadow-sm hover:bg-white/10 active:bg-cyan-500/20">
                     {value}
                   </motion.button>
                 ))}
-                <motion.button whileTap={{ scale: 0.92 }} onClick={() => handleInputKey('0')} className="h-11 rounded-xl border border-cyan-400/20 bg-white/5 text-xl font-black text-white hover:bg-white/10">0</motion.button>
-                <motion.button whileTap={{ scale: 0.92 }} onClick={() => handleInputKey('DEL')} className="col-span-1 flex h-11 items-center justify-center rounded-xl border border-rose-500/20 bg-rose-600/10 text-rose-400 hover:bg-rose-600/20">
+                <motion.button whileTap={{ scale: 0.92 }} onClick={() => void handleInputKey('0')} className="h-11 rounded-xl border border-cyan-400/20 bg-white/5 text-xl font-black text-white hover:bg-white/10">0</motion.button>
+                <motion.button whileTap={{ scale: 0.92 }} onClick={() => void handleInputKey('DEL')} className="col-span-1 flex h-11 items-center justify-center rounded-xl border border-rose-500/20 bg-rose-600/10 text-rose-400 hover:bg-rose-600/20">
                   <Delete size={16} />
                 </motion.button>
                 <button onClick={handleClear} className="col-span-1 rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-[10px] font-black uppercase tracking-wider text-cyan-300 hover:bg-cyan-400/20">CLR</button>
@@ -637,11 +702,11 @@ function QuickCalcGameContent() {
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020617]/98 p-6 text-center backdrop-blur-2xl">
             <div className="w-full max-w-sm">
-              <div className={`mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border-2 ${status === 'lost' && !challengeId && multiplier < 1.0 ? 'border-rose-500/40 bg-rose-600/20' : 'border-emerald-500/40 bg-emerald-500/20'}`}>
-                {status === 'lost' && !challengeId && multiplier < 1.0 ? <ShieldAlert size={40} className="text-rose-500" /> : <Unlock size={40} className="text-emerald-500" />}
+              <div className={`mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border-2 ${status === 'lost' ? 'border-rose-500/40 bg-rose-600/20' : 'border-emerald-500/40 bg-emerald-500/20'}`}>
+                {status === 'lost' ? <ShieldAlert size={40} className="text-rose-500" /> : <Unlock size={40} className="text-emerald-500" />}
               </div>
-              <h2 className="mb-2 text-3xl font-black uppercase italic tracking-tighter">
-                {challengeId ? 'SCORE TRANSMIS' : status === 'lost' && multiplier < 1.0 ? 'TEMPS ÉCOULÉ' : 'PARTIE TERMINÉE'}
+              <h2 className="mb-2 text-3xl font-black uppercase italic tracking-tighter text-white">
+                {challengeId ? 'SCORE TRANSMIS' : status === 'lost' ? 'PERDU' : 'GAGNÉ !'}
               </h2>
 
               <div className="mb-4 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
@@ -652,7 +717,7 @@ function QuickCalcGameContent() {
                 </p>
               </div>
 
-              {/* OPTION DE SECONDE CHANCE DÉCLENCHÉE SI ÉLIGIBLE */}
+              {/* SECONDE CHANCE */}
               {isEligibleForSecondChance && (
                 <div className="mb-4 rounded-[1.5rem] border border-amber-500/30 bg-amber-500/10 p-4 backdrop-blur-md">
                   <div className="flex items-center justify-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
@@ -686,7 +751,7 @@ function QuickCalcGameContent() {
                 </div>
               )}
 
-              <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="w-full rounded-[1.5rem] bg-emerald-600 py-4 text-lg font-black italic text-white shadow-xl hover:bg-emerald-500">
+              <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="w-full rounded-[1.5rem] bg-emerald-600 py-4 text-lg font-black italic text-white shadow-xl hover:bg-emerald-500 transition-colors">
                 {challengeId ? 'VOIR LE CLASSEMENT' : 'RETOUR AU HUB'}
               </button>
             </div>
@@ -697,7 +762,7 @@ function QuickCalcGameContent() {
   );
 }
 
-// --- ENVELOPPE SUSPENSE POUR SEARCH PARAMS EN NEXT.JS 13+ ---
+// ENVELOPPE SUSPENSE POUR SURMONTER LES PROBLÈMES DE BUILD NEXT.JS
 export default function LaserVaultPage() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
