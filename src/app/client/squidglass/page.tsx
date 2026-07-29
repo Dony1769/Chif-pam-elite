@@ -47,7 +47,9 @@ interface FogParticle {
   size: number;
 }
 
-const CONFIG = {
+type GameDifficulty = 'facile' | 'intermediaire' | 'difficile';
+
+const CONFIG: Record<GameDifficulty, { rows: number; cols: number; step: number; label: string }> = {
   facile: { rows: 5, cols: 2, step: 0.3, label: 'Facile' },
   intermediaire: { rows: 7, cols: 2, step: 0.5, label: 'Moyen' },
   difficile: { rows: 9, cols: 3, step: 0.8, label: 'Hard' }
@@ -71,22 +73,21 @@ export default function GlassEliteFinal() {
   const [status, setStatus] = useState<'intro' | 'walking_in' | 'idle' | 'playing' | 'won' | 'lost' | 'loading' | 'maintenance'>('intro');
   const [maintenanceMsg, setMaintenanceMsg] = useState('SERVICE MOMENTANÉMENT INDISPONIBLE');
   
-  const [difficulty, setDifficulty] = useState<keyof typeof CONFIG>('intermediaire');
+  const [difficulty, setDifficulty] = useState<GameDifficulty>('intermediaire');
   const [bet, setBet] = useState(10);
   const [jetonsCP, setJetonsCP] = useState(0);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [path, setPath] = useState<number[]>([]);
   const [history, setHistory] = useState<number[]>([]);
   const [muted, setMuted] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(10);
+  const [lastWinAmount, setLastWinAmount] = useState(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const avatarPos = useRef({ x: 0, y: 0, targetX: 0, targetY: 0, jumpT: 1, walkY: 0, walkCycle: 0 });
   const requestRef = useRef<number | null>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
   const shardsRef = useRef<GlassShard[]>([]);
-  const fogRef = useRef<FogParticle[]>([]);
   const shakeRef = useRef({ intensity: 0, timer: 0 });
 
   // 🔒 REFS DE SÉCURITÉ
@@ -96,28 +97,32 @@ export default function GlassEliteFinal() {
   const currentMult = 1 + (history.length * CONFIG[difficulty].step);
   const currentWin = Math.floor(lockedBetRef.current * currentMult);
 
-  // --- INITIALISATION ---
-  const init = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      setUserId(user.id);
-      const { data } = await supabase.from('profiles').select('jetons_cp').eq('id', user.id).single();
-      if (data) setJetonsCP(data.jetons_cp);
-    }
+  // --- INITIALISATION DU JEU ET DU COMPTE ---
+  const init = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase.from('profiles').select('jetons_cp').eq('id', user.id).single();
+        if (data) setJetonsCP(data.jetons_cp);
+      }
 
-    const { data } = await supabase
-      .from('game_settings')
-      .select('is_active, maintenance_msg')
-      .eq('game_id', 'glass')
-      .single();
+      const { data } = await supabase
+        .from('game_settings')
+        .select('is_active, maintenance_msg')
+        .eq('game_id', 'glass')
+        .single();
 
-    if (data && !data.is_active) {
-      setMaintenanceMsg(data.maintenance_msg);
-      setStatus('maintenance');
-      return true;
+      if (data && !data.is_active) {
+        setMaintenanceMsg(data.maintenance_msg || 'SERVICE MOMENTANÉMENT INDISPONIBLE');
+        setStatus('maintenance');
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
-    return false;
-  };
+  }, []);
 
   useEffect(() => {
     Object.entries(SOUNDS).forEach(([key, url]) => {
@@ -130,13 +135,14 @@ export default function GlassEliteFinal() {
         return () => clearTimeout(introTimer);
       }
     });
-  }, []);
+  }, [init]);
 
   // --- GESTION DU TIMER DE JEU ---
   useEffect(() => {
+    let timer: number | undefined;
     if (status === 'playing') {
       setCountdown(10);
-      const timer = window.setInterval(() => {
+      timer = window.setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
@@ -146,12 +152,13 @@ export default function GlassEliteFinal() {
           return prev - 1;
         });
       }, 1000);
-      return () => window.clearInterval(timer);
-    }
-
-    if (['won', 'lost', 'idle', 'maintenance'].includes(status)) {
+    } else {
       setCountdown(10);
     }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
   }, [status, history]);
 
   const handleTimeOut = async () => {
@@ -159,8 +166,13 @@ export default function GlassEliteFinal() {
     isProcessingRef.current = true;
     playSound('break');
     setStatus('lost');
+    
     if (gameId) {
-      await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
+      try {
+        await supabase.rpc('fail_glass_game', { p_game_id: gameId });
+      } catch (err) {
+        console.error("Erreur d'abandon sur délai expiré:", err);
+      }
     }
     isProcessingRef.current = false;
   };
@@ -188,7 +200,7 @@ export default function GlassEliteFinal() {
     }
   };
 
-  // --- COORDONNÉES DE DESSIN ---
+  // --- COORDONNÉES DE DESSIN SUR CANVAS ---
   const getCoords = useCallback((row: number, col: number): Coords => {
     const cvs = canvasRef.current;
     if (!cvs) return { x: 0, y: 0, w: 0, h: 0 };
@@ -222,7 +234,7 @@ export default function GlassEliteFinal() {
     };
   }, [history, getCoords]);
 
-  // --- LOGIQUE ET RAF ---
+  // --- RENDER ENGINE & RAF ---
   const updateLogic = () => {
     const p = avatarPos.current;
     const cvs = canvasRef.current;
@@ -248,6 +260,22 @@ export default function GlassEliteFinal() {
       p.x += (p.targetX - p.x) * 0.25;
       p.y += (p.targetY - p.y) * 0.25;
     }
+
+    // Mise à jour des secousses
+    if (shakeRef.current.timer > 0) {
+      shakeRef.current.timer--;
+      if (shakeRef.current.timer === 0) shakeRef.current.intensity = 0;
+    }
+
+    // Mise à jour des particules
+    shardsRef.current.forEach(s => {
+      s.x += s.vx;
+      s.y += s.vy;
+      s.vy += 0.2; // Gravité
+      s.life -= 0.02;
+      s.rotation += s.rotationSpeed;
+    });
+    shardsRef.current = shardsRef.current.filter(s => s.life > 0);
   };
 
   const spawnGlassShards = (x: number, y: number) => {
@@ -280,7 +308,7 @@ export default function GlassEliteFinal() {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    // Fond Dégradé
+    // Background Gradient
     const bg = ctx.createRadialGradient(cvs.width / 2, cvs.height / 2, 40, cvs.width / 2, cvs.height / 2, 450);
     bg.addColorStop(0, '#0f172a');
     bg.addColorStop(0.6, '#090d16');
@@ -288,7 +316,7 @@ export default function GlassEliteFinal() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-    // Dalles en verre
+    // Glass tiles
     if (!['intro', 'maintenance'].includes(status)) {
       const activeRows = CONFIG[difficulty].rows;
       const activeCols = CONFIG[difficulty].cols;
@@ -324,7 +352,7 @@ export default function GlassEliteFinal() {
       }
     }
 
-    // Particules de verre brisé
+    // Shards
     shardsRef.current.forEach((s) => {
       if (s.life <= 0) return;
       ctx.save();
@@ -336,7 +364,7 @@ export default function GlassEliteFinal() {
       ctx.restore();
     });
 
-    // Avatar Joueur
+    // Avatar
     if (['walking_in', 'playing', 'idle'].includes(status)) {
       const { x, y, jumpT, walkCycle } = avatarPos.current;
       let drawY = y;
@@ -350,13 +378,13 @@ export default function GlassEliteFinal() {
       ctx.save();
       ctx.translate(x, drawY);
 
-      // Ombre portée du saut
+      // Shadow
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.beginPath();
       ctx.ellipse(0, y - drawY + 10, 10, 4, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Corps
+      // Body
       ctx.shadowBlur = 18;
       ctx.shadowColor = '#f43f5e';
       ctx.fillStyle = '#e11d48';
@@ -364,13 +392,13 @@ export default function GlassEliteFinal() {
       if (ctx.roundRect) ctx.roundRect(-10, -16, 20, 20, 5); else ctx.rect(-10, -16, 20, 20);
       ctx.fill();
 
-      // Tête
+      // Head
       ctx.fillStyle = '#fde047';
       ctx.beginPath();
       ctx.arc(0, -22, 7, 0, Math.PI * 2);
       ctx.fill();
 
-      // Masque / Numéro 456
+      // Number
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 8px sans-serif';
       ctx.textAlign = 'center';
@@ -406,9 +434,9 @@ export default function GlassEliteFinal() {
     };
   }, [status, history, difficulty, syncAvatar]);
 
-  // --- ACTIONS DE JEU ---
+  // --- LOGIQUE CLIENT-SERVEUR SÉCURISÉE ---
   const handleJump = async (colIndex: number) => {
-    if (status !== 'playing' || avatarPos.current.jumpT < 1 || isProcessingRef.current) return;
+    if (status !== 'playing' || avatarPos.current.jumpT < 1 || isProcessingRef.current || !gameId) return;
     isProcessingRef.current = true;
     triggerHaptic();
 
@@ -420,28 +448,40 @@ export default function GlassEliteFinal() {
     avatarPos.current.targetY = target.y;
     avatarPos.current.jumpT = 0;
     
-    const isCorrect = colIndex === path[nextRow];
-    
-    setTimeout(async () => {
-      if (isCorrect) {
-        const newHistory = [...history, colIndex];
-        setHistory(newHistory);
-        
-        await supabase.rpc('update_glass_progress', { p_game_id: gameId, p_new_path: newHistory });
-        
-        if (newHistory.length === CONFIG[difficulty].rows) {
-          await cashout(1 + (newHistory.length * CONFIG[difficulty].step), true);
+    try {
+      // 🔒 SÉCURITÉ : La validation du mouvement se fait intégralement côté serveur
+      const { data, error } = await supabase.rpc('step_glass_bridge', {
+        p_game_id: gameId,
+        p_step_col: colIndex
+      });
+
+      if (error) throw error;
+
+      setTimeout(async () => {
+        if (data.is_correct) {
+          const newHistory = [...history, colIndex];
+          setHistory(newHistory);
+
+          if (data.is_completed) {
+            setLastWinAmount(data.win_amount);
+            setJetonsCP(prev => prev + data.win_amount);
+            playSound('win');
+            spawnGlassShards(canvasRef.current ? canvasRef.current.width / 2 : 200, 120);
+            setStatus('won');
+          }
         } else {
-          isProcessingRef.current = false;
+          playSound('break');
+          spawnGlassShards(target.x, target.y);
+          setStatus('lost');
         }
-      } else {
-        playSound('break');
-        spawnGlassShards(target.x, target.y);
-        setStatus('lost');
-        await supabase.from('glass_games').update({ is_active: false }).eq('id', gameId);
         isProcessingRef.current = false;
-      }
-    }, 400);
+      }, 400);
+
+    } catch (err) {
+      console.error("Erreur lors du saut:", err);
+      setStatus('lost');
+      isProcessingRef.current = false;
+    }
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -465,82 +505,63 @@ export default function GlassEliteFinal() {
     const isMaintained = await init();
     if (isMaintained) return;
     
-    if (bet < 10 || bet > jetonsCP) return;
+    const finalBet = Math.floor(bet);
+    if (finalBet < 10 || finalBet > jetonsCP) return;
 
     isProcessingRef.current = true;
     playSound('doll');
     setStatus('loading');
     
-    const sequence = Array.from({ length: CONFIG[difficulty].rows }, () => Math.floor(Math.random() * CONFIG[difficulty].cols));
-    
     try {
-      const finalBet = Math.floor(bet);
       lockedBetRef.current = finalBet;
 
-      const { data: ok, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
-        p_user_id: userId,
-        p_mise_cp: finalBet,
-        p_gain_cp: 0,
-        p_jeu_nom: 'Glass Start'
+      // 🔒 Déduction du solde & Création de session sur RPC
+      const { data, error } = await supabase.rpc('start_glass_game_secure', {
+        p_bet: finalBet, 
+        p_diff: difficulty
       });
 
-      if (rpcErr || !ok.success) {
+      if (error || !data.success) {
         setStatus('idle');
         isProcessingRef.current = false;
         return;
       }
 
       setJetonsCP(prev => prev - finalBet);
-
-      const { data, error } = await supabase.rpc('start_glass_game', {
-        p_bet: finalBet, 
-        p_rows: CONFIG[difficulty].rows, 
-        p_cols: CONFIG[difficulty].cols, 
-        p_diff: difficulty, 
-        p_path: sequence
-      });
-      
-      if (error) throw error;
-      
-      setGameId(data);
-      setPath(sequence);
+      setGameId(data.game_id);
       setHistory([]);
       setStatus('playing');
       syncAvatar();
       
-      isProcessingRef.current = false;
-    } catch {
+    } catch (err) {
+      console.error("Erreur d'initialisation de partie:", err);
       setStatus('idle');
+    } finally {
       isProcessingRef.current = false;
     }
   };
 
-  const cashout = async (mult: number, auto: boolean = false) => {
-    if (!auto && isProcessingRef.current) return;
+  const cashout = async () => {
+    if (isProcessingRef.current || !gameId || history.length === 0) return;
     isProcessingRef.current = true;
 
-    playSound('win');
     setStatus('loading');
-    
-    const secureBet = lockedBetRef.current;
-    const finalMult = parseFloat(mult.toFixed(2));
-    const winAmount = Math.floor(secureBet * finalMult);
 
     try {
-      if (winAmount > 0) {
-        await supabase.rpc('jouer_partie_cp', {
-          p_user_id: userId,
-          p_mise_cp: 0,
-          p_gain_cp: winAmount,
-          p_jeu_nom: `Glass Win x${finalMult}`
-        });
-        setJetonsCP(prev => prev + winAmount);
-      }
+      // 🔒 Demande d'encaissement direct gérée par RPC Supabase
+      const { data, error } = await supabase.rpc('claim_glass_win_secure', {
+        p_game_id: gameId
+      });
 
-      await supabase.rpc('claim_glass_win', { p_game_id: gameId, p_multiplier: finalMult });
+      if (error || !data.success) throw new Error("Échec du cashout");
+
+      playSound('win');
+      setLastWinAmount(data.win_amount);
+      setJetonsCP(prev => prev + data.win_amount);
       spawnGlassShards(canvasRef.current ? canvasRef.current.width / 2 : 200, 120);
       setStatus('won');
-    } catch {
+    } catch (err) {
+      console.error("Erreur cashout:", err);
       setStatus('playing');
     } finally {
       isProcessingRef.current = false;
@@ -629,7 +650,7 @@ export default function GlassEliteFinal() {
               <div className="space-y-2">
                 <p className="text-[10px] text-white/40 tracking-widest text-center">DIFFICULTÉ DU PONT</p>
                 <div className="flex bg-black/50 p-1.5 rounded-2xl gap-1 border border-white/5">
-                  {(Object.keys(CONFIG) as Array<keyof typeof CONFIG>).map(d => (
+                  {(Object.keys(CONFIG) as GameDifficulty[]).map(d => (
                     <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-2.5 text-[10px] rounded-xl transition-all ${difficulty === d ? 'bg-rose-500 text-black font-black shadow-lg shadow-rose-500/25' : 'text-white/40 hover:text-white'}`}>
                       {CONFIG[d].label}
                     </button>
@@ -646,11 +667,11 @@ export default function GlassEliteFinal() {
                   className="w-full bg-transparent text-5xl text-center outline-none text-rose-500 font-black tracking-tight" 
                 />
                 
-                {/* Boutons de raccourcis de mise */}
+                {/* Raccourcis de mise */}
                 <div className="flex gap-2 justify-center pt-2">
                   <button onClick={() => adjustBet(0.5)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] text-white/70 active:scale-95">1/2</button>
                   <button onClick={() => adjustBet(2)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] text-white/70 active:scale-95">x2</button>
-                  <button onClick={() => setBet(100)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] text-white/70 active:scale-95">+100</button>
+                  <button onClick={() => setBet(prev => prev + 100)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] text-white/70 active:scale-95">+100</button>
                   <button onClick={() => setBet(jetonsCP)} className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-[10px] text-rose-300 active:scale-95">MAX</button>
                 </div>
               </div>
@@ -663,7 +684,7 @@ export default function GlassEliteFinal() {
         )}
       </div>
 
-      {/* BOUTONS TACTILES DIRECTIONNELS & BOUTON CASHOUT */}
+      {/* BOUTONS DIRECTIONNELS & CASHOUT */}
       {status === 'playing' && (
         <div className="z-50 flex flex-col gap-2 border-t border-white/10 bg-slate-950/90 p-4 backdrop-blur-xl">
           
@@ -689,7 +710,7 @@ export default function GlassEliteFinal() {
               </span>
             </div>
             <button 
-              onClick={() => cashout(currentMult)} 
+              onClick={cashout} 
               disabled={history.length === 0 || isProcessingRef.current} 
               className="flex-[1.5] h-full rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-lg font-black text-black shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-20 flex items-center justify-center gap-2"
             >
@@ -709,7 +730,7 @@ export default function GlassEliteFinal() {
               </div>
               <div>
                 <h2 className="text-5xl italic tracking-tighter font-black">{status === 'won' ? 'VICTOIRE !' : 'ÉLIMINÉ'}</h2>
-                <p className="text-2xl mt-2 font-bold text-white/70">{status === 'won' ? `+${currentWin} CP` : 'MISE PERDUE'}</p>
+                <p className="text-2xl mt-2 font-bold text-white/70">{status === 'won' ? `+${lastWinAmount} CP` : 'MISE PERDUE'}</p>
               </div>
               <button onClick={() => setStatus('idle')} className="w-full py-4 bg-white text-black rounded-2xl font-black text-lg active:scale-95 transition-transform shadow-xl">
                 REJOUER
