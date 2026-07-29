@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,14 +8,14 @@ import {
   Fingerprint, Brain, Lock, ChevronLeft, Star,
   Home, Gamepad2, MessageSquare, User,
   Users, LucideIcon, ShoppingBag, Sparkles,
-  Trophy, Clock3, Crown, Play, X, Flame, Dices, Filter
+  Play, X, Flame, Dices, Filter
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 // ==========================================
-// 1. TYPES & INTERFACES (TypeScript Stricte)
+// 1. TYPES & INTERFACES (TypeScript Strict)
 // ==========================================
-interface GameConfig {
+export interface GameConfig {
   id: string;
   name: string;
   desc: string;
@@ -43,6 +43,7 @@ const GAMES: GameConfig[] = [
 ];
 
 const CATEGORIES = ['Tous', 'Favoris', 'Stratégie', 'Réflexes', 'Analyse', 'Savoir', 'Précision'];
+const STORAGE_FAV_KEY = 'fav_games';
 
 // ==========================================
 // 3. COMPOSANT PRINCIPAL DE LA PAGE
@@ -55,45 +56,67 @@ export default function GameListPage() {
   const [search, setSearch] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
 
-  // Gestion des favoris synchronisée avec localStorage
+  // Gestion des favoris sécurisée avec validation
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
+  // Charger les favoris au montage client de manière sécurisée
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('fav_games');
-      if (saved) setFavorites(JSON.parse(saved));
+      const saved = localStorage.getItem(STORAGE_FAV_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setFavorites(parsed.filter((item): item is string => typeof item === 'string'));
+        }
+      }
     } catch (e) {
-      console.error('Impossible d\'accéder à localStorage', e);
+      console.error('Impossible d\'accéder au localStorage favoris:', e);
+    } finally {
+      setIsHydrated(true);
     }
   }, []);
 
-  const toggleFavorite = (event: React.MouseEvent, id: string) => {
+  // Inverser l'état favori d'un jeu
+  const toggleFavorite = useCallback((event: React.MouseEvent, id: string) => {
     event.stopPropagation();
-    const updated = favorites.includes(id)
-      ? favorites.filter((favId) => favId !== id)
-      : [...favorites, id];
-    
-    setFavorites(updated);
-    localStorage.setItem('fav_games', JSON.stringify(updated));
-  };
+    setFavorites((prev) => {
+      const updated = prev.includes(id)
+        ? prev.filter((favId) => favId !== id)
+        : [...prev, id];
+      
+      try {
+        localStorage.setItem(STORAGE_FAV_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Erreur lors de la sauvegarde dans localStorage:', e);
+      }
+      return updated;
+    });
+  }, []);
 
-  // Sélection aléatoire d'un jeu (Fonctionnalité d'engagement)
-  const handleRandomPlay = () => {
-    const randomIndex = Math.floor(Math.random() * GAMES.length);
-    router.push(GAMES[randomIndex].path);
-  };
+  // Sélection aléatoire sécurisée d'un jeu
+  const handleRandomPlay = useCallback(() => {
+    const listToPick = filteredGames.length > 0 ? filteredGames : GAMES;
+    if (listToPick.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * listToPick.length);
+    router.push(listToPick[randomIndex].path);
+  }, [filteredGames, router]);
 
   // Filtrage combiné (Recherche + Catégorie)
   const filteredGames = useMemo(() => {
+    const searchLower = search.trim().toLowerCase();
+    
     return GAMES.filter((game) => {
-      const matchesSearch = 
-        game.name.toLowerCase().includes(search.toLowerCase()) ||
-        game.category.toLowerCase().includes(search.toLowerCase()) ||
-        game.desc.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = searchLower === '' ||
+        game.name.toLowerCase().includes(searchLower) ||
+        game.category.toLowerCase().includes(searchLower) ||
+        game.desc.toLowerCase().includes(searchLower);
 
-      if (selectedCategory === 'Tous') return matchesSearch;
-      if (selectedCategory === 'Favoris') return matchesSearch && favorites.includes(game.id);
-      return matchesSearch && game.category.toLowerCase() === selectedCategory.toLowerCase();
+      if (!matchesSearch) return false;
+
+      if (selectedCategory === 'Tous') return true;
+      if (selectedCategory === 'Favoris') return favorites.includes(game.id);
+      return game.category.toLowerCase() === selectedCategory.toLowerCase();
     });
   }, [search, selectedCategory, favorites]);
 
@@ -101,7 +124,7 @@ export default function GameListPage() {
     <div className="min-h-screen bg-[#020617] text-white selection:bg-emerald-500 selection:text-black pb-36 font-sans">
       
       {/* LUMIÈRES DE FOND DYNAMIQUES */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
         <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-emerald-500/15 blur-[120px] rounded-full" />
         <div className="absolute top-1/3 -right-20 w-[300px] h-[300px] bg-cyan-500/10 blur-[100px] rounded-full" />
       </div>
@@ -112,7 +135,7 @@ export default function GameListPage() {
           <button 
             onClick={() => router.back()} 
             className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition-all hover:bg-white/10 active:scale-95"
-            aria-label="Retour"
+            aria-label="Retourner à la page précédente"
           >
             <ChevronLeft size={20} />
           </button>
@@ -133,14 +156,14 @@ export default function GameListPage() {
       {/* CONTENU PRINCIPAL */}
       <main className="relative z-10 mx-auto flex max-w-6xl flex-col gap-6 px-4 pt-6 sm:px-6">
         
-        {/* BANNIÈRE HERO AVEC ACTION SURPRISE */}
+        {/* BANNIÈRE HERO */}
         <motion.div 
           initial={{ opacity: 0, y: 15 }} 
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="relative overflow-hidden rounded-[30px] border border-white/10 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-emerald-950/40 p-6 backdrop-blur-md shadow-2xl"
         >
-          <div className="absolute top-0 right-0 -mt-12 -mr-12 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" />
+          <div className="absolute top-0 right-0 -mt-12 -mr-12 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" aria-hidden="true" />
           
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="max-w-xl">
@@ -150,12 +173,12 @@ export default function GameListPage() {
               <h2 className="text-2xl font-black uppercase italic tracking-tight text-white sm:text-3xl leading-none">
                 Prêt à relever le défi ?
               </h2>
-              <p className="mt-2.5 text-xs sm:text-sm leading-relaxed text-slate-300/90">
+              <p className="mt-2.5 text-xs sm:text-sm leading-relaxed text-slate-300/90 font-normal">
                 Choisissez un module, perfectionnez votre stratégie et accumulez des points d'expérience.
               </p>
             </div>
 
-            {/* BOUTON JOUER AU HASARD (Call to action fort) */}
+            {/* BOUTON JOUER AU HASARD */}
             <button
               onClick={handleRandomPlay}
               className="group relative flex items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 px-6 py-4 font-black uppercase italic tracking-wider text-black transition-all hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] active:scale-95 shrink-0"
@@ -182,6 +205,7 @@ export default function GameListPage() {
               <button 
                 onClick={() => setSearch('')}
                 className="absolute right-3.5 p-1 rounded-full text-slate-400 hover:text-white hover:bg-white/10"
+                aria-label="Effacer la recherche"
               >
                 <X size={16} />
               </button>
@@ -189,7 +213,7 @@ export default function GameListPage() {
           </div>
         </div>
 
-        {/* FILTRES PAR CATÉGORIES (PILLS SLIDER) */}
+        {/* FILTRES PAR CATÉGORIES */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           <Filter size={14} className="text-slate-500 shrink-0 mr-1" />
           {CATEGORIES.map((cat) => {
@@ -204,7 +228,7 @@ export default function GameListPage() {
                     : 'border border-white/10 bg-slate-900/60 text-slate-400 hover:border-white/20 hover:text-white'
                 }`}
               >
-                {cat} {cat === 'Favoris' && favorites.length > 0 && `(${favorites.length})`}
+                {cat} {cat === 'Favoris' && isHydrated && favorites.length > 0 && `(${favorites.length})`}
               </button>
             );
           })}
@@ -234,7 +258,7 @@ export default function GameListPage() {
               <p className="text-sm font-bold uppercase tracking-wider">Aucun jeu ne correspond à vos critères.</p>
               <button 
                 onClick={() => { setSearch(''); setSelectedCategory('Tous'); }}
-                className="mt-4 text-xs font-black uppercase text-emerald-400 underline underline-offset-4"
+                className="mt-4 text-xs font-black uppercase text-emerald-400 underline underline-offset-4 hover:text-emerald-300 transition-colors"
               >
                 Réinitialiser les filtres
               </button>
@@ -244,7 +268,7 @@ export default function GameListPage() {
 
       </main>
 
-      {/* BARRE DE NAVIGATION INFERIEURE */}
+      {/* BARRE DE NAVIGATION INFÉRIEURE */}
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#020617]/90 px-6 py-3 pb-7 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-md items-center justify-between">
           <NavIcon href="/client/home" icon={<Home size={20} />} label="ACCUEIL" active={pathname === '/client/home'} />
@@ -269,18 +293,21 @@ interface GameCardProps {
   onToggleFavorite: (e: React.MouseEvent, id: string) => void;
 }
 
-function GameCard({ game, isFavorite, onToggleFavorite }: GameCardProps) {
+const GameCard = React.memo(({ game, isFavorite, onToggleFavorite }: GameCardProps) => {
   const router = useRouter();
 
   return (
-    <motion.div
+    <motion.article
       whileHover={{ y: -4 }}
       whileTap={{ scale: 0.98 }}
       onClick={() => router.push(game.path)}
       className="group relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-[26px] border border-white/10 bg-slate-900/70 p-5 transition-all duration-300 hover:border-emerald-500/40 hover:bg-slate-900/90 hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
     >
       {/* EFFET DE SURVOL LUMINEUX */}
-      <div className={`absolute top-0 right-0 h-32 w-32 rounded-full bg-gradient-to-br ${game.color} opacity-20 blur-2xl transition-opacity group-hover:opacity-40`} />
+      <div 
+        className={`absolute top-0 right-0 h-32 w-32 rounded-full bg-gradient-to-br ${game.color} opacity-20 blur-2xl transition-opacity group-hover:opacity-40 pointer-events-none`} 
+        aria-hidden="true" 
+      />
 
       <div>
         {/* EN-TÊTE DE LA CARTE */}
@@ -306,24 +333,24 @@ function GameCard({ game, isFavorite, onToggleFavorite }: GameCardProps) {
             <button 
               onClick={(e) => onToggleFavorite(e, game.id)} 
               className="rounded-full border border-white/10 bg-white/5 p-2 transition-colors hover:bg-white/10 active:scale-90"
-              aria-label="Ajouter aux favoris"
+              aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
             >
               <Heart size={14} className={isFavorite ? 'fill-rose-500 text-rose-500' : 'text-slate-400'} />
             </button>
           </div>
         </div>
 
-        {/* DETAILS DU JEU */}
+        {/* DÉTAILS DU JEU */}
         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">{game.category}</p>
         <h4 className="mt-1 text-base font-black uppercase italic tracking-tight text-white group-hover:text-emerald-300 transition-colors">
           {game.name}
         </h4>
-        <p className="mt-1.5 text-xs text-slate-400 line-clamp-2 leading-relaxed">
+        <p className="mt-1.5 text-xs text-slate-400 line-clamp-2 leading-relaxed font-normal">
           {game.desc}
         </p>
       </div>
 
-      {/* PIED DE CARTE (Joueurs + Bouton d'action) */}
+      {/* PIED DE CARTE */}
       <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-3">
         <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
           <Users size={12} className="text-emerald-400" /> {game.players}
@@ -333,9 +360,10 @@ function GameCard({ game, isFavorite, onToggleFavorite }: GameCardProps) {
           LANCER <Play size={10} className="fill-emerald-400" />
         </div>
       </div>
-    </motion.div>
+    </motion.article>
   );
-}
+});
+GameCard.displayName = 'GameCard';
 
 interface NavIconProps {
   href: string;
@@ -344,27 +372,26 @@ interface NavIconProps {
   active?: boolean;
 }
 
-function NavIcon({ href, icon, label, active = false }: NavIconProps) {
-  return (
-    <Link 
-      href={href} 
-      className={`relative flex flex-col items-center gap-1 transition-all duration-200 ${
-        active ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'
-      }`}
-    >
-      <div className={`relative p-1 transition-all ${active ? 'scale-110' : ''}`}>
-        {icon}
-        {active && (
-          <motion.div 
-            layoutId="activeGlow"
-            className="absolute inset-0 -z-10 rounded-full bg-emerald-500/25 blur-md" 
-          />
-        )}
-      </div>
-      <span className="text-[8px] font-black uppercase tracking-[0.2em]">{label}</span>
+const NavIcon = React.memo(({ href, icon, label, active = false }: NavIconProps) => (
+  <Link 
+    href={href} 
+    className={`relative flex flex-col items-center gap-1 transition-all duration-200 ${
+      active ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'
+    }`}
+  >
+    <div className={`relative p-1 transition-all ${active ? 'scale-110' : ''}`}>
+      {icon}
       {active && (
-        <span className="absolute -bottom-1.5 h-1 w-1 rounded-full bg-emerald-400" />
+        <motion.div 
+          layoutId="activeGlowNav"
+          className="absolute inset-0 -z-10 rounded-full bg-emerald-500/25 blur-md" 
+        />
       )}
-    </Link>
-  );
-}
+    </div>
+    <span className="text-[8px] font-black uppercase tracking-[0.2em]">{label}</span>
+    {active && (
+      <span className="absolute -bottom-1.5 h-1 w-1 rounded-full bg-emerald-400" />
+    )}
+  </Link>
+));
+NavIcon.displayName = 'NavIcon';
