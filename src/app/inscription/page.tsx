@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { normalizePhoneInput } from '@/lib/phone';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -27,56 +27,66 @@ function SignupForm() {
 
   useEffect(() => {
     const ref = searchParams.get('ref');
-    if (ref) setReferralCode(ref.toUpperCase());
+    if (ref) setReferralCode(ref.toUpperCase().trim());
   }, [searchParams]);
 
-  // Fonction de gestion du changement sur le téléphone
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 1. On retire tout ce qui n'est pas un chiffre
+  // Restriction de saisie : uniquement des chiffres, max 8
+  const handlePhoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const onlyNums = e.target.value.replace(/\D/g, '');
-    // 2. On limite la taille à 8 chiffres maximum
     const trimmed = onlyNums.slice(0, 8);
     setPhone(trimmed);
-  };
+  }, []);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    if (loading) return; // Empêche les soumissions multiples
     
-    // Validation spécifique pour les 8 chiffres requis
+    setError('');
+
+    // Validations d'entrée
+    const cleanUsername = username.trim();
+    const cleanReferral = referralCode.trim().toLowerCase();
+
+    if (cleanUsername.length < 3) {
+      return setError("Le pseudo doit contenir au moins 3 caractères.");
+    }
+    
     if (phone.length !== 8) {
       return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
-    
-    const cleanPhone = normalizePhoneInput(phone);
-    if (password.length < 6) return setError("Le mot de passe doit contenir au moins 6 caractères.");
-    if (username.trim().length < 3) return setError("Le pseudo doit contenir au moins 3 caractères.");
+
+    if (password.length < 6) {
+      return setError("Le mot de passe doit contenir au moins 6 caractères.");
+    }
 
     setLoading(true);
 
     try {
-      const internalEmail = `${cleanPhone}@chifpam.ht`;
-      let referrerId: string | null = null;
-      let startBalance = 0;
+      // Normalisation sécurisée du numéro
+      const formattedPhone = normalizePhoneInput(phone);
+      const internalEmail = `${formattedPhone}@chifpam.ht`;
 
-      if (referralCode.trim().length > 0) {
+      // Verification sécurisée du parrain
+      let referrerId: string | null = null;
+      if (cleanReferral.length > 0) {
         const { data: foundId, error: rpcError } = await supabase.rpc('get_referrer_id_by_code', { 
-          code_input: referralCode.trim() 
+          code_input: cleanReferral 
         });
 
         if (!rpcError && foundId) {
           referrerId = foundId as string;
-          startBalance = 10;
         }
       }
 
+      // Création du compte utilisateur avec données metadata sécurisées
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
         options: {
           data: {
-            username: username.trim(),
-            referral_code: referralCode.trim().toLowerCase()
+            username: cleanUsername,
+            phone: formattedPhone,
+            referral_code: cleanReferral
           }
         }
       });
@@ -84,16 +94,20 @@ function SignupForm() {
       if (authError) throw authError;
 
       if (authData?.user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
+        // Tentative d'insertion dans le profil (Note: Idéalement géré via Trigger PostgreSQL)
+        const { error: profileError } = await supabase.from('profiles').upsert({
           id: authData.user.id,
-          phone: cleanPhone,
-          username: username.trim(),
+          phone: formattedPhone,
+          username: cleanUsername,
           email: internalEmail,
-          balance: startBalance,
           referred_by: referrerId
+          // Le solde initial doit être initialisé par défaut à 0 dans la base de données 
+          // ou crédité via un Trigger Supabase pour éviter la manipulation client.
         });
 
-        if (profileError) throw new Error("Erreur lors de la création du profil utilisateur.");
+        if (profileError) {
+          throw new Error("Erreur lors de la configuration du profil. Veuillez contacter le support.");
+        }
 
         router.push('/connexion?signup=success');
       }
@@ -102,7 +116,7 @@ function SignupForm() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Erreur lors de l'inscription. Veuillez réessayer.");
+        setError("Erreur inattendue lors de l'inscription. Veuillez réessayer.");
       }
     } finally {
       setLoading(false);
@@ -130,32 +144,31 @@ function SignupForm() {
 
       <form onSubmit={handleSignup} className="space-y-4">
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Pseudo Agent</label>
+          <label htmlFor="username" className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Pseudo Agent</label>
           <div className="relative">
             <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
             <DSInput 
+              id="username"
               type="text" 
               required 
               value={username} 
               onChange={(e) => setUsername(e.target.value)} 
               placeholder="Votre Nom de code" 
               className="pl-12 py-4 font-bold"
+              disabled={loading}
             />
           </div>
         </div>
 
-        {/* CHAMP TELEPHONE APPORTE AVEC SEUIL +509 ET MAXIMUM 8 CHIFFRES */}
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Téléphone</label>
+          <label htmlFor="phone" className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Téléphone</label>
           <div className="relative flex items-center">
             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
-            
-            {/* Indice +509 fixe */}
             <span className="absolute left-11 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm z-10 select-none">
               +509
             </span>
-
             <DSInput 
+              id="phone"
               type="tel" 
               inputMode="numeric"
               required 
@@ -164,26 +177,30 @@ function SignupForm() {
               maxLength={8}
               placeholder="0000 0000" 
               className="pl-24 py-4 font-bold tracking-widest"
+              disabled={loading}
             />
           </div>
         </div>
 
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Sécurité</label>
+          <label htmlFor="password" className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Sécurité</label>
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
             <DSInput 
+              id="password"
               type={showPassword ? "text" : "password"} 
               required 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
               placeholder="Mot de passe secret" 
               className="pl-12 pr-12 py-4 font-bold"
+              disabled={loading}
             />
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
+              onClick={() => setShowPassword((prev) => !prev)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors z-10"
+              tabIndex={-1}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -191,15 +208,17 @@ function SignupForm() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest ml-3">Parrainage (Optionnel)</label>
+          <label htmlFor="referralCode" className="text-[9px] font-black text-emerald-500 uppercase tracking-widest ml-3">Parrainage (Optionnel)</label>
           <div className="relative">
             <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 z-10" size={18} />
             <DSInput 
+              id="referralCode"
               type="text" 
               value={referralCode} 
               onChange={(e) => setReferralCode(e.target.value.toUpperCase())} 
               placeholder="CODE DU PARRAIN" 
               className="pl-12 py-4 font-bold uppercase text-emerald-400 border-emerald-500/30 focus:border-emerald-500"
+              disabled={loading}
             />
           </div>
         </div>
