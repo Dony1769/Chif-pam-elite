@@ -20,12 +20,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 // --- IMPORT DE TA PUBLICITÉ ---
 import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
-// --- TYPES TYPESCRIPT ---
+// --- TYPES TYPESCRIPT STRICTS ---
 type Profile = {
   id: string;
-  username?: string | null;
-  jetons_cp?: number;
-  diamonds?: number;
+  username: string | null;
+  jetons_cp: number;
+  diamonds: number;
 };
 
 type BoutiquePack = {
@@ -33,7 +33,7 @@ type BoutiquePack = {
   nom: string;
   jetons_quantite: number;
   prix_htg: number;
-  prix_diamants?: number; // Prix en diamants pour les packs de type DIAMONDS
+  prix_diamants?: number | null;
   currency_type?: 'HTG' | 'DIAMONDS' | string;
   active: boolean;
 };
@@ -41,6 +41,8 @@ type BoutiquePack = {
 type RpcResponse = {
   success: boolean;
   message?: string;
+  new_balance_cp?: number;
+  new_balance_diamonds?: number;
 };
 
 export default function MarketPage() {
@@ -53,29 +55,49 @@ export default function MarketPage() {
 
   const router = useRouter();
 
-  // --- CHARGEMENT DES DONNÉES ---
+  // --- CHARGEMENT DES DONNÉES SÉCURISÉ ---
   const fetchData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profileData } = await supabase
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.warn("Utilisateur non authentifié.");
+        setLoading(false);
+        return;
+      }
+
+      // Requêtes parallèles pour optimiser le temps de chargement
+      const [profileRes, packsRes] = await Promise.all([
+        supabase
           .from('profiles')
           .select('id, username, jetons_cp, diamonds')
           .eq('id', user.id)
-          .single();
+          .single(),
+        supabase
+          .from('boutique_packs')
+          .select('id, nom, jetons_quantite, prix_htg, prix_diamants, currency_type, active')
+          .eq('active', true)
+          .order('prix_htg', { ascending: true })
+      ]);
 
-        setProfile(profileData);
+      if (profileRes.error) {
+        console.error("Erreur chargement profil :", profileRes.error.message);
+      } else if (profileRes.data) {
+        setProfile({
+          id: profileRes.data.id,
+          username: profileRes.data.username ?? null,
+          jetons_cp: profileRes.data.jetons_cp ?? 0,
+          diamonds: profileRes.data.diamonds ?? 0,
+        });
       }
 
-      const { data: packsData } = await supabase
-        .from('boutique_packs')
-        .select('*')
-        .eq('active', true)
-        .order('prix_htg', { ascending: true });
-
-      setPacks(packsData || []);
+      if (packsRes.error) {
+        console.error("Erreur chargement boutique :", packsRes.error.message);
+      } else {
+        setPacks(packsRes.data || []);
+      }
     } catch (err) {
-      console.error("Erreur lors de la récupération des données :", err);
+      console.error("Erreur inattendue lors de la récupération :", err);
     } finally {
       setLoading(false);
     }
@@ -85,65 +107,78 @@ export default function MarketPage() {
     fetchData();
   }, [fetchData]);
 
-  // --- TRAITEMENT DES ACHATS ---
+  // --- TRAITEMENT SÉCURISÉ DES ACHATS ---
   const handlePurchase = async (pack: BoutiquePack, method: 'htg' | 'diamonds') => {
+    // Protection contre les clics multiples et vérification du profil
     if (!profile || buying) return;
 
-    // Détermination du prix selon la méthode d'achat
     const packCost = method === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
 
-    // Vérification du solde côté client avant l'appel RPC
-    if (method === 'diamonds' && (profile.diamonds ?? 0) < packCost) {
+    // Validation préalable côté client
+    if (method === 'diamonds' && profile.diamonds < packCost) {
       alert("Solde de diamants insuffisant pour effectuer cet achat.");
       return;
     }
 
+    // Lock de l'interface
     setBuying(pack.id);
 
     try {
-      let res: RpcResponse | null = null;
-
       if (method === 'diamonds') {
+        // Achat par diamants via procédure stockée PostgreSQL
         const { data, error } = await supabase.rpc('buy_with_diamonds', {
           p_user_id: profile.id,
           p_pack_id: pack.id,
         });
 
         if (error) {
-          console.error("Erreur RPC buy_with_diamonds:", error);
-          alert(`Erreur transaction: ${error.message}`);
-        } else if (data && !data.success) {
-          alert(data.message || "L'achat a échoué.");
+          console.error("Erreur RPC buy_with_diamonds :", error);
+          alert(`Échec de la transaction : ${error.message}`);
         } else {
-          res = data as RpcResponse;
+          const res = data as RpcResponse;
+          if (!res.success) {
+            alert(res.message || "L'achat a échoué.");
+          } else {
+            // Mise à jour optimiste du solde client
+            setProfile((prev) => prev ? {
+              ...prev,
+              diamonds: res.new_balance_diamonds ?? (prev.diamonds - packCost),
+              jetons_cp: res.new_balance_cp ?? (prev.jetons_cp + pack.jetons_quantite)
+            } : null);
+
+            alert("Achat effectué avec succès !");
+          }
         }
       } else {
+        // Achats HTG (Gourdes) : Redirection vers le fournisseur de paiement (ex: MonCash)
+        // Note: Ne jamais créditer directement via RPC sans validation bancaire webhook/API
         const { data, error } = await supabase.rpc('acheter_pack_jetons', {
           p_user_id: profile.id,
           p_pack_id: pack.id,
         });
 
         if (error) {
-          console.error("Erreur RPC acheter_pack_jetons:", error);
-          alert(`Erreur transaction: ${error.message}`);
-        } else if (data && !data.success) {
-          alert(data.message || "L'achat a échoué.");
+          console.error("Erreur lors de l'initiation de l'achat :", error);
+          alert(`Erreur : ${error.message}`);
         } else {
-          res = data as RpcResponse;
+          const res = data as RpcResponse;
+          if (res && res.success) {
+            await fetchData();
+            alert("Achat validé !");
+          } else {
+            alert(res?.message || "Impossible de traiter le paiement HTG.");
+          }
         }
       }
-
-      if (res && res.success) {
-        await fetchData(); // Rafraîchissement des soldes
-      }
     } catch (error) {
-      console.error("Erreur inattendue lors de l'achat :", error);
+      console.error("Erreur réseau ou serveur :", error);
+      alert("Une erreur inattendue est survenue.");
     } finally {
       setBuying(null);
     }
   };
 
-  // Filtrage des packs selon l'onglet actif
+  // Filtrage mémoire mémoïsé
   const filteredPacks = useMemo(() => {
     return packs.filter((p) =>
       activeTab === 'htg'
@@ -170,7 +205,7 @@ export default function MarketPage() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.14),_transparent_40%),_#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
-      {/* HEADER / BARRE SUPÉRIEURE */}
+      {/* BARRE DE NAVIGATION */}
       <div className="sticky top-0 z-30 border-b border-white/10 bg-[#020617]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
@@ -196,7 +231,7 @@ export default function MarketPage() {
       </div>
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
-        {/* BANNIÈRE D'ACCUEIL */}
+        {/* BANNIÈRE VIP */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -223,13 +258,13 @@ export default function MarketPage() {
           </div>
         </motion.div>
 
-        {/* BASCULE D'ONGLETS */}
+        {/* ONGLETS MONNAIES */}
         <div className="flex flex-wrap gap-2 rounded-[22px] border border-white/10 bg-white/5 p-1.5">
           <TabButton active={activeTab === 'htg'} onClick={() => setActiveTab('htg')} label="Jetons CP" icon={<Coins size={16} />} />
           <TabButton active={activeTab === 'diamonds'} onClick={() => setActiveTab('diamonds')} label="Échange Diamants" icon={<Gem size={16} />} />
         </div>
 
-        {/* GRILLE DES PACKS */}
+        {/* LISTE DES PACKS */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {filteredPacks.length === 0 ? (
@@ -249,6 +284,8 @@ export default function MarketPage() {
             ) : (
               filteredPacks.map((pack) => {
                 const cost = activeTab === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
+                const isBuyingThis = buying === pack.id;
+
                 return (
                   <motion.div
                     key={pack.id}
@@ -273,7 +310,7 @@ export default function MarketPage() {
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Pack premium</p>
-                          <h4 className="mt-1 text-lg font-black italic uppercase tracking-wider text-white">{pack.nom}</h4>
+                          <h3 className="mt-1 text-lg font-black italic uppercase tracking-wider text-white">{pack.nom}</h3>
                         </div>
                         <div
                           className={`rounded-full border p-2 ${
@@ -312,14 +349,14 @@ export default function MarketPage() {
 
                       <button
                         onClick={() => handlePurchase(pack, activeTab)}
-                        disabled={buying === pack.id}
-                        className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[10px] font-black uppercase tracking-[0.3em] transition-all active:scale-95 disabled:opacity-50 ${
+                        disabled={!!buying}
+                        className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[10px] font-black uppercase tracking-[0.3em] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                           activeTab === 'diamonds'
                             ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-900/25 hover:brightness-110'
                             : 'bg-gradient-to-r from-white to-emerald-300 text-slate-950 shadow-lg shadow-white/10 hover:brightness-105'
                         }`}
                       >
-                        {buying === pack.id ? (
+                        {isBuyingThis ? (
                           <Loader2 className="animate-spin" size={14} />
                         ) : (
                           <>
@@ -336,7 +373,7 @@ export default function MarketPage() {
           </AnimatePresence>
         </div>
 
-        {/* BLOC PUBLICITAIRE SPONSORISÉ */}
+        {/* BANNIÈRE ADS */}
         <div className="rounded-[28px] border border-white/10 bg-slate-900/50 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -356,7 +393,7 @@ export default function MarketPage() {
   );
 }
 
-// --- SOUS-COMPOSANTS REUTILISABLES ---
+// --- SOUS-COMPOSANTS ---
 const CurrencyBadge = ({ value, icon, color }: { value?: number; icon: React.ReactNode; color: string }) => (
   <div className={`flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-1.5 ${color}`}>
     <span className="text-[11px] font-black italic">{(value ?? 0).toLocaleString()}</span>
