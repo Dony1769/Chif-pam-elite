@@ -24,12 +24,11 @@ import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/N
 interface UserProfile {
   id: string;
   jetons_cp: number;
-  [key: string]: unknown;
 }
 
 interface GameSettings {
   is_active: boolean;
-  maintenance_msg: string;
+  maintenance_msg: string | null;
 }
 
 interface BiometricGameRecord {
@@ -40,80 +39,106 @@ interface BiometricGameRecord {
   gain_cp?: number;
 }
 
-type GameStatus = 'idle' | 'showing' | 'input' | 'lost' | 'won' | 'loading' | 'maintenance' | 'awaiting_ad_return';
+type GameStatus = 
+  | 'idle' 
+  | 'showing' 
+  | 'input' 
+  | 'lost' 
+  | 'won' 
+  | 'loading' 
+  | 'maintenance' 
+  | 'awaiting_ad_return';
 
 const MONETAG_AD_URL = "https://omg10.com/4/11431323";
-const REQUIRED_AD_TIME_MS = 6000; // 6 secondes
+const REQUIRED_AD_TIME_MS = 6000;
 
-// --- SYSTÈME AUDIO ÉVOLUÉ (Web Audio API) ---
-const playAdvancedSound = (type: 'click' | 'success' | 'fail' | 'cashout' | 'scan') => {
-  if (typeof window === 'undefined') return;
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+// --- GESTIONNAIRE AUDIO OPTIMISÉ ET SÉCURISÉ ---
+class SoundController {
+  private static audioCtx: AudioContext | null = null;
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    const now = ctx.currentTime;
-
-    switch (type) {
-      case 'click':
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.exponentialRampToValueAtTime(880, now + 0.05);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-        osc.start(now);
-        osc.stop(now + 0.05);
-        break;
-
-      case 'scan':
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.linearRampToValueAtTime(500, now + 0.1);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-        break;
-
-      case 'success':
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now);
-        osc.frequency.setValueAtTime(659.25, now + 0.08);
-        osc.frequency.setValueAtTime(783.99, now + 0.16);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.3);
-        break;
-
-      case 'fail':
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(180, now);
-        osc.frequency.linearRampToValueAtTime(110, now + 0.3);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.3);
-        break;
-
-      case 'cashout':
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, now);
-        osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
-        gain.gain.setValueAtTime(0.25, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-        osc.start(now);
-        osc.stop(now + 0.4);
-        break;
+  private static getContext(): AudioContext | null {
+    if (typeof window === 'undefined') return null;
+    if (!this.audioCtx) {
+      const AudioCtxClass = window.AudioContext || (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtxClass) {
+        this.audioCtx = new AudioCtxClass();
+      }
     }
-  } catch {
-    // Ignorer si bloqué par le navigateur
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    return this.audioCtx;
   }
-};
+
+  public static play(type: 'click' | 'success' | 'fail' | 'cashout' | 'scan') {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+
+      switch (type) {
+        case 'click':
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(600, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.05);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+          osc.start(now);
+          osc.stop(now + 0.05);
+          break;
+
+        case 'scan':
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(300, now);
+          osc.frequency.linearRampToValueAtTime(500, now + 0.1);
+          gain.gain.setValueAtTime(0.1, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+          osc.start(now);
+          osc.stop(now + 0.1);
+          break;
+
+        case 'success':
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.08);
+          osc.frequency.setValueAtTime(783.99, now + 0.16);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.start(now);
+          osc.stop(now + 0.3);
+          break;
+
+        case 'fail':
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(180, now);
+          osc.frequency.linearRampToValueAtTime(110, now + 0.3);
+          gain.gain.setValueAtTime(0.3, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.start(now);
+          osc.stop(now + 0.3);
+          break;
+
+        case 'cashout':
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+          osc.start(now);
+          osc.stop(now + 0.4);
+          break;
+      }
+    } catch {
+      // Ignorer si bloqué par les politiques d'autoplay du navigateur
+    }
+  }
+}
 
 const triggerHapticFeedback = (pattern: number | number[] = [10, 30, 10]) => {
   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -127,7 +152,7 @@ function BiometricGameContent() {
   const challengeId = searchParams.get('challengeId');
   const challengeFee = searchParams.get('fee');
 
-  // --- ÉTATS ---
+  // --- ÉTATS COMPOSANT ---
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [status, setStatus] = useState<GameStatus>('loading');
   const [maintenanceMsg, setMaintenanceMsg] = useState<string>("Protocole de sécurité en cours...");
@@ -147,29 +172,34 @@ function BiometricGameContent() {
   const [shakeGrid, setShakeGrid] = useState<boolean>(false);
   const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
 
-  // REFS
+  // --- REFS POUR ACCÈS ATOMIQUE ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
-  const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null });
+  const gameStateRef = useRef({ multiplier: 0.5, gameId: null as string | null, sessionsSolved: 0 });
+  const adTrackerRef = useRef<{ startTime: number; token: string } | null>(null);
 
   useEffect(() => {
-    gameStateRef.current = { multiplier, gameId };
-  }, [multiplier, gameId]);
+    gameStateRef.current = { multiplier, gameId, sessionsSolved };
+  }, [multiplier, gameId, sessionsSolved]);
 
+  // VÉRIFICATION MAINTENANCE ET CHARGEMENT DU PROFIL
   const checkAccess = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('game_settings')
         .select('is_active, maintenance_msg')
         .eq('game_id', 'biometric')
-        .single<GameSettings>();
+        .maybeSingle<GameSettings>();
 
       if (data && !data.is_active) {
         setMaintenanceMsg(data.maintenance_msg || "Serveurs en maintenance.");
         setStatus('maintenance');
       } else { 
         setStatus('idle'); 
-        if (challengeId && challengeFee) setBetCP(Number(challengeFee));
+        if (challengeId && challengeFee) {
+          const parsedFee = Math.max(10, Math.floor(Number(challengeFee)));
+          setBetCP(isNaN(parsedFee) ? 100 : parsedFee);
+        }
       }
     } catch {
       setStatus('idle'); 
@@ -177,36 +207,48 @@ function BiometricGameContent() {
   }, [challengeId, challengeFee]);
 
   const init = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(data as UserProfile);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, jetons_cp')
+          .eq('id', user.id)
+          .single();
+          
+        if (data) {
+          setProfile(data as UserProfile);
+        }
+      }
+      await checkAccess();
+    } catch (err) {
+      console.error("Échec d'initialisation du profil :", err);
     }
-    await checkAccess();
   }, [checkAccess]);
 
   useEffect(() => { 
     init(); 
   }, [init]);
 
-  // --- VÉRIFICATION DU RETOUR APPRÈS CLIC SUR LA PUB ---
+  // --- GESTION DU RETOUR APRÈS LA PUBLICITÉ (SECONDE CHANCE) ---
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && status === 'awaiting_ad_return') {
-        const adStartTime = localStorage.getItem('biometric_ad_start_time');
-        if (!adStartTime) {
+        const tracker = adTrackerRef.current;
+        adTrackerRef.current = null;
+
+        if (!tracker || !tracker.startTime) {
+          setAdErrorMsg("Session publicitaire invalide.");
           setStatus('lost');
           return;
         }
 
-        const elapsedTime = Date.now() - parseInt(adStartTime, 10);
-        localStorage.removeItem('biometric_ad_start_time');
+        const elapsedTime = Date.now() - tracker.startTime;
 
         if (elapsedTime >= REQUIRED_AD_TIME_MS) {
-          // Temps respecté (>= 6s) -> Déduction de 50% de la mise
           const penaltyFee = Math.floor(lockedBetRef.current * 0.5);
           
-          if (profile && profile.jetons_cp < penaltyFee) {
+          if (!profile || profile.jetons_cp < penaltyFee) {
             setAdErrorMsg("Solde insuffisant pour la relance (50% de la mise requis).");
             setStatus('lost');
             return;
@@ -215,23 +257,24 @@ function BiometricGameContent() {
           setLoading(true);
           try {
             const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-              p_user_id: profile?.id, 
+              p_user_id: profile.id, 
               p_mise_cp: penaltyFee, 
               p_gain_cp: 0, 
               p_jeu_nom: 'Biometric Revive Fee'
             });
 
             if (rpcError || !result?.success) {
-              throw new Error("Erreur de déduction pour la seconde chance.");
+              throw new Error(result?.message || "Erreur de déduction pour la seconde chance.");
             }
 
             setCanRevive(false);
             setCombo(1);
             setAdErrorMsg(null);
             isProcessingRef.current = false;
-            setStatus('showing');
+            
+            // Relancer la séquence
             generatePattern(gridSize);
-            playAdvancedSound('scan');
+            SoundController.play('scan');
             await init();
           } catch (e: unknown) {
             const err = e as Error;
@@ -242,7 +285,7 @@ function BiometricGameContent() {
           }
         } else {
           const remainingSec = Math.ceil((REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
-          setAdErrorMsg(`Temps insuffisant sur le lien pub (${remainingSec}s manquantes). Seconde chance annulée.`);
+          setAdErrorMsg(`Temps insuffisant sur la page (${remainingSec}s manquantes). Seconde chance annulée.`);
           setStatus('lost');
         }
       }
@@ -252,35 +295,52 @@ function BiometricGameContent() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [status, profile, gridSize, init]);
 
-  // --- GENERATION DES MOTIFS ---
+  // --- GÉNÉRATION SÉCURISÉE DES MOTIFS ---
   const generatePattern = useCallback((size: number) => {
     const cells = size * size;
-    const count = size + 1; 
+    const count = Math.min(size + 1, cells); 
     const newPattern: number[] = [];
+    
     while (newPattern.length < count) {
       const r = Math.floor(Math.random() * cells);
       if (!newPattern.includes(r)) newPattern.push(r);
     }
+    
     setPattern(newPattern);
     setUserPattern([]);
     setSessionTimer(10);
     setStatus('showing');
-    playAdvancedSound('scan');
+    SoundController.play('scan');
   }, []);
-  
-  // --- TIMERS DE PHASE ---
+
+  // --- ÉCHEC DE PARTIE ---
+  const handleFailure = useCallback(() => {
+    if (isProcessingRef.current) return;
+    triggerHapticFeedback([100, 50, 100]);
+    SoundController.play('fail');
+    setShakeGrid(true);
+    setTimeout(() => setShakeGrid(false), 500);
+
+    setCombo(1);
+    setStatus('lost');
+  }, []);
+
+  // --- GESTION NETTE DES TIMERS ---
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     let intervalId: NodeJS.Timeout;
 
     if (status === 'showing') {
-      timeoutId = setTimeout(() => setStatus('input'), displayTime);
+      timeoutId = setTimeout(() => {
+        setStatus('input');
+      }, displayTime);
     }
 
     if (status === 'input') {
       intervalId = setInterval(() => {
-        setSessionTimer(prev => {
+        setSessionTimer((prev) => {
           if (prev <= 1) { 
+            clearInterval(intervalId);
             handleFailure(); 
             return 0; 
           }
@@ -293,23 +353,30 @@ function BiometricGameContent() {
       if (timeoutId) clearTimeout(timeoutId);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [status, displayTime]);
+  }, [status, displayTime, handleFailure]);
 
-  // --- DÉMARRAGE DU JEU ---
+  // --- DÉMARRAGE D'UNE NOUVELLE PARTIE ---
   const startGame = async () => {
-    if (!profile || loading) return;
-    if (betCP < 10 && !challengeId) { 
-      alert("Mise minimum : 10 CP"); 
+    if (!profile || loading || isProcessingRef.current) return;
+    
+    const finalFee = challengeId ? Math.floor(Number(challengeFee)) : Math.floor(betCP);
+    
+    if (isNaN(finalFee) || finalFee < 10) { 
+      alert("Mise minimum valide : 10 CP"); 
       return; 
     }
     
+    if (profile.jetons_cp < finalFee) {
+      alert("Solde de CP insuffisant pour démarrer.");
+      return;
+    }
+
     triggerHapticFeedback([20, 50, 20]);
     setLoading(true);
+    isProcessingRef.current = true;
     setAdErrorMsg(null);
-    isProcessingRef.current = false;
 
     try {
-      const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
       lockedBetRef.current = finalFee;
 
       const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
@@ -319,7 +386,9 @@ function BiometricGameContent() {
         p_jeu_nom: 'Biometric Start'
       });
 
-      if (rpcError || !result?.success) throw new Error(result?.message || "Solde de CP insuffisant.");
+      if (rpcError || !result?.success) {
+        throw new Error(result?.message || "Erreur lors du prélèvement des CP.");
+      }
 
       const { data: game, error: gameErr } = await supabase
         .from('biometric_games')
@@ -327,7 +396,7 @@ function BiometricGameContent() {
         .select()
         .single<BiometricGameRecord>();
 
-      if (gameErr) throw gameErr;
+      if (gameErr || !game) throw gameErr || new Error("Erreur de création de session.");
 
       const economySettings = getGameEconomySettings('biometric', 'intermédiaire').profile;
       setGameId(game.id);
@@ -337,17 +406,21 @@ function BiometricGameContent() {
       setCanRevive(true);
       setCombo(1);
       setDisplayTime(economySettings.displayTime ?? 1000);
+      
+      isProcessingRef.current = false;
       generatePattern(economySettings.gridSize ?? 3);
     } catch (e: unknown) { 
       const err = e as Error;
       alert(err.message || "Erreur de communication avec le serveur."); 
+      isProcessingRef.current = false;
     } finally { 
       setLoading(false); 
     }
   };
 
+  // --- CLIC SUR LES CASES DE LA GRILLE ---
   const handleCellClick = (idx: number) => {
-    if (status !== 'input' || userPattern.includes(idx)) return;
+    if (status !== 'input' || userPattern.includes(idx) || isProcessingRef.current) return;
     
     triggerHapticFeedback(15);
     const nextUserPattern = [...userPattern, idx];
@@ -358,44 +431,42 @@ function BiometricGameContent() {
       return; 
     }
     
-    playAdvancedSound('click');
-    setCombo(prev => prev + 1);
+    SoundController.play('click');
+    setCombo((prev) => prev + 1);
 
     if (nextUserPattern.length === pattern.length) {
-      playAdvancedSound('success');
-      setSessionsSolved(s => s + 1);
-      setMultiplier(prev => parseFloat((prev + 0.10).toFixed(2)));
+      SoundController.play('success');
+      const nextSolved = sessionsSolved + 1;
+      setSessionsSolved(nextSolved);
+      setMultiplier((prev) => parseFloat((prev + 0.10).toFixed(2)));
       
       let nextGrid = gridSize;
-      if (sessionsSolved >= 2 && gridSize === 3) nextGrid = 5;
-      if (sessionsSolved >= 4 && gridSize === 5) nextGrid = 7;
+      if (nextSolved >= 2 && gridSize === 3) nextGrid = 5;
+      if (nextSolved >= 4 && gridSize === 5) nextGrid = 7;
       setGridSize(nextGrid);
       
-      setDisplayTime(prev => Math.max(300, prev - 100));
+      setDisplayTime((prev) => Math.max(300, prev - 100));
       setTimeout(() => generatePattern(nextGrid), 400);
     }
   };
 
-  const handleFailure = async () => {
-    triggerHapticFeedback([100, 50, 100]);
-    playAdvancedSound('fail');
-    setShakeGrid(true);
-    setTimeout(() => setShakeGrid(false), 500);
-
-    setCombo(1);
-    setStatus('lost');
-  };
-
-  // --- CRAMPONNER LE GAIN ET CLÔTURER ---
-  const finalizeGame = async (wasAutoSaved: boolean = false) => {
+  // --- FINALISATION DE LA PARTIE ET CLÔTURE SECURE ---
+  const finalizeGame = async (allowPartialRescue: boolean = false) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
-    if (!gameId) return;
+    const currentActiveGameId = gameStateRef.current.gameId;
+    if (!currentActiveGameId || !profile) {
+      isProcessingRef.current = false;
+      return;
+    }
+
     setLoading(true);
     
     const secureBet = lockedBetRef.current;
     const currentMult = gameStateRef.current.multiplier;
+    const currentSolved = gameStateRef.current.sessionsSolved;
+    
     let gainFinal = 0;
 
     const economy = resolveGameEconomy({
@@ -403,14 +474,17 @@ function BiometricGameContent() {
       bet: secureBet,
       multiplier: currentMult,
       difficulty: 'intermédiaire',
-      currentStep: sessionsSolved,
+      currentStep: currentSolved,
       bonusMultiplier: 1,
       jackpotMultiplier: 1,
       specialEventMultiplier: 1
     });
 
-    if (wasAutoSaved || status === 'input' || status === 'showing' || status === 'lost') {
+    // Seul un retrait volontaire ou une récupération autorisée attribue un gain
+    if (!allowPartialRescue && currentMult >= 1.0) {
       gainFinal = economy.payout;
+    } else if (allowPartialRescue) {
+      gainFinal = Math.floor(secureBet * currentMult);
     } else {
       gainFinal = 0;
     }
@@ -418,55 +492,62 @@ function BiometricGameContent() {
     try {
       if (challengeId) {
         await supabase.rpc('increment_challenge_score', {
-          p_user_id: profile?.id, 
+          p_user_id: profile.id, 
           p_challenge_id: challengeId, 
-          p_score: sessionsSolved * 10
+          p_score: currentSolved * 10
         });
       } else if (gainFinal > 0) {
         await supabase.rpc('jouer_partie_cp', {
-          p_user_id: profile?.id, 
+          p_user_id: profile.id, 
           p_mise_cp: 0, 
           p_gain_cp: gainFinal, 
-          p_jeu_nom: 'Biometric Final'
+          p_jeu_nom: 'Biometric Cashout'
         });
       }
 
       await supabase
         .from('biometric_games')
         .update({ is_active: false, gain_cp: gainFinal })
-        .eq('id', gameId);
+        .eq('id', currentActiveGameId);
       
-      if (gainFinal > 0) playAdvancedSound('cashout');
-      setStatus(gainFinal > 0 || (challengeId && sessionsSolved > 0) ? 'won' : 'lost');
+      if (gainFinal > 0) SoundController.play('cashout');
+      setStatus(gainFinal > 0 || (challengeId && currentSolved > 0) ? 'won' : 'lost');
     } catch (e) { 
       console.error("Erreur lors de la finalisation :", e); 
     } finally { 
       setLoading(false); 
-      init(); 
+      isProcessingRef.current = false;
+      await init(); 
     }
   };
 
-  // --- DÉCLENCHEMENT DU CLIC SUR LA PUB ---
+  // --- DÉCLENCHEMENT SÉCURISÉ DE LA PUBLICITÉ ---
   const handleAdClick = () => {
-    localStorage.setItem('biometric_ad_start_time', Date.now().toString());
+    adTrackerRef.current = {
+      startTime: Date.now(),
+      token: Math.random().toString(36).substring(2)
+    };
     setStatus('awaiting_ad_return');
-    window.open(MONETAG_AD_URL, '_blank');
+    window.open(MONETAG_AD_URL, '_blank', 'noopener,noreferrer');
   };
 
   const adjustBet = (amount: number | 'max' | 'double') => {
     triggerHapticFeedback(10);
     if (!profile) return;
+    const currentBalance = profile.jetons_cp || 10;
+
     if (amount === 'max') {
-      setBetCP(Math.max(10, profile.jetons_cp || 10));
+      setBetCP(Math.max(10, currentBalance));
     } else if (amount === 'double') {
-      setBetCP(prev => Math.min(profile.jetons_cp || prev, prev * 2));
+      setBetCP((prev) => Math.min(currentBalance, Math.max(10, prev * 2)));
     } else {
-      setBetCP(prev => Math.max(10, prev + amount));
+      setBetCP((prev) => Math.min(currentBalance, Math.max(10, prev + amount)));
     }
   };
 
   const difficultyLabel = gridSize <= 3 ? 'IRIS-01' : gridSize <= 5 ? 'FINGERPRINT-02' : 'BIOLOCK-03';
   const progressionStage = Math.min(3, Math.floor(sessionsSolved / 2) + 1);
+  const currentCalculatedGain = Math.floor(lockedBetRef.current * multiplier);
 
   if (status === 'maintenance') {
     return (
@@ -478,9 +559,6 @@ function BiometricGameContent() {
       </NeonGameShell>
     );
   }
-
-  // Calcul du gain si abandon en zone < 1.00
-  const currentCalculatedGain = Math.floor(lockedBetRef.current * multiplier);
 
   return (
     <NeonGameShell accent="emerald" className="h-screen font-sans select-none">
@@ -540,7 +618,7 @@ function BiometricGameContent() {
                     type="number" 
                     disabled={!!challengeId} 
                     value={betCP} 
-                    onChange={e => setBetCP(Math.max(10, Number(e.target.value)))} 
+                    onChange={(e) => setBetCP(Math.max(10, Math.floor(Number(e.target.value) || 0)))} 
                     className="w-full bg-transparent text-center text-4xl font-black tracking-tighter text-white outline-none focus:text-emerald-400" 
                   />
 
@@ -557,7 +635,7 @@ function BiometricGameContent() {
                 <button 
                   onClick={startGame} 
                   disabled={loading} 
-                  className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 font-black text-lg text-white shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 font-black text-lg text-white shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {loading ? <Loader2 className="animate-spin" /> : <><Sparkles size={20} /> INITIALISER LE SCAN</>}
                 </button>
@@ -660,7 +738,7 @@ function BiometricGameContent() {
                 disabled={loading}
                 className="w-full mt-6 py-4 font-black rounded-2xl text-lg bg-gradient-to-r from-emerald-400 to-emerald-500 text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.3)] active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
               >
-                {loading ? <Loader2 className="animate-spin" /> : <><Zap size={20} fill="black" /> ENCAISSER {Math.floor(betCP * multiplier)} CP</>}
+                {loading ? <Loader2 className="animate-spin" /> : <><Zap size={20} fill="black" /> ENCAISSER {Math.floor(lockedBetRef.current * multiplier)} CP</>}
               </motion.button>
             )}
             
@@ -673,7 +751,7 @@ function BiometricGameContent() {
         )}
       </div>
 
-      {/* MODAL DE RÉSULTAT ET DE SECONDE CHANCE */}
+      {/* MODAL DE RÉSULTAT ET SECONDE CHANCE */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won' || status === 'awaiting_ad_return') && (
           <motion.div 
@@ -709,14 +787,14 @@ function BiometricGameContent() {
                 <div className="bg-white/5 p-5 rounded-3xl w-full max-w-xs my-4 border border-white/10 shadow-inner">
                   <p className="text-[10px] text-zinc-400 mb-1 font-bold tracking-widest uppercase">Gains Obtenus</p>
                   <p className="text-4xl font-black italic tracking-tighter text-white">
-                    {status === 'won' ? Math.floor(lockedBetRef.current * multiplier) : currentCalculatedGain} 
+                    {status === 'won' ? Math.floor(lockedBetRef.current * multiplier) : 0} 
                     <span className="text-sm text-emerald-400 ml-1 font-bold">CP</span>
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-3 w-full max-w-xs">
-                  {/* Option Pub / Seconde Chance si : Perdu + Mode hors challenge + Multiplicateur < 1.00 */}
-                  {status === 'lost' && canRevive && !challengeId && multiplier < 1.00 && (
+                  {/* Seconde chance via lien pub si défaite en mode classique */}
+                  {status === 'lost' && canRevive && !challengeId && (
                     <button 
                       onClick={handleAdClick} 
                       className="w-full py-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-2xl font-black text-xs active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-950/40 border border-cyan-300/30"
@@ -730,7 +808,7 @@ function BiometricGameContent() {
                     </button>
                   )}
                   
-                  {status === 'lost' && (
+                  {status === 'lost' && currentCalculatedGain > 0 && (
                     <button 
                       onClick={() => finalizeGame(true)} 
                       className="w-full py-3.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 rounded-2xl font-bold text-xs active:scale-95 transition-all"
