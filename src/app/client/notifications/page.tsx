@@ -71,6 +71,18 @@ export default function ClientNotifications() {
   const [isTabVisible, setIsTabVisible] = useState(true);
   const router = useRouter();
 
+  // --- SÉCURITÉ : Validation stricte des liens internes (Anti-Open Redirect) ---
+  const handleNavigation = (link?: string | null) => {
+    if (!link) return;
+    // Vérifie que le lien commence par "/" mais pas par "//" (externe)
+    if (link.startsWith('/') && !link.startsWith('//')) {
+      router.push(link);
+    } else {
+      console.warn("Tentative de redirection externe bloquée :", link);
+      router.push('/client/notifications');
+    }
+  };
+
   // --- ENVOI DE NOTIFICATION NATIVE (Navigateur) ---
   const sendNativePush = async (title: string, body: string) => {
     if (typeof window === 'undefined' || !("Notification" in window)) return;
@@ -99,16 +111,18 @@ export default function ClientNotifications() {
   const fetchAllData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/connexion');
+      if (!user) {
+        router.push('/connexion');
+        return;
+      }
       setUserId(user.id);
 
       const nowIso = new Date().toISOString();
 
-      // Récupération simultanée des notifications, défis et transactions refusées
       const [notifsRes, challengesRes, transactionsRes] = await Promise.all([
         supabase
           .from('notifications')
-          .select('id, title, content, created_at, is_read')
+          .select('id, title, content, created_at, is_read, link, admin_note')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -131,6 +145,8 @@ export default function ClientNotifications() {
       setNotifications((notifsRes.data || []) as NotificationRow[]);
       setLiveChallenges((challengesRes.data || []) as ChallengeRow[]);
       setRejectedTransactions((transactionsRes.data || []) as TransactionRow[]);
+    } catch (err) {
+      console.error('Erreur lors du chargement des données :', err);
     } finally { 
       setLoading(false); 
     }
@@ -138,9 +154,13 @@ export default function ClientNotifications() {
 
   const checkPushSubscription = useCallback(async () => {
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      setPushEnabled(!!sub && Notification.permission === "granted");
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setPushEnabled(!!sub && Notification.permission === "granted");
+      } catch (err) {
+        console.error("Erreur vérification push:", err);
+      }
     }
   }, []);
 
@@ -159,12 +179,12 @@ export default function ClientNotifications() {
     checkPushSubscription();
   }, [checkPushSubscription, fetchAllData]);
 
-  // ÉCOUTE EN TEMPS RÉEL
+  // ÉCOUTE EN TEMPS RÉEL (OPTIMISÉE)
   useEffect(() => {
     if (!userId || !isTabVisible) return;
 
     const channel = supabase.channel('notif_radar_sync')
-      // 1. Écoute des nouvelles notifications
+      // 1. Notifications
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
@@ -175,7 +195,7 @@ export default function ClientNotifications() {
         setNotifications(prev => [n, ...prev.filter((item) => item.id !== n.id)]);
         sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle information");
       })
-      // 2. Écoute des mises à jour sur les défis
+      // 2. Défis
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -194,7 +214,7 @@ export default function ClientNotifications() {
           }
         }
       })
-      // 3. Écoute des mises à jour de transactions (refus/annulation)
+      // 3. Transactions (Mise à jour dynamique des refus/annulations)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -202,17 +222,41 @@ export default function ClientNotifications() {
         filter: `user_id=eq.${userId}`
       }, (payload) => {
         const tx = payload.new as TransactionRow;
+        if (!tx) return;
+
         if (tx.status === 'REJECTED' || tx.status === 'CANCELLED') {
           setRejectedTransactions(prev => [tx, ...prev.filter(t => t.id !== tx.id)]);
           const typeLabel = tx.type === 'DEPOSIT' ? 'Dépôt' : 'Retrait';
           const reasonText = tx.admin_note ? ` Motif : ${tx.admin_note}` : '';
           sendNativePush(`REFUS DE ${typeLabel.toUpperCase()} ❌`, `Votre demande de ${tx.amount} HTG a été refusée.${reasonText}`);
+        } else {
+          // Si la transaction n'est plus rejetée (ex: approuvée), on la retire des alertes de refus
+          setRejectedTransactions(prev => prev.filter(t => t.id !== tx.id));
         }
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      supabase.removeChannel(channel); 
+    };
   }, [isTabVisible, userId]);
+
+  // Conversion sécurisée Base64 pour VAPID Key
+  const urlBase64ToUint8Array = (bs: string) => {
+    try {
+      const pad = '='.repeat((4 - bs.length % 4) % 4);
+      const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(b64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    } catch (e) {
+      console.error("Erreur décodage VAPID Key :", e);
+      throw new Error("Clé VAPID invalide");
+    }
+  };
 
   const togglePush = async () => {
     setIsRegistering(true);
@@ -238,6 +282,7 @@ export default function ClientNotifications() {
             sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar est actif.");
             setPushEnabled(true);
           } else {
+            console.error("Erreur Supabase push:", error);
             alert("Erreur lors de la sauvegarde de l'abonnement.");
           }
         }
@@ -252,23 +297,22 @@ export default function ClientNotifications() {
     }
   };
 
-  const urlBase64ToUint8Array = (bs: string) => {
-    const pad = '='.repeat((4 - bs.length % 4) % 4);
-    const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
-    return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
-  };
-
   const handleMarkAllAsRead = async () => {
     if (!userId) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    try {
+      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
+      if (!error) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      }
+    } catch (err) {
+      console.error("Erreur lors du marquage des notifications :", err);
+    }
   };
 
   // FUSION ET MISE EN FORME DE TOUTES LES ALERTES
   const allAlerts = useMemo<AlertItem[]>(() => {
     const now = new Date();
 
-    // 1. Défis actifs
     const validChallenges = liveChallenges.filter(c => {
       if (!c.is_active) return false;
       if (c.ends_at && new Date(c.ends_at) <= now) return false;
@@ -287,7 +331,6 @@ export default function ClientNotifications() {
       link: '/client/challenges'
     }));
 
-    // 2. Transactions refusées ou annulées
     const mappedRejections: AlertItem[] = rejectedTransactions.map((tx) => {
       const typeText = tx.type === 'DEPOSIT' ? 'DÉPÔT' : 'RETRAIT';
       return {
@@ -306,7 +349,6 @@ export default function ClientNotifications() {
       };
     });
 
-    // 3. Notifications classiques
     const normalizedNotifs: AlertItem[] = notifications.map((n) => {
       const isRejection = Boolean(
         n.title?.toLowerCase().includes('refus') ||
@@ -421,7 +463,7 @@ export default function ClientNotifications() {
                   ? 'bg-gradient-to-br from-emerald-900/40 via-black to-black border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
                   : n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-slate-900/40 border-white/10'
                 }`}
-                onClick={() => n.link && router.push(n.link)}
+                onClick={() => handleNavigation(n.link)}
               >
                 {!n.is_read && (
                   <div className="absolute top-4 right-4">
