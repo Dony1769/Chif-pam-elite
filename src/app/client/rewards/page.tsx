@@ -21,7 +21,7 @@ import {
 import { getDailyReward } from "@/lib/game-economy";
 import { motion } from "framer-motion";
 
-// --- CONSTANTES ET REGLES ECONOMIQUES ---
+// --- CONSTANTES ET REGLES ECONMIQUES ---
 const MAX_CP_REWARD = 50;
 const DIRECT_LINK_URL = "https://omg10.com/4/11431323";
 const SPONSOR_XP_REWARD = 15;
