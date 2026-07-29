@@ -1,51 +1,59 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, MessageSquareHeart, Paperclip, Send, ExternalLink } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { ChatService } from '@/services/chat';
-import { ChatBotService } from '@/services/chatBot';
-import { type ChatMessage, parseMessageContent } from '@/types/chat';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, MessageSquareHeart, Paperclip, Send, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { ChatService } from "@/services/chat";
+import { ChatBotService } from "@/services/chatBot";
+import { type ChatMessage, parseMessageContent } from "@/types/chat";
 
 export default function ClientChatPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [composerText, setComposerText] = useState('');
+  const [composerText, setComposerText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const botTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 1. Initialisation et abonnement Realtime avec nettoyage d'état
   useEffect(() => {
     let isMounted = true;
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const initChat = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user?.id) {
-        if (isMounted) setLoading(false);
-        return;
-      }
-
-      const currentUserId = user.id;
-      if (isMounted) setUserId(currentUserId);
-
       try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user?.id) {
+          if (isMounted) setLoading(false);
+          return;
+        }
+
+        const currentUserId = user.id;
+        if (isMounted) setUserId(currentUserId);
+
         const history = await ChatService.fetchMessagesForClient(supabase, currentUserId);
         if (!isMounted) return;
+        
         setMessages(history);
         await ChatService.markConversationReadByClient(supabase, currentUserId);
-      } catch (error) {
-        console.error('Erreur lors du chargement de l’historique client:', error);
+
+        // Abonnement sécurisé évitant les doublons
+        channel = ChatService.subscribeToClientMessages(supabase, currentUserId, (newMsg) => {
+          if (!isMounted) return;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        });
+      } catch (err) {
+        console.error("Erreur lors de l'initialisation du chat client :", err);
       } finally {
         if (isMounted) setLoading(false);
       }
-
-      channel = ChatService.subscribeToClientMessages(supabase, currentUserId, (msg) => {
-        if (!isMounted) return;
-        setMessages((prev) => [...prev, msg]);
-      });
     };
 
     void initChat();
@@ -53,72 +61,99 @@ export default function ClientChatPage() {
     return () => {
       isMounted = false;
       if (channel) {
-        supabase.removeChannel(channel);
+        void supabase.removeChannel(channel);
+      }
+      if (botTimeoutRef.current) {
+        clearTimeout(botTimeoutRef.current);
       }
     };
   }, []);
 
+  // 2. Défilement fluide vers le bas
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!loading && messages.length > 0) {
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
+    }
   }, [messages, loading]);
 
+  // 3. Gestion de l'envoi de messages texte et réponse automatique
   const handleSendText = async () => {
     if (!userId || !composerText.trim() || isSending) return;
 
     const content = composerText.trim();
-    setComposerText('');
+    setComposerText("");
     setIsSending(true);
 
     try {
       const sent = await ChatService.sendTextMessage(supabase, userId, content, false);
       if (sent) {
-        setMessages((prev) => [...prev, sent]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === sent.id)) return prev;
+          return [...prev, sent];
+        });
 
-        // Déclenchement automatique du Bot de réponse si éligible
-        setTimeout(async () => {
-          // Transmission de userId pour la gestion de session anti-répétition
-          const autoReply = ChatBotService.generateAutoReply(content, userId);
+        // Programmation sécurisée du bot
+        if (botTimeoutRef.current) clearTimeout(botTimeoutRef.current);
 
-          // VÉRIFICATION CRITIQUE : Seul un autoReply non null est envoyé
-          if (autoReply !== null) {
-            // Conversion de l'objet reply en chaîne JSON pour la persistance dans Supabase
-            const replyContent = JSON.stringify(autoReply);
-            const botMessage = await ChatService.sendTextMessage(supabase, userId, replyContent, true);
-            
-            if (botMessage) {
-              setMessages((prev) => [...prev, botMessage]);
+        botTimeoutRef.current = setTimeout(async () => {
+          try {
+            const autoReply = ChatBotService.generateAutoReply(content, userId);
+            if (autoReply !== null) {
+              const replyContent = JSON.stringify(autoReply);
+              const botMessage = await ChatService.sendTextMessage(supabase, userId, replyContent, true);
+              
+              if (botMessage) {
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === botMessage.id)) return prev;
+                  return [...prev, botMessage];
+                });
+              }
             }
+          } catch (botError) {
+            console.error("Erreur lors du traitement du Bot :", botError);
           }
         }, 1000);
       }
     } catch (error) {
-      console.error('Erreur lors de l’envoi du texte:', error);
+      console.error("Erreur lors de l'envoi du message :", error);
       setComposerText(content);
     } finally {
       setIsSending(false);
     }
   };
 
+  // 4. Gestion de l'envoi d'images
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!userId || !file || isSending) return;
+
+    // Validation basique du type de fichier
+    if (!file.type.startsWith("image/")) {
+      console.error("Le fichier sélectionné n'est pas une image.");
+      return;
+    }
 
     setIsSending(true);
 
     try {
       const sent = await ChatService.uploadImageAndSend(supabase, userId, file, false);
       if (sent) {
-        setMessages((prev) => [...prev, sent]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === sent.id)) return prev;
+          return [...prev, sent];
+        });
       }
     } catch (error) {
-      console.error('Erreur lors du téléversement de l’image:', error);
+      console.error("Erreur lors du téléversement de l'image :", error);
     } finally {
       setIsSending(false);
-      event.target.value = '';
+      event.target.value = "";
     }
   };
 
-  const supportTitle = useMemo(() => 'Support Chif-Pam', []);
+  const supportTitle = useMemo(() => "Support Chif-Pam", []);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#020617] text-slate-100">
@@ -157,11 +192,16 @@ export default function ClientChatPage() {
               const isClientMessage = msg.is_admin_message === false;
 
               return (
-                <div key={msg.id} className={`flex ${isClientMessage ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow ${isClientMessage ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-100'}`}>
-                    {parsed.type === 'image' ? (
-                      <img src={parsed.url} alt="Pièce jointe" className="max-h-72 rounded-xl object-cover" />
-                    ) : parsed.type === 'action' ? (
+                <div key={msg.id} className={`flex ${isClientMessage ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow ${isClientMessage ? "bg-emerald-500 text-slate-950" : "bg-slate-800 text-slate-100"}`}>
+                    {parsed.type === "image" ? (
+                      <img
+                        src={parsed.url}
+                        alt="Pièce jointe"
+                        className="max-h-72 rounded-xl object-cover"
+                        loading="lazy"
+                      />
+                    ) : parsed.type === "action" ? (
                       <div className="space-y-2.5">
                         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{parsed.text}</p>
                         <button
@@ -176,8 +216,8 @@ export default function ClientChatPage() {
                     ) : (
                       <p className="whitespace-pre-wrap break-words text-sm">{parsed.text}</p>
                     )}
-                    <div className={`mt-1 text-[10px] ${isClientMessage ? 'text-slate-800/70' : 'text-slate-400'}`}>
-                      {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    <div className={`mt-1 text-[10px] ${isClientMessage ? "text-slate-800/70" : "text-slate-400"}`}>
+                      {new Date(msg.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
                 </div>
@@ -194,7 +234,7 @@ export default function ClientChatPage() {
             value={composerText}
             onChange={(event) => setComposerText(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void handleSendText();
               }
