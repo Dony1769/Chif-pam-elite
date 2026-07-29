@@ -16,7 +16,7 @@ const triggerHaptic = () => {
     try {
       navigator.vibrate([10, 25, 10]);
     } catch {
-      // Ignorer si non supporté ou bloqué par le navigateur
+      // Ignorer si non supporté
     }
   }
 };
@@ -31,11 +31,11 @@ interface ParticleEffect {
 }
 
 const MONETAG_REDIRECT_URL = "https://omg10.com/4/11431323";
-const REQUIRED_AD_TIME_MS = 6000; // 6 secondes requis sur le site publicitaire
+const REQUIRED_AD_TIME_MS = 6000; // 6 secondes requises
 
 export default function MinesElite() {
   const router = useRouter();
-  
+
   // --- ÉTATS DU JEU ---
   const [bet, setBet] = useState<number>(100);
   const [jetonsCP, setJetonsCP] = useState<number>(0); 
@@ -64,7 +64,7 @@ export default function MinesElite() {
   const [checkingSystem, setCheckingSystem] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
 
-  // --- REFS CRITIQUES ---
+  // --- REFS CRITIQUES DE SÉCURITÉ ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
 
@@ -88,7 +88,7 @@ export default function MinesElite() {
     if (status === 'playing' && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     } else if (timeLeft === 0 && status === 'playing') {
-      handleGameOver(true); 
+      handleGameOver(true);
     }
     return () => clearInterval(timer);
   }, [status, timeLeft]);
@@ -148,10 +148,10 @@ export default function MinesElite() {
     };
   }, [router]);
 
-  // ÉCOUTEUR DE RETOUR SUR L'ONGLET POUR LA SECONDE CHANCE
+  // VÉRIFICATION DU TEMPS SUR LA PUB APRES RETOUR SUR L'ONGLET
   useEffect(() => {
     const handleFocusOrVisibility = () => {
-      if (!adWaiting) return;
+      if (!adWaiting || isProcessingRef.current) return;
 
       const clickTimeStr = localStorage.getItem('monetag_click_time');
       if (!clickTimeStr) return;
@@ -160,15 +160,16 @@ export default function MinesElite() {
       const now = Date.now();
       const elapsed = now - clickTime;
 
+      // Nettoyage immédiat pour éviter toute réutilisation malveillante
       localStorage.removeItem('monetag_click_time');
       setAdWaiting(false);
 
       if (elapsed >= REQUIRED_AD_TIME_MS) {
-        // Temps validé : exécution de la seconde chance
+        // Validation et relance directe au Niveau 1
         applySecondChance();
       } else {
         const remainingSec = Math.ceil((REQUIRED_AD_TIME_MS - elapsed) / 1000);
-        setAdError(`Vous devez rester au moins 6 secondes sur le site. (Manquait ${remainingSec}s)`);
+        setAdError(`Vous devez rester au moins 6 secondes sur l'annonce. (Manquait ${remainingSec}s)`);
         setTimeout(() => setAdError(null), 5000);
       }
     };
@@ -305,8 +306,8 @@ export default function MinesElite() {
     const currentMult = getMultiplier();
     const secureBet = lockedBetRef.current;
 
-    // Détermination de l'éligibilité à la seconde chance (Multiplicateur <= 1.00)
-    const isEligibleForSecondChance = isBombHit && currentMult <= 1.00 && !secondChanceUsed;
+    // Seconde chance éligible en cas d'échec si non encore utilisée dans la session
+    const isEligibleForSecondChance = isBombHit && !secondChanceUsed;
 
     const economy = resolveGameEconomy({
       gameId: 'mines',
@@ -320,13 +321,7 @@ export default function MinesElite() {
       specialEventMultiplier: 1
     });
 
-    // Si battu mais pas de seconde chance prise, gain = mise * multiplicateur atteint (si <= 1.0) ou 0
-    let winAmount = 0;
-    if (isBombHit) {
-      winAmount = Math.floor(secureBet * currentMult);
-    } else {
-      winAmount = economy.payout;
-    }
+    let winAmount = isBombHit ? 0 : economy.payout;
 
     setCombo(0);
     setStatus('ended');
@@ -364,11 +359,13 @@ export default function MinesElite() {
     }
   };
 
-  // REDIRECTION PUBLICITAIRE VERS MONETAG
+  // OUVERTURE DU LIEN SPONSORISÉ
   const handleOpenAdForSecondChance = () => {
-    const extraFee = Math.floor(lockedBetRef.current * 0.5);
-    if (jetonsCP < extraFee) {
-      setAdError(`Solde insuffisant pour la seconde chance (${extraFee} CP requis - 50% de la mise).`);
+    if (isProcessingRef.current || !canUseSecondChance) return;
+
+    const requiredFee = Math.floor(lockedBetRef.current * 0.5);
+    if (jetonsCP < requiredFee) {
+      setAdError(`Solde insuffisant : ${requiredFee} CP requis (50% de la mise).`);
       setTimeout(() => setAdError(null), 4000);
       return;
     }
@@ -378,15 +375,17 @@ export default function MinesElite() {
     window.open(MONETAG_REDIRECT_URL, '_blank');
   };
 
-  // APPLICATION DE LA SECONDE CHANCE APRÈS VALIDATION DU TEMPS
+  // APPLICATION DU RESTART NIVEAU 1 AVEC DÉDUCTIONS (50%)
   const applySecondChance = async () => {
-    if (!userId || !gameId) return;
+    if (!userId || !gameId || isProcessingRef.current) return;
+
+    isProcessingRef.current = true;
+    setLoading(true);
 
     const extraFee = Math.floor(lockedBetRef.current * 0.5);
 
-    setLoading(true);
     try {
-      // Déduction des 50% supplémentaires
+      // 1. Déduction sécurisée via Supabase RPC
       const { data: ok, error } = await supabase.rpc('jouer_partie_cp', { 
         p_user_id: userId,
         p_mise_cp: extraFee,
@@ -395,36 +394,48 @@ export default function MinesElite() {
       });
 
       if (error || !ok?.success) {
-        throw new Error('Fonds insuffisants pour activer la seconde chance.');
+        throw new Error('Transaction refusée : solde CP insuffisant.');
       }
 
+      // 2. Mise à jour du solde local et réévaluation de la mise attribuée
       setJetonsCP(prev => prev - extraFee);
+      lockedBetRef.current = extraFee; // La nouvelle mise devient les 50%
+      setBet(extraFee);
 
-      // Relance de la partie avec de nouvelles positions de mines
-      const pos = Array.from({ length: 25 }, (_, i) => i)
+      // 3. Génération d'une nouvelle grille de mines
+      const newMinePositions = Array.from({ length: 25 }, (_, i) => i)
         .sort(() => Math.random() - 0.5)
         .slice(0, mines);
 
+      // 4. Synchronisation base de données
       await supabase
         .from('mines_games')
         .update({ 
           is_active: true,
-          mine_positions: pos
+          bet_amount: extraFee,
+          mine_positions: newMinePositions,
+          status: 'playing'
         })
         .eq('id', gameId);
 
-      setMinePositions(pos);
+      // 5. Réinitialisation complète vers le Niveau 1 (Partie active immédiate)
+      setMinePositions(newMinePositions);
+      setRevealed([]); // Retour case départ (0 case découverte = Niveau 1)
+      setCombo(0);
+      setEffects([]);
+      setTimeLeft(20);
       setSecondChanceUsed(true);
       setCanUseSecondChance(false);
-      setTimeLeft(20);
       setStatus('playing');
 
     } catch (err: unknown) {
       const error = err as Error;
-      setAdError(error?.message || 'Erreur lors de l\'activation de la seconde chance.');
+      setAdError(error?.message || 'Échec de l\'activation de la seconde chance.');
       setTimeout(() => setAdError(null), 4000);
-    } finally {
+      setStatus('ended');
+    } font-bold {
       setLoading(false);
+      isProcessingRef.current = false;
     }
   };
 
@@ -495,10 +506,10 @@ export default function MinesElite() {
   return (
     <NeonGameShell accent="violet" className="min-h-screen px-3 sm:px-4 py-3 font-black italic uppercase flex flex-col items-center select-none pb-16">
       
-      {/* SCRIPT MONETAG EN ARRIÈRE-PLAN */}
+      {/* SCRIPT MONETAG */}
       <MonetagAdScript zoneId="11431323" />
 
-      {/* HEADER TOP-BAR RESPONSIVE */}
+      {/* BARRE SUPÉRIEURE */}
       <div className="mb-4 flex w-full max-w-md items-center justify-between gap-2">
         <button 
           onClick={() => router.push('/client/list')} 
@@ -518,7 +529,7 @@ export default function MinesElite() {
 
       <div className="w-full max-w-md space-y-3.5">
         
-        {/* SELECTIONS DIFFICULTÉ COMPACTE */}
+        {/* NIVEAU DE DIFFICULTÉ */}
         <div className="flex gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-xl">
           {(['facile', 'intermédiaire', 'difficile'] as const).map((level) => (
             <button
@@ -536,12 +547,12 @@ export default function MinesElite() {
           ))}
         </div>
 
-        {/* HUD STATS OPTIMISÉ PENDANT LA PARTIE */}
+        {/* HUD - TABLEAU DE BORD DU NIVEAU ACTIF */}
         {status === 'playing' && (
           <div className="grid grid-cols-2 gap-2 animate-in fade-in zoom-in duration-200">
             <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-center backdrop-blur-xl">
               <p className="mb-0.5 flex items-center justify-center gap-1 text-[7px] sm:text-[8px] text-slate-400">
-                <TrendingUp size={9}/> COTE
+                <TrendingUp size={9}/> MULTIPLICATEUR (NIV. {revealed.length + 1})
               </p>
               <p className={`text-sm sm:text-base font-bold ${currentMult <= 1.0 ? 'text-emerald-300' : 'text-amber-300'}`}>
                 <AnimatedCounter value={Number(currentMult.toFixed(2))} suffix="X" accent={currentMult <= 1.0 ? 'emerald' : 'amber'} />
@@ -575,7 +586,7 @@ export default function MinesElite() {
 
             <div className="col-span-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-center backdrop-blur-xl">
               <div className="mb-1 flex items-center justify-between text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">
-                <span>Chance de Sécurité</span>
+                <span>Sécurité</span>
                 <span className="text-violet-300">{Math.round(safeProbability * 100)}%</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full border border-white/10 bg-white/10">
@@ -590,14 +601,14 @@ export default function MinesElite() {
           </div>
         )}
 
-        {/* MESSAGES D'ERREUR PUBLICITÉ / SOLDE */}
+        {/* NOTIFICATION ERREUR PUB */}
         {adError && (
           <div className="p-3 bg-red-500/20 border border-red-500/40 rounded-xl text-center text-red-300 text-xs font-bold animate-in fade-in">
             {adError}
           </div>
         )}
 
-        {/* PANNEAU DE MISE / ACTION */}
+        {/* MISE / ACTION */}
         <div className="relative z-10 space-y-3 rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-[0_0_30px_rgba(167,139,250,0.1)]">
           <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5">
             <Coins className="text-emerald-500" size={18} />
@@ -638,7 +649,7 @@ export default function MinesElite() {
           </button>
         </div>
 
-        {/* GRILLE DE JEU RESPONSIVE 5x5 */}
+        {/* GRILLE DU JEU 5x5 */}
         <div className="relative w-full aspect-square">
           <AnimatePresence>
             {effects.map(effect => (
@@ -700,13 +711,13 @@ export default function MinesElite() {
           </div>
         </div>
 
-        {/* ZONE PUBLICITAIRE BANNIÈRE */}
+        {/* BANNIÈRE SPONSOR */}
         <div className="relative mt-4 flex min-h-[90px] w-full items-center justify-center overflow-hidden rounded-xl border border-white/5 bg-black/20">
             <p className="absolute top-1.5 right-3 text-[7px] text-slate-600 tracking-widest z-0">SPONSOR</p>
             <ExoClickBanner />
         </div>
 
-        {/* BOUTONS D'ACTION POST-PARTIE (REJOUER OU SECONDE CHANCE) */}
+        {/* SECONDE CHANCE ET REJOINDRE */}
         {status === 'ended' && (
           <div className="space-y-2 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
             {canUseSecondChance && (
@@ -718,12 +729,12 @@ export default function MinesElite() {
                 {adWaiting ? (
                   <>
                     <Loader2 className="animate-spin" size={16} />
-                    <span>EN ATTENTE DE LA VISITE (6s...)...</span>
+                    <span>EN ATTENTE DE VALIDATION (6s)...</span>
                   </>
                 ) : (
                   <>
                     <RotateCcw size={16} />
-                    <span>SECONDE CHANCE (-50% MISE)</span>
+                    <span>SECONDE CHANCE : REVENIR AU NIV. 1 (-50% MISE)</span>
                     <ExternalLink size={14} className="ml-1 opacity-75" />
                   </>
                 )}
@@ -734,7 +745,7 @@ export default function MinesElite() {
               onClick={() => { setStatus('idle'); setRevealed([]); setTimeLeft(20); setCanUseSecondChance(false); }}
               className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs font-bold tracking-widest transition-all text-white active:scale-95"
             >
-              REJOUER
+              REJOUER (MENU PRINCIPAL)
             </button>
           </div>
         )}
