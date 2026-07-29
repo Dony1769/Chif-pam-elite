@@ -104,15 +104,15 @@ function QuizGameContent() {
   const [adErrorMessage, setAdErrorMessage] = useState<string | null>(null);
   const [isVerifyingAd, setIsVerifyingAd] = useState<boolean>(false);
 
-  // --- REFS POUR INTÉGRITÉ ET PERFORMANCE (ANTI-FRAUDE) ---
-  const initialMiseRef = useRef<number>(0); // Garde en mémoire la toute première mise
-  const lockedBetRef = useRef<number>(0);   // Mise courante en jeu
+  // --- REFS POUR INTÉGRITÉ ET PERFORMANCE ---
+  const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const isVerifyingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Horodatage sécurisé anti-triche
-  const adTimestampRef = useRef<{ date: number; perf: number } | null>(null);
+  
+  // Horodatage sécurisé pour la pub
+  const adStartTimestampRef = useRef<number | null>(null);
+  const adTokenRef = useRef<string | null>(null);
 
   const gameStateRef = useRef({ 
     multiplier: 0.5, 
@@ -157,7 +157,7 @@ function QuizGameContent() {
       osc.start();
       osc.stop(ctx.currentTime + 0.2);
     } catch {
-      // Audio non supporté
+      // Audio ignoré si non supporté
     }
   };
 
@@ -231,7 +231,6 @@ function QuizGameContent() {
     );
   };
 
-  // --- DÉMARRAGE PARTIE NORMALE ---
   const start = async () => {
     if (isProcessingRef.current || !profile) return;
     triggerHaptic();
@@ -248,7 +247,6 @@ function QuizGameContent() {
 
     try {
       const finalFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
-      initialMiseRef.current = finalFee;
       lockedBetRef.current = finalFee;
 
       const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
@@ -259,7 +257,7 @@ function QuizGameContent() {
       });
 
       if (payError) throw new Error(payError.message);
-      if (!result?.success) throw new Error(result?.message || "Erreur lors du débit.");
+      if (!result?.success) throw new Error(result?.message || "Erreur lors du débit de la mise.");
 
       if (challengeId) {
         await supabase.from('challenge_attempts').upsert({
@@ -293,7 +291,7 @@ function QuizGameContent() {
 
     } catch (e: unknown) {
       const err = e as Error;
-      alert(err.message || "Erreur lors du lancement");
+      alert(err.message || "Erreur lors du lancement de la partie.");
       setStatus('idle');
     } finally {
       isProcessingRef.current = false;
@@ -355,53 +353,41 @@ function QuizGameContent() {
     }
   }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
 
-  // --- DÉCLENCHEMENT ANNONCE SECONDE CHANCE ---
+  // --- DÉCLENCHEMENT SECONDE CHANCE ET PUB ---
   const triggerSecondChanceAd = () => {
     setAdErrorMessage(null);
+    
+    const uniqueToken = typeof window !== 'undefined' && window.crypto?.randomUUID 
+      ? window.crypto.randomUUID() 
+      : Math.random().toString(36).substring(2);
 
-    // Capture double horodatage pour prévenir la fraude d'horloge JS
-    adTimestampRef.current = {
-      date: Date.now(),
-      perf: performance.now()
-    };
+    adTokenRef.current = uniqueToken;
+    adStartTimestampRef.current = Date.now();
 
     window.open(MONETAG_AD_URL, '_blank', 'noopener,noreferrer');
     setStatus('second_chance_pending');
   };
 
-  // --- VÉRIFICATION PUB SECONDE CHANCE & RE-COMMENCEMENT DIRECT NIVEAU 1 ---
+  // VÉRIFICATION SÉCURISÉE DE LA PUB ET DÉMARRAGE DIRECT AU NIVEAU 1
   const verifySecondChanceAd = useCallback(async () => {
-    if (isVerifyingRef.current || !profile?.id || !adTimestampRef.current) return;
+    if (isVerifyingRef.current || !profile?.id || !adStartTimestampRef.current || !adTokenRef.current) return;
     
     isVerifyingRef.current = true;
     setIsVerifyingAd(true);
 
-    const nowWindow = Date.now();
-    const nowPerf = performance.now();
+    const elapsedTime = Date.now() - adStartTimestampRef.current;
 
-    const elapsedWindow = nowWindow - adTimestampRef.current.date;
-    const elapsedPerf = nowPerf - adTimestampRef.current.perf;
-
-    // Réinitialisation du ref
-    adTimestampRef.current = null;
-
-    // Détection de falsification (si la dérive entre les deux chronos dépasse 1s)
-    if (Math.abs(elapsedWindow - elapsedPerf) > 1000) {
-      setIsVerifyingAd(false);
-      isVerifyingRef.current = false;
-      setAdErrorMessage("Détection de tentative de triche sur l'horloge système.");
-      setStatus('second_chance_offer');
-      return;
-    }
-
-    const elapsedTime = Math.min(elapsedWindow, elapsedPerf);
+    // Réinitialisation des verrous temporaires
+    adStartTimestampRef.current = null;
+    adTokenRef.current = null;
 
     if (elapsedTime >= MIN_REQUIRED_AD_TIME_MS) {
-      // 50% de la mise principale originale
-      const feePenalty = Math.floor(initialMiseRef.current * 0.5);
+      // Calcul de la pénalité de 50% sur la mise initiale
+      const initialBet = lockedBetRef.current;
+      const feePenalty = Math.floor(initialBet * 0.5);
 
       try {
-        // 1. Déduction effective des 50% de pénalité via Supabase
+        // 1. Déduction effective de la pénalité sur le solde Supabase
         const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: feePenalty,
@@ -410,33 +396,36 @@ function QuizGameContent() {
         });
 
         if (payError || !result?.success) {
-          throw new Error(result?.message || "Solde insuffisant pour la pénalité de 50%.");
+          throw new Error(result?.message || "Erreur de solde lors du débit de la pénalité de 50%.");
         }
 
-        // 2. Mise à jour de la nouvelle mise retenue (ex: 5 CP)
-        lockedBetRef.current = feePenalty;
+        // 2. Mise à jour de la nouvelle mise retenue pour la session
+        const newRemainingBet = initialBet - feePenalty;
+        lockedBetRef.current = newRemainingBet;
 
-        // 3. Rechargement immédiat des nouvelles questions
+        // 3. Chargement de nouvelles questions pour recommencer
         const newQuestions = await fetchQuestions(category);
 
-        // 4. RÉINITIALISATION IMMÉDIATE DU JEU AU NIVEAU 1 (VOIE DIRECTE SANS PASSAGE PAR MENU)
+        // 4. RÉINITIALISATION DU JEU ET DÉMARRAGE IMMÉDIAT AU NIVEAU 1 (QUESTION 1/5)
         setHasUsedSecondChance(true);
         setQuestions(newQuestions);
-        setCurrentIndex(0);           // Niveau 1 / Question 1
-        setSessionScore(0);            // Score remis à zéro
-        setMultiplier(0.5);            // Multiplicateur initial
+        setCurrentIndex(0); // Retour direct au niveau 1
+        setSessionScore(0); // Score remis à zéro
+        setMultiplier(0.5); // Multiplicateur de départ
         setSelectedAnswer(null);
         setShowCorrection(false);
-        setExplanation(`🔄 Seconde chance activée ! Pénalité de ${feePenalty} CP appliquée. Redémarrage au Niveau 1 !`);
-        setTimeLeft(getDifficultySettings(difficulty).time);
         
-        // Basculement DIRECT en jeu
+        const difficultySettings = getDifficultySettings(difficulty);
+        setTimeLeft(difficultySettings.time);
+
+        setExplanation(`🔄 Seconde chance activée ! Pénalité de 50% déduite. Nouvelle mise : ${newRemainingBet} CP.`);
+        
+        // Bascule directe en mode jeu (pas de retour au menu principal)
         setStatus('playing');
         void init();
-
       } catch (err: unknown) {
         const error = err as Error;
-        setAdErrorMessage(error.message || "Erreur lors du traitement de la seconde chance.");
+        setAdErrorMessage(error.message || "Erreur lors de la validation de la seconde chance.");
         setStatus('second_chance_offer');
       } finally {
         setIsVerifyingAd(false);
@@ -446,12 +435,12 @@ function QuizGameContent() {
       setIsVerifyingAd(false);
       isVerifyingRef.current = false;
       const remainingSec = Math.ceil((MIN_REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
-      setAdErrorMessage(`Temps insuffisant sur la pub (${Math.round(elapsedTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
+      setAdErrorMessage(`Temps insuffisant sur l'annonce (${Math.round(elapsedTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
       setStatus('second_chance_offer');
     }
   }, [profile?.id, category, difficulty, init]);
 
-  // Écouteur de retour de l'utilisateur sur la page active
+  // Écouteur de changement de visibilité (retour sur le jeu après la pub)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && gameStateRef.current.status === 'second_chance_pending') {
@@ -501,8 +490,8 @@ function QuizGameContent() {
       setExplanation(`❌ Mauvaise réponse. Solution : ${questions[currentIndex]?.correct}`);
 
       setTimeout(() => {
-        // Propose la Seconde Chance si pas en mode Challenge ET non encore utilisée
         if (!challengeId && !hasUsedSecondChance) {
+          // Offre de Seconde Chance
           setStatus('second_chance_offer');
         } else {
           const currentGain = Math.floor(lockedBetRef.current * multiplier);
@@ -512,7 +501,7 @@ function QuizGameContent() {
     }
   };
 
-  // CHRONOMÈTRE DE QUESTION
+  // CHRONOMÈTRE
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -557,7 +546,7 @@ function QuizGameContent() {
         </div>
       </div>
 
-      {/* ZONE CENTRALE */}
+      {/* ZONE CENTRALE DE JEU */}
       <div className="flex-1 my-auto flex flex-col justify-center min-h-0 overflow-hidden py-1">
         
         {status === 'maintenance' ? (
@@ -569,6 +558,7 @@ function QuizGameContent() {
         ) : status === 'idle' || status === 'loading' ? (
           
           <div className="flex flex-col justify-between h-full max-h-[520px] gap-2">
+            
             {status === 'loading' ? (
               <div className="flex flex-col items-center justify-center my-auto">
                 <Loader2 className="animate-spin text-amber-400" size={40}/>
@@ -659,7 +649,7 @@ function QuizGameContent() {
 
         ) : status === 'playing' ? (
           
-          /* MODE JEU (AFFICHE NIVEAU 1 À 5) */
+          /* MODE JEU */
           <div className="flex flex-col justify-between h-full max-h-[500px] gap-2">
             
             <div className="flex-none space-y-1">
@@ -678,7 +668,7 @@ function QuizGameContent() {
                 </div>
               </div>
 
-              {/* BARRE TIMER */}
+              {/* BARRE DU TIMER */}
               <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mt-1">
                 <div 
                   className={`h-full transition-all duration-100 ${timeLeft < 2.5 ? 'bg-rose-500 animate-pulse' : 'bg-amber-400'}`} 
@@ -687,7 +677,7 @@ function QuizGameContent() {
               </div>
             </div>
 
-            {/* QUESTION */}
+            {/* BOÎTE DE LA QUESTION */}
             <div className="flex-1 min-h-0 bg-white text-black p-3.5 rounded-2xl flex flex-col justify-center items-center shadow-lg relative text-center my-1">
               <span className="absolute top-2 right-2 text-[9px] text-slate-400 font-bold">
                 {timeLeft.toFixed(1)}s
@@ -697,7 +687,7 @@ function QuizGameContent() {
               </p>
             </div>
 
-            {/* CHOIX DE RÉPONSES */}
+            {/* BOUTONS DES RÉPONSES */}
             <div className="flex-none grid grid-cols-1 gap-1.5">
               {questions[currentIndex]?.answers.map((a: string, i: number) => {
                 const isCorrect = a === questions[currentIndex].correct;
@@ -734,27 +724,27 @@ function QuizGameContent() {
 
         ) : status === 'second_chance_offer' || status === 'second_chance_pending' ? (
 
-          /* OFFRE DE SECONDE CHANCE EN CAS D'ÉCHEC SUR UN NIVEAU */
+          /* INTERFACE DE SECONDE CHANCE */
           <div className="flex flex-col items-center justify-center h-full space-y-3 text-center my-auto p-2">
             <div className="w-14 h-14 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-400 flex items-center justify-center animate-bounce">
               <RefreshCw size={28} />
             </div>
 
             <div>
-              <h2 className="text-xl font-black italic text-amber-400">SECONDE CHANCE !</h2>
+              <h2 className="text-xl font-black italic text-amber-400">SECONDE CHANCE DISPONIBLE !</h2>
               <p className="text-[10px] text-slate-300 mt-1">
-                Passez au moins <span className="text-amber-400 font-bold">6 secondes</span> sur l'annonce. La partie recommencera **directement au Niveau 1** avec une mise réduite de 50%.
+                Visitez le site partenaire pendant <span className="text-amber-400 font-bold">au moins 6 secondes</span>. Le jeu recommencera au <span className="text-emerald-400 font-bold">Niveau 1</span> avec une pénalité de 50%.
               </p>
             </div>
 
             <div className="bg-slate-900/90 w-full p-3 rounded-xl border border-amber-400/30 text-left space-y-1.5">
               <div className="flex justify-between items-center text-[10px]">
-                <span className="text-slate-400">Pénalité (50%) :</span>
-                <span className="text-rose-400 font-bold">-{Math.floor(initialMiseRef.current * 0.5)} CP</span>
+                <span className="text-slate-400">Pénalité seconde chance (50%) :</span>
+                <span className="text-rose-400 font-bold">-{Math.floor(lockedBetRef.current * 0.5)} CP</span>
               </div>
               <div className="flex justify-between items-center text-[10px]">
-                <span className="text-slate-400">Nouvelle mise pour le Niveau 1 :</span>
-                <span className="text-amber-300 font-bold">{Math.floor(initialMiseRef.current * 0.5)} CP</span>
+                <span className="text-slate-400">Nouvelle mise engagée :</span>
+                <span className="text-amber-300 font-bold">{lockedBetRef.current - Math.floor(lockedBetRef.current * 0.5)} CP</span>
               </div>
             </div>
 
@@ -768,17 +758,17 @@ function QuizGameContent() {
             {status === 'second_chance_pending' ? (
               <div className="w-full py-3.5 bg-amber-500/20 border border-amber-400 text-amber-300 rounded-xl font-black text-xs italic flex items-center justify-center gap-2">
                 <Loader2 size={16} className="animate-spin" />
-                <span>VÉRIFICATION DU TEMPS SUR L'ANNONCE (6s MIN)...</span>
+                <span>VÉRIFICATION DU TEMPS (6s MIN)...</span>
               </div>
             ) : (
               <div className="w-full space-y-2">
                 <button 
                   onClick={triggerSecondChanceAd}
-                  disabled={isVerifyingAd || (profile?.jetons_cp || 0) < Math.floor(initialMiseRef.current * 0.5)}
+                  disabled={isVerifyingAd || (profile?.jetons_cp || 0) < Math.floor(lockedBetRef.current * 0.5)}
                   className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-emerald-400 text-black rounded-xl font-black text-xs italic shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <ExternalLink size={16} />
-                  <span>VOIR L'ANNONCE & RETENTER AU NIVEAU 1</span>
+                  <span>PRENDRE LA SECONDE CHANCE (NIVEAU 1)</span>
                 </button>
 
                 <button 
@@ -788,7 +778,7 @@ function QuizGameContent() {
                   }}
                   className="w-full py-2.5 bg-white/5 border border-white/10 text-slate-400 rounded-xl font-black text-[10px] italic hover:bg-white/10 transition-all"
                 >
-                  ABANDONNER ET QUITTER ({Math.floor(lockedBetRef.current * multiplier)} CP)
+                  ABANDONNER & ENCAISSER ({Math.floor(lockedBetRef.current * multiplier)} CP)
                 </button>
               </div>
             )}
@@ -830,7 +820,7 @@ function QuizGameContent() {
 
       </div>
 
-      {/* HISTORIQUE */}
+      {/* HISTORIQUE EN BAS DE PAGE */}
       {status === 'idle' && history.length > 0 && (
         <div className="flex-none h-14 border-t border-white/5 pt-1.5">
           <div className="flex items-center gap-1 text-[8px] text-slate-400 mb-1">
