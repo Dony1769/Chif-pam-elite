@@ -19,7 +19,7 @@ const OnboardingTour = dynamic(() => import('@/components/OnboardingTour'), { ss
 // Taux de conversion CP -> HTG officiel : 100 CP = ~5.88 HTG
 const CP_TO_HTG_RATE = 0.05882352941176470588; 
 
-interface Profile {
+export interface Profile {
   id: string;
   username: string | null;
   jetons_cp: number;
@@ -29,7 +29,7 @@ interface Profile {
   rank?: string;
 }
 
-interface GameItem {
+export interface GameItem {
   id: string;
   href: string;
   icon: React.ReactNode;
@@ -40,7 +40,7 @@ interface GameItem {
 }
 
 // Logo ChifPam réutilisable avec effet lumineux/Glow personnalisable
-const ChifPamLogo: React.FC<{ glowing?: boolean }> = ({ glowing = false }) => (
+const ChifPamLogo: React.FC<{ glowing?: boolean }> = React.memo(({ glowing = false }) => (
   <div className="relative flex items-center justify-center">
     {glowing && (
       <div className="absolute inset-0 bg-emerald-500/40 rounded-full blur-xl animate-pulse pointer-events-none" />
@@ -54,12 +54,14 @@ const ChifPamLogo: React.FC<{ glowing?: boolean }> = ({ glowing = false }) => (
       }`} 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
     >
       <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
       <path d="M55 45L76 24M76 24H58M76 24V42" stroke="#10B981" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   </div>
-);
+));
+ChifPamLogo.displayName = 'ChifPamLogo';
 
 export default function ClientHome() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -82,13 +84,13 @@ export default function ClientHome() {
   const globalNotificationCount = unreadNotifs;
 
   useEffect(() => {
-    if (profile?.jetons_cp) {
+    if (profile?.jetons_cp !== undefined) {
       setCpToConvert(Math.min(profile.jetons_cp, 100));
     }
   }, [profile?.jetons_cp]);
 
   const calculatedHTG = useMemo(() => {
-    const cp = Number(cpToConvert) || 0;
+    const cp = Math.max(0, Number(cpToConvert) || 0);
     return (cp * CP_TO_HTG_RATE).toFixed(2);
   }, [cpToConvert]);
 
@@ -97,7 +99,7 @@ export default function ClientHome() {
     return (profile.jetons_cp * CP_TO_HTG_RATE).toFixed(2);
   }, [profile?.jetons_cp]);
 
-  const playPing = () => {
+  const playPing = useCallback(() => {
     try {
       const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
       audio.volume = 0.4;
@@ -105,7 +107,7 @@ export default function ClientHome() {
     } catch {
       // Audio non supporté
     }
-  };
+  }, []);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -209,7 +211,7 @@ export default function ClientHome() {
   useEffect(() => {
     if (!currentUserId || !isTabVisible) return;
 
-    const channel = supabase.channel('client_home_ultra_sync')
+    const channel = supabase.channel(`client_home_sync_${currentUserId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${currentUserId}` }, (payload) => {
         setProfile(payload.new as Profile);
       })
@@ -228,7 +230,7 @@ export default function ClientHome() {
     
     const montantCP = Math.floor(cpToConvert);
 
-    if (montantCP < 100) {
+    if (isNaN(montantCP) || montantCP < 100) {
       setFeedbackMessage({ type: 'error', text: 'Un minimum de 100 CP est requis pour effectuer une conversion.' });
       return;
     }
@@ -265,11 +267,11 @@ export default function ClientHome() {
     }
   };
 
-  const gamesList: GameItem[] = [
+  const gamesList: GameItem[] = useMemo(() => [
     { id: 'quiz', href: '/client/quiz', icon: <Brain className="text-blue-400" />, title: 'Quiz Insights', desc: 'Défi cognitif & rapidité', players: '3.0k actifs', tag: 'Populaire' },
     { id: 'laser', href: '/client/laser-vault', icon: <Lock className="text-indigo-400" />, title: 'Laser Vault', desc: 'Réactivité & précision ultime', players: '2.1k actifs' },
     { id: 'biometric', href: '/client/biometric-hack', icon: <Fingerprint className="text-emerald-400" />, title: 'Biometric Lab', desc: 'Mémoire adaptative & logique', players: '650 actifs' }
-  ];
+  ], []);
 
   if (loading) {
     return (
@@ -315,7 +317,7 @@ export default function ClientHome() {
                       </p>
                     </div>
                   </div>
-                  <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition">
+                  <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition" aria-label="Fermer le menu">
                     <X size={18} />
                   </button>
                 </div>
@@ -362,7 +364,7 @@ export default function ClientHome() {
               <CheckCircle2 size={16} className="shrink-0" />
               <span>{feedbackMessage.text}</span>
             </div>
-            <button onClick={() => setFeedbackMessage(null)} className="opacity-60 hover:opacity-100 p-1">
+            <button onClick={() => setFeedbackMessage(null)} className="opacity-60 hover:opacity-100 p-1" aria-label="Fermer">
               <X size={14} />
             </button>
           </motion.div>
@@ -658,7 +660,7 @@ export default function ClientHome() {
 }
 
 // Helper Lien du Menu
-function MenuLink({
+const MenuLink = React.memo(({
   href,
   icon,
   label,
@@ -668,28 +670,27 @@ function MenuLink({
   icon: React.ReactNode;
   label: string;
   badge?: string | number;
-}) {
-  return (
-    <Link 
-      href={href} 
-      className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all active:bg-white/10 group"
-    >
-      <div className="shrink-0">{icon}</div>
-      <span className="text-[11px] font-black tracking-wider uppercase italic text-slate-300 group-hover:text-white transition">
-        {label}
+}) => (
+  <Link 
+    href={href} 
+    className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all active:bg-white/10 group"
+  >
+    <div className="shrink-0">{icon}</div>
+    <span className="text-[11px] font-black tracking-wider uppercase italic text-slate-300 group-hover:text-white transition">
+      {label}
+    </span>
+    {badge !== undefined && (
+      <span className="ml-auto bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] px-2 py-0.5 rounded-full font-black">
+        {badge}
       </span>
-      {badge !== undefined && (
-        <span className="ml-auto bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] px-2 py-0.5 rounded-full font-black">
-          {badge}
-        </span>
-      )}
-      {!badge && <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition" />}
-    </Link>
-  );
-}
+    )}
+    {!badge && <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition" />}
+  </Link>
+));
+MenuLink.displayName = 'MenuLink';
 
 // Helper Ligne de Jeu
-function GameRow({
+const GameRow = React.memo(({
   href,
   icon,
   title,
@@ -703,35 +704,34 @@ function GameRow({
   desc: string;
   players: string;
   tag?: string;
-}) {
-  return (
-    <Link 
-      href={href} 
-      className="bg-slate-900/80 border border-white/5 p-3.5 sm:p-4 rounded-2xl flex items-center justify-between hover:border-emerald-500/30 hover:bg-slate-900 transition-all active:scale-[0.98] group"
-    >
-      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="text-xs font-black italic tracking-wider uppercase text-white truncate">{title}</h4>
-            {tag && (
-              <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[8px] px-1.5 py-0.5 rounded font-black uppercase shrink-0">
-                {tag}
-              </span>
-            )}
-          </div>
-          <p className="text-[10px] text-slate-400 font-normal lowercase italic truncate mt-0.5">{desc}</p>
-        </div>
+}) => (
+  <Link 
+    href={href} 
+    className="bg-slate-900/80 border border-white/5 p-3.5 sm:p-4 rounded-2xl flex items-center justify-between hover:border-emerald-500/30 hover:bg-slate-900 transition-all active:scale-[0.98] group"
+  >
+    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+        {icon}
       </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <h4 className="text-xs font-black italic tracking-wider uppercase text-white truncate">{title}</h4>
+          {tag && (
+            <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[8px] px-1.5 py-0.5 rounded font-black uppercase shrink-0">
+              {tag}
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-slate-400 font-normal lowercase italic truncate mt-0.5">{desc}</p>
+      </div>
+    </div>
 
-      <div className="flex items-center gap-2 shrink-0 ml-2">
-        <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[8px] sm:text-[9px] text-emerald-400 font-black">
-          {players}
-        </span>
-        <ChevronRight size={14} className="text-slate-600 group-hover:text-emerald-400 transition" />
-      </div>
-    </Link>
-  );
-}
+    <div className="flex items-center gap-2 shrink-0 ml-2">
+      <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[8px] sm:text-[9px] text-emerald-400 font-black">
+        {players}
+      </span>
+      <ChevronRight size={14} className="text-slate-600 group-hover:text-emerald-400 transition" />
+    </div>
+  </Link>
+));
+GameRow.displayName = 'GameRow';
