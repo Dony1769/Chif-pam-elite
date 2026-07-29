@@ -3,21 +3,24 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Loader2, ChevronLeft, TrendingUp, 
-  ShieldCheck, DollarSign, Target, Hammer, Coins, Zap, Trophy, History, RefreshCw
+  Loader2, ChevronLeft, ShieldCheck, Target, Hammer, Coins, Zap, Trophy, History
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
-import { resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
 // IMPORT DE LA PUBLICITÉ
 import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
 
-const triggerHaptic = (pattern = [8, 20, 8]) => {
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    navigator.vibrate(pattern);
+// Helper Haptique sécurisé
+const triggerHaptic = (pattern: number[] = [8, 20, 8]) => {
+  if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate(pattern);
+    } catch {
+      // Ignorer si bloqué par le navigateur
+    }
   }
 };
 
@@ -28,7 +31,7 @@ export default function CrashElite() {
   const [bet, setBet] = useState<number>(100); 
   const [jetonsCP, setJetonsCP] = useState<number>(0); 
   const [autoCashout, setAutoCashout] = useState<number>(2.0);
-  const [mult, setMult] = useState<number>(0.5); 
+  const [mult, setMult] = useState<number>(1.0); 
   const [status, setStatus] = useState<'idle' | 'running' | 'crashed' | 'collected'>('idle');
   const [loading, setLoading] = useState<boolean>(false);
   const [gameId, setGameId] = useState<string | null>(null);
@@ -41,48 +44,71 @@ export default function CrashElite() {
   const [isMaintenance, setIsMaintenance] = useState<boolean>(false);
   const [maintMsg, setMaintMsg] = useState<string>("");
 
-  const multRef = useRef<number>(0.5);
+  // REFS TECHNIQUE & SÉCURITÉ
+  const multRef = useRef<number>(1.0);
   const requestRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
-  const crashAtRef = useRef<number>(0);
+  const crashAtRef = useRef<number>(1.0);
   const gameBoxRef = useRef<HTMLDivElement>(null);
   
-  // 🔒 SÉCURITÉ REFS
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
 
   // --- INITIALISATION ---
   useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        const { data } = await supabase.from('profiles').select('jetons_cp').eq('id', user.id).single();
-        if (data) setJetonsCP(data.jetons_cp);
-      }
-      
-      const { data: setting } = await supabase.from('game_settings').select('*').eq('game_id', 'crash').single();
-      if (setting && !setting.is_active) {
-        setIsMaintenance(true);
-        setMaintMsg(setting.maintenance_msg);
-      }
+    let isMounted = true;
 
-      // Charger les derniers crashs enregistrés
-      const { data: recentGames } = await supabase
-        .from('crash_games')
-        .select('crash_point')
-        .order('created_at', { ascending: false })
-        .limit(6);
-      
-      if (recentGames && recentGames.length > 0) {
-        setHistory(recentGames.map(g => Number(g.crash_point || 1.0)));
+    const init = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !isMounted) return;
+        setUserId(user.id);
+
+        // Charger le profil utilisateur
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('jetons_cp')
+          .eq('id', user.id)
+          .single();
+          
+        if (profile && isMounted) {
+          setJetonsCP(Number(profile.jetons_cp) || 0);
+        }
+        
+        // Charger l'état de maintenance du jeu
+        const { data: setting } = await supabase
+          .from('game_settings')
+          .select('is_active, maintenance_msg')
+          .eq('game_id', 'crash')
+          .single();
+
+        if (setting && !setting.is_active && isMounted) {
+          setIsMaintenance(true);
+          setMaintMsg(setting.maintenance_msg || "Maintenance en cours.");
+        }
+
+        // Charger l'historique récent
+        const { data: recentGames } = await supabase
+          .from('crash_games')
+          .select('crash_point')
+          .eq('status', 'crashed')
+          .order('created_at', { ascending: false })
+          .limit(6);
+        
+        if (recentGames && recentGames.length > 0 && isMounted) {
+          setHistory(recentGames.map(g => Number(g.crash_point || 1.0)));
+        }
+      } catch (error) {
+        console.error("Erreur lors de l'initialisation du jeu:", error);
       }
     };
+
     init();
 
     return () => {
+      isMounted = false;
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      gsap.killTweensOf(".game-box");
+      if (gameBoxRef.current) gsap.killTweensOf(gameBoxRef.current);
     };
   }, []);
 
@@ -90,13 +116,15 @@ export default function CrashElite() {
   const triggerCrashAnimation = useCallback(() => {
     if (!gameBoxRef.current) return;
     triggerHaptic([30, 50, 30, 50, 100]);
+    
     const ctx = gsap.context(() => {
       gsap.to(".game-box", { 
-        x: -12, duration: 0.04, repeat: 7, yoyo: true,
+        x: -10, duration: 0.04, repeat: 7, yoyo: true,
         onComplete: () => { gsap.set(".game-box", { x: 0 }); }
       });
-      gsap.to(".crash-overlay", { opacity: 0.5, duration: 0.08, yoyo: true, repeat: 4 });
+      gsap.to(".crash-overlay", { opacity: 0.4, duration: 0.08, yoyo: true, repeat: 3 });
     }, gameBoxRef);
+
     return () => ctx.revert();
   }, []);
 
@@ -112,44 +140,31 @@ export default function CrashElite() {
       requestRef.current = null;
     }
     
-    const finalMult = forcedMult || parseFloat(multRef.current.toFixed(2));
-    const secureBet = lockedBetRef.current;
-    
-    const economy = resolveGameEconomy({
-      gameId: 'crash',
-      bet: secureBet,
-      multiplier: finalMult,
-      difficulty: 'intermédiaire',
-      autoCashout: finalMult,
-      bonusMultiplier: 1,
-      jackpotMultiplier: 1,
-      specialEventMultiplier: 1
-    });
-    const winAmount = economy.payout; 
+    const targetMult = forcedMult ? Number(forcedMult.toFixed(2)) : Number(multRef.current.toFixed(2));
 
     try {
-      const { data: result, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
+      // Validation du gain côté serveur via RPC
+      const { data: result, error: rpcErr } = await supabase.rpc('encaissez_partie_crash', {
+        p_game_id: gameId,
         p_user_id: userId,
-        p_mise_cp: 0,
-        p_gain_cp: winAmount, 
-        p_jeu_nom: `Crash Win x${finalMult}`
+        p_claimed_multiplier: targetMult
       });
 
-      if (rpcErr || !result.success) throw new Error("Erreur transaction gain");
+      if (rpcErr || !result?.success) {
+        throw new Error(result?.message || "Erreur de validation de l'encaissement.");
+      }
+
+      const payout = Number(result.payout);
+      const netGain = payout - lockedBetRef.current;
 
       triggerHaptic([10, 30, 20, 60]);
-      setJetonsCP(prev => prev + winAmount);
-      setSessionGains(prev => prev + (winAmount - secureBet));
-      
-      await supabase.from('crash_games').update({
-        status: 'cashed_out',
-        multiplier_out: finalMult,
-        payout: winAmount
-      }).eq('id', gameId);
-
+      setJetonsCP(prev => prev + payout);
+      setSessionGains(prev => prev + netGain);
       setStatus('collected');
-    } catch (e) {
-      alert("Erreur de synchronisation lors du gain.");
+
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || "Erreur lors du retrait.");
     } finally {
       setLoading(false);
       isProcessingRef.current = false;
@@ -161,14 +176,16 @@ export default function CrashElite() {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
     
-    const currentMult = 0.5 * Math.pow(Math.E, 0.08 * elapsed); 
-    
+    // Courbe de multiplicateur exponentielle sécurisée (démarre à 1.00x)
+    const currentMult = Math.max(1.0, Number((1.0 + Math.pow(elapsed / 3, 1.8)).toFixed(2))); 
+
     if (currentMult >= crashAtRef.current) {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
       
-      const finalCrashPoint = Number(crashAtRef.current.toFixed(2));
+      const finalCrashPoint = crashAtRef.current;
       setMult(finalCrashPoint);
+      multRef.current = finalCrashPoint;
       setStatus('crashed');
       triggerCrashAnimation();
       
@@ -178,7 +195,7 @@ export default function CrashElite() {
         supabase.from('crash_games').update({ status: 'crashed' }).eq('id', gameId).then();
       }
 
-    } else if (autoCashout > 0.51 && currentMult >= autoCashout) {
+    } else if (autoCashout >= 1.01 && currentMult >= autoCashout) {
       setMult(autoCashout);
       multRef.current = autoCashout;
       collect(autoCashout); 
@@ -189,70 +206,55 @@ export default function CrashElite() {
     }
   }, [triggerCrashAnimation, autoCashout, collect, gameId]);
 
-  // --- DEMARRER UNE PARTIE ---
+  // --- DÉMARRER UNE PARTIE ---
   const start = async () => {
-    if (isMaintenance || !userId) return;
-    triggerHaptic([15, 10]);
-    if (bet > jetonsCP || bet < 10 || loading || status === 'running') return;
+    if (isMaintenance || !userId || loading || status === 'running') return;
     
+    const finalBet = Math.floor(bet);
+    if (finalBet > jetonsCP || finalBet < 10) {
+      alert("Mise invalide (minimum 10 CP).");
+      return;
+    }
+
+    triggerHaptic([15, 10]);
     setLoading(true);
-    isProcessingRef.current = false;
+    isProcessingRef.current = true;
     setStatus('idle');
-    setMult(0.5); 
-    multRef.current = 0.5;
+    setMult(1.0); 
+    multRef.current = 1.0;
     startTimeRef.current = null;
 
     try {
-      const finalBet = Math.floor(bet);
       lockedBetRef.current = finalBet;
 
-      const { data: ok, error: rpcErr } = await supabase.rpc('jouer_partie_cp', {
+      // Appel RPC sécurisé : prélèvement + génération du crash point côté DB
+      const { data: res, error: rpcErr } = await supabase.rpc('creer_partie_crash', {
         p_user_id: userId,
-        p_mise_cp: finalBet,
-        p_gain_cp: 0,
-        p_jeu_nom: 'Crash Bet'
+        p_bet_amount: finalBet
       });
 
-      if (rpcErr || !ok.success) {
-        alert("Solde insuffisant ou erreur lors du prélèvement.");
-        setLoading(false);
-        return;
+      if (rpcErr || !res?.success) {
+        throw new Error(res?.message || "Erreur d'initialisation de la partie.");
       }
 
-      setJetonsCP(prev => prev - finalBet); 
-
-      const result = Math.random();
-      const economy = resolveGameEconomy({
-        gameId: 'crash',
-        bet: finalBet,
-        difficulty: 'intermédiaire',
-        multiplier: 1,
-        randomValue: result,
-        bonusMultiplier: 1,
-        jackpotMultiplier: 1,
-        specialEventMultiplier: 1
-      });
+      // Mise à jour du solde local
+      setJetonsCP(prev => Math.max(0, prev - finalBet)); 
       
-      crashAtRef.current = Number((economy.metadata.crashPoint as number) ?? 1.0);
-
-      const { data: game, error: gameErr } = await supabase.from('crash_games').insert({
-        user_id: userId,
-        bet_amount: finalBet,
-        crash_point: crashAtRef.current, 
-        status: 'playing'
-      }).select().single();
-
-      if (gameErr) throw gameErr;
+      // Affectation du point de crash calculé par le serveur
+      crashAtRef.current = Number(res.crash_point);
+      setGameId(res.game_id);
       
-      setGameId(game.id);
       setStatus('running');
+      isProcessingRef.current = false;
       setLoading(false);
+
       requestRef.current = requestAnimationFrame(gameLoop);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Erreur technique au lancement.");
+      alert(error.message || "Erreur technique au lancement.");
       setLoading(false);
+      isProcessingRef.current = false;
     }
   };
 
@@ -267,7 +269,7 @@ export default function CrashElite() {
     } else if (action === 'double') {
       setBet(prev => Math.min(jetonsCP, prev * 2));
     } else if (action === 'max') {
-      setBet(jetonsCP);
+      setBet(Math.max(10, jetonsCP));
     }
   };
 
@@ -287,7 +289,7 @@ export default function CrashElite() {
                 <Hammer className="text-amber-500 animate-bounce" size={40} />
               </div>
               <h2 className="text-3xl font-black italic uppercase tracking-tighter">Crash en <span className="text-amber-500">Pause</span></h2>
-              <p className="text-slate-400 text-xs font-bold leading-relaxed italic">"{maintMsg || "Nous effectuons des mises à jour."}"</p>
+              <p className="text-slate-400 text-xs font-bold leading-relaxed italic">"{maintMsg}"</p>
               <button 
                 onClick={() => router.push('/client/home')} 
                 className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all active:scale-95"
@@ -355,13 +357,12 @@ export default function CrashElite() {
             }} 
           />
 
-          {/* FUSÉE / ORBE ANIMÉE DE PROGRESSION */}
+          {/* ANIMATION DE PROGRESSION */}
           <div className="absolute bottom-4 w-full flex justify-center items-end pointer-events-none">
              <motion.div 
-               style={{ height: `${Math.min((mult - 0.5) * 180, 250)}px` }} 
+               style={{ height: `${Math.min((mult - 1.0) * 120, 240)}px` }} 
                className="w-2 bg-gradient-to-t from-amber-500 via-emerald-400 to-cyan-300 rounded-t-full relative flex justify-center"
              >
-                {/* Tête de fusée néon */}
                 <div className="absolute -top-3 w-6 h-6 bg-cyan-400 rounded-full blur-[2px] shadow-[0_0_15px_#22d3ee] flex items-center justify-center">
                    <div className="w-2 h-2 bg-white rounded-full" />
                 </div>
@@ -456,7 +457,7 @@ export default function CrashElite() {
           )}
 
           <ProgressBar 
-            value={Math.min(100, (mult > 0.5 ? (mult - 0.5) / 2.5 : 0) * 100)} 
+            value={Math.min(100, ((mult - 1.0) / 3.0) * 100)} 
             max={100} 
             label="Moteur de vol" 
             accent="amber" 
