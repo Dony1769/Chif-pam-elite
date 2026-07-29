@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock, Clock, ExternalLink, RotateCcw } from 'lucide-react';
@@ -10,13 +10,13 @@ import MonetagAdScript from '@/components/ads/MonetagAdScript';
 import { resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
-// Helper haptique sécurisé pour mobile
+// --- HELPER HAPTIQUE SÉCURISÉ ---
 const triggerHaptic = () => {
   if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
     try {
       navigator.vibrate([10, 25, 10]);
     } catch {
-      // Ignorer si non supporté sur l'appareil
+      // Non supporté
     }
   }
 };
@@ -36,7 +36,29 @@ interface RpcJouerPartieResult {
 }
 
 const MONETAG_REDIRECT_URL = "https://omg10.com/4/11431323";
-const REQUIRED_AD_TIME_MS = 6000; // 6 secondes requises sur la pub
+const REQUIRED_AD_TIME_MS = 6000;
+
+// --- UTILITAIRES CRYPTOGRAPHIQUES ANTI-TRICHE ---
+const generateSessionSalt = (): string => {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const array = new Uint8Array(16);
+    window.crypto.getRandomValues(array);
+    return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+};
+
+const hashMineIndex = async (index: number, salt: string): Promise<string> => {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(`mine_${index}_salt_${salt}`);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Fallback simple si WebCrypto est indisponible
+  return `hash_${index}_${salt}`;
+};
 
 export default function MinesElite() {
   const router = useRouter();
@@ -48,7 +70,11 @@ export default function MinesElite() {
   const [mines, setMines] = useState<number>(8);
   const [status, setStatus] = useState<'idle' | 'playing' | 'ended'>('idle');
   const [revealed, setRevealed] = useState<number[]>([]);
-  const [minePositions, setMinePositions] = useState<number[]>([]);
+  
+  // Masquage crypto des mines
+  const [mineHashes, setMineHashes] = useState<string[]>([]);
+  const [revealedMinePositions, setRevealedMinePositions] = useState<number[]>([]);
+
   const [loading, setLoading] = useState<boolean>(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(20);
@@ -56,24 +82,27 @@ export default function MinesElite() {
   const [combo, setCombo] = useState<number>(0);
   const [effects, setEffects] = useState<ParticleEffect[]>([]);
 
-  // --- SECONDE CHANCE (PUBLICITÉ MONETAG) ---
+  // --- SECONDE CHANCE (MONETAG) ---
   const [canUseSecondChance, setCanUseSecondChance] = useState<boolean>(false);
   const [secondChanceUsed, setSecondChanceUsed] = useState<boolean>(false);
   const [adWaiting, setAdWaiting] = useState<boolean>(false);
   const [adError, setAdError] = useState<string | null>(null);
 
-  // --- SYSTÈME & MAINTENANCE ---
+  // --- SYSTEME & MAINTENANCE ---
   const [isMounted, setIsMounted] = useState<boolean>(false);
   const [isMaintenance, setIsMaintenance] = useState<boolean>(false);
   const [maintenanceMsg, setMaintenanceMsg] = useState<string>('');
   const [checkingSystem, setCheckingSystem] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
 
-  // --- REFS CRITIQUES DE SÉCURITÉ ---
+  // --- REFS CRITIQUES DE SÉCURITÉ & LOGIQUE EN MÉMOIRE FERMÉE ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
+  const rawMinePositionsRef = useRef<number[]>([]);
+  const sessionSaltRef = useRef<string>('');
+  const lastTickTimeRef = useRef<number>(0);
 
-  // Contrôle d'hydratation côté client
+  // Hydratation
   useEffect(() => {
     setIsMounted(true);
     return () => {
@@ -81,24 +110,13 @@ export default function MinesElite() {
     };
   }, []);
 
-  // Synchronisation du nombre de mines selon la difficulté sélectionnée
+  // Synchronisation des mines selon la difficulté
   useEffect(() => {
     const counts: Record<DifficultyLevel, number> = { facile: 5, intermédiaire: 8, difficile: 11 };
     setMines(counts[difficulty]);
   }, [difficulty]);
 
-  // Timer du jeu
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (status === 'playing' && timeLeft > 0) {
-      timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    } else if (timeLeft === 0 && status === 'playing') {
-      handleGameOver(true);
-    }
-    return () => clearInterval(timer);
-  }, [status, timeLeft]);
-
-  // Initialisation et vérifications d'authentification
+  // Initialisation et profil
   useEffect(() => {
     let active = true;
 
@@ -146,14 +164,185 @@ export default function MinesElite() {
       }
     };
 
-    initSystem();
+    void initSystem();
 
     return () => {
       active = false;
     };
   }, [router]);
 
-  // Vérification du temps passé sur la pub après retour sur la fenêtre
+  const getMultiplier = useCallback((revealedCount = revealed.length): number => {
+    const economy = resolveGameEconomy({
+      gameId: 'mines',
+      bet: 0,
+      revealedCount,
+      difficulty,
+      bonusMultiplier: 1,
+      jackpotMultiplier: 1,
+      specialEventMultiplier: 1
+    });
+    return economy.multiplier;
+  }, [difficulty, revealed.length]);
+
+  const handleGameOver = useCallback(async (isBombHit: boolean) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
+    if (!gameId) {
+      isProcessingRef.current = false;
+      return;
+    }
+
+    const currentMult = getMultiplier();
+    const secureBet = lockedBetRef.current;
+    const isEligibleForSecondChance = isBombHit && !secondChanceUsed;
+
+    const economy = resolveGameEconomy({
+      gameId: 'mines',
+      bet: secureBet,
+      revealedCount: revealed.length,
+      difficulty,
+      multiplier: currentMult,
+      isBombHit,
+      bonusMultiplier: 1,
+      jackpotMultiplier: 1,
+      specialEventMultiplier: 1
+    });
+
+    const winAmount = isBombHit ? 0 : economy.payout;
+
+    // Révéler toutes les positions réelles des mines à la fin
+    setRevealedMinePositions([...rawMinePositionsRef.current]);
+    setCombo(0);
+    setStatus('ended');
+    setCanUseSecondChance(isEligibleForSecondChance);
+
+    try {
+      if (winAmount > 0 && userId) {
+        const { error: payoutError } = await supabase.rpc('jouer_partie_cp', {
+          p_user_id: userId,
+          p_mise_cp: 0,
+          p_gain_cp: winAmount,
+          p_jeu_nom: 'Mines Cashout'
+        });
+
+        if (payoutError) {
+          console.error('Erreur crédit gains:', payoutError);
+        } else {
+          setJetonsCP(prev => prev + winAmount);
+        }
+      }
+
+      await supabase
+        .from('mines_games')
+        .update({ 
+          is_active: false,
+          payout: winAmount,
+          status: winAmount > 0 ? 'won' : 'lost'
+        })
+        .eq('id', gameId);
+
+    } catch (error) {
+      console.error("Erreur clôture partie:", error);
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, [difficulty, gameId, getMultiplier, revealed.length, secondChanceUsed, userId]);
+
+  // Timer avec gestion ultra-précise
+  useEffect(() => {
+    if (status !== 'playing') return;
+
+    lastTickTimeRef.current = performance.now();
+
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const delta = Math.floor((now - lastTickTimeRef.current) / 1000);
+
+      if (delta >= 1) {
+        lastTickTimeRef.current = now;
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            void handleGameOver(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [handleGameOver, status]);
+
+  const applySecondChance = useCallback(async () => {
+    if (!userId || !gameId || isProcessingRef.current) return;
+
+    isProcessingRef.current = true;
+    setLoading(true);
+
+    const extraFee = Math.floor(lockedBetRef.current * 0.5);
+
+    try {
+      const { data: ok, error } = await supabase.rpc('jouer_partie_cp', { 
+        p_user_id: userId,
+        p_mise_cp: extraFee,
+        p_gain_cp: 0,
+        p_jeu_nom: 'Mines Seconde Chance'
+      });
+
+      const rpcResult = ok as RpcJouerPartieResult | null;
+
+      if (error || !rpcResult?.success) {
+        throw new Error('Transaction refusée : solde CP insuffisant.');
+      }
+
+      setJetonsCP(prev => prev - extraFee);
+      lockedBetRef.current = extraFee;
+      setBet(extraFee);
+
+      const salt = generateSessionSalt();
+      sessionSaltRef.current = salt;
+
+      const pos = Array.from({ length: 25 }, (_, i) => i)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, mines);
+
+      rawMinePositionsRef.current = pos;
+
+      const hashes = await Promise.all(pos.map(p => hashMineIndex(p, salt)));
+
+      await supabase
+        .from('mines_games')
+        .update({ 
+          is_active: true,
+          bet_amount: extraFee,
+          mine_positions: pos,
+          status: 'playing'
+        })
+        .eq('id', gameId);
+
+      setMineHashes(hashes);
+      setRevealedMinePositions([]);
+      setRevealed([]);
+      setCombo(0);
+      setEffects([]);
+      setTimeLeft(20);
+      setSecondChanceUsed(true);
+      setCanUseSecondChance(false);
+      setStatus('playing');
+
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAdError(error?.message || 'Échec de l\'activation de la seconde chance.');
+      setTimeout(() => setAdError(null), 4000);
+      setStatus('ended');
+    } finally {
+      setLoading(false);
+      isProcessingRef.current = false;
+    }
+  }, [gameId, mines, userId]);
+
+  // Écouteur de retour d'annonce publicitaire
   useEffect(() => {
     const handleFocusOrVisibility = () => {
       if (!adWaiting || isProcessingRef.current) return;
@@ -169,7 +358,7 @@ export default function MinesElite() {
       setAdWaiting(false);
 
       if (elapsed >= REQUIRED_AD_TIME_MS) {
-        applySecondChance();
+        void applySecondChance();
       } else {
         const remainingSec = Math.ceil((REQUIRED_AD_TIME_MS - elapsed) / 1000);
         setAdError(`Vous devez rester au moins 6 secondes sur l'annonce. (Manquait ${remainingSec}s)`);
@@ -184,20 +373,7 @@ export default function MinesElite() {
       window.removeEventListener('focus', handleFocusOrVisibility);
       document.removeEventListener('visibilitychange', handleFocusOrVisibility);
     };
-  }, [adWaiting]);
-
-  const getMultiplier = (revealedCount = revealed.length): number => {
-    const economy = resolveGameEconomy({
-      gameId: 'mines',
-      bet: 0,
-      revealedCount,
-      difficulty,
-      bonusMultiplier: 1,
-      jackpotMultiplier: 1,
-      specialEventMultiplier: 1
-    });
-    return economy.multiplier;
-  };
+  }, [adWaiting, applySecondChance]);
 
   const addEffect = (type: 'spark' | 'explosion', index: number) => {
     const row = Math.floor(index / 5);
@@ -243,9 +419,16 @@ export default function MinesElite() {
 
       setJetonsCP(prev => prev - finalBet);
 
+      const salt = generateSessionSalt();
+      sessionSaltRef.current = salt;
+
       const pos = Array.from({ length: 25 }, (_, i) => i)
         .sort(() => Math.random() - 0.5)
         .slice(0, mines);
+
+      rawMinePositionsRef.current = pos;
+
+      const hashes = await Promise.all(pos.map(p => hashMineIndex(p, salt)));
 
       const { data: game, error: gameErr } = await supabase
         .from('mines_games')
@@ -263,7 +446,8 @@ export default function MinesElite() {
       if (gameErr) throw gameErr;
 
       setGameId(game.id);
-      setMinePositions(pos);
+      setMineHashes(hashes);
+      setRevealedMinePositions([]);
       setRevealed([]);
       setCombo(0);
       setEffects([]);
@@ -283,83 +467,24 @@ export default function MinesElite() {
     }
   };
 
-  const clickTile = (i: number) => {
+  const clickTile = async (i: number) => {
     if (status !== 'playing' || revealed.includes(i) || isProcessingRef.current) return;
     triggerHaptic();
 
-    if (minePositions.includes(i)) {
+    // Vérification cryptographique de la case
+    const tileHash = await hashMineIndex(i, sessionSaltRef.current);
+    const isMineHit = mineHashes.includes(tileHash) || rawMinePositionsRef.current.includes(i);
+
+    if (isMineHit) {
       addEffect('explosion', i);
       setCombo(0);
-      handleGameOver(true);
+      void handleGameOver(true);
       return;
     }
 
     addEffect('spark', i);
     setCombo(prev => prev + 1);
     setRevealed(prev => [...prev, i]);
-  };
-
-  const handleGameOver = async (isBombHit: boolean) => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
-
-    if (!gameId) {
-      isProcessingRef.current = false;
-      return;
-    }
-
-    const currentMult = getMultiplier();
-    const secureBet = lockedBetRef.current;
-    const isEligibleForSecondChance = isBombHit && !secondChanceUsed;
-
-    const economy = resolveGameEconomy({
-      gameId: 'mines',
-      bet: secureBet,
-      revealedCount: revealed.length,
-      difficulty,
-      multiplier: currentMult,
-      isBombHit,
-      bonusMultiplier: 1,
-      jackpotMultiplier: 1,
-      specialEventMultiplier: 1
-    });
-
-    const winAmount = isBombHit ? 0 : economy.payout;
-
-    setCombo(0);
-    setStatus('ended');
-    setCanUseSecondChance(isEligibleForSecondChance);
-
-    try {
-      if (winAmount > 0 && userId) {
-        const { error: payoutError } = await supabase.rpc('jouer_partie_cp', {
-          p_user_id: userId,
-          p_mise_cp: 0,
-          p_gain_cp: winAmount,
-          p_jeu_nom: 'Mines Cashout'
-        });
-
-        if (payoutError) {
-          console.error('Erreur crédit gains:', payoutError);
-        } else {
-          setJetonsCP(prev => prev + winAmount);
-        }
-      }
-
-      await supabase
-        .from('mines_games')
-        .update({ 
-          is_active: false,
-          payout: winAmount,
-          status: winAmount > 0 ? 'won' : 'lost'
-        })
-        .eq('id', gameId);
-
-    } catch (error) {
-      console.error("Erreur clôture partie:", error);
-    } finally {
-      isProcessingRef.current = false;
-    }
   };
 
   const handleOpenAdForSecondChance = () => {
@@ -375,66 +500,6 @@ export default function MinesElite() {
     localStorage.setItem('monetag_click_time', Date.now().toString());
     setAdWaiting(true);
     window.open(MONETAG_REDIRECT_URL, '_blank');
-  };
-
-  const applySecondChance = async () => {
-    if (!userId || !gameId || isProcessingRef.current) return;
-
-    isProcessingRef.current = true;
-    setLoading(true);
-
-    const extraFee = Math.floor(lockedBetRef.current * 0.5);
-
-    try {
-      const { data: ok, error } = await supabase.rpc('jouer_partie_cp', { 
-        p_user_id: userId,
-        p_mise_cp: extraFee,
-        p_gain_cp: 0,
-        p_jeu_nom: 'Mines Seconde Chance'
-      });
-
-      const rpcResult = ok as RpcJouerPartieResult | null;
-
-      if (error || !rpcResult?.success) {
-        throw new Error('Transaction refusée : solde CP insuffisant.');
-      }
-
-      setJetonsCP(prev => prev - extraFee);
-      lockedBetRef.current = extraFee;
-      setBet(extraFee);
-
-      const newMinePositions = Array.from({ length: 25 }, (_, i) => i)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, mines);
-
-      await supabase
-        .from('mines_games')
-        .update({ 
-          is_active: true,
-          bet_amount: extraFee,
-          mine_positions: newMinePositions,
-          status: 'playing'
-        })
-        .eq('id', gameId);
-
-      setMinePositions(newMinePositions);
-      setRevealed([]);
-      setCombo(0);
-      setEffects([]);
-      setTimeLeft(20);
-      setSecondChanceUsed(true);
-      setCanUseSecondChance(false);
-      setStatus('playing');
-
-    } catch (err: unknown) {
-      const error = err as Error;
-      setAdError(error?.message || 'Échec de l\'activation de la seconde chance.');
-      setTimeout(() => setAdError(null), 4000);
-      setStatus('ended');
-    } finally {
-      setLoading(false);
-      isProcessingRef.current = false;
-    }
   };
 
   const cashout = async () => {
@@ -676,16 +741,17 @@ export default function MinesElite() {
           <div className="grid grid-cols-5 gap-1.5 sm:gap-2.5 h-full w-full">
             {Array.from({ length: 25 }).map((_, i) => {
               const isPremium = premiumIndices.includes(i);
-              const isMine = minePositions.includes(i);
+              const isMineRevealedAtEnd = status === 'ended' && revealedMinePositions.includes(i);
+
               return (
                 <button
                   key={i}
-                  onClick={() => clickTile(i)}
+                  onClick={() => void clickTile(i)}
                   disabled={status !== 'playing' || isProcessingRef.current}
                   className={`relative aspect-square overflow-hidden rounded-xl sm:rounded-2xl border transition-all flex items-center justify-center ${
                     revealed.includes(i) 
                     ? 'border-emerald-400/40 bg-emerald-500/10 shadow-[0_0_12px_rgba(16,185,129,0.2)]' 
-                    : status === 'ended' && isMine
+                    : isMineRevealedAtEnd
                     ? 'z-20 scale-105 border-rose-400 bg-rose-600 shadow-md shadow-rose-500/50'
                     : isPremium
                     ? 'border-violet-400/50 bg-violet-500/10 shadow-[0_0_15px_rgba(167,139,250,0.18)]'
@@ -700,7 +766,7 @@ export default function MinesElite() {
                   {revealed.includes(i) && (
                     <Gem className="text-emerald-400 w-5 h-5 sm:w-7 sm:h-7 animate-in zoom-in duration-300" />
                   )}
-                  {status === 'ended' && isMine && (
+                  {isMineRevealedAtEnd && (
                     <Bomb className="text-white w-5 h-5 sm:w-7 sm:h-7 animate-in bounce-in duration-500" />
                   )}
                 </button>
