@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getHomeRouteForRole } from '@/lib/auth-routing';
 import { normalizePhoneInput } from '@/lib/phone';
@@ -13,8 +13,10 @@ import Link from 'next/link';
 import { LogoChifPam } from '@/components/LogoChifPam';
 import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
 
-interface ProfileRpcResponse {
-  username: string;
+interface ProfileData {
+  is_banned: boolean | null;
+  ban_reason: string | null;
+  role: string | null;
 }
 
 function LoginFormContent() {
@@ -33,37 +35,37 @@ function LoginFormContent() {
     }
   }, [searchParams]);
 
+  // Saisie du numéro : uniquement des chiffres, max 8
+  const handlePhoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const onlyNums = e.target.value.replace(/\D/g, '');
+    const trimmed = onlyNums.slice(0, 8);
+    setPhone(trimmed);
+  }, []);
+
   const handleSupportRequest = async (reason: 'banni' | 'pass') => {
-    const cleanPhone = normalizePhoneInput(phone);
-    if (!cleanPhone) {
-      setErrorMessage("Entrez votre numéro pour que le support puisse vous identifier.");
+    if (loading) return;
+
+    if (phone.length !== 8) {
+      setErrorMessage("Veuillez saisir votre numéro à 8 chiffres pour contacter le support.");
       return;
     }
 
+    const cleanPhone = normalizePhoneInput(phone);
     setLoading(true);
-    let clientName = "Non identifié";
 
     try {
-      const { data } = await supabase.rpc('get_username_by_phone', { phone_input: cleanPhone });
-
-      const typedData = data as ProfileRpcResponse[] | null;
-      if (typedData && typedData.length > 0) {
-        clientName = typedData[0].username;
-      }
-
       const ADMIN_PHONE = "50940451937"; 
       const intent = reason === 'banni' ? "COMPTE BANNI 🚫" : "MOT DE PASSE OUBLIÉ 🔑";
       
       const messageText = `Bonjour Support CHIF-PAM,\n\n` +
                           `J'ai un problème : ${intent}\n` +
-                          `👤 Pseudo: ${clientName}\n` +
-                          `📞 Numéro: ${cleanPhone}\n\n` +
+                          `📞 Numéro : +509 ${phone}\n\n` +
                           `Merci de m'aider à accéder à mon compte.`;
 
       const whatsappUrl = `https://api.whatsapp.com/send?phone=${ADMIN_PHONE}&text=${encodeURIComponent(messageText)}`;
-      window.open(whatsappUrl, '_blank');
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      console.error("Erreur support:", err);
+      console.error("Erreur d'ouverture du support:", err);
       setErrorMessage("Impossible d'ouvrir le support WhatsApp pour le moment.");
     } finally {
       setLoading(false);
@@ -75,41 +77,70 @@ function LoginFormContent() {
     if (loading) return;
     
     setErrorMessage('');
-    setLoading(true);
-    
-    const cleanPhone = normalizePhoneInput(phone);
-    if (cleanPhone.length < 8) {
-      setErrorMessage("Numéro de téléphone invalide.");
-      setLoading(false);
+    setSuccessMessage('');
+
+    if (phone.length !== 8) {
+      setErrorMessage("Le numéro de téléphone doit contenir exactement 8 chiffres.");
       return;
     }
 
-    const email = `${cleanPhone}@chifpam.ht`;
+    if (!password) {
+      setErrorMessage("Veuillez entrer votre mot de passe.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
-      const authResult = await supabase.auth.signInWithPassword({ email, password });
-      if (authResult.error) throw authResult.error;
+      const cleanPhone = normalizePhoneInput(phone);
+      const internalEmail = `${cleanPhone}@chifpam.ht`;
 
-      const user = authResult.data?.user;
-      if (!user) throw new Error("Impossible d'établir la session.");
+      // 1. Authentification Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
+        email: internalEmail, 
+        password 
+      });
 
-      const { data: profile } = await supabase
+      if (authError) throw authError;
+
+      const user = authData?.user;
+      if (!user) throw new Error("Erreur de session.");
+
+      // 2. Vérification du statut utilisateur dans la table profiles
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('is_banned, ban_reason, role')
         .eq('id', user.id)
-        .maybeSingle();
+        .maybeSingle<ProfileData>();
 
+      if (profileError) {
+        await supabase.auth.signOut();
+        throw new Error("Impossible de vérifier les autorisations du profil.");
+      }
+
+      // 3. Traitement des comptes suspendus
       if (profile?.is_banned) {
         await supabase.auth.signOut();
-        setLoading(false);
-        setErrorMessage(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des règles."}`);
+        setErrorMessage(`🚫 COMPTE SUSPENDU : ${profile.ban_reason || "Violation des conditions d'utilisation."}`);
         return;
       }
 
+      // 4. Redirection sécurisée selon le rôle
       const targetPath = getHomeRouteForRole(profile?.role);
       window.location.replace(targetPath);
-    } catch {
-      setErrorMessage("Identifiants incorrects ou numéro non enregistré.");
+
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        // Personnalisation du message d'erreur d'identifiants
+        if (err.message.includes("Invalid login credentials")) {
+          setErrorMessage("Numéro ou mot de passe incorrect.");
+        } else {
+          setErrorMessage(err.message);
+        }
+      } else {
+        setErrorMessage("Identifiants incorrects ou service indisponible.");
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -142,36 +173,46 @@ function LoginFormContent() {
 
       <form onSubmit={handleLogin} className="space-y-4">
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Votre Téléphone</label>
-          <div className="relative">
+          <label htmlFor="phone" className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Téléphone</label>
+          <div className="relative flex items-center">
             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
+            <span className="absolute left-11 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm z-10 select-none">
+              +509
+            </span>
             <DSInput 
+              id="phone"
               type="tel" 
-              placeholder="4000 0000" 
+              inputMode="numeric"
+              placeholder="0000 0000" 
               value={phone} 
-              onChange={(e) => setPhone(e.target.value)} 
+              onChange={handlePhoneChange} 
+              maxLength={8}
               required 
-              className="pl-12 py-4 font-bold" 
+              disabled={loading}
+              className="pl-24 py-4 font-bold tracking-widest" 
             />
           </div>
         </div>
         
         <div className="space-y-1">
-          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Mot de passe</label>
+          <label htmlFor="password" className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Mot de passe</label>
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18}/>
             <DSInput 
+              id="password"
               type={showPassword ? "text" : "password"} 
               placeholder="••••••••" 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
               required 
+              disabled={loading}
               className="pl-12 pr-12 py-4 font-bold" 
             />
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
+              onClick={() => setShowPassword((prev) => !prev)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors z-10"
+              tabIndex={-1}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
