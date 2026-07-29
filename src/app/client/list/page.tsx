@@ -94,15 +94,7 @@ export default function GameListPage() {
     });
   }, []);
 
-  // Sélection aléatoire sécurisée d'un jeu
-  const handleRandomPlay = useCallback(() => {
-    const listToPick = filteredGames.length > 0 ? filteredGames : GAMES;
-    if (listToPick.length === 0) return;
-    const randomIndex = Math.floor(Math.random() * listToPick.length);
-    router.push(listToPick[randomIndex].path);
-  }, [filteredGames, router]);
-
-  // Filtrage combiné (Recherche + Catégorie)
+  // 1. Filtrage combiné (Recherche + Catégorie) -> Déclaré en premier
   const filteredGames = useMemo(() => {
     const searchLower = search.trim().toLowerCase();
     
@@ -119,6 +111,14 @@ export default function GameListPage() {
       return game.category.toLowerCase() === selectedCategory.toLowerCase();
     });
   }, [search, selectedCategory, favorites]);
+
+  // 2. Sélection aléatoire sécurisée d'un jeu -> Utilise `filteredGames` une fois déclaré
+  const handleRandomPlay = useCallback(() => {
+    const listToPick = filteredGames.length > 0 ? filteredGames : GAMES;
+    if (listToPick.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * listToPick.length);
+    router.push(listToPick[randomIndex].path);
+  }, [filteredGames, router]);
 
   return (
     <div className="min-h-screen bg-[#020617] text-white selection:bg-emerald-500 selection:text-black pb-36 font-sans">
