@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { FINANCE_PAYMENT_METHODS, type FinancePaymentMethod } from '@/lib/constants/finance';
 import { ClientFinanceService } from '@/services/client/finance';
@@ -20,9 +20,11 @@ type ToastState = {
   message: string;
 } | null;
 
-// Constantes de configuration financière
+// Constantes de configuration financière & sécurité
 const MIN_DEPOSIT_AMOUNT = 25; // Minimum 25 HTG
 const MIN_WITHDRAWAL_AMOUNT = 100; // Minimum 100 HTG
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB maximum pour les pièces jointes
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 
 const LogoChifPam = ({ className }: { className?: string }) => (
   <div className={`flex flex-col items-center ${className}`}>
@@ -37,86 +39,164 @@ const LogoChifPam = ({ className }: { className?: string }) => (
 export default function FinancePage() {
   const [view, setView] = useState<'menu' | 'deposit' | 'withdrawal'>('menu');
   const [method, setMethod] = useState<FinancePaymentMethod | null>(null);
-  const [profile, setProfile] = useState<{balance: number, locked_balance: number} | null>(null);
+  const [profile, setProfile] = useState<{ balance: number; locked_balance: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [issubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // État du Toast de notification
+  // Notifications Toast
   const [toast, setToast] = useState<ToastState>(null);
 
+  // Formulaires
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
-  const adminNumbers = {
+  // Références pour le nettoyage des minuteurs (Memory Leaks Prevention)
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const adminNumbers: Record<FinancePaymentMethod, string> = {
     NatCash: "+509 4045 1937",
     MonCash: "+509 4719 3408"
   };
 
   const showToast = useCallback((type: 'success' | 'error', message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ type, message });
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
     }, 4500);
   }, []);
 
   const fetchProfile = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        setLoading(false);
+        return;
+      }
+
       setUserId(user.id);
-      const { data } = await supabase.from('profiles').select('balance, locked_balance').eq('id', user.id).single();
-      setProfile(data);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('balance, locked_balance')
+        .eq('id', user.id)
+        .single();
+
+      if (!error && data) {
+        setProfile({
+          balance: Number(data.balance) || 0,
+          locked_balance: Number(data.locked_balance) || 0
+        });
+      }
+    } catch (err) {
+      console.error("Erreur de chargement du profil financier :", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchProfile();
+    void fetchProfile();
   }, [fetchProfile]);
 
+  // Écouteur temps réel Supabase sécurisé
   useEffect(() => {
     if (!userId) return;
-    const sub = supabase.channel('finance-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, () => fetchProfile())
+
+    const channel = supabase.channel(`finance-sync-${userId}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'profiles', 
+        filter: `id=eq.${userId}` 
+      }, () => {
+        void fetchProfile();
+      })
       .subscribe();
-    return () => { supabase.removeChannel(sub); };
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [fetchProfile, userId]);
 
+  // Nettoyage des minuteurs au démontage du composant
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    void navigator.clipboard.writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   };
 
-  // Traitement de la demande de Dépôt
+  // Traitement sécurisé du fichier de preuve
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) {
+      setFile(null);
+      return;
+    }
+
+    if (!ALLOWED_IMAGE_TYPES.includes(selectedFile.type)) {
+      showToast("error", "Format de fichier non pris en charge. Utilisez JPG, PNG ou WEBP.");
+      e.target.value = "";
+      setFile(null);
+      return;
+    }
+
+    if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
+      showToast("error", "La taille de l'image ne doit pas dépasser 5 Mo.");
+      e.target.value = "";
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+  };
+
+  // Traitement de la demande de Dépôt (Sécurisé)
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amt = parseFloat(amount);
+    if (issubmitting) return;
+
+    const rawAmt = parseFloat(amount);
+    const amt = Math.round(rawAmt * 100) / 100; // Arrondi sécurisé à 2 décimales
 
     if (!file || isNaN(amt) || !method) {
       return showToast("error", "Veuillez remplir tous les champs et importer une preuve de paiement.");
     }
 
-    // Vérification du dépôt minimum (25 HTG)
     if (amt < MIN_DEPOSIT_AMOUNT) {
       return showToast("error", `Le montant minimum pour un dépôt est de ${MIN_DEPOSIT_AMOUNT} HTG.`);
     }
 
     setIsSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
         throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${crypto.randomUUID()}.${fileExt}`;
+      const rawExt = file.name.split('.').pop() || 'png';
+      const cleanExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const fileName = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${cleanExt}`;
       const filePath = `proofs/${fileName}`;
       
-      const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(filePath, file);
-      if (uploadError) throw uploadError;
+      const { error: uploadError } = await supabase.storage
+        .from('payment-proofs')
+        .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+      if (uploadError) {
+        throw new Error("Échec du téléversement de la preuve. Réessayez.");
+      }
 
       const result = await ClientFinanceService.submitDeposit(amt, method, filePath);
       if (!result.success) {
@@ -135,10 +215,13 @@ export default function FinancePage() {
     }
   };
 
-  // Traitement de la demande de Retrait
+  // Traitement de la demande de Retrait (Sécurisé)
   const handleWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amt = parseFloat(amount);
+    if (issubmitting) return;
+
+    const rawAmt = parseFloat(amount);
+    const amt = Math.round(rawAmt * 100) / 100;
     const cleanPhone = phone.replace(/\D/g, '');
 
     if (isNaN(amt) || !cleanPhone || !method) {
@@ -149,7 +232,6 @@ export default function FinancePage() {
       return showToast("error", "Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
     
-    // Vérification du retrait minimum (100 HTG)
     if (amt < MIN_WITHDRAWAL_AMOUNT) {
       return showToast("error", `Le montant minimum pour un retrait est de ${MIN_WITHDRAWAL_AMOUNT} HTG.`);
     }
@@ -196,7 +278,7 @@ export default function FinancePage() {
     </main>
   );
 
-  const availableBalance = (profile?.balance || 0) - (profile?.locked_balance || 0);
+  const availableBalance = Math.max(0, (profile?.balance || 0) - (profile?.locked_balance || 0));
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_30%),linear-gradient(135deg,_#030712_0%,_#020617_45%,_#020617_100%)] text-white relative">
@@ -205,6 +287,7 @@ export default function FinancePage() {
         {/* Entête */}
         <div className="mb-4 flex items-center justify-between">
           <button
+            type="button"
             onClick={() => {
               if (method) {
                 setMethod(null);
@@ -249,6 +332,7 @@ export default function FinancePage() {
                 <span className="text-xs font-semibold tracking-wide sm:text-sm">{toast.message}</span>
               </div>
               <button
+                type="button"
                 onClick={() => setToast(null)}
                 className="ml-3 rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
               >
@@ -274,7 +358,7 @@ export default function FinancePage() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-slate-400">Solde disponible</p>
                 <h2 className="mt-2 text-4xl font-black tracking-tight text-emerald-400 sm:text-5xl">
-                  {availableBalance.toLocaleString()} <span className="text-base text-slate-300">HTG</span>
+                  {availableBalance.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span className="text-base text-slate-300">HTG</span>
                 </h2>
               </div>
             </div>
@@ -306,6 +390,7 @@ export default function FinancePage() {
             className="mt-5 grid gap-4 lg:grid-cols-2"
           >
             <button
+              type="button"
               onClick={() => setView('deposit')}
               className="group relative overflow-hidden rounded-[2rem] border border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-emerald-500/10 to-cyan-500/10 p-6 text-left shadow-[0_20px_60px_rgba(16,185,129,0.16)] transition-all duration-200 hover:-translate-y-1 active:scale-[0.99]"
             >
@@ -316,7 +401,7 @@ export default function FinancePage() {
                     <ArrowUpCircle size={14} /> Dépôt rapide (Min 25 HTG)
                   </div>
                   <h3 className="text-xl font-black tracking-tight text-white uppercase">Ajouter des fonds</h3>
-                  <p className="mt-2 max-w-xs text-sm text-slate-300">Faire une demande dépôt à partir de 25 HTG seulement.</p>
+                  <p className="mt-2 max-w-xs text-sm text-slate-300">Faire une demande de dépôt à partir de 25 HTG seulement.</p>
                 </div>
                 <div className="rounded-2xl border border-emerald-400/30 bg-slate-950/40 p-3 text-emerald-400">
                   <ArrowUpCircle size={24} />
@@ -326,6 +411,7 @@ export default function FinancePage() {
 
             <div className="space-y-4">
               <button
+                type="button"
                 onClick={() => setView('withdrawal')}
                 className="group relative w-full overflow-hidden rounded-[2rem] border border-amber-400/20 bg-slate-900/80 p-6 text-left shadow-[0_20px_60px_rgba(2,6,23,0.3)] transition-all duration-200 hover:-translate-y-1 active:scale-[0.99]"
               >
@@ -371,6 +457,7 @@ export default function FinancePage() {
               {FINANCE_PAYMENT_METHODS.map((m) => (
                 <button
                   key={m}
+                  type="button"
                   onClick={() => setMethod(m)}
                   className="flex w-full items-center justify-between rounded-[1.3rem] border border-white/10 bg-slate-950/60 px-5 py-4 text-left transition-all duration-200 hover:border-emerald-400/40 hover:bg-slate-800/80 active:scale-[0.99]"
                 >
@@ -422,6 +509,7 @@ export default function FinancePage() {
               <input
                 type="number"
                 min={MIN_DEPOSIT_AMOUNT}
+                step="any"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full rounded-[1.2rem] border border-white/10 bg-slate-950/70 px-4 py-4 text-base font-black text-emerald-400 outline-none transition-all focus:border-emerald-400/50"
@@ -432,16 +520,29 @@ export default function FinancePage() {
             <label className="flex w-full flex-col items-center rounded-[1.5rem] border border-dashed border-white/15 bg-slate-950/60 p-6 text-center cursor-pointer transition-all duration-200 hover:border-emerald-400/40">
               <Upload size={24} className="mb-2 text-emerald-400" />
               <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">
-                {file ? file.name : 'Importer le reçu ou capture d\'écran'}
+                {file ? file.name : 'Importer le reçu ou capture d\'écran (Max 5Mo)'}
               </span>
-              <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="hidden" />
+              <input 
+                type="file" 
+                accept="image/jpeg,image/png,image/webp,image/heic" 
+                onChange={handleFileChange} 
+                className="hidden" 
+              />
             </label>
 
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setMethod(null)} className="flex-1 rounded-[1.2rem] border border-white/10 bg-slate-950/70 py-4 text-xs font-black uppercase tracking-widest text-slate-300 transition-all duration-200 hover:bg-slate-800/70">
+              <button 
+                type="button" 
+                onClick={() => setMethod(null)} 
+                className="flex-1 rounded-[1.2rem] border border-white/10 bg-slate-950/70 py-4 text-xs font-black uppercase tracking-widest text-slate-300 transition-all duration-200 hover:bg-slate-800/70"
+              >
                 Annuler
               </button>
-              <button type="submit" disabled={issubmitting} className="flex-1 rounded-[1.2rem] bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 text-xs font-black uppercase tracking-widest text-slate-950 shadow-[0_20px_40px_rgba(16,185,129,0.2)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70">
+              <button 
+                type="submit" 
+                disabled={issubmitting} 
+                className="flex-1 rounded-[1.2rem] bg-gradient-to-r from-emerald-500 to-cyan-500 py-4 text-xs font-black uppercase tracking-widest text-slate-950 shadow-[0_20px_40px_rgba(16,185,129,0.2)] transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              >
                 {issubmitting ? <Loader2 className="mx-auto animate-spin" /> : 'Confirmer le Dépôt'}
               </button>
             </div>
@@ -488,6 +589,7 @@ export default function FinancePage() {
               <input
                 type="number"
                 min={MIN_WITHDRAWAL_AMOUNT}
+                step="any"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full rounded-[1.2rem] border border-white/10 bg-slate-950/70 px-4 py-4 text-base font-black text-amber-400 outline-none transition-all focus:border-amber-400/50"
@@ -515,10 +617,18 @@ export default function FinancePage() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setMethod(null)} className="flex-1 rounded-[1.2rem] border border-white/10 bg-slate-950/70 py-4 text-xs font-black uppercase tracking-widest text-slate-300 transition-all duration-200 hover:bg-slate-800/70">
+              <button 
+                type="button" 
+                onClick={() => setMethod(null)} 
+                className="flex-1 rounded-[1.2rem] border border-white/10 bg-slate-950/70 py-4 text-xs font-black uppercase tracking-widest text-slate-300 transition-all duration-200 hover:bg-slate-800/70"
+              >
                 Annuler
               </button>
-              <button type="submit" disabled={issubmitting} className="flex-1 rounded-[1.2rem] bg-amber-400 py-4 text-xs font-black uppercase tracking-widest text-slate-950 transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70">
+              <button 
+                type="submit" 
+                disabled={issubmitting} 
+                className="flex-1 rounded-[1.2rem] bg-amber-400 py-4 text-xs font-black uppercase tracking-widest text-slate-950 transition-all duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              >
                 {issubmitting ? <Loader2 className="mx-auto animate-spin" /> : 'Confirmer le Retrait'}
               </button>
             </div>
@@ -531,4 +641,4 @@ export default function FinancePage() {
       </div>
     </main>
   );
-        }
+}
