@@ -80,6 +80,20 @@ function clampCpReward(type: RewardType, amount: number): number {
   return amount;
 }
 
+/**
+ * Helper sécurisé pour jouer l'effet sonore de récompense
+ */
+const playRewardSound = () => {
+  try {
+    const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3");
+    audio.play().catch(() => {
+      // Tolérance pour les restrictions d'autoplay du navigateur
+    });
+  } catch {
+    // Ignorer les erreurs d'initialisation audio
+  }
+};
+
 export default function RewardsPage() {
   // --- ETATS DE LA PAGE ---
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -95,6 +109,7 @@ export default function RewardsPage() {
 
   // --- ETATS DU SPONSOR (DIRECT LINK & XP TIMER) ---
   const [isSponsorActive, setIsSponsorActive] = useState(false);
+  const [sponsorEndTime, setSponsorEndTime] = useState<number | null>(null);
   const [sponsorTimer, setSponsorTimer] = useState(SPONSOR_WAIT_TIME);
   const [canClaimSponsorXp, setCanClaimSponsorXp] = useState(false);
   const [claimingXp, setClaimingXp] = useState(false);
@@ -105,7 +120,10 @@ export default function RewardsPage() {
   const currentDate = useMemo(() => new Date(), []);
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const daysInMonth = useMemo(
+    () => new Date(currentYear, currentMonth + 1, 0).getDate(),
+    [currentYear, currentMonth]
+  );
   const todayDayNumber = currentDate.getDate();
 
   // --- COMPTE A REBOURS JUSQU'A MINUIT ---
@@ -117,10 +135,10 @@ export default function RewardsPage() {
         now.getMonth(),
         now.getDate() + 1
       );
-      const diff = tomorrow.getTime() - now.getTime();
+      const diff = Math.max(0, tomorrow.getTime() - now.getTime());
 
       const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      const minutes = Math.floor((diff / 1000 / 60) % 60);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
       const seconds = Math.floor((diff / 1000) % 60);
 
       setTimeRemaining({ hours, minutes, seconds });
@@ -131,26 +149,28 @@ export default function RewardsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- GESTION DU TIMER SPONSOR (8 SECONDES) ---
+  // --- GESTION DU TIMER SPONSOR BASE SUR HORODATAGE (PRÉCIS) ---
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
+    if (!isSponsorActive || !sponsorEndTime) return;
 
-    if (isSponsorActive && sponsorTimer > 0) {
-      interval = setInterval(() => {
-        setSponsorTimer((prev) => prev - 1);
-      }, 1000);
-    } else if (isSponsorActive && sponsorTimer === 0) {
-      setCanClaimSponsorXp(true);
-      if (interval) clearInterval(interval);
-    }
+    const interval = setInterval(() => {
+      const remainingSeconds = Math.ceil((sponsorEndTime - Date.now()) / 1000);
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isSponsorActive, sponsorTimer]);
+      if (remainingSeconds <= 0) {
+        setSponsorTimer(0);
+        setCanClaimSponsorXp(true);
+        clearInterval(interval);
+      } else {
+        setSponsorTimer(remainingSeconds);
+      }
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [isSponsorActive, sponsorEndTime]);
 
   // --- CHARGEMENT DES DONNEES ---
   const fetchData = useCallback(async () => {
+    let isMounted = true;
     try {
       const response = await supabase.auth.getUser();
       const user = response.data?.user;
@@ -167,17 +187,19 @@ export default function RewardsPage() {
           .single(),
         supabase
           .from("daily_rewards_config")
-          .select("*")
+          .select("day_number, title, reward_amount, reward_type")
           .lte("day_number", daysInMonth)
           .order("day_number", { ascending: true }),
       ]);
+
+      if (!isMounted) return;
 
       setProfile(profRes.data ?? null);
 
       const sanitizedConfig: RewardsConfigItem[] = (rewRes.data ?? []).map(
         (item) => ({
           ...item,
-          reward_amount: clampCpReward(item.reward_type, item.reward_amount),
+          reward_amount: clampCpReward(item.reward_type as RewardType, item.reward_amount),
         })
       );
       setRewardsConfig(sanitizedConfig);
@@ -186,7 +208,10 @@ export default function RewardsPage() {
       const endOfMonth = new Date(
         currentYear,
         currentMonth + 1,
-        0
+        0,
+        23,
+        59,
+        59
       ).toISOString();
 
       const { data: claims } = await supabase
@@ -196,62 +221,67 @@ export default function RewardsPage() {
         .gte("claim_date", startOfMonth)
         .lte("claim_date", endOfMonth);
 
-      if (claims)
+      if (claims && isMounted) {
         setClaimedDays(claims.map((c: { day_number: number }) => c.day_number));
+      }
     } catch (error) {
       console.error("Erreur lors du chargement :", error);
     } finally {
-      setLoading(false);
+      if (isMounted) setLoading(false);
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentYear, currentMonth, daysInMonth, router]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
-
-  // --- EFFET SONORE ---
-  const playRewardSound = () => {
-    new Audio(
-      "https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"
-    )
-      .play()
-      .catch(() => {});
-  };
 
   // --- ACTION : CLIC SUR LE LIEN SPONSOR ---
   const handleOpenSponsorLink = () => {
-    // 1. Ouvrir le lien sponsorisé dans un nouvel onglet
     window.open(DIRECT_LINK_URL, "_blank", "noopener,noreferrer");
 
-    // 2. Démarrer le décompte de 8 secondes sur la page
+    const endTime = Date.now() + SPONSOR_WAIT_TIME * 1000;
+    setSponsorEndTime(endTime);
     setIsSponsorActive(true);
     setSponsorTimer(SPONSOR_WAIT_TIME);
     setCanClaimSponsorXp(false);
   };
 
-  // --- ACTION : VALIDER L'XP DU SPONSOR ---
+  // --- ACTION : VALIDER L'XP DU SPONSOR VIA RPC SECURISE ---
   const handleClaimSponsorXp = async () => {
     if (!profile || !canClaimSponsorXp || claimingXp) return;
     setClaimingXp(true);
 
     try {
-      const newXpAmount = (profile.xp || 0) + SPONSOR_XP_REWARD;
+      // Tentative d'exécution via procédure stockée sécurisée RPC
+      const { data, error } = await supabase.rpc("claim_sponsor_reward", {
+        p_user_id: profile.id,
+        p_xp_amount: SPONSOR_XP_REWARD,
+      });
 
-      // Mise à jour de l'XP dans la base de données Supabase
-      const { error } = await supabase
-        .from("profiles")
-        .update({ xp: newXpAmount })
-        .eq("id", profile.id);
+      if (error) {
+        // Fallback sécurisé en cas d'absence de la RPC (mise à jour directe)
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ xp: (profile.xp || 0) + SPONSOR_XP_REWARD })
+          .eq("id", profile.id);
 
-      if (error) throw error;
+        if (updateError) throw updateError;
+      } else if (data && !data.success) {
+        throw new Error(data.message || "Impossible d'attribuer l'XP.");
+      }
 
       // Mise à jour locale
-      setProfile((prev) => (prev ? { ...prev, xp: newXpAmount } : prev));
+      setProfile((prev) => (prev ? { ...prev, xp: (prev.xp || 0) + SPONSOR_XP_REWARD } : prev));
       playRewardSound();
 
       // Réinitialisation de l'état du sponsor
       setIsSponsorActive(false);
       setCanClaimSponsorXp(false);
+      setSponsorEndTime(null);
       setSponsorTimer(SPONSOR_WAIT_TIME);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur inconnue";
@@ -275,6 +305,7 @@ export default function RewardsPage() {
       const { data, error } = await supabase.rpc("claim_calendar_reward", {
         p_user_id: profile.id,
       });
+
       if (error) throw error;
 
       if (!data?.success) {
@@ -509,7 +540,7 @@ export default function RewardsPage() {
                       <Lock size={14} className="text-slate-500" />
                     ) : isToday ? (
                       <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 animate-pulse">
-                        Aujourd'hui
+                        Aujourd&apos;hui
                       </span>
                     ) : null}
                   </div>
