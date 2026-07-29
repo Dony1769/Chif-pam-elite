@@ -48,7 +48,7 @@ function ChallengeTimer({ endsAt }: { endsAt?: string }) {
 
     const updateTimer = () => {
       const end = new Date(endsAt).getTime();
-      const now = new Date().getTime();
+      const now = Date.now();
       const diff = end - now;
 
       if (diff <= 0) {
@@ -87,85 +87,121 @@ export default function ArenaPage() {
   const router = useRouter();
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Injection du script de pub uniquement pour cette page + Nettoyage au démontage
+  // Injection propre et sécurisée du script d'annonces publicitaires
   useEffect(() => {
-    const script = document.createElement("script");
-    script.dataset.zone = "11430871";
-    script.src = "https://nap5k.com/tag.min.js";
-    script.async = true;
+    const scriptId = "nap5k-ad-tag";
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
 
-    const targetElement = document.body || document.documentElement;
-    targetElement.appendChild(script);
+    if (!script) {
+      script = document.createElement("script");
+      script.id = scriptId;
+      script.dataset.zone = "11430871";
+      script.src = "https://nap5k.com/tag.min.js";
+      script.async = true;
+
+      const targetElement = document.body || document.documentElement;
+      targetElement.appendChild(script);
+    }
 
     return () => {
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
+      const existingScript = document.getElementById(scriptId);
+      if (existingScript && existingScript.parentNode) {
+        existingScript.parentNode.removeChild(existingScript);
       }
     };
   }, []);
 
   const isChallengeExpired = (endsAt?: string): boolean => {
     if (!endsAt) return false;
-    return new Date(endsAt).getTime() <= new Date().getTime();
+    return new Date(endsAt).getTime() <= Date.now();
   };
 
-  const fetchData = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      router.push("/connexion");
-      return;
+  const calculateEntryFeeCP = useCallback((baseCP: number): number => {
+    if (!profile) return baseCP;
+    if (profile.vip_status === "monthly") return Math.floor(baseCP * 0.7);
+    if (profile.vip_status === "weekly") return Math.floor(baseCP * 0.85);
+    return baseCP;
+  }, [profile]);
+
+  const fetchData = useCallback(async (isMounted: boolean = true) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/connexion");
+        return;
+      }
+
+      // Requêtes ciblées : On ne charge que la tentative de l'utilisateur connecté
+      const [pRes, cRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, jetons_cp, vip_status")
+          .eq("id", user.id)
+          .single(),
+        supabase
+          .from("challenges")
+          .select(
+            `id, title, prize_pool_cp, entry_fee_cp_base, game_type, is_active, ends_at,
+             challenge_attempts(user_id, total_score, attempts_count)`
+          )
+          .eq("is_active", true)
+          .eq("challenge_attempts.user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (!isMounted) return;
+
+      if (pRes.data) setProfile(pRes.data);
+      if (cRes.data) setChallenges(cRes.data as ChallengeItem[]);
+    } catch (err) {
+      if (isMounted) {
+        console.error("Erreur de chargement des données :", err);
+        setErrorMessage("Impossible de charger les défis. Veuillez réentreprendre.");
+      }
+    } finally {
+      if (isMounted) setLoading(false);
     }
-
-    const [pRes, cRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, jetons_cp, vip_status")
-        .eq("id", user.id)
-        .single(),
-      supabase
-        .from("challenges")
-        .select(
-          "id, title, prize_pool_cp, entry_fee_cp_base, game_type, is_active, ends_at, challenge_attempts (user_id, total_score, attempts_count)"
-        )
-        .eq("is_active", true)
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (pRes.data) setProfile(pRes.data);
-    if (cRes.data) setChallenges(cRes.data as ChallengeItem[]);
-    setLoading(false);
   }, [router]);
 
   useEffect(() => {
-    void fetchData();
+    let isMounted = true;
+    void fetchData(isMounted);
 
-    const channel = supabase
-      .channel("arena_main_hub")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "challenge_attempts" },
-        () => {
-          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-          refreshTimerRef.current = setTimeout(() => {
-            void fetchData();
-          }, 800);
-        }
-      )
-      .subscribe();
+    // Écouteur Realtime ciblé exclusivement sur les tentatives de l'utilisateur
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || !isMounted) return;
+
+      channel = supabase
+        .channel(`arena_user_${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "challenge_attempts",
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+            refreshTimerRef.current = setTimeout(() => {
+              if (isMounted) void fetchData(isMounted);
+            }, 500);
+          }
+        )
+        .subscribe();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      isMounted = false;
+      if (channel) void supabase.removeChannel(channel);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [fetchData]);
-
-  const calculateEntryFeeCP = (baseCP: number): number => {
-    if (profile?.vip_status === "monthly") return Math.floor(baseCP * 0.7);
-    if (profile?.vip_status === "weekly") return Math.floor(baseCP * 0.85);
-    return baseCP;
-  };
 
   const handleEntry = async (challenge: ChallengeItem, fee: number) => {
     setErrorMessage(null);
@@ -184,23 +220,43 @@ export default function ArenaPage() {
     setEntryLoading(challenge.id);
 
     try {
-      const { error: attemptError } = await supabase.from("challenge_attempts").upsert(
-        {
-          challenge_id: challenge.id,
-          user_id: profile.id,
-          last_attempt_at: new Date().toISOString(),
-        },
-        { onConflict: "challenge_id,user_id" }
-      );
+      // 1. TENTATIVE VIA RPC ATOMIQUE (Sécurisée)
+      const { data: rpcData, error: rpcError } = await supabase.rpc("enter_challenge", {
+        p_challenge_id: challenge.id,
+        p_user_id: profile.id,
+      });
 
-      if (attemptError) throw attemptError;
+      // 2. FALLBACK SI L'RPC N'EST PAS ENCORE DÉPLOYÉE
+      if (rpcError && rpcError.code === "PGRST202") {
+        console.warn("RPC non trouvée, exécution du fallback transactionnel...");
 
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ jetons_cp: profile.jetons_cp - fee })
-        .eq("id", profile.id);
+        const { error: attemptError } = await supabase.from("challenge_attempts").upsert(
+          {
+            challenge_id: challenge.id,
+            user_id: profile.id,
+            last_attempt_at: new Date().toISOString(),
+          },
+          { onConflict: "challenge_id,user_id" }
+        );
 
-      if (profileError) throw profileError;
+        if (attemptError) throw attemptError;
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({ jetons_cp: profile.jetons_cp - fee })
+          .eq("id", profile.id);
+
+        if (profileError) throw profileError;
+      } else if (rpcError) {
+        throw rpcError;
+      } else if (rpcData && !rpcData.success) {
+        setErrorMessage(rpcData.message || "Impossible de valider l'entrée.");
+        setEntryLoading(null);
+        return;
+      }
+
+      // Mise à jour optimiste du solde local
+      setProfile((prev) => (prev ? { ...prev, jetons_cp: prev.jetons_cp - fee } : null));
 
       const routes: Record<ChallengeItem["game_type"], string> = {
         quiz: "quiz",
@@ -210,8 +266,8 @@ export default function ArenaPage() {
 
       router.push(`/client/${routes[challenge.game_type]}?challengeId=${challenge.id}`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erreur inconnue";
-      setErrorMessage(`Impossible de valider l'entrée: ${message}`);
+      const message = err instanceof Error ? err.message : "Erreur réseau ou serveur";
+      setErrorMessage(`Impossible de valider l'entrée : ${message}`);
       setEntryLoading(null);
     }
   };
@@ -237,6 +293,7 @@ export default function ArenaPage() {
             <button
               onClick={() => router.push("/client/home")}
               className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 transition active:scale-90 hover:bg-white/10"
+              aria-label="Retour à l'accueil"
             >
               <ChevronLeft size={20} />
             </button>
@@ -269,7 +326,7 @@ export default function ArenaPage() {
               <AlertCircle size={18} />
               <span>{errorMessage}</span>
             </div>
-            <button onClick={() => setErrorMessage(null)}>
+            <button onClick={() => setErrorMessage(null)} aria-label="Fermer le message d'erreur">
               <X size={16} />
             </button>
           </motion.div>
@@ -340,7 +397,6 @@ export default function ArenaPage() {
           ) : (
             filteredChallenges.map((ch) => {
               const fee = calculateEntryFeeCP(ch.entry_fee_cp_base);
-              const participants = ch.challenge_attempts?.length || 0;
               const myAttempt = ch.challenge_attempts?.find(
                 (a) => a.user_id === profile?.id
               );
@@ -373,17 +429,13 @@ export default function ArenaPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-center sm:gap-4">
-                    <div className="rounded-xl border border-white/5 bg-slate-950/50 p-2.5">
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500">Joueurs</p>
-                      <p className="text-sm font-bold text-white">{participants}</p>
-                    </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-center sm:gap-4">
                     <div className="rounded-xl border border-white/5 bg-slate-950/50 p-2.5">
                       <p className="text-[9px] uppercase tracking-wider text-slate-500">Votre Score</p>
                       <p className="text-sm font-bold text-emerald-400">{myScore} <span className="text-[10px] text-slate-500">({myCount} essais)</span></p>
                     </div>
                     <div className="rounded-xl border border-white/5 bg-slate-950/50 p-2.5">
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500">Entrée</p>
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500">Frais d&apos;entrée</p>
                       <p className="text-sm font-bold text-white">{fee} CP</p>
                     </div>
                   </div>
@@ -410,6 +462,7 @@ export default function ArenaPage() {
                       onClick={() => router.push(`/client/rank?challengeId=${ch.id}`)}
                       className="rounded-2xl border border-white/10 bg-white/5 p-3.5 text-slate-300 transition hover:bg-white/10 active:scale-95"
                       title="Voir le classement de ce défi"
+                      aria-label="Voir le classement"
                     >
                       <Trophy size={18} />
                     </button>
