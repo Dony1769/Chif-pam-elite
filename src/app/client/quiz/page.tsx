@@ -43,7 +43,7 @@ interface ProfileLike {
 }
 
 const MONETAG_AD_URL = "https://omg10.com/4/11431323";
-const MIN_REQUIRED_AD_TIME_MS = 6000; // 6 secondes obligatoires sur la pub
+const MIN_REQUIRED_AD_TIME_MS = 6000; // 6 secondes obligatoires sur l'annonce
 
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
   facile: { time: 13, step: 0.15, points: 10 },
@@ -154,7 +154,9 @@ function QuizGameContent() {
       }
       osc.start();
       osc.stop(ctx.currentTime + 0.2);
-    } catch {}
+    } catch {
+      // Ignorer l'erreur audio si non supporté
+    }
   };
 
   const checkMaintenance = async () => {
@@ -187,7 +189,6 @@ function QuizGameContent() {
     }
   }, [init, challengeId, challengeFee]);
 
-  // Traduction sécurisée avec fallback
   const translateText = async (text: string): Promise<string> => {
     try {
       const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fr&dt=t&q=${encodeURIComponent(text)}`);
@@ -197,6 +198,36 @@ function QuizGameContent() {
     } catch { 
       return text; 
     }
+  };
+
+  // Charge 5 nouvelles questions traduites
+  const fetchQuestions = async (cat: number): Promise<QuestionItem[]> => {
+    const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${cat}&type=multiple&encode=url3986`);
+    const raw = await res.json();
+
+    if (!raw.results || raw.results.length === 0) {
+      throw new Error("Impossible de charger les questions. Réessayez.");
+    }
+
+    return Promise.all(
+      raw.results.map(async (q: OpenTDBQuestion) => {
+        const dQ = decodeURIComponent(q.question);
+        const dC = decodeURIComponent(q.correct_answer);
+        const dI = q.incorrect_answers.map((a: string) => decodeURIComponent(a));
+        
+        const [qF, cF, ...iF] = await Promise.all([
+          translateText(dQ), 
+          translateText(dC), 
+          ...dI.map((a: string) => translateText(a))
+        ]);
+        
+        return { 
+          question: qF, 
+          correct: cF, 
+          answers: [cF, ...iF].sort(() => Math.random() - 0.5) 
+        };
+      })
+    );
   };
 
   const start = async () => {
@@ -234,32 +265,7 @@ function QuizGameContent() {
         }, { onConflict: 'challenge_id,user_id' });
       }
 
-      const res = await fetch(`https://opentdb.com/api.php?amount=5&category=${category}&type=multiple&encode=url3986`);
-      const raw = await res.json();
-
-      if (!raw.results || raw.results.length === 0) {
-        throw new Error("Impossible de charger les questions. Réessayez.");
-      }
-
-      const processed: QuestionItem[] = await Promise.all(
-        raw.results.map(async (q: OpenTDBQuestion) => {
-          const dQ = decodeURIComponent(q.question);
-          const dC = decodeURIComponent(q.correct_answer);
-          const dI = q.incorrect_answers.map((a: string) => decodeURIComponent(a));
-          
-          const [qF, cF, ...iF] = await Promise.all([
-            translateText(dQ), 
-            translateText(dC), 
-            ...dI.map((a: string) => translateText(a))
-          ]);
-          
-          return { 
-            question: qF, 
-            correct: cF, 
-            answers: [cF, ...iF].sort(() => Math.random() - 0.5) 
-          };
-        })
-      );
+      const processed = await fetchQuestions(category);
 
       const { data: game, error: insertError } = await supabase.from('quiz_games').insert([{
         user_id: profile.id,
@@ -272,26 +278,25 @@ function QuizGameContent() {
       if (insertError) throw insertError;
 
       const difficultySettings = getDifficultySettings(difficulty);
-      const initialMult = 0.5;
 
       setGameId(game.id);
       setQuestions(processed);
       setCurrentIndex(0);
-      setMultiplier(initialMult);
+      setMultiplier(0.5);
       setSessionScore(0);
       setTimeLeft(difficultySettings.time);
       setExplanation('');
       setStatus('playing');
 
-    } catch (e: any) {
-      alert(e.message || "Erreur lors du lancement");
+    } catch (e: unknown) {
+      const err = e as Error;
+      alert(err.message || "Erreur lors du lancement");
       setStatus('idle');
     } finally {
       isProcessingRef.current = false;
     }
   };
 
-  // --- FINALISATION DU JEU ---
   const finalizeGame = useCallback(async (isWin: boolean, calculatedGain?: number) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -351,7 +356,6 @@ function QuizGameContent() {
   const triggerSecondChanceAd = () => {
     setAdErrorMessage(null);
     
-    // Génération d'un token éphémère en mémoire pour contrer les falsifications
     const token = typeof window !== 'undefined' && window.crypto?.randomUUID 
       ? window.crypto.randomUUID() 
       : Math.random().toString(36).substring(2);
@@ -363,6 +367,7 @@ function QuizGameContent() {
     setStatus('second_chance_pending');
   };
 
+  // VÉRIFICATION PUB & RÉINITIALISATION COMPLÈTE À LA QUESTION 1
   const verifySecondChanceAd = useCallback(async () => {
     if (isVerifyingRef.current || !profile?.id || !adLeaveTimeRef.current) return;
     
@@ -371,7 +376,6 @@ function QuizGameContent() {
 
     const elapsedTime = Date.now() - adLeaveTimeRef.current;
 
-    // Reset des tokens de contrôle
     adLeaveTimeRef.current = null;
     adTokenRef.current = null;
 
@@ -379,6 +383,7 @@ function QuizGameContent() {
       const feePenalty = Math.floor(lockedBetRef.current * 0.5);
 
       try {
+        // Déduction de la pénalité de 50%
         const { data: result, error: payError } = await supabase.rpc('jouer_partie_cp', {
           p_user_id: profile.id,
           p_mise_cp: feePenalty,
@@ -390,15 +395,27 @@ function QuizGameContent() {
           throw new Error(result?.message || "Solde insuffisant pour déduire 50% de la mise.");
         }
 
+        // Mise à jour de la mise effective retenue
+        lockedBetRef.current = feePenalty;
+
+        // Rechargement d'une nouvelle série de questions pour recommencer proprement
+        const newQuestions = await fetchQuestions(category);
+
+        // RÉINITIALISATION COMPLÈTE DU JEU À ZERO (QUESTION 1/5)
         setHasUsedSecondChance(true);
+        setQuestions(newQuestions);
+        setCurrentIndex(0);
+        setSessionScore(0);
+        setMultiplier(0.5);
         setSelectedAnswer(null);
         setShowCorrection(false);
-        setExplanation("🔄 Seconde chance activée (-50% de mise déduit) !");
+        setExplanation(`🔄 Seconde chance activée ! Pénalité de 50% appliquée (Mise restante : ${feePenalty} CP). La partie redémarre à zéro !`);
         setTimeLeft(getDifficultySettings(difficulty).time);
         setStatus('playing');
         void init();
-      } catch (err: any) {
-        setAdErrorMessage(err.message || "Erreur de paiement lors de l'activation.");
+      } catch (err: unknown) {
+        const error = err as Error;
+        setAdErrorMessage(error.message || "Erreur lors de l'activation de la seconde chance.");
         setStatus('second_chance_offer');
       } finally {
         setIsVerifyingAd(false);
@@ -408,12 +425,12 @@ function QuizGameContent() {
       setIsVerifyingAd(false);
       isVerifyingRef.current = false;
       const remainingSec = Math.ceil((MIN_REQUIRED_AD_TIME_MS - elapsedTime) / 1000);
-      setAdErrorMessage(`Temps insuffisant sur le lien sponsor (${Math.round(elapsedTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
+      setAdErrorMessage(`Temps insuffisant sur l'annonce (${Math.round(elapsedTime / 1000)}s / 6s). Il manquait ${remainingSec}s.`);
       setStatus('second_chance_offer');
     }
-  }, [profile?.id, difficulty, init]);
+  }, [profile?.id, category, difficulty, init]);
 
-  // Écouteur de retour sur l'onglet
+  // Écouteur de retour sur la fenêtre/l'onglet
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && gameStateRef.current.status === 'second_chance_pending') {
@@ -463,7 +480,7 @@ function QuizGameContent() {
       setExplanation(`❌ Mauvaise réponse. Solution : ${questions[currentIndex]?.correct}`);
 
       setTimeout(() => {
-        if (!challengeId && multiplier < 1.00 && !hasUsedSecondChance) {
+        if (!challengeId && !hasUsedSecondChance) {
           setStatus('second_chance_offer');
         } else {
           const currentGain = Math.floor(lockedBetRef.current * multiplier);
@@ -473,7 +490,7 @@ function QuizGameContent() {
     }
   };
 
-  // --- CHRONOMÈTRE STABILISÉ ---
+  // CHRONOMÈTRE
   useEffect(() => {
     if (status === 'playing' && timeLeft > 0 && !showCorrection) {
       timerRef.current = setInterval(() => {
@@ -492,7 +509,7 @@ function QuizGameContent() {
       
       <MonetagAdScript zoneId="11431323" />
 
-      {/* 1. EN-TÊTE FIXE */}
+      {/* EN-TÊTE FIXE */}
       <div className="flex-none flex items-center justify-between h-12">
         <button 
           onClick={() => router.push(challengeId ? '/client/rank?challengeId=' + challengeId : '/client/home')} 
@@ -518,7 +535,7 @@ function QuizGameContent() {
         </div>
       </div>
 
-      {/* 2. ZONE CENTRALE */}
+      {/* ZONE CENTRALE */}
       <div className="flex-1 my-auto flex flex-col justify-center min-h-0 overflow-hidden py-1">
         
         {status === 'maintenance' ? (
@@ -621,7 +638,7 @@ function QuizGameContent() {
 
         ) : status === 'playing' ? (
           
-          /* MODE JEU EN TEMPS RÉEL */
+          /* MODE JEU */
           <div className="flex flex-col justify-between h-full max-h-[500px] gap-2">
             
             <div className="flex-none space-y-1">
@@ -630,7 +647,7 @@ function QuizGameContent() {
                   <span className="text-[8px] text-slate-400">GAIN ESTIMÉ / MULTIPLICATEUR</span>
                   <div className="text-lg text-emerald-400 font-black italic leading-none flex items-center gap-2">
                     <span>x{multiplier.toFixed(2)}</span>
-                    <span className="text-xs text-amber-300">({Math.floor(betCP * multiplier)} CP)</span>
+                    <span className="text-xs text-amber-300">({Math.floor(lockedBetRef.current * multiplier)} CP)</span>
                   </div>
                 </div>
 
@@ -705,18 +722,18 @@ function QuizGameContent() {
             <div>
               <h2 className="text-xl font-black italic text-amber-400">SECONDE CHANCE DISPONIBLE !</h2>
               <p className="text-[10px] text-slate-300 mt-1">
-                Visitez le lien partenaire pendant <span className="text-amber-400 font-bold">au moins 6 secondes</span> pour rejouer cette question.
+                Regardez l'annonce pendant <span className="text-amber-400 font-bold">au moins 6 secondes</span>. Le jeu va se réinitialiser à la question 1/5 avec 50% de la mise déduite.
               </p>
             </div>
 
             <div className="bg-slate-900/90 w-full p-3 rounded-xl border border-amber-400/30 text-left space-y-1.5">
               <div className="flex justify-between items-center text-[10px]">
-                <span className="text-slate-400">Coût de la seconde chance :</span>
+                <span className="text-slate-400">Pénalité seconde chance :</span>
                 <span className="text-rose-400 font-bold">-{Math.floor(lockedBetRef.current * 0.5)} CP (50%)</span>
               </div>
               <div className="flex justify-between items-center text-[10px]">
-                <span className="text-slate-400">Solde actuel :</span>
-                <span className="text-amber-300 font-bold">{profile?.jetons_cp || 0} CP</span>
+                <span className="text-slate-400">Nouvelle mise retenue :</span>
+                <span className="text-amber-300 font-bold">{Math.floor(lockedBetRef.current * 0.5)} CP</span>
               </div>
             </div>
 
@@ -730,7 +747,7 @@ function QuizGameContent() {
             {status === 'second_chance_pending' ? (
               <div className="w-full py-3.5 bg-amber-500/20 border border-amber-400 text-amber-300 rounded-xl font-black text-xs italic flex items-center justify-center gap-2">
                 <Loader2 size={16} className="animate-spin" />
-                <span>EN ATTENTE DE VÉRIFICATION (6s MIN)...</span>
+                <span>VÉRIFICATION (6s MIN)...</span>
               </div>
             ) : (
               <div className="w-full space-y-2">
@@ -740,7 +757,7 @@ function QuizGameContent() {
                   className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-emerald-400 text-black rounded-xl font-black text-xs italic shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <ExternalLink size={16} />
-                  <span>PRENDRE LA SECONDE CHANCE</span>
+                  <span>PRENDRE LA SECONDE CHANCE & RECOMMENCER</span>
                 </button>
 
                 <button 
@@ -792,7 +809,7 @@ function QuizGameContent() {
 
       </div>
 
-      {/* 3. HISTORIQUE EN BAS */}
+      {/* HISTORIQUE */}
       {status === 'idle' && history.length > 0 && (
         <div className="flex-none h-14 border-t border-white/5 pt-1.5">
           <div className="flex items-center gap-1 text-[8px] text-slate-400 mb-1">
