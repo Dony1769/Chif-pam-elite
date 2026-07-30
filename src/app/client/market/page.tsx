@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- IMPORT DE TA PUBLICITÉ ---
+// --- IMPORT DE LA PUBLICITÉ ---
 import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
 // --- TYPES TYPESCRIPT STRICTS ---
@@ -38,15 +38,23 @@ type BoutiquePack = {
   active: boolean;
 };
 
-type RpcResponse = {
+// Réponses RPC distinctes et explicites
+type BuyWithDiamondsResponse = {
   success: boolean;
   message?: string;
   new_balance_cp?: number;
   new_balance_diamonds?: number;
 };
 
+type BuyWithHtgResponse = {
+  success: boolean;
+  message?: string;
+  redirect_url?: string;
+  new_balance_cp?: number;
+};
+
 export default function MarketPage() {
-  // --- STATES ---
+  // --- ÉTATS ---
   const [profile, setProfile] = useState<Profile | null>(null);
   const [packs, setPacks] = useState<BoutiquePack[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -55,6 +63,15 @@ export default function MarketPage() {
 
   const router = useRouter();
 
+  // --- EXTRACTION SÉCURISÉE DES MESSAGES D'ERREUR ---
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      return String((error as { message: unknown }).message);
+    }
+    return "Une erreur inattendue est survenue.";
+  };
+
   // --- CHARGEMENT DES DONNÉES SÉCURISÉ ---
   const fetchData = useCallback(async () => {
     try {
@@ -62,6 +79,7 @@ export default function MarketPage() {
       
       if (authError || !user) {
         console.warn("Utilisateur non authentifié.");
+        setProfile(null);
         setLoading(false);
         return;
       }
@@ -82,6 +100,7 @@ export default function MarketPage() {
 
       if (profileRes.error) {
         console.error("Erreur chargement profil :", profileRes.error.message);
+        setProfile(null);
       } else if (profileRes.data) {
         setProfile({
           id: profileRes.data.id,
@@ -93,11 +112,12 @@ export default function MarketPage() {
 
       if (packsRes.error) {
         console.error("Erreur chargement boutique :", packsRes.error.message);
+        setPacks([]);
       } else {
         setPacks(packsRes.data || []);
       }
-    } catch (err) {
-      console.error("Erreur inattendue lors de la récupération :", err);
+    } catch (err: unknown) {
+      console.error("Erreur inattendue lors de la récupération :", getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -109,23 +129,27 @@ export default function MarketPage() {
 
   // --- TRAITEMENT SÉCURISÉ DES ACHATS ---
   const handlePurchase = async (pack: BoutiquePack, method: 'htg' | 'diamonds') => {
-    // Protection contre les clics multiples et vérification du profil
     if (!profile || buying) return;
 
     const packCost = method === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
 
     // Validation préalable côté client
-    if (method === 'diamonds' && profile.diamonds < packCost) {
-      alert("Solde de diamants insuffisant pour effectuer cet achat.");
-      return;
+    if (method === 'diamonds') {
+      if (profile.diamonds < packCost) {
+        alert("Solde de diamants insuffisant pour effectuer cet achat.");
+        return;
+      }
+    } else {
+      if (pack.prix_htg <= 0) {
+        alert("Le montant de ce pack est invalide.");
+        return;
+      }
     }
 
-    // Lock de l'interface
     setBuying(pack.id);
 
     try {
       if (method === 'diamonds') {
-        // Achat par diamants via procédure stockée PostgreSQL
         const { data, error } = await supabase.rpc('buy_with_diamonds', {
           p_user_id: profile.id,
           p_pack_id: pack.id,
@@ -135,23 +159,25 @@ export default function MarketPage() {
           console.error("Erreur RPC buy_with_diamonds :", error);
           alert(`Échec de la transaction : ${error.message}`);
         } else {
-          const res = data as RpcResponse;
-          if (!res.success) {
-            alert(res.message || "L'achat a échoué.");
+          const res = data as BuyWithDiamondsResponse | null;
+          if (!res?.success) {
+            alert(res?.message || "L'achat a échoué.");
           } else {
-            // Mise à jour optimiste du solde client
-            setProfile((prev) => prev ? {
-              ...prev,
-              diamonds: res.new_balance_diamonds ?? (prev.diamonds - packCost),
-              jetons_cp: res.new_balance_cp ?? (prev.jetons_cp + pack.jetons_quantite)
-            } : null);
+            // Mise à jour basée uniquement sur la réponse serveur ou synchronisation globale
+            if (res.new_balance_diamonds !== undefined && res.new_balance_cp !== undefined) {
+              setProfile((prev) => prev ? {
+                ...prev,
+                diamonds: res.new_balance_diamonds!,
+                jetons_cp: res.new_balance_cp!
+              } : null);
+            } else {
+              await fetchData();
+            }
 
             alert("Achat effectué avec succès !");
           }
         }
       } else {
-        // Achats HTG (Gourdes) : Redirection vers le fournisseur de paiement (ex: MonCash)
-        // Note: Ne jamais créditer directement via RPC sans validation bancaire webhook/API
         const { data, error } = await supabase.rpc('acheter_pack_jetons', {
           p_user_id: profile.id,
           p_pack_id: pack.id,
@@ -161,8 +187,8 @@ export default function MarketPage() {
           console.error("Erreur lors de l'initiation de l'achat :", error);
           alert(`Erreur : ${error.message}`);
         } else {
-          const res = data as RpcResponse;
-          if (res && res.success) {
+          const res = data as BuyWithHtgResponse | null;
+          if (res?.success) {
             await fetchData();
             alert("Achat validé !");
           } else {
@@ -170,21 +196,22 @@ export default function MarketPage() {
           }
         }
       }
-    } catch (error) {
-      console.error("Erreur réseau ou serveur :", error);
+    } catch (error: unknown) {
+      console.error("Erreur réseau ou serveur :", getErrorMessage(error));
       alert("Une erreur inattendue est survenue.");
     } finally {
       setBuying(null);
     }
   };
 
-  // Filtrage mémoire mémoïsé
+  // Filtrage mémoire mémoïsé et normalisé
   const filteredPacks = useMemo(() => {
-    return packs.filter((p) =>
-      activeTab === 'htg'
-        ? p.currency_type === 'HTG' || !p.currency_type
-        : p.currency_type === 'DIAMONDS'
-    );
+    return packs.filter((p) => {
+      const normalizedType = p.currency_type ? p.currency_type.toUpperCase() : 'HTG';
+      return activeTab === 'htg'
+        ? normalizedType === 'HTG'
+        : normalizedType === 'DIAMONDS';
+    });
   }, [packs, activeTab]);
 
   const formatAmount = (value: number | string | null | undefined): string => {
