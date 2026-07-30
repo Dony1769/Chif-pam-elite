@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Zap,
   TrendingUp,
+  AlertTriangle,
+  Bug,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -26,6 +28,7 @@ export type Profile = {
   username: string | null;
   jetons_cp: number;
   diamonds: number;
+  role?: string | null;
 };
 
 export type BoutiquePack = {
@@ -52,17 +55,34 @@ export type BuyWithHtgResponse = {
   new_balance_cp?: number;
 };
 
+type DebugInfo = {
+  sessionExists: boolean;
+  userId: string | null;
+  profileError: string | null;
+  packsError: string | null;
+  packsCount: number;
+  userRole?: string | null;
+};
+
 export default function MarketPage() {
-  // --- ÉTATS ---
+  // --- ÉTATS DE GESTION ---
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [packs, setPacks] = useState<BoutiquePack[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  
+  const [loadingPacks, setLoadingPacks] = useState<boolean>(true);
+  const [loadingProfile, setLoadingProfile] = useState<boolean>(true);
   const [buying, setBuying] = useState<string | null>(null);
+  
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'htg' | 'diamonds'>('htg');
+  
+  // État Debug
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  const isDebugMode = process.env.NEXT_PUBLIC_DEBUG_MARKET === 'true';
 
   const router = useRouter();
 
-  // --- EXTRACTION SÉCURISÉE DES MESSAGES D'ERREUR ---
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
     if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -71,71 +91,121 @@ export default function MarketPage() {
     return "Une erreur inattendue est survenue.";
   };
 
-  // --- CHARGEMENT DES DONNÉES SÉCURISÉ ---
-  const fetchData = useCallback(async () => {
+  // --- REQUÊTE ET RECUPÉRATION DES DONNÉES ---
+  const fetchProfileAndPacks = useCallback(async () => {
+    setLoadingPacks(true);
+    setLoadingProfile(true);
+    setErrorMessage(null);
+
+    let currentUserId: string | null = null;
+    let hasSession = false;
+    let profileErrStr: string | null = null;
+    let packsErrStr: string | null = null;
+    let fetchedRole: string | null = null;
+
     try {
-      setLoading(true);
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        console.warn("Utilisateur non authentifié.");
-        setProfile(null);
-        setLoading(false);
-        return;
+      // 1. Récupération robuste de la session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.warn("[DEBUG MARKET] Erreur récupération session:", sessionError.message);
       }
 
-      // Requêtes parallèles pour maximiser la vitesse d'exécution
-      const [profileRes, packsRes] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, username, jetons_cp, diamonds')
-          .eq('id', user.id)
-          .single(),
-        supabase
-          .from('boutique_packs')
-          .select('id, nom, jetons_quantite, prix_htg, prix_diamants, currency_type, active')
-          .eq('active', true)
-          .order('prix_htg', { ascending: true })
-      ]);
-
-      if (profileRes.error) {
-        console.error("Erreur lors du chargement du profil :", profileRes.error.message);
+      if (session?.user) {
+        hasSession = true;
+        currentUserId = session.user.id;
+        setUserId(currentUserId);
+      } else {
+        console.warn("[DEBUG MARKET] Aucune session active détectée.");
+        setUserId(null);
         setProfile(null);
-      } else if (profileRes.data) {
-        setProfile({
-          id: profileRes.data.id,
-          username: profileRes.data.username ?? null,
-          jetons_cp: profileRes.data.jetons_cp ?? 0,
-          diamonds: profileRes.data.diamonds ?? 0,
-        });
+        setLoadingProfile(false);
       }
 
+      // 2. Requête des packs (S'exécute TOUJOURS)
+      const packsPromise = supabase
+        .from('boutique_packs')
+        .select('id, nom, jetons_quantite, prix_htg, prix_diamants, currency_type, active')
+        .eq('active', true)
+        .order('prix_htg', { ascending: true });
+
+      // Requête du profil (S'exécute SEULEMENT si user existe)
+      const profilePromise = currentUserId
+        ? supabase
+            .from('profiles')
+            .select('id, username, jetons_cp, diamonds, role')
+            .eq('id', currentUserId)
+            .single()
+        : Promise.resolve(null);
+
+      // Exécution parallèle
+      const [packsRes, profileRes] = await Promise.all([packsPromise, profilePromise]);
+
+      // Traitement des résultats Packs
       if (packsRes.error) {
-        console.error("Erreur lors du chargement de la boutique :", packsRes.error.message);
+        packsErrStr = packsRes.error.message;
+        console.error("[DEBUG MARKET] Erreur packsRes:", packsRes.error);
+        setErrorMessage(`Impossible de charger les packs : ${packsRes.error.message}`);
         setPacks([]);
       } else {
         setPacks(packsRes.data || []);
       }
+      setLoadingPacks(false);
+
+      // Traitement des résultats Profil
+      if (currentUserId && profileRes) {
+        if (profileRes.error) {
+          profileErrStr = profileRes.error.message;
+          console.error("[DEBUG MARKET] Erreur profileRes:", profileRes.error);
+          setProfile(null);
+        } else if (profileRes.data) {
+          fetchedRole = profileRes.data.role ?? null;
+          setProfile({
+            id: profileRes.data.id,
+            username: profileRes.data.username ?? null,
+            jetons_cp: profileRes.data.jetons_cp ?? 0,
+            diamonds: profileRes.data.diamonds ?? 0,
+            role: fetchedRole,
+          });
+        }
+        setLoadingProfile(false);
+      }
+
+      // 3. Mise à jour de l'état de débogage
+      setDebugInfo({
+        sessionExists: hasSession,
+        userId: currentUserId,
+        profileError: profileErrStr,
+        packsError: packsErrStr,
+        packsCount: packsRes.data?.length ?? 0,
+        userRole: fetchedRole,
+      });
+
     } catch (err: unknown) {
-      console.error("Erreur inattendue lors de la récupération :", getErrorMessage(err));
-    } finally {
-      setLoading(false);
+      const msg = getErrorMessage(err);
+      console.error("[DEBUG MARKET] Erreur critique lors du fetch:", msg);
+      setErrorMessage(msg);
+      setLoadingPacks(false);
+      setLoadingProfile(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchProfileAndPacks();
+  }, [fetchProfileAndPacks]);
 
-  // --- TRAITEMENT DES ACHATS VIA RPC ---
+  // --- TRAITEMENT DES ACHATS (RPC INSTRUMENTÉ) ---
   const handlePurchase = async (pack: BoutiquePack, method: 'htg' | 'diamonds') => {
-    if (!profile || buying) return;
+    if (!userId || buying) {
+      if (!userId) alert("Vous devez être connecté pour effectuer un achat.");
+      return;
+    }
 
     const packCost = method === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
 
-    // Validation préalable côté client (UX uniquement, le backend doit ré-exécuter ce contrôle)
+    // Validation préalable côté client
     if (method === 'diamonds') {
-      if (profile.diamonds < packCost) {
+      if (profile && profile.diamonds < packCost) {
         alert("Solde de diamants insuffisant pour effectuer cet achat.");
         return;
       }
@@ -147,69 +217,87 @@ export default function MarketPage() {
     }
 
     setBuying(pack.id);
+    console.log("[DEBUG MARKET] Payload Achat :", { packId: pack.id, method, userId });
 
     try {
       if (method === 'diamonds') {
         const { data, error } = await supabase.rpc('buy_with_diamonds', {
-          p_user_id: profile.id,
+          p_user_id: userId, // Utilisation stricte de auth.uid() / user.id
           p_pack_id: pack.id,
         });
 
         if (error) {
-          console.error("Erreur RPC buy_with_diamonds :", error);
-          alert(`Échec de la transaction : ${error.message}`);
+          console.error("[DEBUG MARKET] Erreur RPC buy_with_diamonds :", error);
+          alert(`Échec de la transaction (${error.code ?? 'RPC_ERR'}) : ${error.message}`);
         } else {
           const res = data as BuyWithDiamondsResponse | null;
           if (!res?.success) {
             alert(res?.message || "L'achat a échoué.");
           } else {
             if (res.new_balance_diamonds !== undefined && res.new_balance_cp !== undefined) {
-              setProfile((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      diamonds: res.new_balance_diamonds!,
-                      jetons_cp: res.new_balance_cp!,
-                    }
-                  : null
-              );
+              setProfile((prev) => prev ? {
+                ...prev,
+                diamonds: res.new_balance_diamonds!,
+                jetons_cp: res.new_balance_cp!
+              } : null);
             } else {
-              await fetchData();
+              await fetchProfileAndPacks();
             }
             alert("Achat effectué avec succès !");
           }
         }
       } else {
         const { data, error } = await supabase.rpc('acheter_pack_jetons', {
-          p_user_id: profile.id,
+          p_user_id: userId, // Utilisation stricte de auth.uid() / user.id
           p_pack_id: pack.id,
         });
 
         if (error) {
-          console.error("Erreur lors de l'initiation de l'achat :", error);
-          alert(`Erreur : ${error.message}`);
+          console.error("[DEBUG MARKET] Erreur RPC acheter_pack_jetons :", error);
+          alert(`Erreur (${error.code ?? 'RPC_ERR'}) : ${error.message}`);
         } else {
           const res = data as BuyWithHtgResponse | null;
           if (res?.success) {
-            await fetchData();
+            await fetchProfileAndPacks();
             alert("Achat validé !");
           } else {
             alert(res?.message || "Impossible de traiter le paiement HTG.");
           }
         }
       }
+
+      // Check optionnel de vérification du rôle
+      const { data: roleCheck } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      console.log("[DEBUG MARKET] Role Check post-transaction :", roleCheck?.role);
+
     } catch (error: unknown) {
-      console.error("Erreur réseau ou serveur :", getErrorMessage(error));
-      alert("Une erreur inattendue est survenue.");
+      console.error("[DEBUG MARKET] Erreur inattendue transaction :", getErrorMessage(error));
+      alert("Une erreur inattendue est survenue lors de la transaction.");
     } finally {
       setBuying(null);
     }
   };
 
-  // Filtrage mémoire mémoïsé
+  // --- FILTRAGE MÉMOÏSÉ AVEC FALLBACK COMPATIBLE ---
   const filteredPacks = useMemo(() => {
     return packs.filter((p) => {
-      const normalizedType = p.currency_type ? p.currency_type.toUpperCase() : 'HTG';
+      // Fallback si currency_type est invalide ou absent -> traiter comme HTG
+      let normalizedType = 'HTG';
+
+      if (p.currency_type) {
+        const upper = p.currency_type.toUpperCase();
+        if (upper === 'HTG' || upper === 'DIAMONDS') {
+          normalizedType = upper;
+        } else {
+          console.warn(`[DEBUG MARKET] currency_type inattendu pour pack ${p.id}: "${p.currency_type}". Fallback sur HTG.`);
+        }
+      }
+
       return activeTab === 'htg'
         ? normalizedType === 'HTG'
         : normalizedType === 'DIAMONDS';
@@ -221,7 +309,7 @@ export default function MarketPage() {
     return Number.isFinite(numericValue) ? numericValue.toLocaleString() : '0';
   };
 
-  if (loading) {
+  if (loadingPacks) {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_40%),_#020617] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/10 bg-slate-900/60 px-8 py-6 shadow-[0_0_60px_rgba(16,185,129,0.12)]">
@@ -234,6 +322,31 @@ export default function MarketPage() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.14),_transparent_40%),_#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
+      
+      {/* PANNEAU DEBUG VISIBLE SI NEXT_PUBLIC_DEBUG_MARKET=true */}
+      {isDebugMode && debugInfo && (
+        <div className="bg-amber-950/90 border-b border-amber-500/30 px-4 py-3 text-xs text-amber-200">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+            <div className="flex items-center gap-2 font-mono">
+              <Bug size={16} className="text-amber-400" />
+              <span><strong>Session:</strong> {debugInfo.sessionExists ? "Oui" : "Non"}</span>
+              <span>|</span>
+              <span><strong>User ID:</strong> {debugInfo.userId ?? "null"}</span>
+              <span>|</span>
+              <span><strong>Rôle:</strong> {debugInfo.userRole ?? "null"}</span>
+              <span>|</span>
+              <span><strong>Packs:</strong> {debugInfo.packsCount}</span>
+            </div>
+            {(debugInfo.profileError || debugInfo.packsError) && (
+              <div className="text-red-400 font-mono">
+                {debugInfo.profileError && <div>ProfileErr: {debugInfo.profileError}</div>}
+                {debugInfo.packsError && <div>PacksErr: {debugInfo.packsError}</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* BARRE DE NAVIGATION */}
       <div className="sticky top-0 z-30 border-b border-white/10 bg-[#020617]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
@@ -253,13 +366,49 @@ export default function MarketPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <CurrencyBadge value={profile?.jetons_cp} icon={<Coins size={12} />} color="text-emerald-500" />
-            <CurrencyBadge value={profile?.diamonds} icon={<Gem size={12} />} color="text-blue-400" />
+            {loadingProfile ? (
+              <Loader2 className="animate-spin text-slate-500 self-center" size={16} />
+            ) : (
+              <>
+                <CurrencyBadge value={profile?.jetons_cp} icon={<Coins size={12} />} color="text-emerald-500" />
+                <CurrencyBadge value={profile?.diamonds} icon={<Gem size={12} />} color="text-blue-400" />
+              </>
+            )}
           </div>
         </div>
       </div>
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
+
+        {/* INVITATION SE CONNECTER SI PAS DE SESSION */}
+        {!userId && (
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={20} className="text-amber-400 shrink-0" />
+              <p className="text-xs sm:text-sm">
+                Vous visitez la boutique en mode invité. Connectez-vous pour voir vos soldes et acheter des packs.
+              </p>
+            </div>
+            <button
+              onClick={() => router.push('/login')}
+              className="shrink-0 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
+            >
+              Connexion
+            </button>
+          </div>
+        )}
+
+        {/* BLOC ERREUR DE CHARGEMENT */}
+        {errorMessage && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-950/40 p-4 text-red-200">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <AlertTriangle size={16} className="text-red-400" />
+              Erreur chargement marketplace
+            </div>
+            <p className="mt-1 text-xs text-red-300">{errorMessage}</p>
+          </div>
+        )}
+
         {/* BANNIÈRE VIP */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
@@ -378,7 +527,7 @@ export default function MarketPage() {
 
                       <button
                         onClick={() => handlePurchase(pack, activeTab)}
-                        disabled={!!buying}
+                        disabled={!!buying || !userId}
                         className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[10px] font-black uppercase tracking-[0.3em] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                           activeTab === 'diamonds'
                             ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-900/25 hover:brightness-110'
