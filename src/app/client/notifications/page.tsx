@@ -16,6 +16,7 @@ type NotificationRow = {
   created_at: string;
   is_read: boolean;
   link?: string | null;
+  admin_note?: string | null;
 };
 
 type ChallengeRow = {
@@ -70,17 +71,7 @@ export default function ClientNotifications() {
   const [isTabVisible, setIsTabVisible] = useState(true);
   const router = useRouter();
 
-  // Redirection sécurisée contre les failles Open Redirect
-  const handleNavigation = (link?: string | null) => {
-    if (!link) return;
-    if (link.startsWith('/') && !link.startsWith('//')) {
-      router.push(link);
-    } else {
-      router.push('/client/notifications');
-    }
-  };
-
-  // Envoi de notification native PWA / Navigateur
+  // --- ENVOI DE NOTIFICATION NATIVE (Navigateur) ---
   const sendNativePush = async (title: string, body: string) => {
     if (typeof window === 'undefined' || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
@@ -101,25 +92,23 @@ export default function ClientNotifications() {
 
       await swReg.showNotification(title, options);
     } catch (err) {
-      console.error("Erreur affichage notification push:", err);
+      console.error("Erreur affichage notif:", err);
     }
   };
 
   const fetchAllData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/connexion');
-        return;
-      }
+      if (!user) return router.push('/connexion');
       setUserId(user.id);
 
       const nowIso = new Date().toISOString();
 
+      // Récupération simultanée des notifications, défis et transactions refusées
       const [notifsRes, challengesRes, transactionsRes] = await Promise.all([
         supabase
           .from('notifications')
-          .select('id, title, content, message, created_at, is_read, link')
+          .select('id, title, content, created_at, is_read')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -136,11 +125,12 @@ export default function ClientNotifications() {
           .order('created_at', { ascending: false })
       ]);
 
-      if (notifsRes.data) setNotifications(notifsRes.data as NotificationRow[]);
-      if (challengesRes.data) setLiveChallenges(challengesRes.data as ChallengeRow[]);
-      if (transactionsRes.data) setRejectedTransactions(transactionsRes.data as TransactionRow[]);
-    } catch (err) {
-      console.error('Erreur de chargement des alertes :', err);
+      if (notifsRes.error) console.error('Erreur requete notifications:', notifsRes.error);
+      if (transactionsRes.error) console.error('Erreur requete transactions:', transactionsRes.error);
+
+      setNotifications((notifsRes.data || []) as NotificationRow[]);
+      setLiveChallenges((challengesRes.data || []) as ChallengeRow[]);
+      setRejectedTransactions((transactionsRes.data || []) as TransactionRow[]);
     } finally { 
       setLoading(false); 
     }
@@ -148,13 +138,9 @@ export default function ClientNotifications() {
 
   const checkPushSubscription = useCallback(async () => {
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        setPushEnabled(!!sub && Notification.permission === "granted");
-      } catch (err) {
-        console.error("Erreur de vérification du Push:", err);
-      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setPushEnabled(!!sub && Notification.permission === "granted");
     }
   }, []);
 
@@ -173,11 +159,12 @@ export default function ClientNotifications() {
     checkPushSubscription();
   }, [checkPushSubscription, fetchAllData]);
 
-  // Synchronisation Temps Réel (Realtime)
+  // ÉCOUTE EN TEMPS RÉEL
   useEffect(() => {
     if (!userId || !isTabVisible) return;
 
     const channel = supabase.channel('notif_radar_sync')
+      // 1. Écoute des nouvelles notifications
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
@@ -185,9 +172,10 @@ export default function ClientNotifications() {
         filter: `user_id=eq.${userId}` 
       }, (payload) => {
         const n = payload.new as NotificationRow;
-        setNotifications(prev => [n, ...prev.filter(item => item.id !== n.id)]);
+        setNotifications(prev => [n, ...prev.filter((item) => item.id !== n.id)]);
         sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle information");
       })
+      // 2. Écoute des mises à jour sur les défis
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -206,6 +194,7 @@ export default function ClientNotifications() {
           }
         }
       })
+      // 3. Écoute des mises à jour de transactions (refus/annulation)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -213,41 +202,26 @@ export default function ClientNotifications() {
         filter: `user_id=eq.${userId}`
       }, (payload) => {
         const tx = payload.new as TransactionRow;
-        if (!tx) return;
-
         if (tx.status === 'REJECTED' || tx.status === 'CANCELLED') {
           setRejectedTransactions(prev => [tx, ...prev.filter(t => t.id !== tx.id)]);
           const typeLabel = tx.type === 'DEPOSIT' ? 'Dépôt' : 'Retrait';
           const reasonText = tx.admin_note ? ` Motif : ${tx.admin_note}` : '';
           sendNativePush(`REFUS DE ${typeLabel.toUpperCase()} ❌`, `Votre demande de ${tx.amount} HTG a été refusée.${reasonText}`);
-        } else {
-          setRejectedTransactions(prev => prev.filter(t => t.id !== tx.id));
         }
       })
       .subscribe();
 
-    return () => { 
-      supabase.removeChannel(channel); 
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [isTabVisible, userId]);
-
-  const urlBase64ToUint8Array = (bs: string) => {
-    const pad = '='.repeat((4 - bs.length % 4) % 4);
-    const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(b64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  };
 
   const togglePush = async () => {
     setIsRegistering(true);
     try {
       const permission = await Notification.requestPermission();
+      
       if (permission === "granted") {
         const reg = await navigator.serviceWorker.ready;
+        
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
@@ -268,32 +242,33 @@ export default function ClientNotifications() {
           }
         }
       } else {
-        alert("Permission refusée par le navigateur.");
+        alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
       }
     } catch (e) {
       console.error(e);
-      alert("Erreur technique lors de l'abonnement push.");
+      alert("Erreur technique lors de l'abonnement.");
     } finally { 
       setIsRegistering(false); 
     }
   };
 
-  const handleMarkAllAsRead = async () => {
-    if (!userId) return;
-    try {
-      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
-      if (!error) {
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-      }
-    } catch (err) {
-      console.error("Erreur de mise à jour des notifications :", err);
-    }
+  const urlBase64ToUint8Array = (bs: string) => {
+    const pad = '='.repeat((4 - bs.length % 4) % 4);
+    const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
   };
 
-  // Agrégation et normalisation des alertes
+  const handleMarkAllAsRead = async () => {
+    if (!userId) return;
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
+
+  // FUSION ET MISE EN FORME DE TOUTES LES ALERTES
   const allAlerts = useMemo<AlertItem[]>(() => {
     const now = new Date();
 
+    // 1. Défis actifs
     const validChallenges = liveChallenges.filter(c => {
       if (!c.is_active) return false;
       if (c.ends_at && new Date(c.ends_at) <= now) return false;
@@ -312,6 +287,7 @@ export default function ClientNotifications() {
       link: '/client/challenges'
     }));
 
+    // 2. Transactions refusées ou annulées
     const mappedRejections: AlertItem[] = rejectedTransactions.map((tx) => {
       const typeText = tx.type === 'DEPOSIT' ? 'DÉPÔT' : 'RETRAIT';
       return {
@@ -330,6 +306,7 @@ export default function ClientNotifications() {
       };
     });
 
+    // 3. Notifications classiques
     const normalizedNotifs: AlertItem[] = notifications.map((n) => {
       const isRejection = Boolean(
         n.title?.toLowerCase().includes('refus') ||
@@ -349,8 +326,7 @@ export default function ClientNotifications() {
           n.title?.includes('🥇') ||
           n.title?.includes('🥈') ||
           n.title?.includes('🥉') ||
-          n.message?.includes('CP') ||
-          n.content?.includes('CP')
+          n.message?.includes('CP')
         )
       };
     });
@@ -445,7 +421,7 @@ export default function ClientNotifications() {
                   ? 'bg-gradient-to-br from-emerald-900/40 via-black to-black border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
                   : n.is_read ? 'bg-white/2 border-white/5 opacity-40' : 'bg-slate-900/40 border-white/10'
                 }`}
-                onClick={() => handleNavigation(n.link)}
+                onClick={() => n.link && router.push(n.link)}
               >
                 {!n.is_read && (
                   <div className="absolute top-4 right-4">
@@ -527,4 +503,4 @@ export default function ClientNotifications() {
       </div>
     </div>
   );
-}
+}   
