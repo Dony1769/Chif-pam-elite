@@ -7,7 +7,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   UserCircle, Phone, Lock, ArrowRight, 
   Loader2, AlertCircle, Trophy, 
-  ShieldCheck, Gamepad2, ScrollText, Eye, EyeOff, Gift 
+  ShieldCheck, Gamepad2, ScrollText, Eye, EyeOff, Gift,
+  Users 
 } from 'lucide-react';
 import Link from 'next/link';
 import { LogoChifPam } from '@/components/LogoChifPam';
