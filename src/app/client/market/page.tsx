@@ -21,14 +21,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
 // --- TYPES TYPESCRIPT STRICTS ---
-type Profile = {
+export type Profile = {
   id: string;
   username: string | null;
   jetons_cp: number;
   diamonds: number;
 };
 
-type BoutiquePack = {
+export type BoutiquePack = {
   id: string;
   nom: string;
   jetons_quantite: number;
@@ -38,15 +38,14 @@ type BoutiquePack = {
   active: boolean;
 };
 
-// Réponses RPC distinctes et explicites
-type BuyWithDiamondsResponse = {
+export type BuyWithDiamondsResponse = {
   success: boolean;
   message?: string;
   new_balance_cp?: number;
   new_balance_diamonds?: number;
 };
 
-type BuyWithHtgResponse = {
+export type BuyWithHtgResponse = {
   success: boolean;
   message?: string;
   redirect_url?: string;
@@ -75,8 +74,9 @@ export default function MarketPage() {
   // --- CHARGEMENT DES DONNÉES SÉCURISÉ ---
   const fetchData = useCallback(async () => {
     try {
+      setLoading(true);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
+
       if (authError || !user) {
         console.warn("Utilisateur non authentifié.");
         setProfile(null);
@@ -84,7 +84,7 @@ export default function MarketPage() {
         return;
       }
 
-      // Requêtes parallèles pour optimiser le temps de chargement
+      // Requêtes parallèles pour maximiser la vitesse d'exécution
       const [profileRes, packsRes] = await Promise.all([
         supabase
           .from('profiles')
@@ -99,7 +99,7 @@ export default function MarketPage() {
       ]);
 
       if (profileRes.error) {
-        console.error("Erreur chargement profil :", profileRes.error.message);
+        console.error("Erreur lors du chargement du profil :", profileRes.error.message);
         setProfile(null);
       } else if (profileRes.data) {
         setProfile({
@@ -111,7 +111,7 @@ export default function MarketPage() {
       }
 
       if (packsRes.error) {
-        console.error("Erreur chargement boutique :", packsRes.error.message);
+        console.error("Erreur lors du chargement de la boutique :", packsRes.error.message);
         setPacks([]);
       } else {
         setPacks(packsRes.data || []);
@@ -127,13 +127,13 @@ export default function MarketPage() {
     fetchData();
   }, [fetchData]);
 
-  // --- TRAITEMENT SÉCURISÉ DES ACHATS ---
+  // --- TRAITEMENT DES ACHATS VIA RPC ---
   const handlePurchase = async (pack: BoutiquePack, method: 'htg' | 'diamonds') => {
     if (!profile || buying) return;
 
     const packCost = method === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
 
-    // Validation préalable côté client
+    // Validation préalable côté client (UX uniquement, le backend doit ré-exécuter ce contrôle)
     if (method === 'diamonds') {
       if (profile.diamonds < packCost) {
         alert("Solde de diamants insuffisant pour effectuer cet achat.");
@@ -163,17 +163,19 @@ export default function MarketPage() {
           if (!res?.success) {
             alert(res?.message || "L'achat a échoué.");
           } else {
-            // Mise à jour basée uniquement sur la réponse serveur ou synchronisation globale
             if (res.new_balance_diamonds !== undefined && res.new_balance_cp !== undefined) {
-              setProfile((prev) => prev ? {
-                ...prev,
-                diamonds: res.new_balance_diamonds!,
-                jetons_cp: res.new_balance_cp!
-              } : null);
+              setProfile((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      diamonds: res.new_balance_diamonds!,
+                      jetons_cp: res.new_balance_cp!,
+                    }
+                  : null
+              );
             } else {
               await fetchData();
             }
-
             alert("Achat effectué avec succès !");
           }
         }
@@ -204,7 +206,7 @@ export default function MarketPage() {
     }
   };
 
-  // Filtrage mémoire mémoïsé et normalisé
+  // Filtrage mémoire mémoïsé
   const filteredPacks = useMemo(() => {
     return packs.filter((p) => {
       const normalizedType = p.currency_type ? p.currency_type.toUpperCase() : 'HTG';
