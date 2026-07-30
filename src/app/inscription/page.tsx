@@ -14,13 +14,13 @@ import { LogoChifPam } from '@/components/LogoChifPam';
 import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
 
 function SignupForm() {
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [referralCode, setReferralCode] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [phone, setPhone] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [username, setUsername] = useState<string>('');
+  const [referralCode, setReferralCode] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,18 +30,18 @@ function SignupForm() {
     if (ref) setReferralCode(ref.toUpperCase());
   }, [searchParams]);
 
-  // Restriction de la saisie téléphonique à 8 chiffres
+  // Saisie téléphonique restreinte à 8 chiffres maximum
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const onlyNums = e.target.value.replace(/\D/g, '');
     const trimmed = onlyNums.slice(0, 8);
     setPhone(trimmed);
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     
-    // Validation des critères de saisie
+    // Validations locales des champs
     if (phone.length !== 8) {
       return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
@@ -54,8 +54,22 @@ function SignupForm() {
 
     try {
       const internalEmail = `${cleanPhone}@chifpam.ht`;
+      let referrerId: string | null = null;
+      let startBalance = 0;
 
-      // Inscription via Supabase Auth avec passage des données dans les métadonnées utilisateur
+      // Vérification du code de parrainage via la fonction RPC
+      if (referralCode.trim().length > 0) {
+        const { data: foundId, error: rpcError } = await supabase.rpc('get_referrer_id_by_code', { 
+          code_input: referralCode.trim() 
+        });
+
+        if (!rpcError && foundId) {
+          referrerId = foundId as string;
+          startBalance = 10; // Bonus de parrainage
+        }
+      }
+
+      // 1. Inscription Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
@@ -63,26 +77,38 @@ function SignupForm() {
           data: {
             username: username.trim(),
             phone: cleanPhone,
-            referral_code: referralCode.trim()
+            referral_code: referralCode.trim().toLowerCase()
           }
         }
       });
 
       if (authError) throw authError;
 
+      // 2. Insertion dans la table public.profiles
       if (authData?.user) {
-        // Redirection en cas de succès
+        const { error: profileError } = await supabase.from('profiles').insert({
+          id: authData.user.id,
+          phone: cleanPhone, // Champ NOT NULL obligatoire
+          username: username.trim(),
+          email: internalEmail,
+          balance: startBalance,
+          referred_by: referrerId,
+          role: 'client'
+        });
+
+        if (profileError) throw profileError;
+
         router.push('/connexion?signup=success');
       }
 
     } catch (err: unknown) {
-      // Traitement sécurisé des erreurs pour éviter d'afficher des objets {}
+      // Gestion stricte de TypeScript pour l'extraction de message d'erreur
       if (err instanceof Error) {
         setError(err.message);
       } else if (typeof err === 'object' && err !== null && 'message' in err) {
         setError(String((err as { message: unknown }).message));
       } else {
-        setError("Erreur lors de l'inscription. Veuillez revoir vos informations et réessayer.");
+        setError("Une erreur est survenue lors de l'inscription. Veuillez réessayer.");
       }
     } finally {
       setLoading(false);
