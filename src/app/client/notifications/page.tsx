@@ -16,7 +16,6 @@ type NotificationRow = {
   created_at: string;
   is_read: boolean;
   link?: string | null;
-  admin_note?: string | null;
 };
 
 type ChallengeRow = {
@@ -71,19 +70,17 @@ export default function ClientNotifications() {
   const [isTabVisible, setIsTabVisible] = useState(true);
   const router = useRouter();
 
-  // --- SÉCURITÉ : Validation stricte des liens internes (Anti-Open Redirect) ---
+  // Redirection sécurisée contre les failles Open Redirect
   const handleNavigation = (link?: string | null) => {
     if (!link) return;
-    // Vérifie que le lien commence par "/" mais pas par "//" (externe)
     if (link.startsWith('/') && !link.startsWith('//')) {
       router.push(link);
     } else {
-      console.warn("Tentative de redirection externe bloquée :", link);
       router.push('/client/notifications');
     }
   };
 
-  // --- ENVOI DE NOTIFICATION NATIVE (Navigateur) ---
+  // Envoi de notification native PWA / Navigateur
   const sendNativePush = async (title: string, body: string) => {
     if (typeof window === 'undefined' || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
@@ -104,7 +101,7 @@ export default function ClientNotifications() {
 
       await swReg.showNotification(title, options);
     } catch (err) {
-      console.error("Erreur affichage notif:", err);
+      console.error("Erreur affichage notification push:", err);
     }
   };
 
@@ -122,7 +119,7 @@ export default function ClientNotifications() {
       const [notifsRes, challengesRes, transactionsRes] = await Promise.all([
         supabase
           .from('notifications')
-          .select('id, title, content, created_at, is_read, link, admin_note')
+          .select('id, title, content, message, created_at, is_read, link')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -139,14 +136,11 @@ export default function ClientNotifications() {
           .order('created_at', { ascending: false })
       ]);
 
-      if (notifsRes.error) console.error('Erreur requete notifications:', notifsRes.error);
-      if (transactionsRes.error) console.error('Erreur requete transactions:', transactionsRes.error);
-
-      setNotifications((notifsRes.data || []) as NotificationRow[]);
-      setLiveChallenges((challengesRes.data || []) as ChallengeRow[]);
-      setRejectedTransactions((transactionsRes.data || []) as TransactionRow[]);
+      if (notifsRes.data) setNotifications(notifsRes.data as NotificationRow[]);
+      if (challengesRes.data) setLiveChallenges(challengesRes.data as ChallengeRow[]);
+      if (transactionsRes.data) setRejectedTransactions(transactionsRes.data as TransactionRow[]);
     } catch (err) {
-      console.error('Erreur lors du chargement des données :', err);
+      console.error('Erreur de chargement des alertes :', err);
     } finally { 
       setLoading(false); 
     }
@@ -159,7 +153,7 @@ export default function ClientNotifications() {
         const sub = await reg.pushManager.getSubscription();
         setPushEnabled(!!sub && Notification.permission === "granted");
       } catch (err) {
-        console.error("Erreur vérification push:", err);
+        console.error("Erreur de vérification du Push:", err);
       }
     }
   }, []);
@@ -179,12 +173,11 @@ export default function ClientNotifications() {
     checkPushSubscription();
   }, [checkPushSubscription, fetchAllData]);
 
-  // ÉCOUTE EN TEMPS RÉEL (OPTIMISÉE)
+  // Synchronisation Temps Réel (Realtime)
   useEffect(() => {
     if (!userId || !isTabVisible) return;
 
     const channel = supabase.channel('notif_radar_sync')
-      // 1. Notifications
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
@@ -192,10 +185,9 @@ export default function ClientNotifications() {
         filter: `user_id=eq.${userId}` 
       }, (payload) => {
         const n = payload.new as NotificationRow;
-        setNotifications(prev => [n, ...prev.filter((item) => item.id !== n.id)]);
+        setNotifications(prev => [n, ...prev.filter(item => item.id !== n.id)]);
         sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle information");
       })
-      // 2. Défis
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -214,7 +206,6 @@ export default function ClientNotifications() {
           }
         }
       })
-      // 3. Transactions (Mise à jour dynamique des refus/annulations)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -230,7 +221,6 @@ export default function ClientNotifications() {
           const reasonText = tx.admin_note ? ` Motif : ${tx.admin_note}` : '';
           sendNativePush(`REFUS DE ${typeLabel.toUpperCase()} ❌`, `Votre demande de ${tx.amount} HTG a été refusée.${reasonText}`);
         } else {
-          // Si la transaction n'est plus rejetée (ex: approuvée), on la retire des alertes de refus
           setRejectedTransactions(prev => prev.filter(t => t.id !== tx.id));
         }
       })
@@ -241,31 +231,23 @@ export default function ClientNotifications() {
     };
   }, [isTabVisible, userId]);
 
-  // Conversion sécurisée Base64 pour VAPID Key
   const urlBase64ToUint8Array = (bs: string) => {
-    try {
-      const pad = '='.repeat((4 - bs.length % 4) % 4);
-      const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
-      const rawData = window.atob(b64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      return outputArray;
-    } catch (e) {
-      console.error("Erreur décodage VAPID Key :", e);
-      throw new Error("Clé VAPID invalide");
+    const pad = '='.repeat((4 - bs.length % 4) % 4);
+    const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(b64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
     }
+    return outputArray;
   };
 
   const togglePush = async () => {
     setIsRegistering(true);
     try {
       const permission = await Notification.requestPermission();
-      
       if (permission === "granted") {
         const reg = await navigator.serviceWorker.ready;
-        
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
@@ -282,16 +264,15 @@ export default function ClientNotifications() {
             sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar est actif.");
             setPushEnabled(true);
           } else {
-            console.error("Erreur Supabase push:", error);
             alert("Erreur lors de la sauvegarde de l'abonnement.");
           }
         }
       } else {
-        alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
+        alert("Permission refusée par le navigateur.");
       }
     } catch (e) {
       console.error(e);
-      alert("Erreur technique lors de l'abonnement.");
+      alert("Erreur technique lors de l'abonnement push.");
     } finally { 
       setIsRegistering(false); 
     }
@@ -305,11 +286,11 @@ export default function ClientNotifications() {
         setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       }
     } catch (err) {
-      console.error("Erreur lors du marquage des notifications :", err);
+      console.error("Erreur de mise à jour des notifications :", err);
     }
   };
 
-  // FUSION ET MISE EN FORME DE TOUTES LES ALERTES
+  // Agrégation et normalisation des alertes
   const allAlerts = useMemo<AlertItem[]>(() => {
     const now = new Date();
 
@@ -368,7 +349,8 @@ export default function ClientNotifications() {
           n.title?.includes('🥇') ||
           n.title?.includes('🥈') ||
           n.title?.includes('🥉') ||
-          n.message?.includes('CP')
+          n.message?.includes('CP') ||
+          n.content?.includes('CP')
         )
       };
     });
