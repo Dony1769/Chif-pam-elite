@@ -6,7 +6,7 @@ import { normalizePhoneInput } from '@/lib/phone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   UserCircle, Phone, Lock, ArrowRight, 
-  Loader2, AlertCircle, Users, Trophy, 
+  Loader2, AlertCircle, Trophy, 
   ShieldCheck, Gamepad2, ScrollText, Eye, EyeOff, Gift 
 } from 'lucide-react';
 import Link from 'next/link';
@@ -30,11 +30,9 @@ function SignupForm() {
     if (ref) setReferralCode(ref.toUpperCase());
   }, [searchParams]);
 
-  // Fonction de gestion du changement sur le téléphone
+  // Restriction de la saisie téléphonique à 8 chiffres
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 1. On retire tout ce qui n'est pas un chiffre
     const onlyNums = e.target.value.replace(/\D/g, '');
-    // 2. On limite la taille à 8 chiffres maximum
     const trimmed = onlyNums.slice(0, 8);
     setPhone(trimmed);
   };
@@ -43,7 +41,7 @@ function SignupForm() {
     e.preventDefault();
     setError('');
     
-    // Validation spécifique pour les 8 chiffres requis
+    // Validation des critères de saisie
     if (phone.length !== 8) {
       return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
@@ -56,27 +54,16 @@ function SignupForm() {
 
     try {
       const internalEmail = `${cleanPhone}@chifpam.ht`;
-      let referrerId: string | null = null;
-      let startBalance = 0;
 
-      if (referralCode.trim().length > 0) {
-        const { data: foundId, error: rpcError } = await supabase.rpc('get_referrer_id_by_code', { 
-          code_input: referralCode.trim() 
-        });
-
-        if (!rpcError && foundId) {
-          referrerId = foundId as string;
-          startBalance = 10;
-        }
-      }
-
+      // Inscription via Supabase Auth avec passage des données dans les métadonnées utilisateur
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
         options: {
           data: {
             username: username.trim(),
-            referral_code: referralCode.trim().toLowerCase()
+            phone: cleanPhone,
+            referral_code: referralCode.trim()
           }
         }
       });
@@ -84,25 +71,18 @@ function SignupForm() {
       if (authError) throw authError;
 
       if (authData?.user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: authData.user.id,
-          phone: cleanPhone,
-          username: username.trim(),
-          email: internalEmail,
-          balance: startBalance,
-          referred_by: referrerId
-        });
-
-        if (profileError) throw new Error("Erreur lors de la création du profil utilisateur.");
-
+        // Redirection en cas de succès
         router.push('/connexion?signup=success');
       }
 
     } catch (err: unknown) {
+      // Traitement sécurisé des erreurs pour éviter d'afficher des objets {}
       if (err instanceof Error) {
         setError(err.message);
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        setError(String((err as { message: unknown }).message));
       } else {
-        setError("Erreur lors de l'inscription. Veuillez réessayer.");
+        setError("Erreur lors de l'inscription. Veuillez revoir vos informations et réessayer.");
       }
     } finally {
       setLoading(false);
@@ -144,13 +124,11 @@ function SignupForm() {
           </div>
         </div>
 
-        {/* CHAMP TELEPHONE APPORTE AVEC SEUIL +509 ET MAXIMUM 8 CHIFFRES */}
         <div className="space-y-1">
           <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Téléphone</label>
           <div className="relative flex items-center">
             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
             
-            {/* Indice +509 fixe */}
             <span className="absolute left-11 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm z-10 select-none">
               +509
             </span>
