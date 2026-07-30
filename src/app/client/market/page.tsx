@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 // --- IMPORT DE LA PUBLICITÉ ---
 import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
-// --- TYPES TYPESCRIPT STRICTS ---
+// --- TYPES TYPESCRIPT STRICTS (ALIGNÉS AVEC SUPABASE) ---
 export type Profile = {
   id: string;
   username: string | null;
@@ -35,9 +35,10 @@ export type BoutiquePack = {
   id: string;
   nom: string;
   jetons_quantite: number;
-  prix_htg: number;
-  prix_diamants?: number | null;
+  prix_htg: number; // Représente le prix (en HTG ou en Diamants selon currency_type)
   currency_type?: 'HTG' | 'DIAMONDS' | string;
+  bonus_star_pourcent?: number | null;
+  image_url?: string | null;
   active: boolean;
 };
 
@@ -104,7 +105,7 @@ export default function MarketPage() {
     let fetchedRole: string | null = null;
 
     try {
-      // 1. Récupération robuste de la session
+      // 1. Récupération de la session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
@@ -122,14 +123,14 @@ export default function MarketPage() {
         setLoadingProfile(false);
       }
 
-      // 2. Requête des packs (S'exécute TOUJOURS)
+      // 2. Requête des packs (Colonnes réelles issues de Supabase)
       const packsPromise = supabase
         .from('boutique_packs')
-        .select('id, nom, jetons_quantite, prix_htg, prix_diamants, currency_type, active')
+        .select('id, nom, jetons_quantite, prix_htg, bonus_star_pourcent, image_url, currency_type, active')
         .eq('active', true)
         .order('prix_htg', { ascending: true });
 
-      // Requête du profil (S'exécute SEULEMENT si user existe)
+      // Requête du profil utilisateur
       const profilePromise = currentUserId
         ? supabase
             .from('profiles')
@@ -138,10 +139,10 @@ export default function MarketPage() {
             .single()
         : Promise.resolve(null);
 
-      // Exécution parallèle
+      // Exécution parallèle des requêtes
       const [packsRes, profileRes] = await Promise.all([packsPromise, profilePromise]);
 
-      // Traitement des résultats Packs
+      // Traitement du résultat des packs
       if (packsRes.error) {
         packsErrStr = packsRes.error.message;
         console.error("[DEBUG MARKET] Erreur packsRes:", packsRes.error);
@@ -152,7 +153,7 @@ export default function MarketPage() {
       }
       setLoadingPacks(false);
 
-      // Traitement des résultats Profil
+      // Traitement du résultat du profil
       if (currentUserId && profileRes) {
         if (profileRes.error) {
           profileErrStr = profileRes.error.message;
@@ -171,7 +172,7 @@ export default function MarketPage() {
         setLoadingProfile(false);
       }
 
-      // 3. Mise à jour de l'état de débogage
+      // Informations de débogage
       setDebugInfo({
         sessionExists: hasSession,
         userId: currentUserId,
@@ -194,35 +195,35 @@ export default function MarketPage() {
     fetchProfileAndPacks();
   }, [fetchProfileAndPacks]);
 
-  // --- TRAITEMENT DES ACHATS (RPC INSTRUMENTÉ) ---
+  // --- TRAITEMENT DES ACHATS ---
   const handlePurchase = async (pack: BoutiquePack, method: 'htg' | 'diamonds') => {
     if (!userId || buying) {
       if (!userId) alert("Vous devez être connecté pour effectuer un achat.");
       return;
     }
 
-    const packCost = method === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
+    const packCost = pack.prix_htg;
 
-    // Validation préalable côté client
+    // Validation préalable du solde côté client
     if (method === 'diamonds') {
       if (profile && profile.diamonds < packCost) {
         alert("Solde de diamants insuffisant pour effectuer cet achat.");
         return;
       }
     } else {
-      if (pack.prix_htg <= 0) {
+      if (packCost <= 0) {
         alert("Le montant de ce pack est invalide.");
         return;
       }
     }
 
     setBuying(pack.id);
-    console.log("[DEBUG MARKET] Payload Achat :", { packId: pack.id, method, userId });
+    console.log("[DEBUG MARKET] Payload Achat :", { packId: pack.id, method, userId, packCost });
 
     try {
       if (method === 'diamonds') {
         const { data, error } = await supabase.rpc('buy_with_diamonds', {
-          p_user_id: userId, // Utilisation stricte de auth.uid() / user.id
+          p_user_id: userId,
           p_pack_id: pack.id,
         });
 
@@ -248,7 +249,7 @@ export default function MarketPage() {
         }
       } else {
         const { data, error } = await supabase.rpc('acheter_pack_jetons', {
-          p_user_id: userId, // Utilisation stricte de auth.uid() / user.id
+          p_user_id: userId,
           p_pack_id: pack.id,
         });
 
@@ -265,16 +266,6 @@ export default function MarketPage() {
           }
         }
       }
-
-      // Check optionnel de vérification du rôle
-      const { data: roleCheck } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      
-      console.log("[DEBUG MARKET] Role Check post-transaction :", roleCheck?.role);
-
     } catch (error: unknown) {
       console.error("[DEBUG MARKET] Erreur inattendue transaction :", getErrorMessage(error));
       alert("Une erreur inattendue est survenue lors de la transaction.");
@@ -283,18 +274,15 @@ export default function MarketPage() {
     }
   };
 
-  // --- FILTRAGE MÉMOÏSÉ AVEC FALLBACK COMPATIBLE ---
+  // --- FILTRAGE DES PACKS PAR MONNAIE ---
   const filteredPacks = useMemo(() => {
     return packs.filter((p) => {
-      // Fallback si currency_type est invalide ou absent -> traiter comme HTG
       let normalizedType = 'HTG';
 
       if (p.currency_type) {
         const upper = p.currency_type.toUpperCase();
         if (upper === 'HTG' || upper === 'DIAMONDS') {
           normalizedType = upper;
-        } else {
-          console.warn(`[DEBUG MARKET] currency_type inattendu pour pack ${p.id}: "${p.currency_type}". Fallback sur HTG.`);
         }
       }
 
@@ -380,7 +368,7 @@ export default function MarketPage() {
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
 
-        {/* INVITATION SE CONNECTER SI PAS DE SESSION */}
+        {/* INVITATION À SE CONNECTER SI PAS DE SESSION */}
         {!userId && (
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
             <div className="flex items-center gap-3">
@@ -398,7 +386,7 @@ export default function MarketPage() {
           </div>
         )}
 
-        {/* BLOC ERREUR DE CHARGEMENT */}
+        {/* BLOC D'ERREUR */}
         {errorMessage && (
           <div className="rounded-2xl border border-red-500/30 bg-red-950/40 p-4 text-red-200">
             <div className="flex items-center gap-2 font-bold text-sm">
@@ -461,7 +449,7 @@ export default function MarketPage() {
               </motion.div>
             ) : (
               filteredPacks.map((pack) => {
-                const cost = activeTab === 'diamonds' ? (pack.prix_diamants ?? pack.prix_htg) : pack.prix_htg;
+                const cost = pack.prix_htg;
                 const isBuyingThis = buying === pack.id;
 
                 return (
@@ -551,7 +539,7 @@ export default function MarketPage() {
           </AnimatePresence>
         </div>
 
-        {/* BANNIÈRE ADS */}
+        {/* BANNIÈRE ADSTERRA */}
         <div className="rounded-[28px] border border-white/10 bg-slate-900/50 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -571,7 +559,7 @@ export default function MarketPage() {
   );
 }
 
-// --- SOUS-COMPOSANTS ---
+// --- SOUS-COMPOSANTS DE STRUCTURATION ---
 const CurrencyBadge = ({ value, icon, color }: { value?: number; icon: React.ReactNode; color: string }) => (
   <div className={`flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-1.5 ${color}`}>
     <span className="text-[11px] font-black italic">{(value ?? 0).toLocaleString()}</span>
