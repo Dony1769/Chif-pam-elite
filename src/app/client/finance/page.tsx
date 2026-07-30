@@ -14,16 +14,14 @@ import dynamic from 'next/dynamic';
 
 const AdsterraNativeBanner = dynamic(() => import('@/components/ads/AdsterraNativeBanner'), { ssr: false });
 
-// Structure pour la gestion des notifications UI (Toasts)
 type ToastState = {
   type: 'success' | 'error';
   message: string;
 } | null;
 
-// Constantes de configuration financière & sécurité
 const MIN_DEPOSIT_AMOUNT = 25; // Minimum 25 HTG
 const MIN_WITHDRAWAL_AMOUNT = 100; // Minimum 100 HTG
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB maximum pour les pièces jointes
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB max
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 
 const LogoChifPam = ({ className }: { className?: string }) => (
@@ -45,15 +43,12 @@ export default function FinancePage() {
   const [copied, setCopied] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Notifications Toast
   const [toast, setToast] = useState<ToastState>(null);
 
-  // Formulaires
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
-  // Références pour le nettoyage des minuteurs (Memory Leaks Prevention)
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -67,32 +62,49 @@ export default function FinancePage() {
     setToast({ type, message });
     toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
-    }, 4500);
+    }, 5000);
   }, []);
 
   const fetchProfile = useCallback(async () => {
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
+        setUserId(null);
+        setProfile(null);
         setLoading(false);
         return;
       }
 
       setUserId(user.id);
-      const { data, error } = await supabase
+
+      // Récupération sécurisée du profil avec création automatique si inexistant
+      let { data, error } = await supabase
         .from('profiles')
         .select('balance, locked_balance')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (!error && data) {
+      if (!data && !error) {
+        // Tentative de récréation du profil en cas d'absence
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert([{ id: user.id, balance: 0, locked_balance: 0 }])
+          .select('balance, locked_balance')
+          .single();
+
+        if (!insertError && newProfile) {
+          data = newProfile;
+        }
+      }
+
+      if (data) {
         setProfile({
           balance: Number(data.balance) || 0,
           locked_balance: Number(data.locked_balance) || 0
         });
       }
     } catch (err) {
-      console.error("Erreur de chargement du profil financier :", err);
+      console.error("Erreur lors de la récupération du profil :", err);
     } finally {
       setLoading(false);
     }
@@ -102,7 +114,6 @@ export default function FinancePage() {
     void fetchProfile();
   }, [fetchProfile]);
 
-  // Écouteur temps réel Supabase sécurisé
   useEffect(() => {
     if (!userId) return;
 
@@ -122,7 +133,6 @@ export default function FinancePage() {
     };
   }, [fetchProfile, userId]);
 
-  // Nettoyage des minuteurs au démontage du composant
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -137,7 +147,6 @@ export default function FinancePage() {
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   };
 
-  // Traitement sécurisé du fichier de preuve
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) {
@@ -146,7 +155,7 @@ export default function FinancePage() {
     }
 
     if (!ALLOWED_IMAGE_TYPES.includes(selectedFile.type)) {
-      showToast("error", "Format de fichier non pris en charge. Utilisez JPG, PNG ou WEBP.");
+      showToast("error", "Format de fichier non supporté. Utilisez JPG, PNG ou WEBP.");
       e.target.value = "";
       setFile(null);
       return;
@@ -162,13 +171,13 @@ export default function FinancePage() {
     setFile(selectedFile);
   };
 
-  // Traitement de la demande de Dépôt (Sécurisé)
+  // Traitement sécurisé de la demande de Dépôt
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (issubmitting) return;
 
     const rawAmt = parseFloat(amount);
-    const amt = Math.round(rawAmt * 100) / 100; // Arrondi sécurisé à 2 décimales
+    const amt = Math.round(rawAmt * 100) / 100;
 
     if (!file || isNaN(amt) || !method) {
       return showToast("error", "Veuillez remplir tous les champs et importer une preuve de paiement.");
@@ -180,9 +189,22 @@ export default function FinancePage() {
 
     setIsSubmitting(true);
     try {
+      // 🔒 Vérification stricte de la session utilisateur active
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
-        throw new Error('Session expirée. Veuillez vous reconnecter.');
+        throw new Error('Votre session a expiré. Veuillez vous reconnecter.');
+      }
+
+      // Vérification que le profil existe en BDD avant insertion de transaction
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!userProfile) {
+        // Enregistrement de secours du profil si manquant
+        await supabase.from('profiles').insert([{ id: user.id, balance: 0, locked_balance: 0 }]);
       }
 
       const rawExt = file.name.split('.').pop() || 'png';
@@ -195,7 +217,7 @@ export default function FinancePage() {
         .upload(filePath, file, { cacheControl: '3600', upsert: false });
 
       if (uploadError) {
-        throw new Error("Échec du téléversement de la preuve. Réessayez.");
+        throw new Error("Échec de l'envoi du reçu de paiement. Veuillez réessayer.");
       }
 
       const result = await ClientFinanceService.submitDeposit(amt, method, filePath);
@@ -209,13 +231,21 @@ export default function FinancePage() {
       setAmount('');
       setFile(null);
     } catch (err: unknown) { 
-      showToast("error", err instanceof Error ? err.message : 'Une erreur inattendue est survenue.'); 
+      let errorMsg = 'Une erreur inattendue est survenue.';
+      if (err instanceof Error) {
+        errorMsg = err.message;
+        // Traduction explicite des erreurs de contraintes de clé étrangère Supabase
+        if (errorMsg.includes('transactions_user_id_fkey') || errorMsg.includes('foreign key constraint')) {
+          errorMsg = "Erreur de compte : Votre profil n'est pas synchronisé. Veuillez recharger la page ou vous reconnecter.";
+        }
+      }
+      showToast("error", errorMsg); 
     } finally { 
       setIsSubmitting(false); 
     }
   };
 
-  // Traitement de la demande de Retrait (Sécurisé)
+  // Traitement sécurisé de la demande de Retrait
   const handleWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (issubmitting) return;
@@ -243,6 +273,11 @@ export default function FinancePage() {
     
     setIsSubmitting(true);
     try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Votre session a expiré. Veuillez vous reconnecter.');
+      }
+
       const result = await ClientFinanceService.submitWithdrawal(amt, method, cleanPhone);
       if (!result.success) {
         throw new Error(result.message);
@@ -254,7 +289,14 @@ export default function FinancePage() {
       setAmount('');
       setPhone('');
     } catch (err: unknown) { 
-      showToast("error", err instanceof Error ? err.message : 'Une erreur inattendue est survenue.'); 
+      let errorMsg = 'Une erreur inattendue est survenue.';
+      if (err instanceof Error) {
+        errorMsg = err.message;
+        if (errorMsg.includes('transactions_user_id_fkey') || errorMsg.includes('foreign key constraint')) {
+          errorMsg = "Erreur de compte : Votre profil n'est pas synchronisé. Veuillez recharger la page ou vous reconnecter.";
+        }
+      }
+      showToast("error", errorMsg); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -436,7 +478,7 @@ export default function FinancePage() {
           </motion.div>
         )}
 
-        {/* Choix de la méthode de paiement */}
+        {/* Choix du mode de paiement */}
         {(view === 'deposit' || view === 'withdrawal') && !method && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
