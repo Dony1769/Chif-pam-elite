@@ -58,7 +58,7 @@ function SignupForm() {
       let referrerId: string | null = null;
       let startBalance = 0;
 
-      // Vérification du code de parrainage via la fonction RPC
+      // Recherche du parrain via la fonction RPC public.get_referrer_id_by_code
       if (referralCode.trim().length > 0) {
         const { data: foundId, error: rpcError } = await supabase.rpc('get_referrer_id_by_code', { 
           code_input: referralCode.trim() 
@@ -70,7 +70,7 @@ function SignupForm() {
         }
       }
 
-      // 1. Inscription Auth
+      // ÉTAPE 1: Création dans Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: internalEmail,
         password: password,
@@ -85,11 +85,11 @@ function SignupForm() {
 
       if (authError) throw authError;
 
-      // 2. Insertion dans la table public.profiles
+      // ÉTAPE 2: Insertion explicite dans public.profiles (Conforme aux règles RLS & NOT NULL)
       if (authData?.user) {
         const { error: profileError } = await supabase.from('profiles').insert({
-          id: authData.user.id,
-          phone: cleanPhone, // Champ NOT NULL obligatoire
+          id: authData.user.id,          // RLS: auth.uid() = id
+          phone: cleanPhone,             // NOT NULL dans la table profiles
           username: username.trim(),
           email: internalEmail,
           balance: startBalance,
@@ -103,13 +103,27 @@ function SignupForm() {
       }
 
     } catch (err: unknown) {
-      // Gestion stricte de TypeScript pour l'extraction de message d'erreur
+      let rawMsg = "";
+
       if (err instanceof Error) {
-        setError(err.message);
+        rawMsg = err.message;
       } else if (typeof err === 'object' && err !== null && 'message' in err) {
-        setError(String((err as { message: unknown }).message));
+        rawMsg = String((err as { message: unknown }).message);
+      }
+
+      // Interception et formatage des erreurs Auth & Database
+      const lowerMsg = rawMsg.toLowerCase();
+
+      if (
+        lowerMsg.includes("user already registered") || 
+        lowerMsg.includes("profiles_phone_key") || 
+        lowerMsg.includes("already exists")
+      ) {
+        setError("Ce numéro de téléphone est déjà enregistré. Veuillez vous connecter.");
+      } else if (lowerMsg.includes("profiles_username_key")) {
+        setError("Ce pseudo d'agent est déjà utilisé par un autre joueur.");
       } else {
-        setError("Une erreur est survenue lors de l'inscription. Veuillez réessayer.");
+        setError(rawMsg || "Une erreur est survenue lors de l'inscription. Veuillez réessayer.");
       }
     } finally {
       setLoading(false);
