@@ -7,7 +7,7 @@ import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   Loader2, ChevronRight, CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
   Ticket, Share2, Copy, Gift, Plus, ArrowDownCircle, Sparkles, Crown,
-  TrendingUp, Settings, BarChart3, Bell, Check, LogOut
+  TrendingUp, Settings, BarChart3, Bell, Check, LogOut, Zap, Award, Star
 } from 'lucide-react';
 import { 
   AreaChart, Area, Tooltip, ResponsiveContainer, XAxis, YAxis, ReferenceLine 
@@ -24,7 +24,23 @@ const LogoChifPamSmall = () => (
   </svg>
 );
 
-// Types
+// Interface des Avantages Passifs (Level Perks)
+interface PerkItem {
+  icon?: string;
+  label: string;
+  description: string;
+}
+
+interface LevelPerksData {
+  level: number;
+  title: string;
+  xp_multiplier: number;
+  border_color: string;
+  badge_icon: string | null;
+  perks_description: PerkItem[];
+}
+
+// Interfaces de Profil
 interface ProfileHistoryEntry {
   id: string;
   label: string;
@@ -72,6 +88,7 @@ export default function ProfilePage() {
 
   // États principaux
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [levelPerks, setLevelPerks] = useState<LevelPerksData | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [updating, setUpdating] = useState<boolean>(false);
@@ -90,7 +107,7 @@ export default function ProfilePage() {
   const [gamePassPublic, setGamePassPublic] = useState(true);
   const [gamePassAvatar, setGamePassAvatar] = useState<(typeof GAME_PASS_AVATARS)[number]>(GAME_PASS_AVATARS[0]);
 
-  // Toast / Notification locale sécurisée
+  // Toast / Notification locale
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -107,7 +124,7 @@ export default function ProfilePage() {
     };
   }, []);
 
-  // Traitement sécurisé et optimisé du graphique de solde
+  // Traitement sécurisé des données du graphique de solde
   const processPerformanceData = useCallback((trans: TransactionItem[], mises: MiseItem[], initialBalance: number) => {
     type ActivityEvent = {
       timestamp: number;
@@ -142,7 +159,6 @@ export default function ProfilePage() {
       });
     });
 
-    // Tri chronologique rigoureux
     events.sort((a, b) => a.timestamp - b.timestamp);
 
     const totalImpact = events.reduce((acc, ev) => acc + ev.impact, 0);
@@ -166,7 +182,7 @@ export default function ProfilePage() {
     setCurrentBalance(Math.max(0, initialBalance));
   }, []);
 
-  // Chargement des données en parallèle via Promise.all pour la performance
+  // Chargement global intégrant le RPC get_user_level_perks
   const fetchCompleteData = useCallback(async () => {
     try {
       setLoading(true);
@@ -176,10 +192,11 @@ export default function ProfilePage() {
         return;
       }
 
-      const [profRes, transRes, misesRes] = await Promise.all([
+      const [profRes, transRes, misesRes, perksRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('transactions').select('amount, type, created_at, status').eq('user_id', user.id).eq('status', 'approved'),
-        supabase.from('mises').select('montant, status, created_at').eq('user_id', user.id)
+        supabase.from('mises').select('montant, status, created_at').eq('user_id', user.id),
+        supabase.rpc('get_user_level_perks', { user_id: user.id })
       ]);
 
       if (profRes.error && profRes.status !== 406) {
@@ -187,6 +204,19 @@ export default function ProfilePage() {
       }
 
       const prof = profRes.data as Profile | null;
+
+      // Ingestion des avantages du niveau
+      if (!perksRes.error && perksRes.data) {
+        const perkData = perksRes.data;
+        setLevelPerks({
+          level: perkData.level ?? 1,
+          title: perkData.title ?? 'Agent Novice',
+          xp_multiplier: Number(perkData.xp_multiplier ?? 1.0),
+          border_color: perkData.border_color ?? 'emerald',
+          badge_icon: perkData.badge_icon ?? '🛡️',
+          perks_description: Array.isArray(perkData.perks_description) ? perkData.perks_description : []
+        });
+      }
 
       const storedGamePass = typeof window !== 'undefined' ? (() => {
         try { 
@@ -205,8 +235,8 @@ export default function ProfilePage() {
         const mergedProfile: Profile = {
           ...prof,
           ...storedGamePass,
-          xp: computed.xp,
-          level: computed.level,
+          xp: prof.xp ?? storedGamePass?.xp ?? computed.xp,
+          level: prof.level ?? storedGamePass?.level ?? computed.level,
           badge: prof.badge || storedGamePass?.badge || computed.badge,
           title: prof.title || storedGamePass?.title || computed.title,
           rank: prof.rank || storedGamePass?.rank || computed.rank,
@@ -253,7 +283,7 @@ export default function ProfilePage() {
     };
   }, [fetchCompleteData]);
 
-  // Échange du coupon sécurisé avec nettoyage
+  // Échange du coupon sécurisé
   const handleRedeemCoupon = async () => {
     const cleanCode = couponCode.trim().toUpperCase();
     if (!cleanCode) return;
@@ -324,12 +354,11 @@ export default function ProfilePage() {
     }
   };
 
-  // Mise à jour sécurisée du profil avec validation
+  // Mise à jour sécurisée du profil
   const handleUpdateProfile = async () => {
     const sanitizedUsername = newUsername.trim();
     const sanitizedTitle = gamePassTitle.trim();
 
-    // Validations côté client
     if (sanitizedUsername.length < 3 || sanitizedUsername.length > 20) {
       showToast("L'identifiant doit contenir entre 3 et 20 caractères.");
       return;
@@ -368,7 +397,6 @@ export default function ProfilePage() {
         history: profile?.history || [createGamePassHistoryEntry('Profil mis à jour', 'Mise à jour du Game Pass')],
       };
 
-      // Validation DB
       const { error: profError } = await supabase.from('profiles').update({
         username: sanitizedUsername,
         title: sanitizedTitle,
@@ -382,13 +410,11 @@ export default function ProfilePage() {
 
       if (profError) throw profError;
 
-      // Mise à jour de la mémoire locale uniquement si la DB a réussi
       setProfile(nextProfile);
       if (typeof window !== 'undefined') {
         localStorage.setItem('game-pass', JSON.stringify(nextProfile));
       }
 
-      // Mise à jour mot de passe optionnelle
       if (newPassword.length >= 8) {
         const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
         if (authError) throw new Error("Erreur de mise à jour du mot de passe : " + authError.message);
@@ -438,6 +464,17 @@ export default function ProfilePage() {
     }
   };
 
+  // Helper pour les bordures dynamiques basées sur la configuration SQL
+  const getBorderColorStyle = (colorName?: string) => {
+    switch (colorName) {
+      case 'amber': return 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.3)]';
+      case 'purple': return 'border-purple-500 shadow-[0_0_25px_rgba(168,85,247,0.3)]';
+      case 'cyan': return 'border-cyan-400 shadow-[0_0_25px_rgba(34,211,238,0.3)]';
+      case 'rose': return 'border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.3)]';
+      default: return 'border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.3)]';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -446,10 +483,19 @@ export default function ProfilePage() {
     );
   }
 
+  // Calcul du progrès du niveau basé sur la formule quadratique
+  const currentXP = profile?.xp || 0;
+  const currentLevel = profile?.level || 1;
+  const currentLevelThreshold = (currentLevel - 1) * (currentLevel - 1) * 1000;
+  const nextLevelThreshold = currentLevel * currentLevel * 1000;
+  const xpInCurrentLevel = Math.max(0, currentXP - currentLevelThreshold);
+  const xpRequiredForNext = Math.max(1, nextLevelThreshold - currentLevelThreshold);
+  const progressPercent = Math.min(100, Math.max(0, (xpInCurrentLevel / xpRequiredForNext) * 100));
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_32%),linear-gradient(135deg,#020617_0%,#050816_60%,#020617_100%)] pb-32 text-white">
       
-      {/* Notification Toast */}
+      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 left-1/2 z-50 -translate-x-1/2 transform rounded-full border border-emerald-500/30 bg-slate-900/95 px-6 py-3 text-xs font-bold text-emerald-300 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all">
           {toastMessage}
@@ -458,7 +504,7 @@ export default function ProfilePage() {
 
       <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-5 sm:px-6">
         
-        {/* Navigation Supérieure */}
+        {/* En-tête Navigation */}
         <div className="flex items-center justify-between rounded-[1.6rem] border border-white/10 bg-slate-950/70 px-4 py-3 shadow-[0_20px_55px_rgba(0,0,0,0.28)] backdrop-blur-xl">
           <button 
             onClick={() => router.push('/client/home')} 
@@ -483,7 +529,7 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* Section Carte Profil */}
+        {/* Section Carte Profil Personnalisée */}
         <section className="relative overflow-hidden rounded-[2rem] border border-emerald-500/20 bg-gradient-to-br from-slate-950/90 via-slate-900/80 to-slate-950/70 p-6 shadow-[0_24px_70px_rgba(2,8,23,0.42)]">
           {isInstallable && (
             <button 
@@ -495,7 +541,7 @@ export default function ProfilePage() {
           )}
 
           <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
-            <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 border-emerald-400/30 bg-gradient-to-br from-emerald-500/20 via-slate-950 to-cyan-500/20 shadow-[0_0_35px_rgba(16,185,129,0.25)]">
+            <div className={`relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 bg-gradient-to-br from-slate-900 to-slate-950 ${getBorderColorStyle(levelPerks?.border_color)}`}>
               <span className="text-4xl">{profile?.avatar || GAME_PASS_AVATARS[0]}</span>
               <div className="absolute -bottom-1 -right-1 rounded-full border border-emerald-400/30 bg-slate-950 p-1.5 shadow-md">
                 <Crown size={14} className="text-amber-300" />
@@ -507,27 +553,35 @@ export default function ProfilePage() {
                 <h1 className="text-2xl font-black uppercase italic tracking-tight text-white">@{profile?.username || 'Utilisateur'}</h1>
                 <CheckCircle2 size={18} className="text-emerald-400" />
               </div>
-              <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-400">
-                {profile?.title || 'Voyageur'} • {profile?.rank || 'Bronze'}
-              </span>
+              <div className="mt-0.5 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-400">
+                  {levelPerks?.title || profile?.title || 'Agent Novice'}
+                </span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-extrabold uppercase text-amber-300">
+                  {levelPerks?.badge_icon || '🛡️'} Nivo {profile?.level || 1}
+                </span>
+              </div>
 
-              {/* Barre de Progression XP */}
+              {/* Barre de Progression XP Dynamique */}
               <div className="mt-3 w-full max-w-md">
                 <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                  <span>Niveau {profile?.level || 1} ({profile?.badge || 'Novice'})</span>
-                  <span className="font-bold text-emerald-300">{profile?.xp || 0} XP</span>
+                  <span>Niveau {profile?.level || 1}</span>
+                  <span className="font-bold text-emerald-300">{currentXP.toLocaleString()} XP</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full border border-white/10 bg-white/5">
+                <div className="h-2.5 overflow-hidden rounded-full border border-white/10 bg-white/5">
                   <div 
-                    className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-500" 
-                    style={{ width: `${Math.min(100, Math.max(0, ((profile?.xp || 0) % 300) / 3))}%` }} 
+                    className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 transition-all duration-500" 
+                    style={{ width: `${progressPercent}%` }} 
                   />
                 </div>
+                <p className="mt-1 text-right text-[8px] font-bold tracking-wider text-slate-500 uppercase">
+                  Prochain niveau : {nextLevelThreshold.toLocaleString()} XP
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Raccourcis Dépôt / Retrait */}
+          {/* Raccourcis Financement */}
           <div className="mt-6 grid grid-cols-2 gap-3">
             <Link href="/client/finance" className="w-full">
               <DSButton variant="primary" className="flex w-full items-center justify-center gap-2 py-3.5">
@@ -581,6 +635,44 @@ export default function ProfilePage() {
         {/* ONGLET 1 : APERÇU */}
         {activeTab === 'overview' && (
           <div className="space-y-5">
+            
+            {/* CARTE DES AVANTAGES DE NIVEAU (LEVEL PERKS) */}
+            <DSCard className="rounded-[2rem] border border-amber-500/20 bg-slate-900/90 p-5 shadow-xl">
+              <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <Zap size={18} className="text-amber-400 animate-pulse" />
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-amber-200">
+                    Avantages Actifs • Niveau {levelPerks?.level || profile?.level || 1}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1">
+                  <Star size={12} className="text-amber-400 fill-amber-400" />
+                  <span className="text-[10px] font-black text-amber-300">
+                    XP x{levelPerks?.xp_multiplier || 1.0}
+                  </span>
+                </div>
+              </div>
+
+              {levelPerks?.perks_description && levelPerks.perks_description.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {levelPerks.perks_description.map((perk, index) => (
+                    <div key={index} className="flex items-start gap-3 rounded-2xl border border-white/5 bg-slate-950/60 p-3">
+                      <span className="text-xl">{perk.icon || '✨'}</span>
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-tight text-white">{perk.label}</p>
+                        <p className="text-[9px] font-medium text-slate-400">{perk.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between rounded-xl bg-white/5 p-3 text-xs text-slate-400">
+                  <span>Aucun avantage passif spécifique pour ce niveau.</span>
+                  <Award size={16} className="text-slate-500" />
+                </div>
+              )}
+            </DSCard>
+
             {/* Carte Parrainage */}
             <DSCard className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-600 to-emerald-900 p-6 text-white shadow-[0_20px_60px_rgba(16,185,129,0.18)]">
               <div className="absolute right-0 top-0 p-4 opacity-15 pointer-events-none">
