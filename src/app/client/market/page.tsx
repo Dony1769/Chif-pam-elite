@@ -16,13 +16,17 @@ import {
   TrendingUp,
   AlertTriangle,
   Bug,
+  CheckCircle2,
+  XCircle,
+  Info,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- IMPORT DE LA PUBLICITÉ ---
 import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
 
-// --- TYPES TYPESCRIPT STRICTS (ALIGNÉS AVEC SUPABASE) ---
+// --- TYPES TYPESCRIPT STRICTS ---
 export type Profile = {
   id: string;
   username: string | null;
@@ -35,7 +39,7 @@ export type BoutiquePack = {
   id: string;
   nom: string;
   jetons_quantite: number;
-  prix_htg: number; // Représente le prix (en HTG ou en Diamants selon currency_type)
+  prix_htg: number;
   currency_type?: 'HTG' | 'DIAMONDS' | string;
   bonus_star_pourcent?: number | null;
   image_url?: string | null;
@@ -65,6 +69,12 @@ type DebugInfo = {
   userRole?: string | null;
 };
 
+// Type pour la gestion des notifications Toast
+type ToastNotification = {
+  message: string;
+  type: 'success' | 'error' | 'info';
+} | null;
+
 export default function MarketPage() {
   // --- ÉTATS DE GESTION ---
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -77,12 +87,28 @@ export default function MarketPage() {
   
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'htg' | 'diamonds'>('htg');
+
+  // État pour remplacer les alert() par des Toasts
+  const [toast, setToast] = useState<ToastNotification>(null);
   
   // État Debug
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const isDebugMode = process.env.NEXT_PUBLIC_DEBUG_MARKET === 'true';
 
   const router = useRouter();
+
+  // Fonction utilitaire pour afficher une notification propre
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  }, []);
+
+  // Auto-fermeture du Toast après 4 secondes
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
@@ -105,7 +131,6 @@ export default function MarketPage() {
     let fetchedRole: string | null = null;
 
     try {
-      // 1. Récupération de la session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
@@ -123,14 +148,12 @@ export default function MarketPage() {
         setLoadingProfile(false);
       }
 
-      // 2. Requête des packs (Colonnes réelles issues de Supabase)
       const packsPromise = supabase
         .from('boutique_packs')
         .select('id, nom, jetons_quantite, prix_htg, bonus_star_pourcent, image_url, currency_type, active')
         .eq('active', true)
         .order('prix_htg', { ascending: true });
 
-      // Requête du profil utilisateur
       const profilePromise = currentUserId
         ? supabase
             .from('profiles')
@@ -139,10 +162,8 @@ export default function MarketPage() {
             .single()
         : Promise.resolve(null);
 
-      // Exécution parallèle des requêtes
       const [packsRes, profileRes] = await Promise.all([packsPromise, profilePromise]);
 
-      // Traitement du résultat des packs
       if (packsRes.error) {
         packsErrStr = packsRes.error.message;
         console.error("[DEBUG MARKET] Erreur packsRes:", packsRes.error);
@@ -153,7 +174,6 @@ export default function MarketPage() {
       }
       setLoadingPacks(false);
 
-      // Traitement du résultat du profil
       if (currentUserId && profileRes) {
         if (profileRes.error) {
           profileErrStr = profileRes.error.message;
@@ -172,7 +192,6 @@ export default function MarketPage() {
         setLoadingProfile(false);
       }
 
-      // Informations de débogage
       setDebugInfo({
         sessionExists: hasSession,
         userId: currentUserId,
@@ -195,30 +214,29 @@ export default function MarketPage() {
     fetchProfileAndPacks();
   }, [fetchProfileAndPacks]);
 
-  // --- TRAITEMENT DES ACHATS ---
+  // --- TRAITEMENT DES ACHATS AVEC TOASTS ---
   const handlePurchase = async (pack: BoutiquePack, method: 'htg' | 'diamonds') => {
     if (!userId || buying) {
-      if (!userId) alert("Vous devez être connecté pour effectuer un achat.");
+      if (!userId) showToast("Vous devez être connecté pour effectuer un achat.", "info");
       return;
     }
 
     const packCost = pack.prix_htg;
 
-    // Validation préalable du solde côté client
+    // Validations préalables du solde côté client avec Toast
     if (method === 'diamonds') {
       if (profile && profile.diamonds < packCost) {
-        alert("Solde de diamants insuffisant pour effectuer cet achat.");
+        showToast("Solde de diamants insuffisant pour effectuer cet achat.", "error");
         return;
       }
     } else {
       if (packCost <= 0) {
-        alert("Le montant de ce pack est invalide.");
+        showToast("Le montant de ce pack est invalide.", "error");
         return;
       }
     }
 
     setBuying(pack.id);
-    console.log("[DEBUG MARKET] Payload Achat :", { packId: pack.id, method, userId, packCost });
 
     try {
       if (method === 'diamonds') {
@@ -229,11 +247,11 @@ export default function MarketPage() {
 
         if (error) {
           console.error("[DEBUG MARKET] Erreur RPC buy_with_diamonds :", error);
-          alert(`Échec de la transaction (${error.code ?? 'RPC_ERR'}) : ${error.message}`);
+          showToast(`Échec de la transaction (${error.code ?? 'RPC_ERR'}) : ${error.message}`, "error");
         } else {
           const res = data as BuyWithDiamondsResponse | null;
           if (!res?.success) {
-            alert(res?.message || "L'achat a échoué.");
+            showToast(res?.message || "L'achat a échoué.", "error");
           } else {
             if (res.new_balance_diamonds !== undefined && res.new_balance_cp !== undefined) {
               setProfile((prev) => prev ? {
@@ -244,7 +262,7 @@ export default function MarketPage() {
             } else {
               await fetchProfileAndPacks();
             }
-            alert("Achat effectué avec succès !");
+            showToast("Achat effectué avec succès !", "success");
           }
         }
       } else {
@@ -255,20 +273,20 @@ export default function MarketPage() {
 
         if (error) {
           console.error("[DEBUG MARKET] Erreur RPC acheter_pack_jetons :", error);
-          alert(`Erreur (${error.code ?? 'RPC_ERR'}) : ${error.message}`);
+          showToast(`Erreur (${error.code ?? 'RPC_ERR'}) : ${error.message}`, "error");
         } else {
           const res = data as BuyWithHtgResponse | null;
           if (res?.success) {
             await fetchProfileAndPacks();
-            alert("Achat validé !");
+            showToast("Achat validé avec succès !", "success");
           } else {
-            alert(res?.message || "Impossible de traiter le paiement HTG.");
+            showToast(res?.message || "Impossible de traiter le paiement HTG.", "error");
           }
         }
       }
     } catch (error: unknown) {
       console.error("[DEBUG MARKET] Erreur inattendue transaction :", getErrorMessage(error));
-      alert("Une erreur inattendue est survenue lors de la transaction.");
+      showToast("Une erreur inattendue est survenue lors de la transaction.", "error");
     } finally {
       setBuying(null);
     }
@@ -311,6 +329,41 @@ export default function MarketPage() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.14),_transparent_40%),_#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
       
+      {/* NOTIFICATION TOAST FLOTTANTE */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-5 left-1/2 z-50 -translate-x-1/2 w-full max-w-md px-4"
+          >
+            <div
+              className={`flex items-center justify-between gap-3 rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${
+                toast.type === 'success'
+                  ? 'border-emerald-500/40 bg-slate-900/95 text-emerald-300 shadow-emerald-950/50'
+                  : toast.type === 'error'
+                  ? 'border-red-500/40 bg-slate-900/95 text-red-300 shadow-red-950/50'
+                  : 'border-blue-500/40 bg-slate-900/95 text-blue-300 shadow-blue-950/50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {toast.type === 'success' && <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />}
+                {toast.type === 'error' && <XCircle size={20} className="text-red-400 shrink-0" />}
+                {toast.type === 'info' && <Info size={20} className="text-blue-400 shrink-0" />}
+                <p className="text-xs font-semibold sm:text-sm">{toast.message}</p>
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="rounded-lg p-1 transition hover:bg-white/10"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* PANNEAU DEBUG VISIBLE SI NEXT_PUBLIC_DEBUG_MARKET=true */}
       {isDebugMode && debugInfo && (
         <div className="bg-amber-950/90 border-b border-amber-500/30 px-4 py-3 text-xs text-amber-200">
@@ -368,7 +421,7 @@ export default function MarketPage() {
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
 
-        {/* INVITATION À SE CONNECTER SI PAS DE SESSION */}
+        {/* INVITATION À SE CONNECTER */}
         {!userId && (
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
             <div className="flex items-center gap-3">
