@@ -10,9 +10,6 @@ import {
   AlertCircle, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import dynamic from 'next/dynamic';
-
-const AdsterraNativeBanner = dynamic(() => import('@/components/ads/AdsterraNativeBanner'), { ssr: false });
 
 type ToastState = {
   type: 'success' | 'error';
@@ -189,7 +186,7 @@ export default function FinancePage() {
 
     setIsSubmitting(true);
     try {
-      // 🔒 Vérification stricte de la session utilisateur active
+      // Vérification stricte de la session utilisateur active
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         throw new Error('Votre session a expiré. Veuillez vous reconnecter.');
@@ -203,7 +200,6 @@ export default function FinancePage() {
         .maybeSingle();
 
       if (!userProfile) {
-        // Enregistrement de secours du profil si manquant
         await supabase.from('profiles').insert([{ id: user.id, balance: 0, locked_balance: 0 }]);
       }
 
@@ -234,7 +230,6 @@ export default function FinancePage() {
       let errorMsg = 'Une erreur inattendue est survenue.';
       if (err instanceof Error) {
         errorMsg = err.message;
-        // Traduction explicite des erreurs de contraintes de clé étrangère Supabase
         if (errorMsg.includes('transactions_user_id_fkey') || errorMsg.includes('foreign key constraint')) {
           errorMsg = "Erreur de compte : Votre profil n'est pas synchronisé. Veuillez recharger la page ou vous reconnecter.";
         }
@@ -429,7 +424,7 @@ export default function FinancePage() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
-            className="mt-5 grid gap-4 lg:grid-cols-2"
+            className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4"
           >
             <button
               type="button"
@@ -451,30 +446,24 @@ export default function FinancePage() {
               </div>
             </button>
 
-            <div className="space-y-4">
-              <button
-                type="button"
-                onClick={() => setView('withdrawal')}
-                className="group relative w-full overflow-hidden rounded-[2rem] border border-amber-400/20 bg-slate-900/80 p-6 text-left shadow-[0_20px_60px_rgba(2,6,23,0.3)] transition-all duration-200 hover:-translate-y-1 active:scale-[0.99]"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-amber-300">
-                      <ArrowDownCircle size={14} /> Retrait instantané (Min 100 HTG)
-                    </div>
-                    <h3 className="text-xl font-black tracking-tight text-white uppercase">Sortir votre solde</h3>
-                    <p className="mt-2 max-w-xs text-sm text-slate-400">Faire une demande de retrait à partir de 100 HTG.</p>
+            <button
+              type="button"
+              onClick={() => setView('withdrawal')}
+              className="group relative overflow-hidden rounded-[2rem] border border-amber-400/20 bg-slate-900/80 p-6 text-left shadow-[0_20px_60px_rgba(2,6,23,0.3)] transition-all duration-200 hover:-translate-y-1 active:scale-[0.99]"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-amber-300">
+                    <ArrowDownCircle size={14} /> Retrait instantané (Min 100 HTG)
                   </div>
-                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 text-amber-400">
-                    <ArrowDownCircle size={24} />
-                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-white uppercase">Sortir votre solde</h3>
+                  <p className="mt-2 max-w-xs text-sm text-slate-400">Faire une demande de retrait à partir de 100 HTG.</p>
                 </div>
-              </button>
-
-              <div className="rounded-[1.5rem] border border-white/10 bg-slate-900/40 p-3 shadow-[0_10px_40px_rgba(2,6,23,0.2)]">
-                <AdsterraNativeBanner />
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-3 text-amber-400">
+                  <ArrowDownCircle size={24} />
+                </div>
               </div>
-            </div>
+            </button>
           </motion.div>
         )}
 
@@ -673,10 +662,6 @@ export default function FinancePage() {
               >
                 {issubmitting ? <Loader2 className="mx-auto animate-spin" /> : 'Confirmer le Retrait'}
               </button>
-            </div>
-
-            <div className="mt-2 rounded-[1.2rem] border border-white/10 bg-slate-950/40 p-3">
-              <AdsterraNativeBanner />
             </div>
           </motion.form>
         )}
