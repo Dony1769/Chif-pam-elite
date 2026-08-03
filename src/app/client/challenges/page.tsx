@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import {
@@ -85,31 +85,6 @@ export default function ArenaPage() {
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
 
   const router = useRouter();
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Injection propre et sécurisée du script d'annonces publicitaires
-  useEffect(() => {
-    const scriptId = "nap5k-ad-tag";
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
-
-    if (!script) {
-      script = document.createElement("script");
-      script.id = scriptId;
-      script.dataset.zone = "11430871";
-      script.src = "https://nap5k.com/tag.min.js";
-      script.async = true;
-
-      const targetElement = document.body || document.documentElement;
-      targetElement.appendChild(script);
-    }
-
-    return () => {
-      const existingScript = document.getElementById(scriptId);
-      if (existingScript && existingScript.parentNode) {
-        existingScript.parentNode.removeChild(existingScript);
-      }
-    };
-  }, []);
 
   const isChallengeExpired = (endsAt?: string): boolean => {
     if (!endsAt) return false;
@@ -134,7 +109,6 @@ export default function ArenaPage() {
         return;
       }
 
-      // Requêtes ciblées : On ne charge que la tentative de l'utilisateur connecté
       const [pRes, cRes] = await Promise.all([
         supabase
           .from("profiles")
@@ -170,7 +144,6 @@ export default function ArenaPage() {
     let isMounted = true;
     void fetchData(isMounted);
 
-    // Écouteur Realtime ciblé exclusivement sur les tentatives de l'utilisateur
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -187,10 +160,7 @@ export default function ArenaPage() {
             filter: `user_id=eq.${user.id}`,
           },
           () => {
-            if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-            refreshTimerRef.current = setTimeout(() => {
-              if (isMounted) void fetchData(isMounted);
-            }, 500);
+            if (isMounted) void fetchData(isMounted);
           }
         )
         .subscribe();
@@ -199,7 +169,6 @@ export default function ArenaPage() {
     return () => {
       isMounted = false;
       if (channel) void supabase.removeChannel(channel);
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [fetchData]);
 
@@ -220,16 +189,12 @@ export default function ArenaPage() {
     setEntryLoading(challenge.id);
 
     try {
-      // 1. TENTATIVE VIA RPC ATOMIQUE (Sécurisée)
       const { data: rpcData, error: rpcError } = await supabase.rpc("enter_challenge", {
         p_challenge_id: challenge.id,
         p_user_id: profile.id,
       });
 
-      // 2. FALLBACK SI L'RPC N'EST PAS ENCORE DÉPLOYÉE
       if (rpcError && rpcError.code === "PGRST202") {
-        console.warn("RPC non trouvée, exécution du fallback transactionnel...");
-
         const { error: attemptError } = await supabase.from("challenge_attempts").upsert(
           {
             challenge_id: challenge.id,
@@ -255,7 +220,6 @@ export default function ArenaPage() {
         return;
       }
 
-      // Mise à jour optimiste du solde local
       setProfile((prev) => (prev ? { ...prev, jetons_cp: prev.jetons_cp - fee } : null));
 
       const routes: Record<ChallengeItem["game_type"], string> = {
