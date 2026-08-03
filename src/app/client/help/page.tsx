@@ -9,7 +9,13 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-// Logo officiel SVG
+// ==========================================
+// 1. COMPOSANTS DE BASE & TYPAGE TYPESCRIPT
+// ==========================================
+
+/**
+ * Logo officiel SVG mémoïsé pour éviter les re-rendus inutiles
+ */
 const LogoElite = React.memo(({ className = "w-8 h-8" }: { className?: string }) => (
   <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="10" strokeLinecap="round" />
@@ -39,7 +45,10 @@ export interface FAQItem {
   answer: React.ReactNode;
 }
 
-// Données statiques extraites du composant pour maximiser les performances de rendu
+// ==========================================
+// 2. DONNÉES STATIQUES (EXTRAITES POUR PERF)
+// ==========================================
+
 const GAMES_DATA: GameInfo[] = [
   {
     id: 'crash',
@@ -133,16 +142,20 @@ const FAQ_DATA: FAQItem[] = [
   }
 ];
 
+// ==========================================
+// 3. COMPOSANT PRINCIPAL (HELP PAGE)
+// ==========================================
+
 export default function HelpPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [openFaqId, setOpenFaqId] = useState<string | null>('faq-1');
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, boolean>>({});
 
-  // Assainissement de la requête pour la recherche
+  // Assainissement et nettoyage de la recherche
   const cleanQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
 
-  // Filtrage optimisé des jeux
+  // Filtrage optimisé des jeux selon la recherche
   const filteredGames = useMemo(() => {
     if (!cleanQuery) return GAMES_DATA;
     return GAMES_DATA.filter(g => 
@@ -151,7 +164,7 @@ export default function HelpPage() {
     );
   }, [cleanQuery]);
 
-  // Filtrage optimisé de la FAQ
+  // Filtrage optimisé de la FAQ selon la recherche
   const filteredFaq = useMemo(() => {
     if (!cleanQuery) return FAQ_DATA;
     return FAQ_DATA.filter(f => 
@@ -159,7 +172,7 @@ export default function HelpPage() {
     );
   }, [cleanQuery]);
 
-  // Handlers mémoïsés pour éviter les re-rendus inutiles
+  // Callbacks stabilisés
   const toggleAccordion = useCallback((id: string) => {
     setOpenFaqId(prevId => (prevId === id ? null : id));
   }, []);
@@ -175,7 +188,7 @@ export default function HelpPage() {
   return (
     <div className="min-h-screen bg-[#020617] text-white pb-20 font-sans selection:bg-emerald-500 selection:text-black">
       
-      {/* HEADER AVEC FLOATING EFFECT */}
+      {/* HEADER AVEC EFFET FLOATING / GLASSMORPHISM */}
       <header className="p-4 sm:p-6 flex items-center justify-between sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-30 border-b border-white/5">
         <div className="flex items-center gap-3">
           <button 
@@ -204,7 +217,7 @@ export default function HelpPage() {
 
       <main className="max-w-3xl mx-auto p-4 sm:p-6 space-y-8">
         
-        {/* BANNIÈRE DE RECHERCHE DYNAMIQUE */}
+        {/* BARRE DE RECHERCHE DYNAMIQUE */}
         <section aria-label="Recherche d'aide">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
@@ -231,7 +244,7 @@ export default function HelpPage() {
           </div>
         </section>
 
-        {/* SECTION 1 : RÈGLES ET ACCÈS DIRECT AUX JEUX */}
+        {/* SECTION 1 : RÈGLES ET RACCOURCIS JEUX */}
         <section className="space-y-4" aria-labelledby="section-games-title">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -324,7 +337,7 @@ export default function HelpPage() {
                       >
                         {faq.answer}
 
-                        {/* Retour utilisateur */}
+                        {/* Module d'évaluation de la réponse */}
                         <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500">
                           <span>Cette réponse vous a-t-elle été utile ?</span>
                           {hasVoted ? (
@@ -363,7 +376,7 @@ export default function HelpPage() {
           </div>
         </section>
 
-        {/* BANNIÈRE SUPPORT EN TEMPS RÉEL */}
+        {/* SECTION 3 : BANNIÈRE CALL-TO-ACTION (SUPPORT EN DIRECT) */}
         <section className="relative overflow-hidden bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 sm:p-8 rounded-3xl text-slate-950 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl shadow-emerald-500/10">
           <div className="space-y-2 text-center sm:text-left">
             <div className="inline-flex items-center gap-1.5 bg-black/10 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
@@ -388,7 +401,7 @@ export default function HelpPage() {
 
       </main>
 
-      {/* FOOTER DISCRET */}
+      {/* FOOTER */}
       <footer className="flex flex-col items-center justify-center opacity-40 py-8 gap-2">
         <LogoElite className="w-8 h-8 grayscale" />
         <p className="text-[9px] tracking-[0.4em] uppercase font-bold text-slate-400">
