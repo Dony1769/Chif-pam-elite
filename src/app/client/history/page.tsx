@@ -10,7 +10,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- TYPE STRICT TRANSACTION ---
+// ==========================================
+// 1. TYPES TYPESCRIPT STRICTS
+// ==========================================
 export type TransactionType = 'deposit' | 'depot' | 'withdrawal' | 'retrait';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected';
 
@@ -24,7 +26,13 @@ export interface Transaction {
   admin_note?: string | null;
 }
 
-// --- LOGO MINI MÉMOÏSÉ ---
+// ==========================================
+// 2. PETITS COMPOSANTS ET UTILS MÉMOÏSÉS
+// ==========================================
+
+/**
+ * Logo SVG vectoriel stylisé mémoïsé
+ */
 const LogoTiny = React.memo(() => (
   <svg viewBox="0 0 100 100" className="w-6 h-6 drop-shadow-[0_0_5px_rgba(16,185,129,0.4)]" fill="none" aria-hidden="true">
     <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="12" strokeLinecap="round" />
@@ -33,18 +41,25 @@ const LogoTiny = React.memo(() => (
 ));
 LogoTiny.displayName = 'LogoTiny';
 
+/**
+ * Fonction d'aide pour identifier si une transaction est un dépôt
+ */
+const isDeposit = (type: TransactionType): boolean => {
+  return type === 'deposit' || type === 'depot';
+};
+
+// ==========================================
+// 3. COMPOSANT PRINCIPAL
+// ==========================================
 export default function ClientHistory() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
 
-  // Helper pour vérifier si le type est un dépôt
-  const isDeposit = (type: TransactionType): boolean => {
-    return type === 'deposit' || type === 'depot';
-  };
-
-  // Récupération des transactions avec gestion des erreurs
+  /**
+   * Récupère l'historique des transactions depuis la table Supabase
+   */
   const fetchHistory = useCallback(async () => {
     try {
       setErrorMessage(null);
@@ -66,7 +81,7 @@ export default function ClientHistory() {
       }
 
       setTransactions((data as Transaction[]) || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur historique:", error);
       setErrorMessage("Impossible de charger votre historique. Veuillez réessayer.");
     } finally {
@@ -74,7 +89,9 @@ export default function ClientHistory() {
     }
   }, []);
 
-  // Écoute des mises à jour Realtime Supabase
+  /**
+   * Mise en place du listener Realtime pour mettre à jour la liste en direct
+   */
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
@@ -84,6 +101,7 @@ export default function ClientHistory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Écoute les changements SQL sur la table transactions pour cet utilisateur
       channel = supabase.channel(`history-user-${user.id}`)
         .on(
           'postgres_changes', 
@@ -102,6 +120,7 @@ export default function ClientHistory() {
 
     setupSubscription();
 
+    // Nettoyage du canal websocket à la destruction du composant
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
@@ -109,22 +128,23 @@ export default function ClientHistory() {
     };
   }, [fetchHistory]);
 
-  // Formateur de date pour éviter les instanciations réseau/rendu répétitives
-  const formatDate = useMemo(() => {
-    return (dateString: string) => {
-      try {
-        return new Date(dateString).toLocaleDateString('fr-FR', {
-          day: 'numeric',
-          month: 'short',
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      } catch {
-        return dateString;
-      }
-    };
+  /**
+   * Formateur de date mémoïsé
+   */
+  const formatDate = useCallback((dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
+    }
   }, []);
 
+  // Écran de chargement principal
   if (loading) {
     return (
       <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center space-y-4">
@@ -138,7 +158,7 @@ export default function ClientHistory() {
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
       
-      {/* HEADER */}
+      {/* HEADER FIXE */}
       <header className="sticky top-0 z-30 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
         <button 
           onClick={() => router.back()} 
@@ -159,7 +179,7 @@ export default function ClientHistory() {
 
       <main className="max-w-md mx-auto p-4 space-y-6">
         
-        {/* CARTE RÉSUMÉ */}
+        {/* CARTE RÉSUMÉ D'INFORMATION */}
         <section className="bg-gradient-to-br from-slate-900 to-slate-950 p-6 rounded-[2rem] border border-white/5 shadow-lg flex items-center gap-4">
           <div className="p-3 bg-emerald-500/10 rounded-full border border-emerald-500/20 shrink-0">
             <Wallet className="text-emerald-500" size={24} aria-hidden="true" />
@@ -174,7 +194,7 @@ export default function ClientHistory() {
           </div>
         </section>
 
-        {/* AFFICHAGE ERREUR ÉVENTUELLE */}
+        {/* ALERTE D'ERREUR */}
         {errorMessage && (
           <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -269,7 +289,7 @@ export default function ClientHistory() {
                       </div>
                     </div>
 
-                    {/* Motif de refus si applicable */}
+                    {/* Motif de refus affiché si disponible */}
                     {t.status === 'rejected' && t.admin_note && (
                       <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10 flex items-start gap-2 mt-2">
                         <AlertCircle size={12} className="text-rose-500 shrink-0 mt-0.5" />
