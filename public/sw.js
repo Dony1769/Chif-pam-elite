@@ -27,19 +27,6 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// 1. CONFIGURATION MONETAG
-// ⚠️ ATTENTION : Si ce script échoue, tout le SW plante. C'est le risque des régies pubs.
-self.options = {
-    "domain": "3nbf4.com",
-    "zoneId": 10585090
-}
-self.lary = ""
-try {
-    importScripts('https://3nbf4.com/act/files/service-worker.min.js?r=sw')
-} catch (e) {
-    console.warn("Monetag script failed to load", e);
-}
-
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -49,14 +36,8 @@ self.addEventListener("fetch", (event) => {
   const isSameOrigin = url.origin === self.location.origin;
   const isSupabase = url.hostname.includes("supabase.co");
   const isApi = url.pathname.startsWith("/api/");
-  const isAdOrAnalytics =
-    url.hostname.includes("googlesyndication") ||
-    url.hostname.includes("google-analytics") ||
-    url.hostname.includes("magsrv.com") ||
-    url.hostname.includes("effectivegatecpm.com") ||
-    url.hostname.includes("3nbf4.com");
 
-  if (!isHttp || isSupabase || isApi || isAdOrAnalytics) return;
+  if (!isHttp || isSupabase || isApi) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
@@ -100,8 +81,8 @@ self.addEventListener("push", (event) => {
   let payload = null;
   try {
     payload = event.data.json();
-  } catch (e) {
-    return; // Pas du JSON (probablement pub Monetag), on laisse faire
+  } catch {
+    return;
   }
 
   // Si c'est une notif CHIF PAM

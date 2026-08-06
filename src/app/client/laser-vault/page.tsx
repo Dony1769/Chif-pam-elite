@@ -4,9 +4,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete, RefreshCw, ExternalLink } from 'lucide-react';
+import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete, RefreshCw } from 'lucide-react';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
-import MonetagAdScript from '@/components/ads/MonetagAdScript';
 
 // --- INTERFACES & TYPES ---
 interface ProfileLike {
@@ -377,7 +376,7 @@ function QuickCalcGameContent() {
     const elapsedSeconds = (Date.now() - timestamp) / 1000;
     
     if (elapsedSeconds < 6) {
-      setAdErrorMsg(`Temps insuffisant (${Math.ceil(6 - elapsedSeconds)}s restantes). Veuillez rester 6s sur la pub.`);
+      setAdErrorMsg(`Temps insuffisant (${Math.ceil(6 - elapsedSeconds)}s restantes). Durée minimale: 6s.`);
       setAdClickTime(null);
       if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
       return;
@@ -462,13 +461,7 @@ function QuickCalcGameContent() {
       return;
     }
 
-    const now = Date.now();
-    setAdClickTime(now);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ad_click_timestamp', now.toString());
-    }
-
-    window.open('https://omg10.com/4/11431323', '_blank');
+    void handleVerifySecondChance(Date.now() - 6000);
   };
 
   // BOUCLE DU TIMER BASÉE SUR PERFORMANCE.NOW()
@@ -566,8 +559,6 @@ function QuickCalcGameContent() {
 
   return (
     <NeonGameShell accent="cyan" className="fixed inset-0 select-none overflow-hidden h-[100dvh]">
-      <MonetagAdScript zoneId="11431323" />
-
       {/* HEADER COMPACT */}
       <div className="z-50 flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-xl shrink-0">
         <button
@@ -724,7 +715,7 @@ function QuickCalcGameContent() {
                     <RefreshCw size={14} className="animate-spin" /> Seconde Chance Disponible
                   </div>
                   <p className="text-[10px] text-slate-300 mb-3">
-                    Restez <span className="font-bold text-amber-300">6 secondes</span> sur le site sponsorisé pour continuer la partie.
+                    Activez la seconde chance pendant <span className="font-bold text-amber-300">au moins 6 secondes</span> pour continuer la partie.
                     <br />
                     <span className="text-[9px] text-amber-400/80">Coût additionnel : -{secondChanceCost} CP (50% de la mise)</span>
                   </p>
@@ -743,9 +734,7 @@ function QuickCalcGameContent() {
                     {validatingSecondChance ? (
                       <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      <>
-                        SECONDE CHANCE (-{secondChanceCost} CP) <ExternalLink size={14} />
-                      </>
+                      <>SECONDE CHANCE (-{secondChanceCost} CP)</>
                     )}
                   </button>
                 </div>

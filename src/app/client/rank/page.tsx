@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import Script from "next/script";
 
 // --- TYPES TYPÉS STRICTEMENT ---
 type GameType = "quiz" | "biometric" | "vault";
@@ -409,22 +408,14 @@ function RankContent() {
 // --- CONTENEUR PRINCIPAL AVEC SUSPENSE & ADS ---
 export default function LeaderboardPage() {
   return (
-    <>
-      <Script
-        id="monetag-vignette"
-        src="https://gizokraijaw.net/vignette.min.js"
-        data-zone="10586275"
-        strategy="lazyOnload"
-      />
-      <Suspense
-        fallback={
-          <div className="flex h-screen items-center justify-center bg-[#020617]">
-            <Loader2 className="animate-spin text-emerald-500" size={40} />
-          </div>
-        }
-      >
-        <RankContent />
-      </Suspense>
-    </>
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-[#020617]">
+          <Loader2 className="animate-spin text-emerald-500" size={40} />
+        </div>
+      }
+    >
+      <RankContent />
+    </Suspense>
   );
 }

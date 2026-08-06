@@ -10,9 +10,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
-// IMPORT DE LA PUBLICITÉ
-import ExoClickBanner from "@/components/ads/ExoClickBanner"; 
-
 // Helper Haptique sécurisé
 const triggerHaptic = (pattern: number[] = [8, 20, 8]) => {
   if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
@@ -404,12 +401,6 @@ export default function CrashElite() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-
-        {/* ZONE PUB SÉCURISÉE */}
-        <div className="relative flex min-h-[70px] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-            <p className="absolute top-1 right-2 text-[6px] text-slate-600 font-black uppercase tracking-widest z-0">SPONSOR</p>
-            <ExoClickBanner />
         </div>
 
         {/* PANNEAU DE CONTRÔLE ET COMMANDES */}

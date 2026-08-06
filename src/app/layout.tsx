@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
-import Script from "next/script";
 import PWARegister from "@/components/PWARegister";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -38,30 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           content="0DKoujhMc_f-hx6jkLpCVG5DC1apsfHK8VtM-do5Mf0"
         />
 
-        {/* Google AdSense account verification */}
-        <meta
-          name="google-adsense-account"
-          content="ca-pub-5900590603770169"
-        />
-
-        {/* ExoClick verification */}
-        <meta
-          name="6a97888e-site-verification"
-          content="5e81fa45aafa6f5cc66cc432be3668ca"
-        />
-
       </head>
 
       <body className={`${spaceGrotesk.variable} ${ibmMono.variable} antialiased`}>
-        <Script
-          id="adsense-script"
-          strategy="lazyOnload"
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5900590603770169"
-          crossOrigin="anonymous"
-        />
-        {/* Monetag retiré d'ici pour éviter le spam */}
-        
-        <PWARegister propeller={true} />
+        <PWARegister />
         <WebVitalsReporter />
         {children}
         <SpeedInsights />

@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ChevronLeft, History as HistoryIcon, AlertTriangle, Coins, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import ExoClickBanner from '@/components/ads/ExoClickBanner';
 import { resolveGameEconomy } from '@/lib/game-economy';
 import { NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
@@ -602,9 +601,6 @@ export default function PlinkoElite() {
             />
           </div>
 
-          <div className="mt-4 w-full max-w-lg border-t border-white/5 pt-4">
-            <ExoClickBanner />
-          </div>
         </div>
       </div>
     </NeonGameShell>

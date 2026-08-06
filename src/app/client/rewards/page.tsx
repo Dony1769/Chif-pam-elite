@@ -15,7 +15,6 @@ import {
   Flame,
   Gift,
   Lock,
-  ExternalLink,
   Award,
 } from "lucide-react";
 import { getDailyReward } from "@/lib/game-economy";
@@ -23,9 +22,6 @@ import { motion } from "framer-motion";
 
 // --- CONSTANTES ET REGLES ECONMIQUES ---
 const MAX_CP_REWARD = 50;
-const DIRECT_LINK_URL = "https://omg10.com/4/11431323";
-const SPONSOR_XP_REWARD = 15;
-const SPONSOR_WAIT_TIME = 8;
 
 // --- TYPES ---
 type RewardType = "cp" | "diamonds" | "xp";
@@ -85,11 +81,6 @@ export default function RewardsPage() {
   const [claiming, setClaiming] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState({ hours: 0, minutes: 0, seconds: 0 });
 
-  const [isSponsorActive, setIsSponsorActive] = useState(false);
-  const [sponsorTimer, setSponsorTimer] = useState(SPONSOR_WAIT_TIME);
-  const [canClaimSponsorXp, setCanClaimSponsorXp] = useState(false);
-  const [claimingXp, setClaimingXp] = useState(false);
-
   const router = useRouter();
 
   const currentDate = useMemo(() => new Date(), []);
@@ -116,19 +107,6 @@ export default function RewardsPage() {
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  // Timer Sponsor
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    if (isSponsorActive && sponsorTimer > 0) {
-      interval = setInterval(() => setSponsorTimer((prev) => prev - 1), 1000);
-    } else if (isSponsorActive && sponsorTimer === 0) {
-      setCanClaimSponsorXp(true);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isSponsorActive, sponsorTimer]);
 
   // Chargement des données + Génération de secours si BDD vide
   const fetchData = useCallback(async () => {
@@ -206,32 +184,6 @@ export default function RewardsPage() {
     try {
       new Audio("https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3").play().catch(() => {});
     } catch {}
-  };
-
-  const handleOpenSponsorLink = () => {
-    window.open(DIRECT_LINK_URL, "_blank", "noopener,noreferrer");
-    setIsSponsorActive(true);
-    setSponsorTimer(SPONSOR_WAIT_TIME);
-    setCanClaimSponsorXp(false);
-  };
-
-  const handleClaimSponsorXp = async () => {
-    if (!profile || !canClaimSponsorXp || claimingXp) return;
-    setClaimingXp(true);
-
-    try {
-      const newXp = (profile.xp || 0) + SPONSOR_XP_REWARD;
-      const { error } = await supabase.from("profiles").update({ xp: newXp }).eq("id", profile.id);
-      if (error) throw error;
-
-      setProfile((prev) => (prev ? { ...prev, xp: newXp } : prev));
-      playRewardSound();
-      setIsSponsorActive(false);
-    } catch (err) {
-      alert("Erreur lors de la validation XP");
-    } finally {
-      setClaimingXp(false);
-    }
   };
 
   const handleClaimDaily = async () => {
@@ -330,24 +282,6 @@ export default function RewardsPage() {
                 <p className="text-xl font-black text-white">{profile?.xp ?? 0}</p>
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* SECTION SPONSOR */}
-        <section className="rounded-3xl border border-amber-500/30 bg-slate-900 p-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <h2 className="text-xl font-black text-white">Visitez notre partenaire (+{SPONSOR_XP_REWARD} XP)</h2>
-            </div>
-            {!isSponsorActive ? (
-              <button onClick={handleOpenSponsorLink} className="rounded-2xl bg-amber-400 px-6 py-3 text-xs font-black text-slate-950">
-                Visiter (+{SPONSOR_XP_REWARD} XP)
-              </button>
-            ) : (
-              <button onClick={handleClaimSponsorXp} disabled={!canClaimSponsorXp || claimingXp} className="rounded-2xl bg-emerald-400 px-6 py-3 text-xs font-black text-slate-950 disabled:opacity-50">
-                {canClaimSponsorXp ? "Réclamer XP" : `Attendez ${sponsorTimer}s`}
-              </button>
-            )}
           </div>
         </section>
 

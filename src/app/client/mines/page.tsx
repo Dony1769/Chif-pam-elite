@@ -3,10 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock, Clock, ExternalLink, RotateCcw } from 'lucide-react';
+import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock, Clock, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import ExoClickBanner from "@/components/ads/ExoClickBanner";
-import MonetagAdScript from '@/components/ads/MonetagAdScript';
 import { resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
@@ -34,9 +32,6 @@ interface RpcJouerPartieResult {
   success: boolean;
   message?: string;
 }
-
-const MONETAG_REDIRECT_URL = "https://omg10.com/4/11431323";
-const REQUIRED_AD_TIME_MS = 6000;
 
 // --- UTILITAIRES CRYPTOGRAPHIQUES ANTI-TRICHE ---
 const generateSessionSalt = (): string => {
@@ -82,10 +77,9 @@ export default function MinesElite() {
   const [combo, setCombo] = useState<number>(0);
   const [effects, setEffects] = useState<ParticleEffect[]>([]);
 
-  // --- SECONDE CHANCE (MONETAG) ---
+  // --- SECONDE CHANCE ---
   const [canUseSecondChance, setCanUseSecondChance] = useState<boolean>(false);
   const [secondChanceUsed, setSecondChanceUsed] = useState<boolean>(false);
-  const [adWaiting, setAdWaiting] = useState<boolean>(false);
   const [adError, setAdError] = useState<string | null>(null);
 
   // --- SYSTEME & MAINTENANCE ---
@@ -342,39 +336,6 @@ export default function MinesElite() {
     }
   }, [gameId, mines, userId]);
 
-  // Écouteur de retour d'annonce publicitaire
-  useEffect(() => {
-    const handleFocusOrVisibility = () => {
-      if (!adWaiting || isProcessingRef.current) return;
-
-      const clickTimeStr = localStorage.getItem('monetag_click_time');
-      if (!clickTimeStr) return;
-
-      const clickTime = parseInt(clickTimeStr, 10);
-      const now = Date.now();
-      const elapsed = now - clickTime;
-
-      localStorage.removeItem('monetag_click_time');
-      setAdWaiting(false);
-
-      if (elapsed >= REQUIRED_AD_TIME_MS) {
-        void applySecondChance();
-      } else {
-        const remainingSec = Math.ceil((REQUIRED_AD_TIME_MS - elapsed) / 1000);
-        setAdError(`Vous devez rester au moins 6 secondes sur l'annonce. (Manquait ${remainingSec}s)`);
-        setTimeout(() => setAdError(null), 5000);
-      }
-    };
-
-    window.addEventListener('focus', handleFocusOrVisibility);
-    document.addEventListener('visibilitychange', handleFocusOrVisibility);
-
-    return () => {
-      window.removeEventListener('focus', handleFocusOrVisibility);
-      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
-    };
-  }, [adWaiting, applySecondChance]);
-
   const addEffect = (type: 'spark' | 'explosion', index: number) => {
     const row = Math.floor(index / 5);
     const col = index % 5;
@@ -497,9 +458,7 @@ export default function MinesElite() {
       return;
     }
 
-    localStorage.setItem('monetag_click_time', Date.now().toString());
-    setAdWaiting(true);
-    window.open(MONETAG_REDIRECT_URL, '_blank');
+    void applySecondChance();
   };
 
   const cashout = async () => {
@@ -568,9 +527,6 @@ export default function MinesElite() {
 
   return (
     <NeonGameShell accent="violet" className="min-h-screen px-3 sm:px-4 py-3 font-black italic uppercase flex flex-col items-center select-none pb-16">
-      
-      {/* SCRIPT MONETAG */}
-      <MonetagAdScript zoneId="11431323" />
 
       {/* BARRE SUPÉRIEURE */}
       <div className="mb-4 flex w-full max-w-md items-center justify-between gap-2">
@@ -664,7 +620,7 @@ export default function MinesElite() {
           </div>
         )}
 
-        {/* NOTIFICATION ERREUR PUB */}
+        {/* NOTIFICATION ERREUR SECONDE CHANCE */}
         {adError && (
           <div className="p-3 bg-red-500/20 border border-red-500/40 rounded-xl text-center text-red-300 text-xs font-bold animate-in fade-in">
             {adError}
@@ -775,31 +731,24 @@ export default function MinesElite() {
           </div>
         </div>
 
-        {/* BANNIÈRE SPONSOR */}
-        <div className="relative mt-4 flex min-h-[90px] w-full items-center justify-center overflow-hidden rounded-xl border border-white/5 bg-black/20">
-            <p className="absolute top-1.5 right-3 text-[7px] text-slate-600 tracking-widest z-0">SPONSOR</p>
-            <ExoClickBanner />
-        </div>
-
         {/* SECONDE CHANCE ET REJOINDRE */}
         {status === 'ended' && (
           <div className="space-y-2 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
             {canUseSecondChance && (
               <button 
                 onClick={handleOpenAdForSecondChance}
-                disabled={adWaiting || loading}
+                disabled={loading}
                 className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black border border-amber-300/30 rounded-xl text-xs font-black tracking-widest transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2 active:scale-95"
               >
-                {adWaiting ? (
+                {loading ? (
                   <>
                     <Loader2 className="animate-spin" size={16} />
-                    <span>EN ATTENTE DE VALIDATION (6s)...</span>
+                    <span>ACTIVATION...</span>
                   </>
                 ) : (
                   <>
                     <RotateCcw size={16} />
                     <span>SECONDE CHANCE : REVENIR AU NIV. 1 (-50% MISE)</span>
-                    <ExternalLink size={14} className="ml-1 opacity-75" />
                   </>
                 )}
               </button>

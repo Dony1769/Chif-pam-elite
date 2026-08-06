@@ -23,9 +23,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- IMPORT DE LA PUBLICITÉ ---
-import AdsterraNativeBanner from "@/components/ads/AdsterraNativeBanner";
-
 // --- TYPES TYPESCRIPT STRICTS ---
 export type Profile = {
   id: string;
@@ -592,21 +589,6 @@ export default function MarketPage() {
           </AnimatePresence>
         </div>
 
-        {/* BANNIÈRE ADSTERRA */}
-        <div className="rounded-[28px] border border-white/10 bg-slate-900/50 p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Sponsorisé</p>
-              <p className="mt-1 text-sm text-slate-300">Profitez d’un contenu premium tout en continuant votre expérience.</p>
-            </div>
-            <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 p-2.5 text-emerald-300">
-              <ShieldCheck size={16} />
-            </div>
-          </div>
-          <div className="flex min-h-[120px] items-center justify-center overflow-hidden rounded-[22px] border border-white/10 bg-black/20">
-            <AdsterraNativeBanner />
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -14,8 +14,7 @@ import {
   HeartPulse, 
   Zap, 
   Sparkles,
-  AlertTriangle,
-  ExternalLink
+  AlertTriangle
 } from 'lucide-react';
 import { getGameEconomySettings, resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
@@ -49,7 +48,6 @@ type GameStatus =
   | 'maintenance' 
   | 'awaiting_ad_return';
 
-const MONETAG_AD_URL = "https://omg10.com/4/11431323";
 const REQUIRED_AD_TIME_MS = 6000;
 
 // --- GESTIONNAIRE AUDIO OPTIMISÉ ET SÉCURISÉ ---
@@ -230,7 +228,7 @@ function BiometricGameContent() {
     init(); 
   }, [init]);
 
-  // --- GESTION DU RETOUR APRÈS LA PUBLICITÉ (SECONDE CHANCE) ---
+  // --- GESTION DU RETOUR DE SECONDE CHANCE ---
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && status === 'awaiting_ad_return') {
@@ -238,7 +236,7 @@ function BiometricGameContent() {
         adTrackerRef.current = null;
 
         if (!tracker || !tracker.startTime) {
-          setAdErrorMsg("Session publicitaire invalide.");
+          setAdErrorMsg("Session de seconde chance invalide.");
           setStatus('lost');
           return;
         }
@@ -521,14 +519,16 @@ function BiometricGameContent() {
     }
   };
 
-  // --- DÉCLENCHEMENT SÉCURISÉ DE LA PUBLICITÉ ---
+  // --- DÉCLENCHEMENT SÉCURISÉ DE LA SECONDE CHANCE ---
   const handleAdClick = () => {
     adTrackerRef.current = {
-      startTime: Date.now(),
+      startTime: Date.now() - REQUIRED_AD_TIME_MS,
       token: Math.random().toString(36).substring(2)
     };
     setStatus('awaiting_ad_return');
-    window.open(MONETAG_AD_URL, '_blank', 'noopener,noreferrer');
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(new Event('visibilitychange'));
+    }
   };
 
   const adjustBet = (amount: number | 'max' | 'double') => {
@@ -763,9 +763,9 @@ function BiometricGameContent() {
             {status === 'awaiting_ad_return' ? (
               <div className="flex flex-col items-center gap-4">
                 <Loader2 size={56} className="animate-spin text-cyan-400" />
-                <h3 className="text-xl font-bold text-white uppercase tracking-wider">Vérification du lien sponsorisé...</h3>
+                <h3 className="text-xl font-bold text-white uppercase tracking-wider">Vérification de la seconde chance...</h3>
                 <p className="text-xs text-zinc-400 max-w-xs">
-                  Passez au moins 6 secondes sur la page sponsorisée ouverte dans votre nouvel onglet puis revenez ici.
+                  Validation de la seconde chance en cours...
                 </p>
               </div>
             ) : (
@@ -793,14 +793,14 @@ function BiometricGameContent() {
                 </div>
 
                 <div className="flex flex-col gap-3 w-full max-w-xs">
-                  {/* Seconde chance via lien pub si défaite en mode classique */}
+                  {/* Seconde chance si défaite en mode classique */}
                   {status === 'lost' && canRevive && !challengeId && (
                     <button 
                       onClick={handleAdClick} 
                       className="w-full py-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-2xl font-black text-xs active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-950/40 border border-cyan-300/30"
                     >
                       <span className="flex items-center gap-2">
-                        <HeartPulse className="animate-pulse" size={18}/> SECONDE CHANCE (LIEN PUB) <ExternalLink size={14} />
+                        <HeartPulse className="animate-pulse" size={18}/> SECONDE CHANCE
                       </span>
                       <span className="text-[9px] font-medium text-cyan-100/80">
                         Coût : {Math.floor(lockedBetRef.current * 0.5)} CP (50% de la mise) • Visite 6s

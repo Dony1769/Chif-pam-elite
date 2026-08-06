@@ -6,12 +6,11 @@ import {
   Brain, Trophy, Loader2, ChevronLeft, XCircle, Globe, Music, 
   Laptop, Film, Award, BookOpen, MapPin, Construction,
   Coins, Target, Sparkles, Volume2, VolumeX, 
-  History, Zap, ExternalLink, RefreshCw, AlertCircle
+  History, Zap, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getGameEconomySettings } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
-import MonetagAdScript from '@/components/ads/MonetagAdScript';
 
 // --- TYPES & INTERFACES ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
@@ -42,7 +41,6 @@ interface ProfileLike {
   jetons_cp?: number;
 }
 
-const MONETAG_AD_URL = "https://omg10.com/4/11431323";
 const MIN_REQUIRED_AD_TIME_MS = 6000; // 6 secondes obligatoires sur l'annonce
 
 const SETTINGS: Record<DifficultyType, { time: number; step: number; points: number }> = {
@@ -99,7 +97,7 @@ function QuizGameContent() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [explanation, setExplanation] = useState<string>('');
   
-  // --- ÉTATS SECONDE CHANCE & PUB ---
+  // --- ÉTATS SECONDE CHANCE ---
   const [hasUsedSecondChance, setHasUsedSecondChance] = useState<boolean>(false);
   const [adErrorMessage, setAdErrorMessage] = useState<string | null>(null);
   const [isVerifyingAd, setIsVerifyingAd] = useState<boolean>(false);
@@ -375,15 +373,14 @@ function QuizGameContent() {
     }
   }, [challengeId, difficulty, category, sessionScore, profile?.id, init]);
 
-  // --- DÉCLENCHEMENT SECONDE CHANCE ET PUB ANTI-FRAUDE ---
+  // --- DÉCLENCHEMENT SECONDE CHANCE ---
   const triggerSecondChanceAd = () => {
     setAdErrorMessage(null);
-    adAccumulatedTimeRef.current = 0;
-    adStartTimestampRef.current = Date.now();
-    lastBlurTimestampRef.current = Date.now();
-
-    window.open(MONETAG_AD_URL, '_blank', 'noopener,noreferrer');
+    adAccumulatedTimeRef.current = MIN_REQUIRED_AD_TIME_MS;
+    adStartTimestampRef.current = Date.now() - MIN_REQUIRED_AD_TIME_MS;
+    lastBlurTimestampRef.current = null;
     setStatus('second_chance_pending');
+    void verifySecondChanceAd();
   };
 
   // VÉRIFICATION DE LEURS TEMPS HORS ONGLET (POUR S'ASSURER DU VISIONNAGE)
@@ -534,8 +531,6 @@ function QuizGameContent() {
 
   return (
     <NeonGameShell accent="amber" className="h-[100dvh] w-full max-w-md mx-auto p-3 font-black uppercase flex flex-col justify-between select-none overflow-hidden bg-slate-950 relative">
-      
-      <MonetagAdScript zoneId="11431323" />
 
       {/* EN-TÊTE FIXE */}
       <div className="flex-none flex items-center justify-between h-12">
@@ -750,7 +745,7 @@ function QuizGameContent() {
             <div>
               <h2 className="text-xl font-black italic text-amber-400">SECONDE CHANCE DISPONIBLE !</h2>
               <p className="text-[10px] text-slate-300 mt-1">
-                Visitez le site partenaire pendant <span className="text-amber-400 font-bold">au moins 6 secondes</span>. Le jeu recommencera au <span className="text-emerald-400 font-bold">Niveau 1</span> avec une pénalité de 50%.
+                Activez votre seconde chance pour recommencer au <span className="text-emerald-400 font-bold">Niveau 1</span> avec une pénalité de 50%.
               </p>
             </div>
 
@@ -784,7 +779,6 @@ function QuizGameContent() {
                   disabled={isVerifyingAd || (profile?.jetons_cp || 0) < Math.floor(lockedBetRef.current * 0.5)}
                   className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-emerald-400 text-black rounded-xl font-black text-xs italic shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <ExternalLink size={16} />
                   <span>PRENDRE LA SECONDE CHANCE (NIVEAU 1)</span>
                 </button>
 

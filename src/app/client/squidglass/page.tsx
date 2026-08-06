@@ -16,7 +16,6 @@ import {
   ArrowUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ExoClickBanner from "@/components/ads/ExoClickBanner";
 import { AnimatedCounter, NeonGameShell } from '@/components/game/NeonGameShell';
 
 // --- TYPES ---
@@ -634,13 +633,6 @@ export default function GlassEliteFinal() {
             TEMPS RESTANT <span className="text-lg font-black text-rose-400">{countdown}s</span>
           </div>
         )}
-
-        {/* PUB BANNER */}
-        <div className="absolute bottom-20 w-full flex justify-center pointer-events-none opacity-40">
-          <div className="scale-75 origin-bottom">
-            <ExoClickBanner />
-          </div>
-        </div>
 
         {/* PANNEAU DE MISE & DE CONFIGURATION */}
         {status === 'idle' && (
