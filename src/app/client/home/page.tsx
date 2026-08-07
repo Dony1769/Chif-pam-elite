@@ -4,9 +4,9 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell, Lock, Activity, ChevronRight, Brain, Fingerprint,
+  Bell, Lock, Trophy, Activity, ChevronRight, Brain, Fingerprint,
   Menu, X, Crown, ShieldCheck, Gift, Sparkles, Coins, ArrowRightLeft,
-  Flame, User, LogOut, CheckCircle2, Wallet, PlusCircle, ArrowUpRight, Trophy
+  Flame, User, LogOut, CheckCircle2, Wallet, PlusCircle, ArrowUpRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -195,7 +195,7 @@ export default function ClientHome() {
 
     } catch (error) {
       console.error('Erreur globale fetchData:', error);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   }, [pathname, router]);
@@ -282,6 +282,7 @@ export default function ClientHome() {
 
   return (
     <DSPage className="text-white font-black italic uppercase pb-12 sm:pb-20 overflow-x-hidden relative ds-fade-up">
+
       {/* Navigation latérale Drawer */}
       <AnimatePresence>
         {isMenuOpen && (
@@ -367,7 +368,7 @@ export default function ClientHome() {
         <div className="grid gap-5 sm:gap-6 xl:grid-cols-[1.4fr_0.8fr]">
           <div className="space-y-5 sm:space-y-6">
             
-            {/* Entête principal avec Logo ChifPam */}
+            {/* Entête principal avec Logo ChifPam Illuminé pour Non-VIP */}
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0 flex items-start gap-3.5">
                 
