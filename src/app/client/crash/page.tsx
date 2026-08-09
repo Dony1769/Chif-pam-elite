@@ -26,7 +26,7 @@ interface RecentGameData {
   crash_point: number;
 }
 
-// Responses (Retours de la fonction RPC)
+// Retours de la fonction RPC Supabase
 interface RpcCreateGameResponse {
   success: boolean;
   message?: string;
@@ -38,18 +38,6 @@ interface RpcCashoutResponse {
   success: boolean;
   message?: string;
   payout?: number;
-}
-
-// Arguments (Paramètres envoyés aux RPC)
-interface RpcCreateGameArgs {
-  p_user_id: string;
-  p_bet_amount: number;
-}
-
-interface RpcCashoutArgs {
-  p_game_id: string;
-  p_user_id: string;
-  p_claimed_multiplier: number;
 }
 
 // Helper Haptique sécurisé
@@ -183,12 +171,14 @@ export default function CrashElite() {
     const targetMult = forcedMult ? Number(forcedMult.toFixed(2)) : Number(multRef.current.toFixed(2));
 
     try {
-      // Correct generic usage: <ReturnType, ArgsType>
-      const { data: result, error: rpcErr } = await supabase.rpc<RpcCashoutResponse, RpcCashoutArgs>('encaissez_partie_crash', {
+      // Appel de la procédure stockée RPC Supabase
+      const { data, error: rpcErr } = await supabase.rpc('encaissez_partie_crash', {
         p_game_id: gameId,
         p_user_id: userId,
         p_claimed_multiplier: targetMult
       });
+
+      const result = data as RpcCashoutResponse | null;
 
       if (rpcErr || !result?.success) {
         throw new Error(result?.message || "Erreur de validation de l'encaissement.");
@@ -212,7 +202,7 @@ export default function CrashElite() {
     }
   }, [status, gameId, loading, userId]);
 
-  // --- BOUCLE DU JEU (HAUTE DIFFICULTÉ : MONTÉE ACCÉLÉRÉE) ---
+  // --- BOUCLE DU JEU (MONTÉE ACCÉLÉRÉE) ---
   const gameLoop = useCallback((time: number) => {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
@@ -267,11 +257,13 @@ export default function CrashElite() {
     try {
       lockedBetRef.current = finalBet;
 
-      // Correct generic usage: <ReturnType, ArgsType>
-      const { data: res, error: rpcErr } = await supabase.rpc<RpcCreateGameResponse, RpcCreateGameArgs>('creer_partie_crash', {
+      // Appel RPC Supabase
+      const { data, error: rpcErr } = await supabase.rpc('creer_partie_crash', {
         p_user_id: userId,
         p_bet_amount: finalBet
       });
+
+      const res = data as RpcCreateGameResponse | null;
 
       if (rpcErr || !res?.success || !res.crash_point || !res.game_id) {
         throw new Error(res?.message || "Erreur d'initialisation de la partie.");
@@ -412,7 +404,7 @@ export default function CrashElite() {
             
             {status === 'running' && (
               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.3em] text-amber-400 animate-pulse mt-2">
-                <Zap size={12} /> Vol Haute Difficulte...
+                <Zap size={12} /> Vol Haute Difficulté...
               </div>
             )}
 
