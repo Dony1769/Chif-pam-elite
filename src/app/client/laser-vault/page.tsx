@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete, RefreshCw } from 'lucide-react';
+import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete } from 'lucide-react';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
 
 // --- INTERFACES & TYPES ---
@@ -75,11 +75,11 @@ const triggerHaptic = () => {
   }
 };
 
-// --- LOGIQUE TEMPORELLE ET MULTIPLICATEURS ---
+// --- LOGIQUE TEMPORELLE ET MULTIPLICATEURS (DIFFICULTÉ ACCRUE) ---
 const getQuestionTimeMs = (questionNumber: number) => {
-  const baseTimeMs = 6000;
-  const reductionMs = (questionNumber - 1) * 600;
-  return Math.max(2500, baseTimeMs - reductionMs);
+  const baseTimeMs = 4500; // Réduit de 6000ms à 4500ms
+  const reductionMs = (questionNumber - 1) * 450; // Réduction plus rapide
+  return Math.max(1800, baseTimeMs - reductionMs); // Temps minimum abaissé à 1.8s
 };
 
 const getNextMultiplier = (answered: number) => {
@@ -87,65 +87,73 @@ const getNextMultiplier = (answered: number) => {
   return steps[Math.min(answered, steps.length - 1)] ?? 4.0;
 };
 
-// --- GÉNÉRATEUR SÉCURISÉ DE QUESTIONS ---
+// --- GÉNÉRATEUR SÉCURISÉ DE QUESTIONS (DIFFICULTÉ HAUTE) ---
 const generateMathQuestionSecure = async (questionsAnswered: number): Promise<MathQuestionInternal> => {
-  const level = questionsAnswered < 3 ? 1 : questionsAnswered < 7 ? 2 : 3;
+  const level = questionsAnswered < 3 ? 1 : questionsAnswered < 6 ? 2 : 3;
   let display = '';
   let answer = 0;
 
   if (level === 1) {
-    const a = Math.floor(Math.random() * 9) + 1;
-    const b = Math.floor(Math.random() * 9) + 1;
-    if (Math.random() > 0.5) {
+    // NIVEAU 1 : Additions, Soustractions (nombres plus grands) et Multiplications simples
+    const rand = Math.random();
+    if (rand < 0.35) {
+      const a = Math.floor(Math.random() * 25) + 5;
+      const b = Math.floor(Math.random() * 25) + 5;
       display = `${a} + ${b}`;
       answer = a + b;
-    } else {
+    } else if (rand < 0.70) {
+      const a = Math.floor(Math.random() * 30) + 10;
+      const b = Math.floor(Math.random() * 20) + 5;
       const left = Math.max(a, b);
       const right = Math.min(a, b);
       display = `${left} - ${right}`;
       answer = left - right;
+    } else {
+      const a = Math.floor(Math.random() * 10) + 2;
+      const b = Math.floor(Math.random() * 10) + 2;
+      display = `${a} × ${b}`;
+      answer = a * b;
     }
   } else if (level === 2) {
-    if (Math.random() > 0.4) {
-      const a = Math.floor(Math.random() * 7) + 3;
-      const b = Math.floor(Math.random() * 7) + 3;
+    // NIVEAU 2 : Multiplications moyennes, Divisions exactes et grands nombres
+    const rand = Math.random();
+    if (rand < 0.35) {
+      const a = Math.floor(Math.random() * 12) + 3;
+      const b = Math.floor(Math.random() * 12) + 3;
       display = `${a} × ${b}`;
       answer = a * b;
+    } else if (rand < 0.70) {
+      const ans = Math.floor(Math.random() * 12) + 2;
+      const divisor = Math.floor(Math.random() * 9) + 2;
+      const dividend = ans * divisor;
+      display = `${dividend} ÷ ${divisor}`;
+      answer = ans;
     } else {
-      const a = Math.floor(Math.random() * 40) + 10;
-      const b = Math.floor(Math.random() * 40) + 10;
-      if (Math.random() > 0.5) {
-        display = `${a} + ${b}`;
-        answer = a + b;
-      } else {
-        const left = Math.max(a, b);
-        const right = Math.min(a, b);
-        display = `${left} - ${right}`;
-        answer = left - right;
-      }
-    }
-  } else {
-    const op = Math.floor(Math.random() * 4);
-    if (op === 0) {
-      const a = Math.floor(Math.random() * 80) + 20;
-      const b = Math.floor(Math.random() * 80) + 20;
+      const a = Math.floor(Math.random() * 90) + 20;
+      const b = Math.floor(Math.random() * 90) + 20;
       display = `${a} + ${b}`;
       answer = a + b;
-    } else if (op === 1) {
-      const a = Math.floor(Math.random() * 80) + 20;
-      const b = Math.floor(Math.random() * 80) + 20;
-      const left = Math.max(a, b);
-      const right = Math.min(a, b);
-      display = `${left} - ${right}`;
-      answer = left - right;
-    } else if (op === 2) {
+    }
+  } else {
+    // NIVEAU 3 : Opérations combinées à 3 termes ou grands calculs
+    const rand = Math.random();
+    if (rand < 0.40) {
+      // Expression type: a + b * c
+      const a = Math.floor(Math.random() * 20) + 2;
+      const b = Math.floor(Math.random() * 8) + 2;
+      const c = Math.floor(Math.random() * 8) + 2;
+      display = `${a} + ${b} × ${c}`;
+      answer = a + (b * c);
+    } else if (rand < 0.70) {
+      // Expression type: a * b - c
       const a = Math.floor(Math.random() * 9) + 3;
       const b = Math.floor(Math.random() * 9) + 3;
-      display = `${a} × ${b}`;
-      answer = a * b;
+      const c = Math.floor(Math.random() * 15) + 1;
+      display = `${a} × ${b} - ${c}`;
+      answer = (a * b) - c;
     } else {
-      const ans = Math.floor(Math.random() * 15) + 3;
-      const divisor = Math.floor(Math.random() * 8) + 2;
+      const ans = Math.floor(Math.random() * 25) + 5;
+      const divisor = Math.floor(Math.random() * 12) + 3;
       const dividend = ans * divisor;
       display = `${dividend} ÷ ${divisor}`;
       answer = ans;
@@ -186,15 +194,9 @@ function QuickCalcGameContent() {
   const [loading, setLoading] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [questionsAnswered, setQuestionsAnswered] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(6000);
-  const [initialTime, setInitialTime] = useState(6000);
+  const [timeRemaining, setTimeRemaining] = useState(4500);
+  const [initialTime, setInitialTime] = useState(4500);
   const [shakeAnswer, setShakeAnswer] = useState(false);
-
-  // ÉTATS POUR LA SECONDE CHANCE ET ADS
-  const [secondChanceUsed, setSecondChanceUsed] = useState(false);
-  const [adClickTime, setAdClickTime] = useState<number | null>(null);
-  const [adErrorMsg, setAdErrorMsg] = useState<string | null>(null);
-  const [validatingSecondChance, setValidatingSecondChance] = useState(false);
 
   const lockedBetRef = useRef(0);
   const isProcessingRef = useRef(false);
@@ -260,9 +262,6 @@ function QuickCalcGameContent() {
 
     setLoading(true);
     isProcessingRef.current = false;
-    setSecondChanceUsed(false);
-    setAdClickTime(null);
-    setAdErrorMsg(null);
 
     try {
       lockedBetRef.current = effectiveFee;
@@ -303,7 +302,7 @@ function QuickCalcGameContent() {
       playSound('beep');
     } catch (error: unknown) {
       alert(error instanceof Error ? error.message : 'Impossible de démarrer la partie');
-    } finally {
+    } fontally {
       setLoading(false);
     }
   }, [betCP, challengeFee, challengeId, loading, profile?.id, profile?.jetons_cp, status]);
@@ -370,99 +369,6 @@ function QuickCalcGameContent() {
       void init();
     }
   }, [challengeId, init, profile?.id]);
-
-  // VÉRIFICATION DE LA SECONDE CHANCE CÔTÉ CLIENT
-  const handleVerifySecondChance = useCallback(async (timestamp: number) => {
-    const elapsedSeconds = (Date.now() - timestamp) / 1000;
-    
-    if (elapsedSeconds < 6) {
-      setAdErrorMsg(`Temps insuffisant (${Math.ceil(6 - elapsedSeconds)}s restantes). Durée minimale: 6s.`);
-      setAdClickTime(null);
-      if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
-      return;
-    }
-
-    setValidatingSecondChance(true);
-    setAdErrorMsg(null);
-
-    const costCP = Math.floor(lockedBetRef.current * 0.5);
-
-    if ((profile?.jetons_cp || 0) < costCP) {
-      setAdErrorMsg(`Solde insuffisant pour la seconde chance (${costCP} CP requis).`);
-      setValidatingSecondChance(false);
-      setAdClickTime(null);
-      if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
-      return;
-    }
-
-    try {
-      const { data: result, error: rpcError } = await supabase.rpc('jouer_partie_cp', {
-        p_user_id: profile?.id,
-        p_mise_cp: costCP,
-        p_gain_cp: 0,
-        p_jeu_nom: 'Quick Calc Second Chance',
-      });
-
-      if (rpcError || !result?.success) {
-        throw new Error(result?.message || 'Erreur lors du prélèvement CP');
-      }
-
-      setSecondChanceUsed(true);
-      isProcessingRef.current = false;
-      
-      const nextTime = getQuestionTimeMs(questionsAnswered + 1);
-      const nextQuestion = await generateMathQuestionSecure(questionsAnswered);
-
-      setQuestion(nextQuestion);
-      setTimeRemaining(nextTime);
-      setInitialTime(nextTime);
-      setInput('');
-      lastTickTimeRef.current = performance.now();
-      setStatus('playing');
-      playSound('beep');
-    } catch (err: unknown) {
-      setAdErrorMsg(err instanceof Error ? err.message : 'Erreur lors de la seconde chance');
-    } finally {
-      setValidatingSecondChance(false);
-      setAdClickTime(null);
-      if (typeof window !== 'undefined') localStorage.removeItem('ad_click_timestamp');
-      void init();
-    }
-  }, [init, profile?.id, profile?.jetons_cp, questionsAnswered]);
-
-  useEffect(() => {
-    const checkAdReturn = () => {
-      const storedTime = localStorage.getItem('ad_click_timestamp');
-      const activeTime = adClickTime || (storedTime ? Number(storedTime) : null);
-      if (activeTime && status === 'lost') {
-        void handleVerifySecondChance(activeTime);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkAdReturn();
-      }
-    };
-
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', checkAdReturn);
-
-    return () => {
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', checkAdReturn);
-    };
-  }, [adClickTime, handleVerifySecondChance, status]);
-
-  const handleTriggerAdClick = () => {
-    const costCP = Math.floor(lockedBetRef.current * 0.5);
-    if ((profile?.jetons_cp || 0) < costCP) {
-      setAdErrorMsg(`Solde insuffisant. Vous devez avoir au moins ${costCP} CP.`);
-      return;
-    }
-
-    void handleVerifySecondChance(Date.now() - 6000);
-  };
 
   // BOUCLE DU TIMER BASÉE SUR PERFORMANCE.NOW()
   useEffect(() => {
@@ -553,9 +459,6 @@ function QuickCalcGameContent() {
       </div>
     );
   }
-
-  const isEligibleForSecondChance = !challengeId && multiplier < 1.0 && !secondChanceUsed;
-  const secondChanceCost = Math.floor(betCP * 0.5);
 
   return (
     <NeonGameShell accent="cyan" className="fixed inset-0 select-none overflow-hidden h-[100dvh]">
@@ -649,7 +552,7 @@ function QuickCalcGameContent() {
                 <AnimatePresence mode="wait">
                   <motion.div key={question?.display} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full text-center">
                     <div className="mb-2 rounded-[1.5rem] border border-cyan-400/20 bg-black/40 px-4 py-3">
-                      <p className="text-4xl font-black italic tracking-tighter text-white drop-shadow-lg">{question?.display}</p>
+                      <p className="text-3xl sm:text-4xl font-black italic tracking-tighter text-white drop-shadow-lg">{question?.display}</p>
                     </div>
                     
                     <motion.div animate={shakeAnswer ? { x: [0, -8, 8, -8, 0] } : { x: 0 }} className={`mx-auto flex h-14 w-full max-w-[200px] items-center justify-center rounded-[1.2rem] border text-3xl font-black italic tracking-tighter ${shakeAnswer ? 'border-rose-400 bg-rose-500/20 text-rose-300' : 'border-cyan-400/40 bg-white/10 text-cyan-200'}`}>
@@ -688,7 +591,7 @@ function QuickCalcGameContent() {
         )}
       </div>
 
-      {/* ÉCRAN DE FIN DE PARTIE & SECONDE CHANCE */}
+      {/* ÉCRAN DE FIN DE PARTIE */}
       <AnimatePresence>
         {(status === 'lost' || status === 'won') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#020617]/98 p-6 text-center backdrop-blur-2xl">
@@ -700,7 +603,7 @@ function QuickCalcGameContent() {
                 {challengeId ? 'SCORE TRANSMIS' : status === 'lost' ? 'PERDU' : 'GAGNÉ !'}
               </h2>
 
-              <div className="mb-4 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
+              <div className="mb-6 w-full rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-inner">
                 <p className="mb-2 text-[8px] font-bold uppercase italic tracking-[0.3em] text-slate-400">{challengeId ? 'POINTS ARENA' : 'CP REMPORTÉS'}</p>
                 <p className="text-5xl font-black italic tracking-tighter text-white">
                   {challengeId ? questionsAnswered * 100 : Math.floor(betCP * multiplier)}
@@ -708,39 +611,7 @@ function QuickCalcGameContent() {
                 </p>
               </div>
 
-              {/* SECONDE CHANCE */}
-              {isEligibleForSecondChance && (
-                <div className="mb-4 rounded-[1.5rem] border border-amber-500/30 bg-amber-500/10 p-4 backdrop-blur-md">
-                  <div className="flex items-center justify-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
-                    <RefreshCw size={14} className="animate-spin" /> Seconde Chance Disponible
-                  </div>
-                  <p className="text-[10px] text-slate-300 mb-3">
-                    Activez la seconde chance pendant <span className="font-bold text-amber-300">au moins 6 secondes</span> pour continuer la partie.
-                    <br />
-                    <span className="text-[9px] text-amber-400/80">Coût additionnel : -{secondChanceCost} CP (50% de la mise)</span>
-                  </p>
-
-                  {adErrorMsg && (
-                    <p className="mb-2 text-[9px] font-bold text-rose-400 bg-rose-950/50 p-2 rounded-lg border border-rose-800/40">
-                      {adErrorMsg}
-                    </p>
-                  )}
-
-                  <button
-                    onClick={handleTriggerAdClick}
-                    disabled={validatingSecondChance}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-sm font-black text-white shadow-lg transition-transform active:scale-95 disabled:opacity-50"
-                  >
-                    {validatingSecondChance ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <>SECONDE CHANCE (-{secondChanceCost} CP)</>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="w-full rounded-[1.5rem] bg-emerald-600 py-4 text-lg font-black italic text-white shadow-xl hover:bg-emerald-500 transition-colors">
+              <button onClick={() => router.push(challengeId ? `/client/rank?challengeId=${challengeId}` : '/client/home')} className="w-full rounded-[1.5rem] bg-emerald-600 py-4 text-lg font-black italic text-white shadow-xl hover:bg-emerald-500 transition-colors active:scale-95">
                 {challengeId ? 'VOIR LE CLASSEMENT' : 'RETOUR AU HUB'}
               </button>
             </div>
