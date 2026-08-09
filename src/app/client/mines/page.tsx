@@ -3,18 +3,18 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock, Clock, RotateCcw } from 'lucide-react';
+import { Gem, Bomb, Coins, Loader2, ChevronLeft, Zap, TrendingUp, ShieldAlert, Lock, Clock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
 
 // --- HELPER HAPTIQUE SÉCURISÉ ---
-const triggerHaptic = () => {
+const triggerHaptic = (): void => {
   if (typeof window !== 'undefined' && 'navigator' in window && 'vibrate' in navigator) {
     try {
       navigator.vibrate([10, 25, 10]);
     } catch {
-      // Non supporté
+      // Non supporté sur ce navigateur
     }
   }
 };
@@ -51,7 +51,6 @@ const hashMineIndex = async (index: number, salt: string): Promise<string> => {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
-  // Fallback simple si WebCrypto est indisponible
   return `hash_${index}_${salt}`;
 };
 
@@ -62,7 +61,9 @@ export default function MinesElite() {
   const [bet, setBet] = useState<number>(100);
   const [jetonsCP, setJetonsCP] = useState<number>(0); 
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('intermédiaire');
-  const [mines, setMines] = useState<number>(8);
+  
+  // Nombre de mines durci (Facile: 8, Intermédiaire: 12, Difficile: 16)
+  const [mines, setMines] = useState<number>(12);
   const [status, setStatus] = useState<'idle' | 'playing' | 'ended'>('idle');
   const [revealed, setRevealed] = useState<number[]>([]);
   
@@ -72,15 +73,12 @@ export default function MinesElite() {
 
   const [loading, setLoading] = useState<boolean>(false);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState<number>(20);
+  
+  // Minuteur durci : 12 secondes
+  const [timeLeft, setTimeLeft] = useState<number>(12);
   const [userId, setUserId] = useState<string | null>(null);
   const [combo, setCombo] = useState<number>(0);
   const [effects, setEffects] = useState<ParticleEffect[]>([]);
-
-  // --- SECONDE CHANCE ---
-  const [canUseSecondChance, setCanUseSecondChance] = useState<boolean>(false);
-  const [secondChanceUsed, setSecondChanceUsed] = useState<boolean>(false);
-  const [adError, setAdError] = useState<string | null>(null);
 
   // --- SYSTEME & MAINTENANCE ---
   const [isMounted, setIsMounted] = useState<boolean>(false);
@@ -89,7 +87,7 @@ export default function MinesElite() {
   const [checkingSystem, setCheckingSystem] = useState<boolean>(true);
   const [initError, setInitError] = useState<string | null>(null);
 
-  // --- REFS CRITIQUES DE SÉCURITÉ & LOGIQUE EN MÉMOIRE FERMÉE ---
+  // --- REFS CRITIQUES DE SÉCURITÉ ---
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
   const rawMinePositionsRef = useRef<number[]>([]);
@@ -104,17 +102,21 @@ export default function MinesElite() {
     };
   }, []);
 
-  // Synchronisation des mines selon la difficulté
+  // Synchronisation des mines selon le nouveau niveau de difficulté
   useEffect(() => {
-    const counts: Record<DifficultyLevel, number> = { facile: 5, intermédiaire: 8, difficile: 11 };
+    const counts: Record<DifficultyLevel, number> = { 
+      facile: 8,          // Était 5
+      intermédiaire: 12,  // Était 8
+      difficile: 16       // Était 11
+    };
     setMines(counts[difficulty]);
   }, [difficulty]);
 
-  // Initialisation et profil
+  // Initialisation et chargement du profil
   useEffect(() => {
     let active = true;
 
-    const initSystem = async () => {
+    const initSystem = async (): Promise<void> => {
       try {
         const { data: authData, error: authError } = await supabase.auth.getUser();
         if (authError || !authData?.user) {
@@ -178,7 +180,7 @@ export default function MinesElite() {
     return economy.multiplier;
   }, [difficulty, revealed.length]);
 
-  const handleGameOver = useCallback(async (isBombHit: boolean) => {
+  const handleGameOver = useCallback(async (isBombHit: boolean): Promise<void> => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
@@ -189,7 +191,6 @@ export default function MinesElite() {
 
     const currentMult = getMultiplier();
     const secureBet = lockedBetRef.current;
-    const isEligibleForSecondChance = isBombHit && !secondChanceUsed;
 
     const economy = resolveGameEconomy({
       gameId: 'mines',
@@ -209,7 +210,6 @@ export default function MinesElite() {
     setRevealedMinePositions([...rawMinePositionsRef.current]);
     setCombo(0);
     setStatus('ended');
-    setCanUseSecondChance(isEligibleForSecondChance);
 
     try {
       if (winAmount > 0 && userId) {
@@ -236,14 +236,14 @@ export default function MinesElite() {
         })
         .eq('id', gameId);
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Erreur clôture partie:", error);
     } finally {
       isProcessingRef.current = false;
     }
-  }, [difficulty, gameId, getMultiplier, revealed.length, secondChanceUsed, userId]);
+  }, [difficulty, gameId, getMultiplier, revealed.length, userId]);
 
-  // Timer avec gestion ultra-précise
+  // Timer très strict de 12 secondes
   useEffect(() => {
     if (status !== 'playing') return;
 
@@ -268,75 +268,7 @@ export default function MinesElite() {
     return () => clearInterval(timer);
   }, [handleGameOver, status]);
 
-  const applySecondChance = useCallback(async () => {
-    if (!userId || !gameId || isProcessingRef.current) return;
-
-    isProcessingRef.current = true;
-    setLoading(true);
-
-    const extraFee = Math.floor(lockedBetRef.current * 0.5);
-
-    try {
-      const { data: ok, error } = await supabase.rpc('jouer_partie_cp', { 
-        p_user_id: userId,
-        p_mise_cp: extraFee,
-        p_gain_cp: 0,
-        p_jeu_nom: 'Mines Seconde Chance'
-      });
-
-      const rpcResult = ok as RpcJouerPartieResult | null;
-
-      if (error || !rpcResult?.success) {
-        throw new Error('Transaction refusée : solde CP insuffisant.');
-      }
-
-      setJetonsCP(prev => prev - extraFee);
-      lockedBetRef.current = extraFee;
-      setBet(extraFee);
-
-      const salt = generateSessionSalt();
-      sessionSaltRef.current = salt;
-
-      const pos = Array.from({ length: 25 }, (_, i) => i)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, mines);
-
-      rawMinePositionsRef.current = pos;
-
-      const hashes = await Promise.all(pos.map(p => hashMineIndex(p, salt)));
-
-      await supabase
-        .from('mines_games')
-        .update({ 
-          is_active: true,
-          bet_amount: extraFee,
-          mine_positions: pos,
-          status: 'playing'
-        })
-        .eq('id', gameId);
-
-      setMineHashes(hashes);
-      setRevealedMinePositions([]);
-      setRevealed([]);
-      setCombo(0);
-      setEffects([]);
-      setTimeLeft(20);
-      setSecondChanceUsed(true);
-      setCanUseSecondChance(false);
-      setStatus('playing');
-
-    } catch (err: unknown) {
-      const error = err as Error;
-      setAdError(error?.message || 'Échec de l\'activation de la seconde chance.');
-      setTimeout(() => setAdError(null), 4000);
-      setStatus('ended');
-    } finally {
-      setLoading(false);
-      isProcessingRef.current = false;
-    }
-  }, [gameId, mines, userId]);
-
-  const addEffect = (type: 'spark' | 'explosion', index: number) => {
+  const addEffect = (type: 'spark' | 'explosion', index: number): void => {
     const row = Math.floor(index / 5);
     const col = index % 5;
     const x = col * 20 + 10;
@@ -352,12 +284,12 @@ export default function MinesElite() {
     }, 900);
   };
 
-  const start = async () => {
+  const start = async (): Promise<void> => {
     if (isProcessingRef.current || isMaintenance || !userId || loading) return;
     triggerHaptic();
 
     const finalBet = Math.floor(bet);
-    if (finalBet < 10 || finalBet > jetonsCP) return;
+    if (finalBet < 25 || finalBet > jetonsCP) return; // Seuil minimal relevé à 25 CP
 
     setLoading(true);
     isProcessingRef.current = true;
@@ -412,9 +344,7 @@ export default function MinesElite() {
       setRevealed([]);
       setCombo(0);
       setEffects([]);
-      setTimeLeft(20);
-      setSecondChanceUsed(false);
-      setCanUseSecondChance(false);
+      setTimeLeft(12); // Réinitialisation à 12 secondes
       setStatus('playing');
 
     } catch (err: unknown) {
@@ -428,11 +358,11 @@ export default function MinesElite() {
     }
   };
 
-  const clickTile = async (i: number) => {
+  const clickTile = async (i: number): Promise<void> => {
     if (status !== 'playing' || revealed.includes(i) || isProcessingRef.current) return;
     triggerHaptic();
 
-    // Vérification cryptographique de la case
+    // Vérification cryptographique de la case cliquée
     const tileHash = await hashMineIndex(i, sessionSaltRef.current);
     const isMineHit = mineHashes.includes(tileHash) || rawMinePositionsRef.current.includes(i);
 
@@ -448,20 +378,7 @@ export default function MinesElite() {
     setRevealed(prev => [...prev, i]);
   };
 
-  const handleOpenAdForSecondChance = () => {
-    if (isProcessingRef.current || !canUseSecondChance) return;
-
-    const requiredFee = Math.floor(lockedBetRef.current * 0.5);
-    if (jetonsCP < requiredFee) {
-      setAdError(`Solde insuffisant : ${requiredFee} CP requis (50% de la mise).`);
-      setTimeout(() => setAdError(null), 4000);
-      return;
-    }
-
-    void applySecondChance();
-  };
-
-  const cashout = async () => {
+  const cashout = async (): Promise<void> => {
     if (status !== 'playing' || revealed.length < 1 || loading) return;
     setLoading(true);
     try {
@@ -476,11 +393,11 @@ export default function MinesElite() {
   const remainingTiles = Math.max(1, 25 - revealed.length);
   const safeProbability = remainingSafe / remainingTiles;
   const riskPercent = Math.min(100, Math.round((mines / remainingTiles) * 100));
-  const riskLabel = riskPercent >= 45 ? 'Élevé' : riskPercent >= 25 ? 'Moyen' : 'Faible';
+  const riskLabel = riskPercent >= 55 ? 'Extrême' : riskPercent >= 35 ? 'Élevé' : 'Moyen';
 
   const premiumIndices = useMemo(() => {
     const indices = Array.from({ length: 25 }, (_, i) => i);
-    const baseCount = difficulty === 'facile' ? 4 : difficulty === 'intermédiaire' ? 6 : 8;
+    const baseCount = difficulty === 'facile' ? 3 : difficulty === 'intermédiaire' ? 5 : 7;
     return indices.filter((_, idx) => {
       const seed = (idx + combo + revealed.length + mines) % 7;
       return seed < Math.min(4, baseCount - 2);
@@ -548,7 +465,7 @@ export default function MinesElite() {
 
       <div className="w-full max-w-md space-y-3.5">
         
-        {/* NIVEAU DE DIFFICULTÉ */}
+        {/* NIVEAU DE DIFFICULTÉ SÉLECTEUR */}
         <div className="flex gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-xl">
           {(['facile', 'intermédiaire', 'difficile'] as const).map((level) => (
             <button
@@ -561,12 +478,12 @@ export default function MinesElite() {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              {level}
+              {level} ({level === 'facile' ? '8M' : level === 'intermédiaire' ? '12M' : '16M'})
             </button>
           ))}
         </div>
 
-        {/* HUD - TABLEAU DE BORD DU NIVEAU ACTIF */}
+        {/* HUD - TABLEAU DE BORD EN PARALLELE DU JEU */}
         {status === 'playing' && (
           <div className="grid grid-cols-2 gap-2 animate-in fade-in zoom-in duration-200">
             <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-center backdrop-blur-xl">
@@ -591,21 +508,21 @@ export default function MinesElite() {
               <p className="mb-0.5 flex items-center justify-center gap-1 text-[7px] sm:text-[8px] text-slate-400">
                 <ShieldAlert size={9}/> RISQUE
               </p>
-              <p className={`text-xs sm:text-sm font-bold ${riskLabel === 'Élevé' ? 'text-rose-400' : riskLabel === 'Moyen' ? 'text-amber-300' : 'text-emerald-300'}`}>
+              <p className={`text-xs sm:text-sm font-bold ${riskLabel === 'Extrême' || riskLabel === 'Élevé' ? 'text-rose-400' : 'text-amber-300'}`}>
                 {riskLabel} · {riskPercent}%
               </p>
             </div>
 
-            <div className={`rounded-xl border p-2.5 text-center transition-all ${timeLeft <= 5 ? 'animate-pulse border-rose-500 bg-rose-500/20' : 'border-white/10 bg-white/5'}`}>
+            <div className={`rounded-xl border p-2.5 text-center transition-all ${timeLeft <= 4 ? 'animate-pulse border-rose-500 bg-rose-500/20' : 'border-white/10 bg-white/5'}`}>
               <p className="text-[7px] sm:text-[8px] text-slate-400 mb-0.5 flex items-center justify-center gap-1">
                 <Clock size={9}/> TEMPS
               </p>
-              <p className={`text-xs sm:text-sm font-bold ${timeLeft <= 5 ? 'text-rose-500' : 'text-white'}`}>{timeLeft}S</p>
+              <p className={`text-xs sm:text-sm font-bold ${timeLeft <= 4 ? 'text-rose-500' : 'text-white'}`}>{timeLeft}S</p>
             </div>
 
             <div className="col-span-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-center backdrop-blur-xl">
               <div className="mb-1 flex items-center justify-between text-[7px] sm:text-[8px] uppercase tracking-wider text-slate-400">
-                <span>Sécurité</span>
+                <span>Chance de Survie</span>
                 <span className="text-violet-300">{Math.round(safeProbability * 100)}%</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full border border-white/10 bg-white/10">
@@ -620,31 +537,24 @@ export default function MinesElite() {
           </div>
         )}
 
-        {/* NOTIFICATION ERREUR SECONDE CHANCE */}
-        {adError && (
-          <div className="p-3 bg-red-500/20 border border-red-500/40 rounded-xl text-center text-red-300 text-xs font-bold animate-in fade-in">
-            {adError}
-          </div>
-        )}
-
-        {/* MISE / ACTION */}
+        {/* ZONE DE MISE & ACTION */}
         <div className="relative z-10 space-y-3 rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-[0_0_30px_rgba(167,139,250,0.1)]">
           <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5">
             <Coins className="text-emerald-500" size={18} />
             <input 
               type="number" 
               value={bet} 
-              onChange={(e) => setBet(Math.max(10, Number(e.target.value)))}
+              onChange={(e) => setBet(Math.max(25, Number(e.target.value)))}
               disabled={status === 'playing'}
               className="bg-transparent flex-1 outline-none text-lg sm:text-xl text-emerald-500 font-bold placeholder-emerald-900 disabled:opacity-50"
             />
           </div>
 
-          <ProgressBar value={Math.min(100, (revealed.length / 25) * 100)} max={100} label="Progression" accent="violet" />
+          <ProgressBar value={Math.min(100, (revealed.length / Math.max(1, 25 - mines)) * 100)} max={100} label="Progression Sans Mine" accent="violet" />
 
           <button 
             onClick={status === 'playing' ? cashout : start}
-            disabled={loading || (status === 'playing' && revealed.length < 1) || (status !== 'playing' && bet > jetonsCP)}
+            disabled={loading || (status === 'playing' && revealed.length < 1) || (status !== 'playing' && (bet > jetonsCP || bet < 25))}
             className={`flex w-full flex-col items-center justify-center rounded-2xl py-3.5 sm:py-4 text-lg sm:text-xl font-black shadow-lg transition-all active:scale-95 ${
               status === 'playing' 
               ? (revealed.length < 1 ? 'cursor-not-allowed bg-slate-800 text-slate-500' : 'bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-amber-500/20') 
@@ -664,7 +574,7 @@ export default function MinesElite() {
                   </span>
                 )}
               </>
-            ) : (bet > jetonsCP ? "SOLDE INSUFFISANT" : "JOUER")}
+            ) : (bet > jetonsCP ? "SOLDE INSUFFISANT" : bet < 25 ? "MIN. 25 CP" : "JOUER")}
           </button>
         </div>
 
@@ -731,34 +641,14 @@ export default function MinesElite() {
           </div>
         </div>
 
-        {/* SECONDE CHANCE ET REJOINDRE */}
+        {/* FIN DE PARTIE - REJOUER */}
         {status === 'ended' && (
-          <div className="space-y-2 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {canUseSecondChance && (
-              <button 
-                onClick={handleOpenAdForSecondChance}
-                disabled={loading}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black border border-amber-300/30 rounded-xl text-xs font-black tracking-widest transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2 active:scale-95"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={16} />
-                    <span>ACTIVATION...</span>
-                  </>
-                ) : (
-                  <>
-                    <RotateCcw size={16} />
-                    <span>SECONDE CHANCE : REVENIR AU NIV. 1 (-50% MISE)</span>
-                  </>
-                )}
-              </button>
-            )}
-
+          <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
             <button 
-              onClick={() => { setStatus('idle'); setRevealed([]); setTimeLeft(20); setCanUseSecondChance(false); }}
-              className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs font-bold tracking-widest transition-all text-white active:scale-95"
+              onClick={() => { setStatus('idle'); setRevealed([]); setTimeLeft(12); }}
+              className="w-full py-4 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-black border border-violet-400/30 rounded-xl text-xs font-black tracking-widest transition-all shadow-[0_0_20px_rgba(167,139,250,0.3)] active:scale-95"
             >
-              REJOUER (MENU PRINCIPAL)
+              REJOUER UNE PARTIE
             </button>
           </div>
         )}
