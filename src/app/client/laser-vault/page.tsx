@@ -65,7 +65,7 @@ const playSound = (type: 'beep' | 'error' | 'win' | 'lost') => {
       oscillator.stop(now + 0.45);
     }
   } catch {
-    // AudioContext bloqué
+    // AudioContext bloqué ou non supporté
   }
 };
 
@@ -75,11 +75,11 @@ const triggerHaptic = () => {
   }
 };
 
-// --- LOGIQUE TEMPORELLE ET MULTIPLICATEURS (DIFFICULTÉ ACCRUE) ---
+// --- LOGIQUE TEMPORELLE ET MULTIPLICATEURS ---
 const getQuestionTimeMs = (questionNumber: number) => {
-  const baseTimeMs = 4500; // Réduit de 6000ms à 4500ms
-  const reductionMs = (questionNumber - 1) * 450; // Réduction plus rapide
-  return Math.max(1800, baseTimeMs - reductionMs); // Temps minimum abaissé à 1.8s
+  const baseTimeMs = 4500;
+  const reductionMs = (questionNumber - 1) * 450;
+  return Math.max(1800, baseTimeMs - reductionMs);
 };
 
 const getNextMultiplier = (answered: number) => {
@@ -87,14 +87,13 @@ const getNextMultiplier = (answered: number) => {
   return steps[Math.min(answered, steps.length - 1)] ?? 4.0;
 };
 
-// --- GÉNÉRATEUR SÉCURISÉ DE QUESTIONS (DIFFICULTÉ HAUTE) ---
+// --- GÉNÉRATEUR SÉCURISÉ DE QUESTIONS ---
 const generateMathQuestionSecure = async (questionsAnswered: number): Promise<MathQuestionInternal> => {
   const level = questionsAnswered < 3 ? 1 : questionsAnswered < 6 ? 2 : 3;
   let display = '';
   let answer = 0;
 
   if (level === 1) {
-    // NIVEAU 1 : Additions, Soustractions (nombres plus grands) et Multiplications simples
     const rand = Math.random();
     if (rand < 0.35) {
       const a = Math.floor(Math.random() * 25) + 5;
@@ -115,7 +114,6 @@ const generateMathQuestionSecure = async (questionsAnswered: number): Promise<Ma
       answer = a * b;
     }
   } else if (level === 2) {
-    // NIVEAU 2 : Multiplications moyennes, Divisions exactes et grands nombres
     const rand = Math.random();
     if (rand < 0.35) {
       const a = Math.floor(Math.random() * 12) + 3;
@@ -135,17 +133,14 @@ const generateMathQuestionSecure = async (questionsAnswered: number): Promise<Ma
       answer = a + b;
     }
   } else {
-    // NIVEAU 3 : Opérations combinées à 3 termes ou grands calculs
     const rand = Math.random();
     if (rand < 0.40) {
-      // Expression type: a + b * c
       const a = Math.floor(Math.random() * 20) + 2;
       const b = Math.floor(Math.random() * 8) + 2;
       const c = Math.floor(Math.random() * 8) + 2;
       display = `${a} + ${b} × ${c}`;
       answer = a + (b * c);
     } else if (rand < 0.70) {
-      // Expression type: a * b - c
       const a = Math.floor(Math.random() * 9) + 3;
       const b = Math.floor(Math.random() * 9) + 3;
       const c = Math.floor(Math.random() * 15) + 1;
@@ -302,7 +297,7 @@ function QuickCalcGameContent() {
       playSound('beep');
     } catch (error: unknown) {
       alert(error instanceof Error ? error.message : 'Impossible de démarrer la partie');
-    } fontally {
+    } finally {
       setLoading(false);
     }
   }, [betCP, challengeFee, challengeId, loading, profile?.id, profile?.jetons_cp, status]);
