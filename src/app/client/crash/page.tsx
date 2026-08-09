@@ -26,6 +26,7 @@ interface RecentGameData {
   crash_point: number;
 }
 
+// Responses (Retours de la fonction RPC)
 interface RpcCreateGameResponse {
   success: boolean;
   message?: string;
@@ -37,6 +38,18 @@ interface RpcCashoutResponse {
   success: boolean;
   message?: string;
   payout?: number;
+}
+
+// Arguments (Paramètres envoyés aux RPC)
+interface RpcCreateGameArgs {
+  p_user_id: string;
+  p_bet_amount: number;
+}
+
+interface RpcCashoutArgs {
+  p_game_id: string;
+  p_user_id: string;
+  p_claimed_multiplier: number;
 }
 
 // Helper Haptique sécurisé
@@ -170,7 +183,8 @@ export default function CrashElite() {
     const targetMult = forcedMult ? Number(forcedMult.toFixed(2)) : Number(multRef.current.toFixed(2));
 
     try {
-      const { data: result, error: rpcErr } = await supabase.rpc<string, RpcCashoutResponse>('encaissez_partie_crash', {
+      // Correct generic usage: <ReturnType, ArgsType>
+      const { data: result, error: rpcErr } = await supabase.rpc<RpcCashoutResponse, RpcCashoutArgs>('encaissez_partie_crash', {
         p_game_id: gameId,
         p_user_id: userId,
         p_claimed_multiplier: targetMult
@@ -203,8 +217,6 @@ export default function CrashElite() {
     if (!startTimeRef.current) startTimeRef.current = time;
     const elapsed = (time - startTimeRef.current) / 1000;
     
-    // Courbe d'accélération rendue plus agressive pour réduire le temps de réaction
-    // Formule ajustée : exponentielle plus raide (puissance 2.2 sur base de 2s)
     const currentMult = Math.max(1.0, Number((1.0 + Math.pow(elapsed / 2, 2.2)).toFixed(2))); 
 
     if (currentMult >= crashAtRef.current) {
@@ -255,8 +267,8 @@ export default function CrashElite() {
     try {
       lockedBetRef.current = finalBet;
 
-      // Prélèvement et calcul serveur du point de crash
-      const { data: res, error: rpcErr } = await supabase.rpc<string, RpcCreateGameResponse>('creer_partie_crash', {
+      // Correct generic usage: <ReturnType, ArgsType>
+      const { data: res, error: rpcErr } = await supabase.rpc<RpcCreateGameResponse, RpcCreateGameArgs>('creer_partie_crash', {
         p_user_id: userId,
         p_bet_amount: finalBet
       });
@@ -265,7 +277,6 @@ export default function CrashElite() {
         throw new Error(res?.message || "Erreur d'initialisation de la partie.");
       }
 
-      // Mise à jour du solde local
       setJetonsCP(prev => Math.max(0, prev - finalBet)); 
       
       crashAtRef.current = Number(res.crash_point);
