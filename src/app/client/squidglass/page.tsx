@@ -9,7 +9,6 @@ import {
   Play, 
   Volume2, 
   VolumeX, 
-  Hammer, 
   Coins, 
   Sparkles,
   Zap,
@@ -18,7 +17,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { AnimatedCounter, NeonGameShell } from '@/components/game/NeonGameShell';
 
-// --- TYPES ---
+// --- TYPES ET INTERFACES ---
 interface Coords {
   x: number;
   y: number;
@@ -38,20 +37,13 @@ interface GlassShard {
   color: string;
 }
 
-interface FogParticle {
-  x: number;
-  y: number;
-  vy: number;
-  alpha: number;
-  size: number;
-}
-
 type GameDifficulty = 'facile' | 'intermediaire' | 'difficile';
 
+// Configuration avec difficulté accrue
 const CONFIG: Record<GameDifficulty, { rows: number; cols: number; step: number; label: string }> = {
-  facile: { rows: 5, cols: 2, step: 0.3, label: 'Facile' },
-  intermediaire: { rows: 7, cols: 2, step: 0.5, label: 'Moyen' },
-  difficile: { rows: 9, cols: 3, step: 0.8, label: 'Hard' }
+  facile: { rows: 6, cols: 2, step: 0.2, label: 'Facile (2 Voies)' },
+  intermediaire: { rows: 8, cols: 3, step: 0.35, label: 'Moyen (3 Voies)' },
+  difficile: { rows: 10, cols: 4, step: 0.6, label: 'Hard (4 Voies)' }
 };
 
 const SOUNDS = {
@@ -73,14 +65,14 @@ export default function GlassEliteFinal() {
   const [maintenanceMsg, setMaintenanceMsg] = useState('SERVICE MOMENTANÉMENT INDISPONIBLE');
   
   const [difficulty, setDifficulty] = useState<GameDifficulty>('intermediaire');
-  const [bet, setBet] = useState(10);
-  const [jetonsCP, setJetonsCP] = useState(0);
+  const [bet, setBet] = useState<number>(10);
+  const [jetonsCP, setJetonsCP] = useState<number>(0);
   const [gameId, setGameId] = useState<string | null>(null);
   const [history, setHistory] = useState<number[]>([]);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState<boolean>(false);
   const [userId, setUserId] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(10);
-  const [lastWinAmount, setLastWinAmount] = useState(0);
+  const [countdown, setCountdown] = useState<number>(10);
+  const [lastWinAmount, setLastWinAmount] = useState<number>(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const avatarPos = useRef({ x: 0, y: 0, targetX: 0, targetY: 0, jumpT: 1, walkY: 0, walkCycle: 0 });
@@ -89,14 +81,14 @@ export default function GlassEliteFinal() {
   const shardsRef = useRef<GlassShard[]>([]);
   const shakeRef = useRef({ intensity: 0, timer: 0 });
 
-  // 🔒 REFS DE SÉCURITÉ
+  // REFS DE SÉCURITÉ
   const lockedBetRef = useRef<number>(0);
   const isProcessingRef = useRef<boolean>(false);
 
   const currentMult = 1 + (history.length * CONFIG[difficulty].step);
   const currentWin = Math.floor(lockedBetRef.current * currentMult);
 
-  // --- INITIALISATION DU JEU ET DU COMPTE ---
+  // --- INITIALISATION SYSTEME ET UTILISATEUR ---
   const init = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -136,7 +128,7 @@ export default function GlassEliteFinal() {
     });
   }, [init]);
 
-  // --- GESTION DU TIMER DE JEU ---
+  // --- GESTION DE TEMPS PAR TOUR ---
   useEffect(() => {
     let timer: number | undefined;
     if (status === 'playing') {
@@ -176,7 +168,7 @@ export default function GlassEliteFinal() {
     isProcessingRef.current = false;
   };
 
-  // --- AUDIO CONTROL ---
+  // --- CONTRÔLE SONORE ---
   useEffect(() => {
     const theme = audioRefs.current.theme;
     if (status === 'playing' && !muted && theme) {
@@ -199,16 +191,16 @@ export default function GlassEliteFinal() {
     }
   };
 
-  // --- COORDONNÉES DE DESSIN SUR CANVAS ---
+  // --- CALCUL DES COORDONNÉES GRAPHIQUES ---
   const getCoords = useCallback((row: number, col: number): Coords => {
     const cvs = canvasRef.current;
     if (!cvs) return { x: 0, y: 0, w: 0, h: 0 };
     const maxCols = CONFIG[difficulty].cols;
     const maxRows = CONFIG[difficulty].rows;
     
-    const TILE_W = Math.min(cvs.width / (maxCols + 1.2), 75);
-    const TILE_H = 38;
-    const TILE_GAP = 14;
+    const TILE_W = Math.min(cvs.width / (maxCols + 1.2), 65);
+    const TILE_H = 34;
+    const TILE_GAP = 12;
     const centerX = cvs.width / 2;
     const totalHeight = (maxRows + 1) * (TILE_H + TILE_GAP);
     const startY = (cvs.height / 2) + (totalHeight / 2) - 30;
@@ -233,7 +225,7 @@ export default function GlassEliteFinal() {
     };
   }, [history, getCoords]);
 
-  // --- RENDER ENGINE & RAF ---
+  // --- LOGIQUE D'ANIMATION ET BOUCLE CANVAS ---
   const updateLogic = () => {
     const p = avatarPos.current;
     const cvs = canvasRef.current;
@@ -260,17 +252,15 @@ export default function GlassEliteFinal() {
       p.y += (p.targetY - p.y) * 0.25;
     }
 
-    // Mise à jour des secousses
     if (shakeRef.current.timer > 0) {
       shakeRef.current.timer--;
       if (shakeRef.current.timer === 0) shakeRef.current.intensity = 0;
     }
 
-    // Mise à jour des particules
     shardsRef.current.forEach(s => {
       s.x += s.vx;
       s.y += s.vy;
-      s.vy += 0.2; // Gravité
+      s.vy += 0.2;
       s.life -= 0.02;
       s.rotation += s.rotationSpeed;
     });
@@ -307,7 +297,6 @@ export default function GlassEliteFinal() {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    // Background Gradient
     const bg = ctx.createRadialGradient(cvs.width / 2, cvs.height / 2, 40, cvs.width / 2, cvs.height / 2, 450);
     bg.addColorStop(0, '#0f172a');
     bg.addColorStop(0.6, '#090d16');
@@ -315,7 +304,6 @@ export default function GlassEliteFinal() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-    // Glass tiles
     if (!['intro', 'maintenance'].includes(status)) {
       const activeRows = CONFIG[difficulty].rows;
       const activeCols = CONFIG[difficulty].cols;
@@ -351,7 +339,6 @@ export default function GlassEliteFinal() {
       }
     }
 
-    // Shards
     shardsRef.current.forEach((s) => {
       if (s.life <= 0) return;
       ctx.save();
@@ -363,7 +350,6 @@ export default function GlassEliteFinal() {
       ctx.restore();
     });
 
-    // Avatar
     if (['walking_in', 'playing', 'idle'].includes(status)) {
       const { x, y, jumpT, walkCycle } = avatarPos.current;
       let drawY = y;
@@ -377,13 +363,11 @@ export default function GlassEliteFinal() {
       ctx.save();
       ctx.translate(x, drawY);
 
-      // Shadow
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.beginPath();
       ctx.ellipse(0, y - drawY + 10, 10, 4, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Body
       ctx.shadowBlur = 18;
       ctx.shadowColor = '#f43f5e';
       ctx.fillStyle = '#e11d48';
@@ -391,13 +375,11 @@ export default function GlassEliteFinal() {
       if (ctx.roundRect) ctx.roundRect(-10, -16, 20, 20, 5); else ctx.rect(-10, -16, 20, 20);
       ctx.fill();
 
-      // Head
       ctx.fillStyle = '#fde047';
       ctx.beginPath();
       ctx.arc(0, -22, 7, 0, Math.PI * 2);
       ctx.fill();
 
-      // Number
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 8px sans-serif';
       ctx.textAlign = 'center';
@@ -433,7 +415,7 @@ export default function GlassEliteFinal() {
     };
   }, [status, history, difficulty, syncAvatar]);
 
-  // --- LOGIQUE CLIENT-SERVEUR SÉCURISÉE ---
+  // --- ACTIONS DU JEU ---
   const handleJump = async (colIndex: number) => {
     if (status !== 'playing' || avatarPos.current.jumpT < 1 || isProcessingRef.current || !gameId) return;
     isProcessingRef.current = true;
@@ -448,7 +430,6 @@ export default function GlassEliteFinal() {
     avatarPos.current.jumpT = 0;
     
     try {
-      // 🔒 SÉCURITÉ : La validation du mouvement se fait intégralement côté serveur
       const { data, error } = await supabase.rpc('step_glass_bridge', {
         p_game_id: gameId,
         p_step_col: colIndex
@@ -514,7 +495,6 @@ export default function GlassEliteFinal() {
     try {
       lockedBetRef.current = finalBet;
 
-      // 🔒 Déduction du solde & Création de session sur RPC
       const { data, error } = await supabase.rpc('start_glass_game_secure', {
         p_bet: finalBet, 
         p_diff: difficulty
@@ -547,7 +527,6 @@ export default function GlassEliteFinal() {
     setStatus('loading');
 
     try {
-      // 🔒 Demande d'encaissement direct gérée par RPC Supabase
       const { data, error } = await supabase.rpc('claim_glass_win_secure', {
         p_game_id: gameId
       });
@@ -578,9 +557,6 @@ export default function GlassEliteFinal() {
       <AnimatePresence>
         {status === 'maintenance' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[300] bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
-            <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="w-24 h-24 bg-rose-500/10 rounded-full flex items-center justify-center border-2 border-rose-500 mb-6 shadow-[0_0_30px_rgba(244,63,94,0.3)]">
-              <Hammer className="text-rose-500" size={40} />
-            </motion.div>
             <h1 className="text-4xl tracking-tighter mb-2">MODE <span className="text-rose-500">MAINTENANCE</span></h1>
             <p className="text-sm text-white/40 font-bold max-w-xs">{maintenanceMsg}</p>
             <button onClick={() => window.history.back()} className="mt-10 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-8 py-4 transition-all active:scale-95">
@@ -634,7 +610,7 @@ export default function GlassEliteFinal() {
           </div>
         )}
 
-        {/* PANNEAU DE MISE & DE CONFIGURATION */}
+        {/* PANNEAU DE CONFIGURATION */}
         {status === 'idle' && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 p-6 backdrop-blur-md">
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-sm space-y-5 rounded-[2rem] border border-rose-400/30 bg-slate-950/80 p-6 shadow-[0_0_50px_rgba(244,63,94,0.2)]">
@@ -659,7 +635,6 @@ export default function GlassEliteFinal() {
                   className="w-full bg-transparent text-5xl text-center outline-none text-rose-500 font-black tracking-tight" 
                 />
                 
-                {/* Raccourcis de mise */}
                 <div className="flex gap-2 justify-center pt-2">
                   <button onClick={() => adjustBet(0.5)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] text-white/70 active:scale-95">1/2</button>
                   <button onClick={() => adjustBet(2)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] text-white/70 active:scale-95">x2</button>
@@ -679,8 +654,6 @@ export default function GlassEliteFinal() {
       {/* BOUTONS DIRECTIONNELS & CASHOUT */}
       {status === 'playing' && (
         <div className="z-50 flex flex-col gap-2 border-t border-white/10 bg-slate-950/90 p-4 backdrop-blur-xl">
-          
-          {/* Boutons de choix de colonne */}
           <div className="flex gap-2 w-full">
             {Array.from({ length: CONFIG[difficulty].cols }).map((_, colIdx) => (
               <button
