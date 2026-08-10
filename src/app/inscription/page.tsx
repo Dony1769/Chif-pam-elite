@@ -119,7 +119,7 @@ function SignupForm() {
         lowerMsg.includes("profiles_phone_key") || 
         lowerMsg.includes("already exists")
       ) {
-        setError("Ce numéro de téléphone est déjà enregistré. Veuillez vous connecter.");
+        setError("Nimewo w la gentan anrejistre kliyan , ou mèt al konekte san tèt kase");
       } else if (lowerMsg.includes("profiles_username_key")) {
         setError("Ce pseudo d'agent est déjà utilisé par un autre joueur.");
       } else {
