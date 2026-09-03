@@ -26,6 +26,14 @@ export type ParsedMessageContent =
   | { type: 'image'; url: string }
   | { type: 'action'; text: string; actionLabel: string; actionUrl: string };
 
+function sanitizeMessageText(content: string): string {
+  return content.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/[<>]/g, '').trim();
+}
+
+function isSafeActionUrl(url: string): boolean {
+  return /^\/[a-zA-Z0-9/_?=&.-]*$/.test(url) && !url.startsWith('//');
+}
+
 /**
  * Helper pour décoder le contenu d'un message (Texte brut, Image JSON ou Action Card)
  */
@@ -39,14 +47,14 @@ export function parseMessageContent(content: string): ParsedMessageContent {
       if (obj.type === 'action' && typeof obj.text === 'string' && typeof obj.actionUrl === 'string') {
         return { 
           type: 'action', 
-          text: obj.text, 
-          actionLabel: obj.actionLabel || 'Ouvrir la page', 
-          actionUrl: obj.actionUrl 
+          text: sanitizeMessageText(obj.text), 
+          actionLabel: sanitizeMessageText(obj.actionLabel || 'Ouvrir la page'), 
+          actionUrl: isSafeActionUrl(obj.actionUrl) ? obj.actionUrl : '/client/help',
         };
       }
     }
   } catch {
     // Si ce n'est pas du JSON valide, c'est du texte simple
   }
-  return { type: 'text', text: content };
+  return { type: 'text', text: sanitizeMessageText(content) };
 }

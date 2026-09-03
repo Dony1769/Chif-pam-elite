@@ -97,7 +97,7 @@ export default function ClientHome() {
 
   const playPing = useCallback(() => {
     try {
-      const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
+      const audio = new Audio('/sounds/pop.mp3');
       audio.volume = 0.4;
       audio.play().catch(() => {});
     } catch {

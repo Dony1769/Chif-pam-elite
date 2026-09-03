@@ -5,7 +5,6 @@ import { Loader2, MessageSquareHeart, Paperclip, Send, ExternalLink } from "luci
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ChatService } from "@/services/chat";
-import { ChatBotService } from "@/services/chatBot";
 import { type ChatMessage, parseMessageContent } from "@/types/chat";
 
 export default function ClientChatPage() {
@@ -17,7 +16,6 @@ export default function ClientChatPage() {
   const [isSending, setIsSending] = useState(false);
   
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const botTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1. Initialisation et abonnement Realtime avec nettoyage d'état
   useEffect(() => {
@@ -63,9 +61,6 @@ export default function ClientChatPage() {
       if (channel) {
         void supabase.removeChannel(channel);
       }
-      if (botTimeoutRef.current) {
-        clearTimeout(botTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -94,27 +89,16 @@ export default function ClientChatPage() {
           return [...prev, sent];
         });
 
-        // Programmation sécurisée du bot
-        if (botTimeoutRef.current) clearTimeout(botTimeoutRef.current);
-
-        botTimeoutRef.current = setTimeout(async () => {
-          try {
-            const autoReply = ChatBotService.generateAutoReply(content, userId);
-            if (autoReply !== null) {
-              const replyContent = JSON.stringify(autoReply);
-              const botMessage = await ChatService.sendTextMessage(supabase, userId, replyContent, true);
-              
-              if (botMessage) {
-                setMessages((prev) => {
-                  if (prev.some((m) => m.id === botMessage.id)) return prev;
-                  return [...prev, botMessage];
-                });
-              }
-            }
-          } catch (botError) {
-            console.error("Erreur lors du traitement du Bot :", botError);
-          }
-        }, 1000);
+        await fetch('/api/chat/agent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sourceMessageId: sent.id,
+            message: content,
+          }),
+        });
       }
     } catch (error) {
       console.error("Erreur lors de l'envoi du message :", error);

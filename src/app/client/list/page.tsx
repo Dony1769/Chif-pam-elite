@@ -1,12 +1,10 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Search, Heart, Zap, Layers, Target, Grid,
   Fingerprint, Brain, Lock, ChevronLeft, Star,
-  Home, Gamepad2, MessageSquare, User,
   Users, LucideIcon, ShoppingBag, Sparkles,
   Play, X, Flame, Dices, Filter
 } from 'lucide-react';
@@ -50,7 +48,6 @@ const STORAGE_FAV_KEY = 'fav_games';
 // ==========================================
 export default function GameListPage() {
   const router = useRouter();
-  const pathname = usePathname();
   
   // États de filtrage et recherche
   const [search, setSearch] = useState<string>('');
@@ -268,17 +265,6 @@ export default function GameListPage() {
 
       </main>
 
-      {/* BARRE DE NAVIGATION INFÉRIEURE */}
-      <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#020617]/90 px-6 py-3 pb-7 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-md items-center justify-between">
-          <NavIcon href="/client/home" icon={<Home size={20} />} label="ACCUEIL" active={pathname === '/client/home'} />
-          <NavIcon href="/client/list" icon={<Gamepad2 size={20} />} label="EXPLORER" active={pathname === '/client/list'} />
-          <NavIcon href="/client/market" icon={<ShoppingBag size={20} />} label="OFFRES" active={pathname === '/client/market'} />
-          <NavIcon href="/client/chat" icon={<MessageSquare size={20} />} label="COMMUNAUTÉ" active={pathname === '/client/chat'} />
-          <NavIcon href="/client/profile" icon={<User size={20} />} label="PROFIL" active={pathname === '/client/profile'} />
-        </div>
-      </nav>
-
     </div>
   );
 }
@@ -364,34 +350,3 @@ const GameCard = React.memo(({ game, isFavorite, onToggleFavorite }: GameCardPro
   );
 });
 GameCard.displayName = 'GameCard';
-
-interface NavIconProps {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-}
-
-const NavIcon = React.memo(({ href, icon, label, active = false }: NavIconProps) => (
-  <Link 
-    href={href} 
-    className={`relative flex flex-col items-center gap-1 transition-all duration-200 ${
-      active ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'
-    }`}
-  >
-    <div className={`relative p-1 transition-all ${active ? 'scale-110' : ''}`}>
-      {icon}
-      {active && (
-        <motion.div 
-          layoutId="activeGlowNav"
-          className="absolute inset-0 -z-10 rounded-full bg-emerald-500/25 blur-md" 
-        />
-      )}
-    </div>
-    <span className="text-[8px] font-black uppercase tracking-[0.2em]">{label}</span>
-    {active && (
-      <span className="absolute -bottom-1.5 h-1 w-1 rounded-full bg-emerald-400" />
-    )}
-  </Link>
-));
-NavIcon.displayName = 'NavIcon';

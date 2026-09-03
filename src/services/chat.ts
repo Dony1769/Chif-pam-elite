@@ -5,8 +5,18 @@ import type { ChatMessage, AdminConversation } from '@/types/chat';
 export type { ChatMessage, AdminConversation } from '@/types/chat';
 
 type RealtimeMessagePayload = { new: ChatMessage };
+type TypingPayload = { isTyping: boolean; from?: string };
+type PresencePayload = { status: 'online' | 'offline'; at?: string };
 
 const CHAT_CHANNEL_PREFIX = 'chat_user_';
+
+function sanitizeChatText(input: string): string {
+  return input
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, 1000);
+}
 
 function getChatChannelName(userId: string) {
   return `${CHAT_CHANNEL_PREFIX}${userId}`;
@@ -66,8 +76,29 @@ export class ChatService {
     text: string,
     isAdmin: boolean
   ): Promise<ChatMessage | null> {
-    const trimmed = text.trim();
+    const trimmed = sanitizeChatText(text);
     if (!trimmed) return null;
+
+    if (typeof window !== 'undefined') {
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId,
+          content: trimmed,
+          asAdmin: isAdmin,
+        }),
+      });
+
+      const result = (await response.json()) as { success?: boolean; message?: ChatMessage | string };
+      if (!response.ok || !result.success || typeof result.message !== 'object' || result.message === null) {
+        throw new Error(typeof result.message === 'string' ? result.message : "Erreur lors de l'envoi du message texte.");
+      }
+
+      return result.message as ChatMessage;
+    }
 
     const { data, error } = await db
       .from('messages')
@@ -266,7 +297,10 @@ export class ChatService {
     return channel;
   }
 
-  static subscribeToBroadcasts(userId: string, handlers: { onTyping?: (p: any) => void; onPresence?: (p: any) => void }) {
+  static subscribeToBroadcasts(
+    userId: string,
+    handlers: { onTyping?: (p: TypingPayload) => void; onPresence?: (p: PresencePayload) => void }
+  ) {
     const channel = supabase.channel(getChatChannelName(userId));
     if (handlers.onTyping) {
       channel.on('broadcast', { event: 'typing' }, (e) => handlers.onTyping?.(e.payload));

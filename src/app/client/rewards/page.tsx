@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { getDailyReward } from "@/lib/game-economy";
 import { motion } from "framer-motion";
+import RewardedVideo from "@/components/ads/RewardedVideo";
 
 // --- CONSTANTES ET REGLES ECONMIQUES ---
 const MAX_CP_REWARD = 50;
@@ -79,6 +80,7 @@ export default function RewardsPage() {
   const [rewardsConfig, setRewardsConfig] = useState<RewardsConfigItem[]>([]);
   const [claimedDays, setClaimedDays] = useState<number[]>([]);
   const [claiming, setClaiming] = useState(false);
+  const [showRewardedAd, setShowRewardedAd] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState({ hours: 0, minutes: 0, seconds: 0 });
 
   const router = useRouter();
@@ -182,7 +184,7 @@ export default function RewardsPage() {
 
   const playRewardSound = () => {
     try {
-      new Audio("https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3").play().catch(() => {});
+      new Audio('/sounds/win.mp3').play().catch(() => {});
     } catch {}
   };
 
@@ -241,6 +243,15 @@ export default function RewardsPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 pb-28 text-slate-100 font-sans">
+      {showRewardedAd ? (
+        <RewardedVideo
+          onClose={() => setShowRewardedAd(false)}
+          onReward={() => {
+            void fetchData();
+          }}
+        />
+      ) : null}
+
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-8">
         
         {/* BANNIERE */}
@@ -282,6 +293,23 @@ export default function RewardsPage() {
                 <p className="text-xl font-black text-white">{profile?.xp ?? 0}</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-amber-400/25 bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-950 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-amber-300">Bonus instantane</p>
+              <h2 className="mt-1 text-xl font-black text-white">Publicite recompensee Monetag</h2>
+              <p className="mt-1 text-xs text-slate-300">Activez la pub puis reclamez un bonus protege cote serveur: +5 diamants et +10 XP.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRewardedAd(true)}
+              className="rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-300 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black shadow-lg shadow-amber-500/20 transition hover:brightness-105 active:scale-95"
+            >
+              Activer maintenant
+            </button>
           </div>
         </section>
 

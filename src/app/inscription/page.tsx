@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { supabase } from '@/lib/supabase';
-import { normalizePhoneInput } from '@/lib/phone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   UserCircle, Phone, Lock, ArrowRight, 
@@ -47,60 +45,32 @@ function SignupForm() {
       return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
     
-    const cleanPhone = normalizePhoneInput(phone);
-    if (password.length < 6) return setError("Le mot de passe doit contenir au moins 6 caractères.");
+    if (password.length < 8) return setError("Le mot de passe doit contenir au moins 8 caractères.");
     if (username.trim().length < 3) return setError("Le pseudo doit contenir au moins 3 caractères.");
 
     setLoading(true);
 
     try {
-      const internalEmail = `${cleanPhone}@chifpam.ht`;
-      let referrerId: string | null = null;
-      let startBalance = 0;
-
-      // Recherche du parrain via la fonction RPC public.get_referrer_id_by_code
-      if (referralCode.trim().length > 0) {
-        const { data: foundId, error: rpcError } = await supabase.rpc('get_referrer_id_by_code', { 
-          code_input: referralCode.trim() 
-        });
-
-        if (!rpcError && foundId) {
-          referrerId = foundId as string;
-          startBalance = 10; // Bonus de parrainage
-        }
-      }
-
-      // ÉTAPE 1: Création dans Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: internalEmail,
-        password: password,
-        options: {
-          data: {
-            username: username.trim(),
-            phone: cleanPhone,
-            referral_code: referralCode.trim().toLowerCase()
-          }
-        }
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone,
+          password,
+          username,
+          referralCode,
+        }),
       });
 
-      if (authError) throw authError;
+      const result = (await response.json()) as { success?: boolean; message?: string };
 
-      // ÉTAPE 2: Insertion explicite dans public.profiles (Conforme aux règles RLS & NOT NULL)
-      if (authData?.user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: authData.user.id,          // RLS: auth.uid() = id
-          phone: cleanPhone,             // NOT NULL dans la table profiles
-          username: username.trim(),
-          email: internalEmail,
-          balance: startBalance,
-          referred_by: referrerId,
-          role: 'client'
-        });
-
-        if (profileError) throw profileError;
-
-        router.push('/connexion?signup=success');
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Une erreur est survenue lors de l'inscription.");
       }
+
+      router.push('/connexion?signup=success');
 
     } catch (err: unknown) {
       let rawMsg = "";

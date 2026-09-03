@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import PWARegister from "@/components/PWARegister";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
+import UISoundEffects from "@/components/ui/UISoundEffects";
+import GlobalPageLoader from "@/components/ui/GlobalPageLoader";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
@@ -42,6 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${spaceGrotesk.variable} ${ibmMono.variable} antialiased`}>
         <PWARegister />
         <WebVitalsReporter />
+        <UISoundEffects />
+        <GlobalPageLoader />
         {children}
         <SpeedInsights />
       </body>
