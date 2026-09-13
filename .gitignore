@@ -68,6 +68,25 @@ web_modules/
 .env
 .env.*
 !.env.example
+*.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Secrets and local credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*token*
+*secret*
+*credential*
+service-account*.json
+credentials*.json
 
 # Build outputs
 .next
@@ -96,8 +115,9 @@ vite.config.ts.timestamp-*
 # Next.js project specifics
 /build
 .DS_Store
-*.pem
 next-env.d.ts
 
 # Vercel
 .vercel
+
+.vscode/mcp.json

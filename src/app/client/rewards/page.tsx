@@ -42,10 +42,12 @@ type ProfileData = {
   xp?: number;
 };
 
+type RewardIconComponent = React.ComponentType<{ size?: number; className?: string }>;
+
 // --- METADATA CONFIG ---
 const rewardTypeMeta: Record<
   RewardType,
-  { label: string; icon: React.ElementType; color: string; badge: string }
+  { label: string; icon: RewardIconComponent; color: string; badge: string }
 > = {
   cp: {
     label: "CP",

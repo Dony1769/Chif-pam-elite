@@ -21,6 +21,9 @@ import {
   Users,
   Wallet,
   User,
+  LogIn,
+  LogOut,
+  UserPlus,
   X
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -49,6 +52,7 @@ const clientItems: ShellNavItem[] = [
   { href: "/client/rewards", label: "Récompenses", icon: <Gift size={18} /> },
   { href: "/client/challenges", label: "Défis", icon: <Shield size={18} /> },
   { href: "/client/market", label: "Offres", icon: <ShoppingBag size={18} /> },
+  { href: "/client/uno", label: "UNO Live", icon: <Sparkles size={18} /> },
   { href: "/client/profile", label: "Profil", icon: <User size={18} /> },
   { href: "/client/vip", label: "VIP", icon: <Crown size={18} /> },
 ];
@@ -235,6 +239,43 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
   const router = useRouter();
   const isClient = role === "client";
   const showBackButton = isClient && pathname !== "/client/home";
+  const [authUser, setAuthUser] = useState<{ id: string } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (mounted) setAuthUser(session?.user ? { id: session.user.id } : null);
+    };
+
+    loadSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) setAuthUser(session?.user ? { id: session.user.id } : null);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const redirectAnonymousAction = (event: React.SyntheticEvent) => {
+    if (!isClient || authUser) return;
+
+    const target = event.target as HTMLElement;
+    const actionControl = target.closest("button, input, textarea, select, [contenteditable='true']");
+    if (!actionControl || actionControl.closest("[data-public-action='true']")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    router.push(`/connexion?redirect=${encodeURIComponent(pathname)}`);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/");
+  };
 
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -245,7 +286,11 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
   };
 
   return (
-    <div className="relative min-h-screen text-(--fg-1)">
+    <div
+      className="relative min-h-screen text-(--fg-1)"
+      onClickCapture={redirectAnonymousAction}
+      onSubmitCapture={redirectAnonymousAction}
+    >
       {/* Arrière-plan décoratif */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-32 -top-30 h-110 w-110 rounded-full bg-emerald-300/15 blur-3xl" />
@@ -279,13 +324,52 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
           <header className="glass sticky top-4 z-30 rounded-3xl border border-white/12 px-5 py-4 md:px-6">
             <div className="flex items-center justify-between gap-3">
               <SectionHeadline role={role} />
-              <div className="hidden items-center gap-2 md:flex">
+              <div className="flex items-center gap-2">
+                {isClient && !authUser ? (
+                  <>
+                    <Link
+                      href="/connexion"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-(--fg-2) transition hover:border-emerald-300/30 hover:text-emerald-200"
+                    >
+                      <LogIn size={14} />
+                      Connexion
+                    </Link>
+                    <Link
+                      href="/inscription"
+                      className="hidden items-center gap-1.5 rounded-xl border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200 transition hover:bg-emerald-300/20 sm:inline-flex"
+                    >
+                      <UserPlus size={14} />
+                      Inscription
+                    </Link>
+                  </>
+                ) : isClient ? (
+                  <>
+                    <Link
+                      href="/client/profile"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-(--fg-2) transition hover:border-emerald-300/30 hover:text-emerald-200"
+                    >
+                      <User size={14} />
+                      Profil
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-(--fg-3) transition hover:border-rose-300/30 hover:text-rose-200"
+                      data-public-action="true"
+                    >
+                      <LogOut size={14} />
+                      Déconnexion
+                    </button>
+                  </>
+                ) : null}
+                <div className="hidden items-center gap-2 md:flex">
                 <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
                   live
                 </span>
                 <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
                   desktop optimized
                 </span>
+                </div>
               </div>
             </div>
           </header>
@@ -321,6 +405,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
             <button
               type="button"
               onClick={handleBack}
+              data-public-action="true"
               className="fixed bottom-20 right-4 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/25 bg-slate-950/85 text-emerald-200 shadow-[0_16px_40px_rgba(16,185,129,0.2)] backdrop-blur-xl transition hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
               aria-label="Retour"
             >

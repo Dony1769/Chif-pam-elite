@@ -38,6 +38,7 @@ const GAMES: GameConfig[] = [
   { id: 'biometric', name: 'Biometric Lab', desc: 'Agilité visuelle extrême', path: '/client/biometric-hack', icon: Fingerprint, iconColor: 'text-cyan-400', color: 'from-cyan-500/20 via-cyan-500/5', players: '652', category: 'Réflexes', isNew: true },
   { id: 'quiz', name: 'Quiz Insights', desc: 'Connaissance active & rapidité', path: '/client/quiz', icon: Brain, iconColor: 'text-purple-400', color: 'from-purple-500/20 via-purple-500/5', players: '3,012', category: 'Savoir', isHot: true },
   { id: 'laser', name: 'Laser Vault', desc: 'Précision adaptative', path: '/client/laser-vault', icon: Lock, iconColor: 'text-orange-500', color: 'from-orange-500/20 via-orange-500/5', players: '2,094', category: 'Précision', isNew: true }
+  ,{ id: 'uno', name: 'UNO Live', desc: 'Cartes, stratégie et pot CP', path: '/client/uno', icon: Dices, iconColor: 'text-fuchsia-400', color: 'from-fuchsia-500/20 via-fuchsia-500/5', players: 'Live', category: 'Stratégie', isNew: true }
 ];
 
 const CATEGORIES = ['Tous', 'Favoris', 'Stratégie', 'Réflexes', 'Analyse', 'Savoir', 'Précision'];

@@ -13,8 +13,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   useEffect(() => {  
     const checkUser = async () => {  
       const { data: { session } } = await supabase.auth.getSession();  
-      if (!session) {  
-        router.replace(APP_ROUTES.login);  
+      if (!session) {
+        setLoading(false);
         return;
       }
 
