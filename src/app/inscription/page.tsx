@@ -11,6 +11,7 @@ import {
 import Link from 'next/link';
 import { LogoChifPam } from '@/components/LogoChifPam';
 import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
+import ThreeSurface from '@/components/three/ThreeSurface';
 
 function SignupForm() {
   const [phone, setPhone] = useState<string>('');
@@ -220,6 +221,7 @@ function SignupForm() {
 export default function Inscription() {
   return (
     <div className="ds-page text-slate-100 flex flex-col font-sans overflow-x-hidden ds-fade-up min-h-screen bg-[#020617]">
+      <ThreeSurface variant="auth" className="pointer-events-none -right-12 top-16 z-0 h-[30rem] w-[34rem] opacity-60" />
       <nav className="p-6 md:px-12 flex justify-between items-center w-full max-w-7xl mx-auto">
         <Link href="/">
           <LogoChifPam />

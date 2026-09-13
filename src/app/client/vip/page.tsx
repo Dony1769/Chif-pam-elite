@@ -20,6 +20,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import ThreeSurface from "@/components/three/ThreeSurface";
 
 // --- TYPES & INTERFACES ---
 interface VipPlan {
@@ -269,6 +270,7 @@ export default function VipPage() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-white pb-24 overflow-x-hidden font-sans relative">
+      <ThreeSurface variant="vip" className="pointer-events-none -right-10 top-24 z-0 h-[28rem] w-[32rem] opacity-65" />
       {/* HEADER */}
       <header className="p-5 sm:p-6 flex items-center justify-between border-b border-white/10 bg-slate-950/40 backdrop-blur-xl sticky top-0 z-30">
         <div className="flex items-center gap-3 sm:gap-4">

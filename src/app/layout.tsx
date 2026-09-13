@@ -5,6 +5,7 @@ import WebVitalsReporter from "@/components/WebVitalsReporter";
 import UISoundEffects from "@/components/ui/UISoundEffects";
 import GlobalPageLoader from "@/components/ui/GlobalPageLoader";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import ThreeSurface from "@/components/three/ThreeSurface";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className={`${spaceGrotesk.variable} ${ibmMono.variable} antialiased`}>
+        <ThreeSurface variant="ambient" className="fixed z-0 opacity-25" />
         <PWARegister />
         <WebVitalsReporter />
         <UISoundEffects />

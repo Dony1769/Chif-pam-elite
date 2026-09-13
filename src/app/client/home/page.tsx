@@ -11,6 +11,7 @@ import {
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DSButton, DSCard, DSHeader, DSPage, DSPanel } from '@/components/ui/primitives';
+import ThreeSurface from '@/components/three/ThreeSurface';
 
 // Taux de conversion CP -> HTG officiel : 100 CP = ~5.88 HTG
 const CP_TO_HTG_RATE = 0.05882352941176470588; 
@@ -152,7 +153,11 @@ export default function ClientHome() {
       setLoading(true);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
-        router.push('/connexion');
+        setCurrentUserId(null);
+        setProfile(null);
+        setUnreadNotifs(0);
+        setUnreadChat(0);
+        setLoading(false);
         return;
       }
       setCurrentUserId(user.id);
@@ -282,6 +287,7 @@ export default function ClientHome() {
 
   return (
     <DSPage className="text-white font-black italic uppercase pb-12 sm:pb-20 overflow-x-hidden relative ds-fade-up">
+      <ThreeSurface variant="home" className="pointer-events-none -right-10 left-auto top-0 z-0 h-[32rem] w-[42rem] opacity-70" />
 
       {/* Navigation latérale Drawer */}
       <AnimatePresence>
