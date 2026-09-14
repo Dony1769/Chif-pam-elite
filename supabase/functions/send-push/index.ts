@@ -1,10 +1,13 @@
-// @ts-ignore
+// @ts-expect-error Deno resolves remote ESM imports at runtime.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-// @ts-ignore
+// @ts-expect-error Deno resolves remote ESM imports at runtime.
 import webpush from "https://esm.sh/web-push@3.6.7"
 
 // Cette ligne magique empêche Next.js de planter s'il regarde le fichier
-declare const Deno: any;
+declare const Deno: {
+  env: { get(name: string): string | undefined };
+  serve(handler: (request: Request) => Response | Promise<Response>): void;
+};
 
 type PushRequestPayload = {
   user_id?: string;

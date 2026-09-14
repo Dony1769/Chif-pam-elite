@@ -4,12 +4,19 @@ export const APP_ROUTES = {
   clientDashboard: '/client/home',
   clientChallenges: '/client/challenges',
   adminDashboard: '/admin-chif-pam/dashboard',
+  agentDashboard: '/agent/dashboard',
 } as const;
 
 export function isAdminRole(role?: string | null): boolean {
   return role === 'admin';
 }
 
+export function isAgentRole(role?: string | null): boolean {
+  return role === 'agent';
+}
+
 export function getHomeRouteForRole(role?: string | null): string {
-  return isAdminRole(role) ? APP_ROUTES.adminDashboard : APP_ROUTES.clientHome;
+  if (isAdminRole(role)) return APP_ROUTES.adminDashboard;
+  if (isAgentRole(role)) return APP_ROUTES.agentDashboard;
+  return APP_ROUTES.clientHome;
 }

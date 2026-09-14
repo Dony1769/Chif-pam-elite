@@ -86,7 +86,7 @@ function SceneContent({ variant }: { variant: ThreeSurfaceVariant }) {
   return <>
     <ambientLight intensity={0.7} />
     <directionalLight position={[2, 3, 4]} intensity={1.2} />
-    {isHome ? <><Center position={[2.2, 0.25, 0]}><LogoMark /></Center><ParticleField count={85} /></> : null}
+    {isHome ? <><Center position={[2.2, 0.25, 0]}><LogoMark /></Center><ParticleField count={48} /></> : null}
     {variant === "ambient" ? <ParticleField count={42} color="#67e8f9" /> : null}
     {variant === "auth" ? <><Center position={[2.2, 0, 0]}><AuthOrb /></Center><Sparkles count={22} scale={3.5} size={1.4} speed={0.22} color="#67e8f9" /></> : null}
     {variant === "uno" ? <><Center position={[2.35, -0.25, 0]}><UnoTable /></Center><ParticleField count={26} color="#f0abfc" /></> : null}
@@ -95,15 +95,15 @@ function SceneContent({ variant }: { variant: ThreeSurfaceVariant }) {
 }
 
 export default function ThreeScene({ variant }: { variant: ThreeSurfaceVariant }) {
-  const [dpr, setDpr] = useState(1.25);
+  const [dpr, setDpr] = useState(1);
   return <Canvas
     frameloop="demand"
     dpr={dpr}
     camera={{ position: [0, 0, 6], fov: 42 }}
     gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
-    onCreated={({ gl }) => { gl.setPixelRatio(Math.min(2, Math.max(1, window.devicePixelRatio || 1))); }}
+    onCreated={({ gl }) => { gl.setPixelRatio(Math.min(1.5, Math.max(1, window.devicePixelRatio || 1))); }}
   >
-    <PerformanceMonitor onIncline={() => setDpr(1.5)} onDecline={() => setDpr(1)} flipflops={3}>
+    <PerformanceMonitor onIncline={() => setDpr(1.25)} onDecline={() => setDpr(1)} flipflops={3}>
       <SceneContent variant={variant} />
     </PerformanceMonitor>
   </Canvas>;

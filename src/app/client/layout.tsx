@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';  
 import { useRouter } from 'next/navigation';  
 import { Loader2 } from 'lucide-react';  
-import { APP_ROUTES, isAdminRole } from '@/lib/auth-routing';
+import { APP_ROUTES, isAdminRole, isAgentRole } from '@/lib/auth-routing';
 import { ClientAppShell } from '@/components/ui/app-shell';
   
 export default function ClientLayout({ children }: { children: React.ReactNode }) {  
@@ -34,6 +34,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         router.replace(APP_ROUTES.adminDashboard);
         return;
       }  
+      if (isAgentRole(profile?.role)) {
+        router.replace(APP_ROUTES.agentDashboard);
+        return;
+      }
 
       setLoading(false);  
     };  

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/server/supabase/admin';
-import { normalizePhoneInput } from '@/lib/phone';
+import { normalizePhoneNumber, phoneDigits } from '@/lib/phone';
 import { isSameOriginRequest, sanitizePlainText } from '@/lib/security';
 
 type SignupPayload = {
@@ -9,10 +9,6 @@ type SignupPayload = {
   username?: string;
   referralCode?: string;
 };
-
-function isValidPhone(phone: string): boolean {
-  return /^\d{8}$/.test(phone);
-}
 
 function isValidPassword(password: string): boolean {
   return password.length >= 8 && password.length <= 72;
@@ -30,14 +26,16 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as SignupPayload;
 
-    const phone = normalizePhoneInput(String(body.phone ?? '')).replace(/\D/g, '');
+    let phone: string;
+    try {
+      phone = normalizePhoneNumber(String(body.phone ?? ''));
+    } catch (error) {
+      return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Numero invalide.' }, { status: 400 });
+    }
+    const phoneForEmail = phoneDigits(phone);
     const password = String(body.password ?? '');
     const username = sanitizePlainText(String(body.username ?? ''), 24);
     const referralCode = sanitizePlainText(String(body.referralCode ?? ''), 24).toUpperCase();
-
-    if (!isValidPhone(phone)) {
-      return NextResponse.json({ success: false, message: 'Numero invalide. 8 chiffres requis.' }, { status: 400 });
-    }
 
     if (!isValidPassword(password)) {
       return NextResponse.json(
@@ -54,7 +52,7 @@ export async function POST(request: Request) {
     }
 
     const supabaseAdmin = getSupabaseAdminClient();
-    const internalEmail = `${phone}@chifpam.ht`;
+    const internalEmail = `${phoneForEmail}@chifpam.ht`;
 
     let referrerId: string | null = null;
     let startBalance = 0;

@@ -11,7 +11,6 @@ import {
   ShoppingBag,
   Loader2,
   ArrowRight,
-  ShieldCheck,
   Zap,
   TrendingUp,
   AlertTriangle,
@@ -83,7 +82,7 @@ export default function MarketPage() {
   const [buying, setBuying] = useState<string | null>(null);
   
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'htg' | 'diamonds'>('htg');
+  const [activeTab, setActiveTab] = useState<'diamonds'>('diamonds');
 
   // État pour remplacer les alert() par des Toasts
   const [toast, setToast] = useState<ToastNotification>(null);
@@ -148,6 +147,7 @@ export default function MarketPage() {
       const packsPromise = supabase
         .from('boutique_packs')
         .select('id, nom, jetons_quantite, prix_htg, bonus_star_pourcent, image_url, currency_type, active')
+        .eq('currency_type', 'DIAMONDS')
         .eq('active', true)
         .order('prix_htg', { ascending: true });
 
@@ -301,11 +301,9 @@ export default function MarketPage() {
         }
       }
 
-      return activeTab === 'htg'
-        ? normalizedType === 'HTG'
-        : normalizedType === 'DIAMONDS';
+      return normalizedType === 'DIAMONDS';
     });
-  }, [packs, activeTab]);
+  }, [packs]);
 
   const formatAmount = (value: number | string | null | undefined): string => {
     const numericValue = Number(value ?? 0);
@@ -476,8 +474,10 @@ export default function MarketPage() {
 
         {/* ONGLETS MONNAIES */}
         <div className="flex flex-wrap gap-2 rounded-[22px] border border-white/10 bg-white/5 p-1.5">
-          <TabButton active={activeTab === 'htg'} onClick={() => setActiveTab('htg')} label="Jetons CP" icon={<Coins size={16} />} />
-          <TabButton active={activeTab === 'diamonds'} onClick={() => setActiveTab('diamonds')} label="Échange Diamants" icon={<Gem size={16} />} />
+          <button type="button" onClick={() => router.push('/client/p2p')} className="flex flex-1 items-center justify-center gap-2 rounded-[16px] bg-emerald-500/15 px-3 py-3.5 text-[11px] font-black uppercase tracking-[0.25em] text-emerald-200 transition hover:bg-emerald-500/25">
+            <Coins size={16} /> Acheter du CP en HTG
+          </button>
+          <TabButton active onClick={() => setActiveTab('diamonds')} label="Échange Diamants" icon={<Gem size={16} />} />
         </div>
 
         {/* LISTE DES PACKS */}
@@ -510,16 +510,12 @@ export default function MarketPage() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.96 }}
                     className={`group relative overflow-hidden rounded-[24px] border p-5 shadow-[0_18px_45px_rgba(2,6,23,0.35)] transition-all duration-300 hover:-translate-y-1 ${
-                      activeTab === 'diamonds'
-                        ? 'border-blue-500/20 bg-gradient-to-br from-blue-950/30 via-slate-900/80 to-slate-900/80 hover:border-blue-500/45'
-                        : 'border-white/10 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-emerald-950/25 hover:border-emerald-500/25'
+                      'border-blue-500/20 bg-gradient-to-br from-blue-950/30 via-slate-900/80 to-slate-900/80 hover:border-blue-500/45'
                     }`}
                   >
                     <div
                       className={`absolute inset-x-0 top-0 h-1 ${
-                        activeTab === 'diamonds'
-                          ? 'bg-gradient-to-r from-blue-400 to-cyan-400'
-                          : 'bg-gradient-to-r from-emerald-400 to-cyan-400'
+                        'bg-gradient-to-r from-blue-400 to-cyan-400'
                       }`}
                     />
                     <div className="relative z-10 flex flex-col gap-4">
@@ -530,9 +526,7 @@ export default function MarketPage() {
                         </div>
                         <div
                           className={`rounded-full border p-2 ${
-                            activeTab === 'diamonds'
-                              ? 'border-blue-400/20 bg-blue-500/10 text-blue-300'
-                              : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
+                            'border-blue-400/20 bg-blue-500/10 text-blue-300'
                           }`}
                         >
                           <Zap size={14} />
@@ -545,7 +539,7 @@ export default function MarketPage() {
                           <span className="text-[10px] font-bold not-italic text-slate-500">CP</span>
                         </p>
                         <p className="mt-2 flex items-center gap-2 text-sm text-slate-400">
-                          <TrendingUp size={14} className={activeTab === 'diamonds' ? 'text-blue-400' : 'text-emerald-400'} />
+                          <TrendingUp size={14} className="text-blue-400" />
                           Progression rapide et fluide
                         </p>
                       </div>
@@ -553,7 +547,7 @@ export default function MarketPage() {
                       <div className="grid grid-cols-2 gap-2 text-left text-[11px] text-slate-400">
                         <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                           <p className="font-semibold text-white">
-                            {formatAmount(cost)} {activeTab === 'diamonds' ? '💎' : 'HTG'}
+                            {formatAmount(cost)} 💎
                           </p>
                           <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">Prix</p>
                         </div>
@@ -567,16 +561,14 @@ export default function MarketPage() {
                         onClick={() => handlePurchase(pack, activeTab)}
                         disabled={!!buying || !userId}
                         className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[10px] font-black uppercase tracking-[0.3em] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          activeTab === 'diamonds'
-                            ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-900/25 hover:brightness-110'
-                            : 'bg-gradient-to-r from-white to-emerald-300 text-slate-950 shadow-lg shadow-white/10 hover:brightness-105'
+                          'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-900/25 hover:brightness-110'
                         }`}
                       >
                         {isBuyingThis ? (
                           <Loader2 className="animate-spin" size={14} />
                         ) : (
                           <>
-                            {formatAmount(cost)} {activeTab === 'diamonds' ? '💎' : 'HTG'}
+                            {formatAmount(cost)} 💎
                             <ArrowRight size={14} />
                           </>
                         )}

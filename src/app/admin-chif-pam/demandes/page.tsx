@@ -34,7 +34,7 @@ export default function AdminDemandes() {
       .from('transactions')
       .select(`
         *,
-        profiles ( id, username, balance, locked_balance )
+        profiles ( id, username, role, balance, locked_balance )
       `)
       .order('created_at', { ascending: false });
     
@@ -145,6 +145,7 @@ export default function AdminDemandes() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs text-slate-400 not-italic lowercase">@{t.profiles?.username || 'user'}</span>
+                    {t.profiles?.role === 'agent' && <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[8px] text-cyan-200">AGENT</span>}
                   </div>
                   <h3 className="text-xl tracking-tighter">{t.amount.toLocaleString()} HTG</h3>
                 </div>

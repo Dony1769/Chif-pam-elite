@@ -3,7 +3,6 @@
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getHomeRouteForRole } from '@/lib/auth-routing';
-import { normalizePhoneInput } from '@/lib/phone';
 import { useSearchParams } from 'next/navigation';
 import { 
   Loader2, ArrowRight, HelpCircle, ShieldCheck, 
@@ -36,11 +35,9 @@ function LoginFormContent() {
     }
   }, [searchParams]);
 
-  // Saisie du numéro : uniquement des chiffres, max 8
+  // Autorise les formats locaux et internationaux; le serveur normalise réellement.
   const handlePhoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const onlyNums = e.target.value.replace(/\D/g, '');
-    const trimmed = onlyNums.slice(0, 8);
-    setPhone(trimmed);
+    setPhone(e.target.value.slice(0, 20));
   }, []);
 
   const handleSupportRequest = async (reason: 'banni' | 'pass') => {
@@ -51,7 +48,6 @@ function LoginFormContent() {
       return;
     }
 
-    const cleanPhone = normalizePhoneInput(phone);
     setLoading(true);
 
     try {
@@ -80,8 +76,8 @@ function LoginFormContent() {
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (phone.length !== 8) {
-      setErrorMessage("Le numéro de téléphone doit contenir exactement 8 chiffres.");
+    if (!phone.trim()) {
+      setErrorMessage("Veuillez saisir votre numéro de téléphone.");
       return;
     }
 
@@ -93,12 +89,19 @@ function LoginFormContent() {
     setLoading(true);
 
     try {
-      const cleanPhone = normalizePhoneInput(phone);
-      const internalEmail = `${cleanPhone}@chifpam.ht`;
+      const resolveResponse = await fetch('/api/auth/resolve-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const resolved = (await resolveResponse.json()) as { success?: boolean; email?: string; message?: string };
+      if (!resolveResponse.ok || !resolved.success || !resolved.email) {
+        throw new Error(resolved.message || 'Numéro ou mot de passe incorrect.');
+      }
 
       // 1. Authentification Supabase
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
-        email: internalEmail, 
+        email: resolved.email,
         password 
       });
 

@@ -42,6 +42,7 @@ export default function UnoPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<UnoCard['color'] | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
   const myPlayer = players.find((player) => player.user_id === userId);
   const isHost = room?.host_id === userId;
@@ -78,6 +79,20 @@ export default function UnoPage() {
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [loadRoom, room?.id]);
+
+  useEffect(() => {
+    const expiresAt = room?.expires_at;
+    if (room?.status !== 'waiting' || !expiresAt) {
+      setRemainingSeconds(null);
+      return;
+    }
+    const updateRemaining = () => {
+      setRemainingSeconds(Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)));
+    };
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [room?.expires_at, room?.status]);
 
   const runAction = async (action: () => Promise<void>) => {
     if (loading) return;
@@ -171,8 +186,8 @@ export default function UnoPage() {
 
         {view === 'room' && room && (
           <section className="space-y-6">
-            <div className="flex flex-col justify-between gap-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:p-7"><div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-300">{room.status === 'waiting' ? 'Salon d’attente' : 'Partie en cours'}</p><div className="mt-2 flex items-center gap-3"><h1 className="font-mono text-3xl font-black tracking-widest">MATCH-{room.match_code}</h1><button type="button" onClick={() => navigator.clipboard?.writeText(`MATCH-${room.match_code}`)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white" aria-label="Copier le code"><Copy size={16} /></button></div></div><div className="flex items-center gap-3 text-sm font-bold text-slate-300"><Users size={18} /> {players.length}/{room.max_players} <span className="text-emerald-300">{room.pot_cp.toLocaleString()} CP</span></div></div>
-            {room.status === 'waiting' ? <div className="grid gap-6 lg:grid-cols-[1fr_0.65fr]"><div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: room.max_players }).map((_, index) => { const player = players.find((entry) => entry.seat === index); return <div key={index} className="flex min-h-32 flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/60 p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Siège {index + 1}</span>{player?.user_id === room.host_id && <Crown size={16} className="text-amber-300" />}</div><p className="text-lg font-black">{player ? (player.user_id === userId ? 'Vous' : `Joueur ${index + 1}`) : 'En attente...'}</p>{player && <p className="text-xs text-emerald-300">Mise {player.bet_cp.toLocaleString()} CP</p>}</div>; })}</div><div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-5"><p className="text-sm leading-6 text-slate-300">Le match démarre à partir de 2 joueurs. Le code est partageable pendant que la table se remplit.</p><button type="button" onClick={startMatch} disabled={!canStart || loading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"><Play size={17} /> {loading ? 'Préparation...' : 'Démarrer la partie'}</button></div></div> : <GameBoard room={room} player={myPlayer} players={players} isMyTurn={Boolean(isMyTurn)} playable={playable} selectedColor={selectedColor} setSelectedColor={setSelectedColor} playCard={playCard} drawCard={drawCard} loading={loading} hasFinished={hasFinished} />}
+            <div className="flex flex-col justify-between gap-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:p-7"><div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-300">{room.status === 'waiting' ? 'Salon d’attente' : room.status === 'cancelled' ? 'Salon fermé' : 'Partie en cours'}</p><div className="mt-2 flex items-center gap-3"><h1 className="font-mono text-3xl font-black tracking-widest">MATCH-{room.match_code}</h1><button type="button" onClick={() => navigator.clipboard?.writeText(`MATCH-${room.match_code}`)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white" aria-label="Copier le code"><Copy size={16} /></button></div></div><div className="flex items-center gap-3 text-sm font-bold text-slate-300"><Users size={18} /> {players.length}/{room.max_players} <span className="text-emerald-300">{room.pot_cp.toLocaleString()} CP</span></div></div>
+            {room.status === 'waiting' ? <div className="grid gap-6 lg:grid-cols-[1fr_0.65fr]"><div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: room.max_players }).map((_, index) => { const player = players.find((entry) => entry.seat === index); return <div key={index} className="flex min-h-32 flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/60 p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Siège {index + 1}</span>{player?.user_id === room.host_id && <Crown size={16} className="text-amber-300" />}</div><p className="text-lg font-black">{player ? (player.user_id === userId ? 'Vous' : `Joueur ${index + 1}`) : 'En attente...'}</p>{player && <p className="text-xs text-emerald-300">Mise {player.bet_cp.toLocaleString()} CP</p>}</div>; })}</div><div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-5"><p className="text-sm leading-6 text-slate-300">Le match démarre automatiquement quand la salle est pleine. Les mises sont remboursées si le délai expire.</p><p className="mt-4 font-mono text-2xl font-black text-emerald-200">{remainingSeconds === null ? '--:--' : `${Math.floor(remainingSeconds / 60).toString().padStart(2, '0')}:${(remainingSeconds % 60).toString().padStart(2, '0')}`}</p><p className="mt-1 text-xs text-slate-400">Temps restant</p><button type="button" onClick={startMatch} disabled={!canStart || loading || remainingSeconds === 0} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"><Play size={17} /> {loading ? 'Préparation...' : 'Démarrer la partie'}</button></div></div> : room.status === 'cancelled' ? <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-6 text-sm text-amber-100">Le délai de 8 minutes est écoulé. Les mises engagées ont été remboursées automatiquement.</div> : <GameBoard room={room} player={myPlayer} players={players} isMyTurn={Boolean(isMyTurn)} playable={playable} selectedColor={selectedColor} setSelectedColor={setSelectedColor} playCard={playCard} drawCard={drawCard} loading={loading} hasFinished={hasFinished} />}
           </section>
         )}
       </div>

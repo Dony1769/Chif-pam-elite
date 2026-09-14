@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { validateBalance, validatePassword } from '@/lib/validation';
 import { AdminUsersService } from '@/services/admin/users';
@@ -22,9 +22,7 @@ export default function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetchUsers(); }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('profiles')
@@ -33,7 +31,9 @@ export default function AdminUsers() {
       
     setUsers((data as UserProfile[]) || []);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => { void fetchUsers(); }, [fetchUsers]);
 
   // --- FONCTION DE RESET (VIA SERVER ACTION) ---
   const handleResetPassword = async (id: string, username: string) => {

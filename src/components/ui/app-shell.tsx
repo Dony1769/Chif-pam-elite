@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState, useCallback } from "react";
 import {
   ArrowLeft,
+  AlertTriangle,
   BarChart3,
   Bell,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Shield,
+  ShieldAlert,
   ShoppingBag,
   Sparkles,
   Ticket,
@@ -42,8 +44,11 @@ const adminItems: ShellNavItem[] = [
   { href: "/admin-chif-pam/coupon", label: "Coupons", icon: <Ticket size={18} /> },
   { href: "/admin-chif-pam/demandes", label: "Demandes", icon: <Wallet size={18} /> },
   { href: "/admin-chif-pam/users", label: "Utilisateurs", icon: <Users size={18} /> },
+  { href: "/admin-chif-pam/phone-duplicates", label: "Doublons tel.", icon: <ShieldAlert size={18} /> },
   { href: "/admin-chif-pam/chat", label: "Support", icon: <MessageSquare size={18} /> },
   { href: "/admin-chif-pam/notifications", label: "Notifications", icon: <Bell size={18} /> },
+  { href: "/admin-chif-pam/p2p", label: "Marché P2P", icon: <Sparkles size={18} /> },
+  { href: "/admin-chif-pam/phone-issues", label: "Incidents téléphone", icon: <AlertTriangle size={18} /> },
 ];
 
 // Remplacement de /client/chat par /client/profile
@@ -130,7 +135,6 @@ function SectionHeadline({ role }: { role: "admin" | "client" }) {
  */
 function FloatingChatBubble() {
   const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [userId, setUserId] = useState<string | null>(null);
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -161,7 +165,6 @@ function FloatingChatBubble() {
     const initAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserId(user.id);
         fetchUnreadCount(user.id);
 
         // Ecoute en temps réel des nouveaux messages
@@ -234,6 +237,31 @@ function FloatingChatBubble() {
   );
 }
 
+function PhoneIssueBanner() {
+  const router = useRouter();
+  const [issue, setIssue] = useState<{ issue_type: 'invalid_phone' | 'unresolved_duplicate'; resolved: boolean } | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.from('phone_account_issues').select('issue_type, resolved').eq('resolved', false).maybeSingle().then(({ data }) => {
+      if (active) setIssue(data as typeof issue);
+    });
+    return () => { active = false; };
+  }, []);
+
+  if (!issue || dismissed) return null;
+  const invalid = issue.issue_type === 'invalid_phone';
+  return (
+    <div className="fixed inset-x-3 top-3 z-[60] mx-auto flex max-w-xl items-start gap-3 rounded-2xl border border-amber-300/30 bg-slate-950/95 p-4 text-amber-100 shadow-2xl backdrop-blur-xl">
+      <AlertTriangle className="mt-0.5 shrink-0 text-amber-300" size={18} />
+      <p className="flex-1 text-xs leading-5">{invalid ? 'Votre numéro de téléphone doit être corrigé dans les paramètres de votre profil.' : 'Veuillez contacter le support afin de vérifier les informations de votre compte.'}</p>
+      <button type="button" onClick={() => router.push(invalid ? '/client/profile' : '/client/chat')} className="shrink-0 rounded-lg bg-amber-300 px-3 py-2 text-[10px] font-black text-slate-950">{invalid ? 'Corriger' : 'Support'}</button>
+      <button type="button" onClick={() => setDismissed(true)} aria-label="Fermer" className="shrink-0 p-1 text-slate-400 hover:text-white"><X size={15} /></button>
+    </div>
+  );
+}
+
 function DesktopShell({ children, role, items }: { children: ReactNode; role: "admin" | "client"; items: ShellNavItem[] }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -298,9 +326,9 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
         <div className="absolute -bottom-55 left-[30%] h-115 w-115 rounded-full bg-emerald-500/10 blur-3xl" />
       </div>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-440 gap-6 px-4 pb-6 pt-4 md:px-6 xl:gap-8 xl:px-10">
+      <div className="relative z-10 mx-auto flex w-full max-w-440 gap-6 px-4 pb-6 pt-4 md:px-6 lg:gap-8 lg:px-10">
         {/* Menu latéral ordinateur */}
-        <aside className="hidden w-72.5 shrink-0 xl:flex xl:flex-col">
+        <aside className="hidden w-72.5 shrink-0 lg:flex lg:flex-col">
           <div className="glass-strong sticky top-4 flex h-[calc(100vh-2rem)] flex-col rounded-[28px] p-4">
             <div className="mb-6 flex items-center gap-3 px-2 pt-1">
               <BrandMark />
@@ -374,7 +402,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
             </div>
           </header>
 
-          <main className="mt-4 rounded-[30px] border border-white/8 bg-black/18 p-0 shadow-[0_24px_70px_rgba(1,5,14,0.55)] backdrop-blur-sm xl:p-0">
+          <main className="mt-4 rounded-[30px] border border-white/8 bg-black/18 p-0 shadow-[0_24px_70px_rgba(1,5,14,0.55)] backdrop-blur-sm lg:p-0">
             {children}
           </main>
 
@@ -392,9 +420,10 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
         <>
           {/* Bulle de chat flottante */}
           <FloatingChatBubble />
+          <PhoneIssueBanner />
 
           {/* Navigation inférieure mobile */}
-          <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 pt-2 md:hidden">
+          <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 pt-2 lg:hidden">
             <div className="mx-auto flex max-w-md items-center justify-between rounded-[28px] border border-white/12 bg-slate-950/85 px-2 py-2 shadow-[0_24px_65px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
               <ShellNav items={items} compact />
             </div>
@@ -406,7 +435,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
               type="button"
               onClick={handleBack}
               data-public-action="true"
-              className="fixed bottom-20 right-4 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/25 bg-slate-950/85 text-emerald-200 shadow-[0_16px_40px_rgba(16,185,129,0.2)] backdrop-blur-xl transition hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
+              className="fixed bottom-20 right-4 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/25 bg-slate-950/85 text-emerald-200 shadow-[0_16px_40px_rgba(16,185,129,0.2)] backdrop-blur-xl transition hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6"
               aria-label="Retour"
             >
               <ArrowLeft size={18} />

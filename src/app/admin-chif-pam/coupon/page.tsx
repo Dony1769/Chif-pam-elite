@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { validatePositiveAmount, validateRequiredText } from '@/lib/validation';
 import { AdminCouponsService } from '@/services/admin/coupons';
@@ -11,12 +11,12 @@ export default function AdminCoupons() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { fetchCoupons(); }, []);
-
-  const fetchCoupons = async () => {
+  const fetchCoupons = useCallback(async () => {
     const { data } = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
     setCoupons(data || []);
-  };
+  }, []);
+
+  useEffect(() => { void fetchCoupons(); }, [fetchCoupons]);
 
   const createCoupon = async (e: React.FormEvent) => {
     e.preventDefault();

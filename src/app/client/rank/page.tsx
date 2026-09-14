@@ -55,6 +55,7 @@ function RankContent() {
   const [activeChallenge, setActiveChallenge] = useState<ChallengeInfo | null>(null);
   const [currentUserRank, setCurrentUserRank] = useState<LeaderboardEntry | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>("");
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   // --- FONCTION DE RÉCUPÉRATION DU CLASSEMENT ---
   const fetchRankings = useCallback(async (cId: string, currentUserId: string) => {
@@ -167,6 +168,7 @@ function RankContent() {
     const updateTimer = () => {
       const end = new Date(activeChallenge.ends_at!).getTime();
       const now = Date.now();
+      setCurrentTime(now);
       const diff = end - now;
 
       if (diff <= 0) {
@@ -188,7 +190,7 @@ function RankContent() {
   // --- VÉRIFICATION EXPIRATION ---
   const isExpired = Boolean(
     !activeChallenge?.is_active ||
-      (activeChallenge?.ends_at && new Date(activeChallenge.ends_at).getTime() <= Date.now()) ||
+      (activeChallenge?.ends_at && new Date(activeChallenge.ends_at).getTime() <= currentTime) ||
       timeLeft.includes("TERMINÉE")
   );
 
@@ -247,7 +249,7 @@ function RankContent() {
               </div>
             ) : (
               myChallenges.map((ch) => {
-                const expired = !ch.is_active || (ch.ends_at && new Date(ch.ends_at).getTime() <= Date.now());
+                const expired = !ch.is_active || (ch.ends_at && new Date(ch.ends_at).getTime() <= currentTime);
                 return (
                   <motion.button
                     whileTap={{ scale: 0.97 }}

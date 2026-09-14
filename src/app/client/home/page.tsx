@@ -203,7 +203,7 @@ export default function ClientHome() {
     } finally {
       setLoading(false);
     }
-  }, [pathname, router]);
+  }, [pathname]);
 
   useEffect(() => {
     fetchData();
@@ -406,7 +406,9 @@ export default function ClientHome() {
 
               <div className="flex items-center justify-between sm:justify-end gap-2.5">
                 <button
+                  type="button"
                   onClick={() => setIsMenuOpen(true)}
+                  data-public-action="true"
                   className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-[11px] font-black uppercase tracking-[0.2em] text-emerald-300 transition hover:bg-white/10 active:scale-95"
                 >
                   <Menu size={16} />
@@ -440,10 +442,10 @@ export default function ClientHome() {
                     <Crown size={12} /> Passez au niveau supérieur
                   </div>
                   <h3 className="text-base sm:text-lg font-black text-white italic tracking-tight uppercase">
-                    Débloquez l'expérience <span className="text-amber-400">ChifPam VIP</span>
+                    Débloquez l&apos;expérience <span className="text-amber-400">ChifPam VIP</span>
                   </h3>
                   <p className="text-xs text-slate-300 font-normal lowercase italic max-w-md">
-                    Profitez de -25% sur les frais, de bonus exclusifs et d'un badge doré illuminé sur votre profil.
+                    Profitez de -25% sur les frais, de bonus exclusifs et d&apos;un badge doré illuminé sur votre profil.
                   </p>
                 </div>
                 <Link 

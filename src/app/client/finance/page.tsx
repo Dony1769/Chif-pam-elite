@@ -75,11 +75,13 @@ export default function FinancePage() {
       setUserId(user.id);
 
       // Récupération sécurisée du profil avec création automatique si inexistant
-      let { data, error } = await supabase
+      const profileResult = await supabase
         .from('profiles')
         .select('balance, locked_balance')
         .eq('id', user.id)
         .maybeSingle();
+      let data = profileResult.data;
+      const { error } = profileResult;
 
       if (!data && !error) {
         // Tentative de récréation du profil en cas d'absence

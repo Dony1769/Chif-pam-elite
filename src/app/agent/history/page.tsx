@@ -1,0 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+type Transaction = { id: string; direction: string; amount_cp: number; amount_htg: number; rate_htg_per_cp: number; created_at: string };
+export default function AgentHistoryPage() { const [rows, setRows] = useState<Transaction[]>([]); useEffect(() => { void (async () => { const { data: { user } } = await supabase.auth.getUser(); if (user) { const { data } = await supabase.from("p2p_transactions").select("id, direction, amount_cp, amount_htg, rate_htg_per_cp, created_at").eq("agent_id", user.id).order("created_at", { ascending: false }); setRows(data ?? []); } })(); }, []); return <main className="mx-auto max-w-5xl space-y-6 px-4 py-8"><h1 className="text-3xl font-black">Historique P2P</h1><div className="overflow-hidden rounded-2xl border border-white/10"><div className="grid grid-cols-4 gap-3 border-b border-white/10 bg-white/[0.04] p-4 text-xs font-bold text-slate-400"><span>Sens</span><span>CP</span><span>HTG</span><span>Date</span></div>{rows.map((row) => <div key={row.id} className="grid grid-cols-4 gap-3 border-b border-white/5 p-4 text-sm"><span>{row.direction === "buy_cp" ? "Vente" : "Rachat"}</span><span>{row.amount_cp.toLocaleString()}</span><span>{row.amount_htg.toLocaleString()} HTG</span><span>{new Date(row.created_at).toLocaleDateString("fr-FR")}</span></div>)}</div></main>; }

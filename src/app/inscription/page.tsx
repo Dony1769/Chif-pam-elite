@@ -30,11 +30,9 @@ function SignupForm() {
     if (ref) setReferralCode(ref.toUpperCase());
   }, [searchParams]);
 
-  // Saisie téléphonique restreinte à 8 chiffres maximum
+  // Le serveur accepte les formats locaux ou internationaux valides.
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const onlyNums = e.target.value.replace(/\D/g, '');
-    const trimmed = onlyNums.slice(0, 8);
-    setPhone(trimmed);
+    setPhone(e.target.value.slice(0, 20));
   };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -42,8 +40,8 @@ function SignupForm() {
     setError('');
     
     // Validations locales des champs
-    if (phone.length !== 8) {
-      return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
+    if (!phone.trim()) {
+      return setError("Le numéro de téléphone est requis.");
     }
     
     if (password.length < 8) return setError("Le mot de passe doit contenir au moins 8 caractères.");

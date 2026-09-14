@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { AdminMarketService } from '@/services/admin/market';
 
@@ -21,11 +21,7 @@ export default function AdminMarket() {
         bonus_star_pourcent: 0 
     });
 
-    useEffect(() => {
-        fetchPacks();
-    }, []);
-
-    async function fetchPacks() {
+    const fetchPacks = useCallback(async () => {
         const { data, error } = await supabase
             .from('boutique_packs')
             .select('*')
@@ -34,7 +30,11 @@ export default function AdminMarket() {
         if (error) console.error(error);
         if (data) setPacks(data);
         setLoading(false);
-    }
+    }, []);
+
+    useEffect(() => {
+        void fetchPacks();
+    }, [fetchPacks]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
