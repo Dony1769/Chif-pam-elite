@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getHomeRouteForRole } from '@/lib/auth-routing';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { useSearchParams } from 'next/navigation';
 import { 
   Loader2, ArrowRight, HelpCircle, ShieldCheck, 
@@ -35,15 +36,15 @@ function LoginFormContent() {
     }
   }, [searchParams]);
 
-  // Autorise les formats locaux et internationaux; le serveur normalise réellement.
+  // Le préfixe +509 est affiché séparément; seule la partie locale est saisie.
   const handlePhoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(e.target.value.slice(0, 20));
+    setPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
   }, []);
 
   const handleSupportRequest = async (reason: 'banni' | 'pass') => {
     if (loading) return;
 
-    if (phone.length !== 8) {
+    if (phone.length !== 8 || !/^\d{8}$/.test(phone)) {
       setErrorMessage("Veuillez saisir votre numéro à 8 chiffres pour contacter le support.");
       return;
     }
@@ -76,8 +77,8 @@ function LoginFormContent() {
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!phone.trim()) {
-      setErrorMessage("Veuillez saisir votre numéro de téléphone.");
+    if (phone.length !== 8 || !/^\d{8}$/.test(phone)) {
+      setErrorMessage("Le numéro de téléphone doit contenir exactement 8 chiffres.");
       return;
     }
 
@@ -92,7 +93,7 @@ function LoginFormContent() {
       const resolveResponse = await fetch('/api/auth/resolve-phone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: normalizePhoneNumber(`+509${phone}`) }),
       });
       const resolved = (await resolveResponse.json()) as { success?: boolean; email?: string; message?: string };
       if (!resolveResponse.ok || !resolved.success || !resolved.email) {

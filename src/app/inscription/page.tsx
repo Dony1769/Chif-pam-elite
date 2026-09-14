@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { LogoChifPam } from '@/components/LogoChifPam';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
 import ThreeSurface from '@/components/three/ThreeSurface';
 
@@ -30,9 +31,9 @@ function SignupForm() {
     if (ref) setReferralCode(ref.toUpperCase());
   }, [searchParams]);
 
-  // Le serveur accepte les formats locaux ou internationaux valides.
+  // Le préfixe +509 est fixe; seule la partie locale est saisie.
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(e.target.value.slice(0, 20));
+    setPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
   };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -40,8 +41,8 @@ function SignupForm() {
     setError('');
     
     // Validations locales des champs
-    if (!phone.trim()) {
-      return setError("Le numéro de téléphone est requis.");
+    if (phone.length !== 8 || !/^\d{8}$/.test(phone)) {
+      return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
     }
     
     if (password.length < 8) return setError("Le mot de passe doit contenir au moins 8 caractères.");
@@ -56,7 +57,7 @@ function SignupForm() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phone,
+          phone: normalizePhoneNumber(`+509${phone}`),
           password,
           username,
           referralCode,

@@ -26,9 +26,14 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as SignupPayload;
 
+    const rawPhone = String(body.phone ?? '').replace(/\s/g, '');
+    if (!/^\d{8}$/.test(rawPhone) && !/^\+509\d{8}$/.test(rawPhone)) {
+      return NextResponse.json({ success: false, message: 'Numero invalide. 8 chiffres requis.' }, { status: 400 });
+    }
+
     let phone: string;
     try {
-      phone = normalizePhoneNumber(String(body.phone ?? ''));
+      phone = normalizePhoneNumber(rawPhone);
     } catch (error) {
       return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Numero invalide.' }, { status: 400 });
     }

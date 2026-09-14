@@ -7,7 +7,11 @@ export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) return NextResponse.json({ success: false, message: 'Requete non autorisee.' }, { status: 403 });
   try {
     const body = (await request.json()) as { phone?: string };
-    const phone = normalizePhoneNumber(String(body.phone ?? ''));
+    const rawPhone = String(body.phone ?? '');
+    if (!/^\d{8}$/.test(rawPhone) && !/^509\d{8}$/.test(rawPhone) && !/^\+509\d{8}$/.test(rawPhone)) {
+      return NextResponse.json({ success: false, message: 'Le numéro de téléphone doit contenir exactement 8 chiffres.' }, { status: 400 });
+    }
+    const phone = normalizePhoneNumber(rawPhone);
     const admin = getSupabaseAdminClient();
     const { data, error } = await admin.from('profiles').select('id').eq('phone', phone).maybeSingle();
     if (error) return NextResponse.json({ success: false, message: 'Impossible de vérifier le numéro.' }, { status: 500 });
