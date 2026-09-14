@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/server/supabase/admin';
-import { normalizePhoneNumber, phoneDigits } from '@/lib/phone';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { isSameOriginRequest } from '@/lib/security';
 
 export async function POST(request: Request) {
@@ -13,10 +13,10 @@ export async function POST(request: Request) {
     }
     const phone = normalizePhoneNumber(rawPhone);
     const admin = getSupabaseAdminClient();
-    const { data, error } = await admin.from('profiles').select('id').eq('phone', phone).maybeSingle();
+    const { data, error } = await admin.from('profiles').select('id, email').eq('phone', phone).maybeSingle();
     if (error) return NextResponse.json({ success: false, message: 'Impossible de vérifier le numéro.' }, { status: 500 });
-    if (!data) return NextResponse.json({ success: false, message: 'Numéro ou mot de passe incorrect.' }, { status: 401 });
-    return NextResponse.json({ success: true, email: `${phoneDigits(phone)}@chifpam.ht` });
+    if (!data?.email) return NextResponse.json({ success: false, message: 'Compte sans identifiant de connexion valide.' }, { status: 401 });
+    return NextResponse.json({ success: true, email: data.email });
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Numéro invalide.' }, { status: 400 });
   }

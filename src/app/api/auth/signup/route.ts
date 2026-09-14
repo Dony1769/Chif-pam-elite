@@ -58,6 +58,17 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = getSupabaseAdminClient();
     const internalEmail = `${phoneForEmail}@chifpam.ht`;
+    const { data: existingProfile, error: uniquenessError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email')
+      .eq('phone', phone)
+      .maybeSingle();
+    if (uniquenessError) {
+      return NextResponse.json({ success: false, message: 'Impossible de vérifier ce numéro pour le moment. Réessayez.' }, { status: 503 });
+    }
+    if (existingProfile) {
+      return NextResponse.json({ success: false, message: 'Ce numéro est déjà associé à un compte. Connectez-vous ou utilisez le reset du mot de passe.' }, { status: 409 });
+    }
 
     let referrerId: string | null = null;
     let startBalance = 0;
