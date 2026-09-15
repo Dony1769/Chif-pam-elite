@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowDownCircle, ArrowUpCircle, CheckCircle2, Clock3, Loader2, Smartphone, Upload, Wallet, XCircle } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, CheckCircle2, Clock3, Copy, Loader2, Smartphone, Upload, Wallet, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { FINANCE_PAYMENT_METHODS, type FinancePaymentMethod } from "@/lib/constants/finance";
 import { ClientFinanceService } from "@/services/client/finance";
@@ -31,7 +31,9 @@ export default function AgentFinancePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFinance = useCallback(async () => {
     setLoading(true);
@@ -65,6 +67,12 @@ export default function AgentFinancePage() {
   useEffect(() => { void loadFinance(); }, [loadFinance]);
 
   useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
     const subscribe = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -85,6 +93,13 @@ export default function AgentFinancePage() {
     setPhone("");
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const copyPaymentNumber = () => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    void navigator.clipboard.writeText(paymentNumbers[method]);
+    setCopied(true);
+    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const handleFileChange = (selectedFile: File | undefined) => {
@@ -152,7 +167,7 @@ export default function AgentFinancePage() {
         <button type="button" onClick={() => selectMode("withdrawal")} className={`rounded-2xl border p-5 text-left transition ${mode === "withdrawal" ? "border-amber-300/40 bg-amber-300/10" : "border-white/10 bg-white/5"}`}><ArrowDownCircle className="text-amber-300" /><p className="mt-4 font-black">Retirer des fonds</p><p className="mt-1 text-xs text-slate-400">Vers un portefeuille mobile, minimum 100 HTG</p></button>
       </div>
       {message && <div className={`flex items-center gap-2 rounded-xl border p-4 text-sm ${message.ok ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-red-300/30 bg-red-300/10 text-red-200"}`}>{message.ok ? <CheckCircle2 size={18} /> : <XCircle size={18} />}{message.text}</div>}
-      <DSCard className="p-6"><form onSubmit={submit} className="space-y-5"><div className="flex gap-2">{FINANCE_PAYMENT_METHODS.map((item) => <button type="button" key={item} onClick={() => setMethod(item)} className={`flex-1 rounded-xl border px-3 py-3 text-sm font-black ${method === item ? "border-emerald-300 bg-emerald-300/10 text-emerald-200" : "border-white/10 text-slate-400"}`}>{item}</button>)}</div><p className="flex items-center gap-2 text-xs text-slate-400"><Smartphone size={15} /> Numero de depot : <strong className="text-slate-200">{paymentNumbers[method]}</strong></p><label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Montant (HTG)<DSInput type="number" min={mode === "deposit" ? MIN_DEPOSIT_AMOUNT : MIN_WITHDRAWAL_AMOUNT} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-2" placeholder={mode === "deposit" ? "Ex : 250" : "Ex : 500"} /></label>{mode === "deposit" ? <label className="flex cursor-pointer flex-col items-center rounded-2xl border border-dashed border-white/15 bg-slate-950/40 p-6 text-center"><Upload className="mb-2 text-emerald-300" size={24} /><span className="text-xs text-slate-300">{file?.name || "Importer la preuve de paiement (5 Mo max)"}</span><input ref={fileInputRef} type="file" accept={ALLOWED_IMAGE_TYPES.join(",")} onChange={(event) => handleFileChange(event.target.files?.[0])} className="hidden" /></label> : <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Numero recepteur<DSInput type="tel" inputMode="numeric" maxLength={8} value={phone} onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 8))} className="mt-2" placeholder="0000 0000" /></label>}<DSButton type="submit" disabled={submitting}>{submitting ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}{submitting ? "Validation..." : mode === "deposit" ? "Confirmer le depot" : "Confirmer le retrait"}</DSButton></form></DSCard>
+      <DSCard className="p-6"><form onSubmit={submit} className="space-y-5"><div className="flex gap-2">{FINANCE_PAYMENT_METHODS.map((item) => <button type="button" key={item} onClick={() => setMethod(item)} className={`flex-1 rounded-xl border px-3 py-3 text-sm font-black ${method === item ? "border-emerald-300 bg-emerald-300/10 text-emerald-200" : "border-white/10 text-slate-400"}`}>{item}</button>)}</div>{mode === "deposit" && <div><p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><Smartphone size={15} /> Numero de depot</p><button type="button" onClick={copyPaymentNumber} className="flex w-full items-center justify-between rounded-xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3 text-left transition hover:border-emerald-300/60 hover:bg-emerald-300/15" aria-label={`Copier le numero ${paymentNumbers[method]}`}><span className="font-black tracking-wider text-white">{paymentNumbers[method]}</span>{copied ? <CheckCircle2 size={18} className="text-emerald-300" /> : <Copy size={18} className="text-slate-300" />}</button><p className="mt-2 text-xs text-slate-500">Cliquez sur le numero pour le copier.</p></div>}{mode === "withdrawal" && <p className="flex items-center gap-2 text-xs text-slate-400"><Smartphone size={15} /> Methode de retrait : <strong className="text-slate-200">{method}</strong></p>}<label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Montant (HTG)<DSInput type="number" min={mode === "deposit" ? MIN_DEPOSIT_AMOUNT : MIN_WITHDRAWAL_AMOUNT} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-2" placeholder={mode === "deposit" ? "Ex : 250" : "Ex : 500"} /></label>{mode === "deposit" ? <label className="flex cursor-pointer flex-col items-center rounded-2xl border border-dashed border-white/15 bg-slate-950/40 p-6 text-center"><Upload className="mb-2 text-emerald-300" size={24} /><span className="text-xs text-slate-300">{file?.name || "Importer la preuve de paiement (5 Mo max)"}</span><input ref={fileInputRef} type="file" accept={ALLOWED_IMAGE_TYPES.join(",")} onChange={(event) => handleFileChange(event.target.files?.[0])} className="hidden" /></label> : <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Numero recepteur<DSInput type="tel" inputMode="numeric" maxLength={8} value={phone} onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 8))} className="mt-2" placeholder="0000 0000" /></label>}<DSButton type="submit" disabled={submitting}>{submitting ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}{submitting ? "Validation..." : mode === "deposit" ? "Confirmer le depot" : "Confirmer le retrait"}</DSButton></form></DSCard>
       <DSCard className="p-6"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs uppercase tracking-[0.25em] text-slate-500">Suivi</p><h2 className="mt-1 text-xl font-black">Historique financier</h2></div><Clock3 className="text-slate-500" size={20} /></div>{transactions.length === 0 ? <p className="text-sm text-slate-500">Aucune transaction recente.</p> : <div className="space-y-3">{transactions.map((transaction) => <div key={transaction.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/3 p-3"><div className="flex items-center gap-3">{isDeposit(transaction.type) ? <ArrowUpCircle className="text-emerald-300" size={18} /> : <ArrowDownCircle className="text-amber-300" size={18} />}<div><p className="text-sm font-bold">{isDeposit(transaction.type) ? "Depot" : "Retrait"}</p><p className="text-xs text-slate-500">{new Date(transaction.created_at).toLocaleString("fr-FR")}</p></div></div><div className="text-right"><p className="font-black">{formatAmount(Number(transaction.amount))} HTG</p><p className={`text-xs ${transaction.status === "approved" ? "text-emerald-300" : transaction.status === "rejected" ? "text-red-300" : "text-amber-300"}`}>{transaction.status === "approved" ? "Approuve" : transaction.status === "rejected" ? "Refuse" : "En attente"}</p></div></div>)}</div>}</DSCard>
     </DSPage>
   );
