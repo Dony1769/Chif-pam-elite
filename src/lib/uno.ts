@@ -23,6 +23,7 @@ export interface UnoRoom {
   winner_id: string | null;
   vip_bonus_cp: number;
   expires_at: string | null;
+  turn_deadline_at: string | null;
 }
 
 export interface UnoPlayer {

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Skull, Loader2, ChevronLeft, ArrowUpCircle, LogOut } from 'lucide-react';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 const EliteAvatar = ({ isWalking, status }: { isWalking: boolean; status: string }) => (
   <motion.div 
@@ -38,6 +39,7 @@ const EliteAvatar = ({ isWalking, status }: { isWalking: boolean; status: string
 );
 
 export default function HellElevator() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const [status, setStatus] = useState<'idle' | 'intro' | 'playing' | 'falling' | 'won'>('idle');
   const [bet, setBet] = useState(50);
@@ -80,7 +82,7 @@ export default function HellElevator() {
       setStatus('intro');
       setTimeout(() => setStatus('playing'), 3500);
     } catch (e: any) {
-      alert(e.message);
+      notify(e.message, 'danger');
       setLoading(false);
     }
   };

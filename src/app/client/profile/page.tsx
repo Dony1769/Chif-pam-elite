@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { 
   Loader2, ChevronRight, CheckCircle2, ArrowLeft, Save, Shield, BookOpen, 
@@ -83,6 +85,8 @@ interface MiseItem {
 }
 
 export default function ProfilePage() {
+  const { confirm } = useAppFeedback();
+  const { enabled: pushEnabled, loading: pushLoading, subscribe: subscribePush } = usePushNotifications();
   const router = useRouter();
   const { isInstallable, install } = usePWAInstall();
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -135,7 +139,7 @@ export default function ProfilePage() {
   }, [profile?.role]);
 
   const requestAgentStatus = async () => {
-    if (!window.confirm('Le passage agent remettra votre solde HTG et CP à zéro. Confirmez-vous cette demande ?')) return;
+    if (!(await confirm('Le passage agent remettra votre solde HTG et CP à zéro. Confirmez-vous cette demande ?'))) return;
     setAgentRequestLoading(true);
     const { error } = await supabase.rpc('submit_agent_request');
     setAgentRequestPending(!error);
@@ -450,23 +454,11 @@ export default function ProfilePage() {
   };
 
   const handleNotificationRequest = async () => {
-    if (!('Notification' in window)) {
-      return showToast('Notifications non supportées par ce navigateur.');
-    }
     try {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        const swReg = await navigator.serviceWorker.ready;
-        swReg.showNotification('ChifPam', { 
-          body: 'Notifications activées avec succès ! ✅', 
-          icon: '/icons/icon-192.png' 
-        });
-        showToast('Notifications activées avec succès ✅');
-      } else {
-        showToast('Autorisation refusée pour les notifications.');
-      }
-    } catch {
-      showToast('Erreur lors de l\'activation des notifications.');
+      await subscribePush();
+      showToast('Notifications push activées ✅');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Erreur lors de l\'activation des notifications.');
     }
   };
 
@@ -540,11 +532,12 @@ export default function ProfilePage() {
 
           <button 
             onClick={handleNotificationRequest}
+            disabled={pushLoading}
             className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition-all hover:bg-white/10 active:scale-90"
-            title="Activer les notifications"
+            title={pushEnabled ? "Notifications push activées" : "Activer les notifications push"}
             aria-label="Notifications"
           >
-            <Bell size={18} />
+            <Bell size={18} className={pushEnabled ? "text-emerald-300" : ""} />
           </button>
         </div>
 

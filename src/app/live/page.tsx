@@ -1,5 +1,8 @@
+"use client";
+
 import Link from 'next/link';
-import { ArrowRight, Dices, Sparkles, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Dices, Sparkles, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 type LiveGame = {
   id: string;
@@ -22,11 +25,13 @@ const LIVE_GAMES: LiveGame[] = [
 ];
 
 export default function LiveHubPage() {
+  const router = useRouter();
   return (
     <main className="min-h-screen overflow-hidden bg-[#080d1a] px-5 py-10 text-white sm:px-10">
       <div className="mx-auto max-w-6xl">
         <header className="mb-10 flex items-end justify-between gap-4">
           <div>
+            <button type="button" onClick={() => router.back()} className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:border-emerald-300/40" aria-label="Retour"><ArrowLeft size={18} /></button>
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-emerald-300">ChifPam Arena</p>
             <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-6xl">Live</h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">Retrouvez les parties multijoueur disponibles maintenant.</p>

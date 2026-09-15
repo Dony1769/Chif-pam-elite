@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 import { ChevronLeft, History as HistoryIcon, AlertTriangle, Coins, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { resolveGameEconomy } from '@/lib/game-economy';
@@ -99,6 +100,7 @@ const generateSecurePath = async (rows: number): Promise<{ path: number[]; final
 };
 
 export default function PlinkoElite() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -442,7 +444,7 @@ export default function PlinkoElite() {
       const result = data as RpcJouerResult | null;
 
       if (error || !result?.success) {
-        alert('Solde insuffisant ou erreur de transaction.');
+        notify('Solde insuffisant ou erreur de transaction.', 'danger');
         return;
       }
 

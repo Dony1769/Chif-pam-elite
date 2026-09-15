@@ -12,8 +12,12 @@ declare const Deno: {
 type PushRequestPayload = {
   user_id?: string;
   title?: string;
+  content?: string;
   body?: string;
+  type?: string;
+  link?: string;
   url?: string;
+  record?: PushRequestPayload;
 };
 
 function getRequiredEnv(name: string): string {
@@ -22,6 +26,16 @@ function getRequiredEnv(name: string): string {
     throw new Error(`Missing environment variable: ${name}`);
   }
   return value;
+}
+
+function targetUrl(payload: PushRequestPayload): string {
+  if (payload.url || payload.link) return payload.url || payload.link || "/client/notifications";
+  const type = (payload.type || "").toLowerCase();
+  const text = `${payload.title || ""} ${payload.content || payload.body || ""}`.toLowerCase();
+  if (type.includes("challenge") || text.includes("défi") || text.includes("defi")) return "/client/challenges";
+  if (type.includes("transaction") || type.includes("finance") || text.includes("dépôt") || text.includes("retrait") || text.includes("refus")) return "/client/finance";
+  if (type.includes("victory") || type.includes("game") || text.includes("victoire") || text.includes("gagn")) return "/client/list";
+  return "/client/notifications";
 }
 
 const corsHeaders = {
@@ -35,8 +49,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const payload = (await req.json()) as PushRequestPayload
-    const { user_id, title, body, url } = payload
+    const rawPayload = (await req.json()) as PushRequestPayload
+    const payload = rawPayload.record || rawPayload
+    const { user_id, title, content, body } = payload
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "user_id is required" }), {
@@ -58,26 +73,40 @@ Deno.serve(async (req: Request) => {
 
     const { data: pushData, error: dbError } = await supabaseAdmin
       .from('push_subscriptions')
-      .select('subscription')
+      .select('id, subscription')
       .eq('user_id', user_id)
-      .single()
+      .returns<Array<{ id: string; subscription: webpush.PushSubscription }>>();
 
-    if (dbError || !pushData) {
+    if (dbError || !pushData || pushData.length === 0) {
       return new Response(JSON.stringify({ error: "No subscription found" }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const payload = JSON.stringify({
+    const pushBody = JSON.stringify({
       title: title || "Chif Pam",
-      body: body || "Nouvelle mise à jour !",
-      url: url || "/client/notifications"
+      body: content || body || "Nouvelle mise à jour !",
+      url: targetUrl(payload),
     })
 
-    await webpush.sendNotification(pushData.subscription, payload)
+    const results = await Promise.allSettled(pushData.map(async (item) => {
+      try {
+        await webpush.sendNotification(item.subscription, pushBody)
+        return { sent: true }
+      } catch (error: unknown) {
+        const statusCode = typeof error === "object" && error !== null && "statusCode" in error ? Number((error as { statusCode?: number }).statusCode) : 0
+        if (statusCode === 404 || statusCode === 410) {
+          await supabaseAdmin.from("push_subscriptions").delete().eq("id", item.id)
+          return { sent: false, removed: true }
+        }
+        throw error
+      }
+    }))
+    const sent = results.filter((result) => result.status === "fulfilled" && result.value.sent).length
+    const removed = results.filter((result) => result.status === "fulfilled" && result.value.removed).length
 
-    return new Response(JSON.stringify({ sent: true }), {
+    return new Response(JSON.stringify({ sent, removed, attempted: pushData.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })

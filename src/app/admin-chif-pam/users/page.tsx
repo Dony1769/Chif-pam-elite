@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { validateBalance, validatePassword } from '@/lib/validation';
 import { AdminUsersService } from '@/services/admin/users';
 import { Search, Ban, UserCheck, Wallet, Loader2, ShieldAlert, User, Calendar, MessageSquare, Key } from 'lucide-react';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 interface UserProfile {
   id: string;
@@ -18,6 +19,7 @@ interface UserProfile {
 }
 
 export default function AdminUsers() {
+  const { prompt, notify } = useAppFeedback();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -37,12 +39,12 @@ export default function AdminUsers() {
 
   // --- FONCTION DE RESET (VIA SERVER ACTION) ---
   const handleResetPassword = async (id: string, username: string) => {
-    const newPass = prompt(`Nouveau mot de passe pour @${username || 'cet utilisateur'} :`);
+    const newPass = await prompt(`Nouveau mot de passe pour @${username || 'cet utilisateur'} :`, '', 'Réinitialiser le mot de passe');
     
     if (!newPass) return;
     const passwordCheck = validatePassword(newPass);
     if (!passwordCheck.ok) {
-      alert(passwordCheck.message || 'Mot de passe invalide.');
+      notify(passwordCheck.message || 'Mot de passe invalide.', 'danger');
       return;
     }
 
@@ -51,26 +53,26 @@ export default function AdminUsers() {
       const result = await AdminUsersService.resetPassword(id, newPass);
 
       if (result.success) {
-        alert("✅ " + result.message);
+        notify(result.message, 'success');
       } else {
-        alert("❌ Erreur : " + result.message);
+        notify("Erreur : " + result.message, 'danger');
       }
     } catch (err) {
       console.error(err);
-      alert("Erreur technique lors de la réinitialisation.");
+      notify("Erreur technique lors de la réinitialisation.", 'danger');
     }
   };
 
   const toggleBan = async (id: string, currentStatus: boolean) => {
     let banReason = null;
     if (!currentStatus) {
-      banReason = prompt("Motif du blocage :");
+      banReason = await prompt("Motif du blocage :", '', 'Bloquer cet utilisateur');
       if (banReason === null) return;
     }
 
     const result = await AdminUsersService.setBanStatus(id, !currentStatus, banReason);
     if (!result.success) {
-      alert('❌ Erreur : ' + result.message);
+      notify('Erreur : ' + result.message, 'danger');
       return;
     }
 
@@ -78,18 +80,18 @@ export default function AdminUsers() {
   };
 
   const adjustBalance = async (id: string) => {
-    const newBalance = prompt("Entrez le nouveau solde total (HTG) :");
+    const newBalance = await prompt("Entrez le nouveau solde total (HTG) :", '', 'Modifier le solde');
     if (newBalance !== null) {
       const parsed = Number(newBalance);
       const balanceCheck = validateBalance(parsed);
       if (!balanceCheck.ok) {
-        alert(balanceCheck.message || 'Montant invalide.');
+        notify(balanceCheck.message || 'Montant invalide.', 'danger');
         return;
       }
 
       const result = await AdminUsersService.setBalance(id, parsed);
       if (!result.success) {
-        alert('❌ Erreur : ' + result.message);
+        notify('Erreur : ' + result.message, 'danger');
         return;
       }
 

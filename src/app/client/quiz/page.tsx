@@ -11,6 +11,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getGameEconomySettings } from '@/lib/game-economy';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 // --- TYPES & INTERFACES ---
 type DifficultyType = 'facile' | 'intermédiaire' | 'difficile';
@@ -69,6 +70,7 @@ const CATEGORIES = [
 ];
 
 function QuizGameContent() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
@@ -238,12 +240,12 @@ function QuizGameContent() {
     triggerHaptic();
     
     if (betCP < 25 && !challengeId) { 
-      alert("Mise minimum : 25 CP"); 
+      notify("Mise minimum : 25 CP", 'warning');
       return; 
     }
 
     if ((profile.jetons_cp || 0) < betCP && !challengeId) {
-      alert("Solde insuffisant de CP pour lancer la partie.");
+      notify("Solde insuffisant de CP pour lancer la partie.", 'danger');
       return;
     }
     
@@ -296,7 +298,7 @@ function QuizGameContent() {
 
     } catch (e: unknown) {
       const err = e as Error;
-      alert(err.message || "Erreur lors du lancement de la partie.");
+      notify(err.message || "Erreur lors du lancement de la partie.", 'danger');
       setStatus('idle');
     } finally {
       isProcessingRef.current = false;

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 import { useRouter } from "next/navigation";
 import {
   Calendar as CalendarIcon,
@@ -77,6 +78,7 @@ function clampCpReward(type: RewardType, amount: number): number {
 }
 
 export default function RewardsPage() {
+  const { notify } = useAppFeedback();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [rewardsConfig, setRewardsConfig] = useState<RewardsConfigItem[]>([]);
@@ -207,7 +209,7 @@ export default function RewardsPage() {
       if (error) throw error;
 
       if (!data?.success) {
-        alert(data?.message ?? "Impossible de réclamer le bonus.");
+        notify(data?.message ?? "Impossible de réclamer le bonus.", 'danger');
       } else {
         setProfile((prev) => {
           if (!prev) return prev;
@@ -224,7 +226,7 @@ export default function RewardsPage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur inconnue";
-      alert("Erreur: " + message);
+      notify("Erreur: " + message, 'danger');
     } finally {
       setClaiming(false);
     }

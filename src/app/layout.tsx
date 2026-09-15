@@ -4,6 +4,7 @@ import PWARegister from "@/components/PWARegister";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import UISoundEffects from "@/components/ui/UISoundEffects";
 import GlobalPageLoader from "@/components/ui/GlobalPageLoader";
+import { AppFeedbackProvider } from "@/components/ui/AppFeedbackProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ThreeSurface from "@/components/three/ThreeSurface";
 import "./globals.css";
@@ -48,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <WebVitalsReporter />
         <UISoundEffects />
         <GlobalPageLoader />
-        {children}
+        <AppFeedbackProvider>{children}</AppFeedbackProvider>
         <SpeedInsights />
       </body>
     </html>

@@ -84,7 +84,7 @@ export default function MarketPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'diamonds'>('diamonds');
 
-  // État pour remplacer les alert() par des Toasts
+  // Les retours d’action utilisent le système de feedback centralisé.
   const [toast, setToast] = useState<ToastNotification>(null);
   
   // État Debug

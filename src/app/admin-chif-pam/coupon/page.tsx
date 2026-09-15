@@ -4,8 +4,10 @@ import { supabase } from '@/lib/supabase';
 import { validatePositiveAmount, validateRequiredText } from '@/lib/validation';
 import { AdminCouponsService } from '@/services/admin/coupons';
 import { Ticket, Plus, Power, Loader2 } from 'lucide-react';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 export default function AdminCoupons() {
+  const { notify } = useAppFeedback();
   const [coupons, setCoupons] = useState<any[]>([]);
   const [code, setCode] = useState('');
   const [amount, setAmount] = useState('');
@@ -23,14 +25,14 @@ export default function AdminCoupons() {
 
     const codeCheck = validateRequiredText(code, 'Le code', 40);
     if (!codeCheck.ok) {
-      alert(codeCheck.message || 'Code invalide.');
+      notify(codeCheck.message || 'Code invalide.', 'danger');
       return;
     }
 
     const parsedAmount = parseFloat(amount);
     const amountCheck = validatePositiveAmount(parsedAmount, 'Le montant');
     if (!amountCheck.ok) {
-      alert(amountCheck.message || 'Montant invalide.');
+      notify(amountCheck.message || 'Montant invalide.', 'danger');
       return;
     }
 
@@ -38,7 +40,7 @@ export default function AdminCoupons() {
 
     const result = await AdminCouponsService.create(code, parsedAmount);
     if (!result.success) {
-      alert('Erreur lors de la création : ' + result.message);
+      notify('Erreur lors de la création : ' + result.message, 'danger');
       setLoading(false);
       return;
     }
@@ -52,7 +54,7 @@ export default function AdminCoupons() {
   const toggleStatus = async (id: string, currentStatus: boolean) => {
     const result = await AdminCouponsService.toggleStatus(id, currentStatus);
     if (!result.success) {
-      alert('Erreur de mise à jour : ' + result.message);
+      notify('Erreur de mise à jour : ' + result.message, 'danger');
       return;
     }
     await fetchCoupons();

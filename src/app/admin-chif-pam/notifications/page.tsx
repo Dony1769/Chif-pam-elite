@@ -3,8 +3,10 @@
 import React, { useState } from 'react';
 import { AdminNotificationsService } from '@/services/admin/notifications';
 import { Send, Bell, CheckCircle2, Loader2 } from 'lucide-react';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 export default function AdminNotifications() {
+  const { confirm, notify } = useAppFeedback();
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,7 +16,7 @@ export default function AdminNotifications() {
     e.preventDefault();
     // Petite sécurité pour éviter les envois accidentels
     if (!title.trim() || !message.trim()) return;
-    if (!window.confirm("Diffuser ce message à TOUS les clients ?")) return;
+    if (!(await confirm("Diffuser ce message à TOUS les clients ?"))) return;
     
     setLoading(true);
     try {
@@ -23,24 +25,13 @@ export default function AdminNotifications() {
         throw new Error(result.message);
       }
 
-      // Push non bloquant conservé côté client
-      try {
-        await fetch('/api/push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, message }),
-        });
-      } catch (pushError) {
-        console.error("Erreur envoi push (non bloquant):", pushError);
-      }
-
       setSent(true);
       setTitle('');
       setMessage('');
       setTimeout(() => setSent(false), 3000);
     } catch (error: any) {
       console.error("Erreur de diffusion:", error);
-      alert("Erreur: " + (error.message || "Impossible de diffuser"));
+      notify("Erreur: " + (error.message || "Impossible de diffuser"), 'danger');
     } finally {
       setLoading(false);
     }

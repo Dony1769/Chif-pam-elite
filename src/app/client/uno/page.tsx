@@ -8,6 +8,7 @@ import {
   Copy,
   Crown,
   Disc3,
+  HelpCircle,
   LogIn,
   Play,
   Plus,
@@ -36,6 +37,7 @@ type PendingBet = {
   code?: string;
   maxPlayers?: number;
 };
+type Standing = { user_id: string; username: string | null; score: number };
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Une erreur est survenue.";
@@ -55,7 +57,7 @@ function UnoCardView({
       type="button"
       onClick={onPlay}
       disabled={!playable}
-      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-xl font-black shadow-xl transition sm:min-w-20 ${unoColorClass(card.color)} ${playable ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:shadow-emerald-300/30" : "cursor-default opacity-85"}`}
+      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-xl font-black shadow-xl transition sm:min-w-20 ${card.color === "black" ? "border-white/70 bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#38bdf8_270deg_360deg)] text-white" : unoColorClass(card.color)} ${playable ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:shadow-emerald-300/30" : "cursor-default opacity-85"}`}
       aria-label={`Carte ${unoValueLabel(card.value)}`}
     >
       <span className="absolute inset-2 rounded-xl border border-white/35" />
@@ -83,6 +85,9 @@ export default function UnoPage() {
     null,
   );
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [remainingTurnSeconds, setRemainingTurnSeconds] = useState<number | null>(null);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [helpOpen, setHelpOpen] = useState(false);
   const realtimeRefreshRef = useRef<number | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,17 +116,14 @@ export default function UnoPage() {
     if (playerError) throw playerError;
     setRoom(roomData as UnoRoom);
     setPlayers((playerData ?? []) as UnoPlayer[]);
-    const playerIds = (playerData ?? []).map((player) => player.user_id);
-    if (playerIds.length > 0) {
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, username")
-        .in("id", playerIds);
+    if ((playerData ?? []).length > 0) {
+      const { data: profileData, error: profileError } = await supabase.rpc("uno_get_player_profiles", { p_room_id: roomId });
       if (profileError) throw profileError;
+      const profiles = (profileData ?? []) as Array<{ user_id: string; username: string | null }>;
       setPlayerNames(
         Object.fromEntries(
-          (profileData ?? []).flatMap((profile) =>
-            profile.username ? [[profile.id, profile.username]] : [],
+          profiles.flatMap((profile) =>
+            profile.username ? [[profile.user_id, profile.username]] : [],
           ),
         ),
       );
@@ -129,6 +131,10 @@ export default function UnoPage() {
       setPlayerNames({});
     }
     if (roomData.status === "finished") setView("finished");
+    if (roomData.status === "finished") {
+      const { data: matchData } = await supabase.from("matches").select("final_standings").eq("room_id", roomId).maybeSingle();
+      setStandings((matchData?.final_standings ?? []) as Standing[]);
+    }
   }, []);
 
   useEffect(() => {
@@ -200,6 +206,14 @@ export default function UnoPage() {
     const timer = window.setInterval(updateRemaining, 1000);
     return () => window.clearInterval(timer);
   }, [room?.expires_at, room?.status]);
+
+  useEffect(() => {
+    if (room?.status !== "playing" || !room.turn_deadline_at) { setRemainingTurnSeconds(null); return; }
+    const update = () => setRemainingTurnSeconds(Math.max(0, Math.ceil((new Date(room.turn_deadline_at as string).getTime() - Date.now()) / 1000)));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [room?.turn_deadline_at, room?.status]);
 
   useEffect(
     () => () => {
@@ -349,7 +363,7 @@ export default function UnoPage() {
         variant="uno"
         className="pointer-events-none -right-10 top-10 z-0 h-[28rem] w-[34rem] opacity-50"
       />
-      <div className="mx-auto max-w-6xl">
+      <div className="relative z-10 mx-auto max-w-6xl">
         <header className="mb-8 flex items-center justify-between gap-3">
           <button
             type="button"
@@ -367,8 +381,11 @@ export default function UnoPage() {
               UNO <span className="text-emerald-300">LIVE</span>
             </h2>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-200">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setHelpOpen(true)} className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-2 text-xs font-bold text-fuchsia-100"><HelpCircle size={15} /> Comment jouer</button>
+            <div className="flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-200">
             <ShieldCheck size={15} /> CP sécurisé
+            </div>
           </div>
         </header>
 
@@ -437,6 +454,8 @@ export default function UnoPage() {
             </div>
           </div>
         )}
+
+        {helpOpen && <UnoHelpModal onClose={() => setHelpOpen(false)} />}
 
         {view === "lobby" && (
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -652,6 +671,8 @@ export default function UnoPage() {
                 Le délai de 8 minutes est écoulé. Les mises engagées ont été
                 remboursées automatiquement.
               </div>
+            ) : hasFinished ? (
+              <FinishedMatchScreen room={room} standings={standings} playerNames={playerNames} onContinue={() => router.push("/live")} />
             ) : (
               <GameBoard
                 room={room}
@@ -666,6 +687,8 @@ export default function UnoPage() {
                 drawCard={drawCard}
                 loading={loading}
                 hasFinished={hasFinished}
+                remainingTurnSeconds={remainingTurnSeconds}
+                onHelp={() => setHelpOpen(true)}
               />
             )}
           </section>
@@ -688,6 +711,8 @@ function GameBoard({
   drawCard,
   loading,
   hasFinished,
+  remainingTurnSeconds,
+  onHelp,
 }: {
   room: UnoRoom;
   player?: UnoPlayer;
@@ -701,6 +726,8 @@ function GameBoard({
   drawCard: () => void;
   loading: boolean;
   hasFinished: boolean;
+  remainingTurnSeconds: number | null;
+  onHelp: () => void;
 }) {
   const winner = players.find((entry) => entry.user_id === room.winner_id);
   return (
@@ -713,7 +740,7 @@ function GameBoard({
               key={entry.user_id}
               className={`rounded-full border px-4 py-2 text-xs font-bold ${room.current_turn === entry.user_id ? "border-fuchsia-300 bg-fuchsia-300/15 text-fuchsia-100 shadow-[0_0_25px_rgba(232,121,249,0.35)]" : "border-white/10 bg-white/5 text-slate-400"}`}
             >
-              <span>{playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`} · {entry.hand.length} cartes</span>
+              <span className="inline-flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/20 text-[10px] text-fuchsia-100">{(playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`).slice(0, 1).toUpperCase()}</span>{playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`} · {entry.hand.length} cartes</span>
               <span className={`ml-2 inline-flex items-center gap-1 ${entry.is_connected ? "text-emerald-300" : "text-amber-300"}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${entry.is_connected ? "bg-emerald-300" : "bg-amber-300"}`} />
                 {entry.is_connected ? "En ligne" : "Déconnecté"}
@@ -725,8 +752,9 @@ function GameBoard({
         <div className="absolute left-5 top-5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
           Tour {room.turn_number}
         </div>
-        <div className="absolute right-5 top-5 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">
-          Couleur <span className="text-emerald-300">{room.current_color}</span>
+        <div className="absolute right-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">
+          <span>Couleur <span className="text-emerald-300">{room.current_color}</span></span>
+          <span className={remainingTurnSeconds !== null && remainingTurnSeconds <= 10 ? "text-rose-300" : "text-amber-200"}>⏱ {remainingTurnSeconds ?? "--"}s</span>
         </div>
         <div className="flex items-center gap-5">
           <div className="grid aspect-[3/4] w-20 place-items-center rounded-2xl border-4 border-white/20 bg-linear-to-br from-fuchsia-700 to-slate-950 text-3xl shadow-2xl">
@@ -743,6 +771,7 @@ function GameBoard({
               ? "Votre tour"
               : "Tour adverse"}
         </p>
+        {isMyTurn && player?.hand.length === 1 && <div className="mt-3 rounded-full bg-rose-500 px-4 py-2 text-sm font-black tracking-[0.25em] text-white shadow-[0_0_30px_rgba(244,63,94,0.45)]">UNO !</div>}
         {winner && (
           <div className="mt-3 text-center text-emerald-200">
             <TrophyIcon /> Victoire du siège {winner.seat + 1} · +
@@ -774,6 +803,7 @@ function GameBoard({
           >
             <RefreshCw size={14} /> Piocher
           </button>
+          <button type="button" onClick={onHelp} className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300"><HelpCircle size={14} /> Règles</button>
         </div>
         <div className="flex min-h-28 flex-wrap justify-center gap-2 sm:gap-3">
           {(player?.hand ?? []).map((card) => (
@@ -791,6 +821,32 @@ function GameBoard({
       </div>
     </div>
   );
+}
+
+function FinishedMatchScreen({ room, standings, playerNames, onContinue }: { room: UnoRoom; standings: Standing[]; playerNames: Record<string, string>; onContinue: () => void }) {
+  const winner = standings.find((entry) => entry.user_id === room.winner_id);
+  const ranking = standings.filter((entry) => entry.user_id !== room.winner_id).sort((left, right) => left.score - right.score);
+  return <motion.section initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="relative overflow-hidden rounded-[32px] border border-amber-300/25 bg-linear-to-br from-amber-300/10 via-slate-950 to-emerald-300/10 p-6 text-center sm:p-10">
+    <div className="pointer-events-none absolute inset-0 opacity-40"><span className="absolute left-[12%] top-8 h-2 w-8 rotate-45 bg-amber-300" /><span className="absolute right-[16%] top-20 h-2 w-8 -rotate-45 bg-fuchsia-300" /><span className="absolute bottom-20 left-[25%] h-2 w-8 rotate-90 bg-emerald-300" /></div>
+    <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-200">Match terminé</p>
+    <div className="relative mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full border-4 border-amber-300/70 bg-amber-300/15 text-3xl font-black text-amber-100 shadow-[0_0_45px_rgba(251,191,36,0.35)]">{(winner ? (playerNames[winner.user_id] ?? winner.username ?? "J") : "J").slice(0, 1).toUpperCase()}</div>
+    <h1 className="relative mt-4 text-3xl font-black">{winner ? (playerNames[winner.user_id] ?? winner.username ?? `Joueur`) : "Victoire"}</h1>
+    <p className="relative mt-2 text-emerald-200">+{(room.pot_cp + room.vip_bonus_cp).toLocaleString()} CP</p>
+    {ranking.length > 0 && <div className="relative mx-auto mt-8 max-w-xl space-y-2 text-left"><p className="mb-3 text-center text-xs font-black uppercase tracking-[0.25em] text-slate-500">Classement par points restants</p>{ranking.map((entry, index) => <div key={entry.user_id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"><span className="flex items-center gap-3"><span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/15 text-xs font-black text-fuchsia-100">{index + 2}</span><span>{playerNames[entry.user_id] ?? entry.username ?? `Joueur`}</span></span><span className="font-mono text-sm text-slate-300">{entry.score} points</span></div>)}</div>}
+    <button type="button" onClick={onContinue} className="relative mt-8 rounded-xl bg-emerald-300 px-6 py-3 font-black text-slate-950 transition hover:bg-emerald-200 active:scale-95">Continuer vers Live</button>
+  </motion.section>;
+}
+
+function UnoHelpModal({ onClose }: { onClose: () => void }) {
+  const examples: Array<{ card: UnoCard; title: string; description: string }> = [
+    { card: { id: "help-number", color: "red", value: "7" }, title: "Carte numérique", description: "Jouez une carte de même couleur ou de même valeur." },
+    { card: { id: "help-skip", color: "yellow", value: "skip" }, title: "Passe", description: "Le joueur suivant perd son tour." },
+    { card: { id: "help-reverse", color: "blue", value: "reverse" }, title: "Renverse", description: "Inverse le sens à 3-4 joueurs; à 2 joueurs, vous rejouez." },
+    { card: { id: "help-draw2", color: "green", value: "draw2" }, title: "+2", description: "Le joueur suivant pioche deux cartes et perd son tour." },
+    { card: { id: "help-wild", color: "black", value: "wild" }, title: "Joker", description: "Choisissez la couleur qui continuera la partie." },
+    { card: { id: "help-wild4", color: "black", value: "wild4" }, title: "+4", description: "Choisissez une couleur; le joueur suivant pioche quatre cartes." },
+  ];
+  return <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/80 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="uno-help-title"><div className="max-h-[min(88vh,760px)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-fuchsia-300/25 bg-[#0b1222] p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.3em] text-fuchsia-300">UNO Live</p><h2 id="uno-help-title" className="mt-2 text-2xl font-black">Comment jouer</h2></div><button type="button" onClick={onClose} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300">Fermer</button></div><p className="mt-5 text-sm leading-6 text-slate-300">À tour de rôle, posez une carte qui correspond à la couleur ou à la valeur de la carte visible. À 2 joueurs, piochez jusqu’à obtenir une carte jouable; à 3-4 joueurs, une carte non jouable fait passer le tour.</p><div className="mt-6 grid gap-3 sm:grid-cols-2">{examples.map((example) => <div key={example.card.id} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-3"><UnoCardView card={example.card} playable={false} /><div><h3 className="font-black text-white">{example.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{example.description}</p></div></div>)}</div><button type="button" onClick={onClose} className="mt-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-200">J’ai compris</button></div></div>;
 }
 
 function TrophyIcon() {

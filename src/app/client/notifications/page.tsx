@@ -2,6 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Inbox, Loader2, CheckCheck, Bell, Trophy, Shield, Flame, BellOff, Coins, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,50 +53,18 @@ type AlertItem = {
   link?: string;
 };
 
-type NotificationOptionsWithVibrate = NotificationOptions & {
-  vibrate?: number[];
-  renotify?: boolean;
-  data?: { url: string };
-};
-
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "BEbxxcO2dGwTgPFasWQ0bZGSIoAhAbYPDB7X0p5cIp4eU6Qg2ZVe6Zyrky30AcvqGkHGU_SZZQGAtBrI8DK17gw";
-
 export default function ClientNotifications() {
+  const { notify } = useAppFeedback();
+  const { enabled: pushEnabled, loading: pushLoading, subscribe: subscribePush } = usePushNotifications();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [liveChallenges, setLiveChallenges] = useState<ChallengeRow[]>([]);
   const [rejectedTransactions, setRejectedTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('TOUT');
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [isTabVisible, setIsTabVisible] = useState(true);
   const router = useRouter();
 
-  // --- ENVOI DE NOTIFICATION NATIVE (Navigateur) ---
-  const sendNativePush = async (title: string, body: string) => {
-    if (typeof window === 'undefined' || !("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
-
-    try {
-      const swReg = await navigator.serviceWorker.ready;
-      if (!swReg) return;
-
-      const options: NotificationOptionsWithVibrate = {
-        body: body,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        vibrate: [200, 100, 200],
-        tag: "chif-pam-notif",
-        renotify: true,
-        data: { url: "/client/notifications" }
-      };
-
-      await swReg.showNotification(title, options);
-    } catch (err) {
-      console.error("Erreur affichage notif:", err);
-    }
-  };
 
   const fetchAllData = useCallback(async () => {
     try {
@@ -136,14 +106,6 @@ export default function ClientNotifications() {
     }
   }, [router]);
 
-  const checkPushSubscription = useCallback(async () => {
-    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      setPushEnabled(!!sub && Notification.permission === "granted");
-    }
-  }, []);
-
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsTabVisible(document.visibilityState === 'visible');
@@ -156,8 +118,7 @@ export default function ClientNotifications() {
 
   useEffect(() => {
     fetchAllData();
-    checkPushSubscription();
-  }, [checkPushSubscription, fetchAllData]);
+  }, [fetchAllData]);
 
   // ÉCOUTE EN TEMPS RÉEL
   useEffect(() => {
@@ -173,7 +134,6 @@ export default function ClientNotifications() {
       }, (payload) => {
         const n = payload.new as NotificationRow;
         setNotifications(prev => [n, ...prev.filter((item) => item.id !== n.id)]);
-        sendNativePush(n.title || "CHIF PAM ⚡", n.content || n.message || "Nouvelle information");
       })
       // 2. Écoute des mises à jour sur les défis
       .on('postgres_changes', { 
@@ -190,7 +150,6 @@ export default function ClientNotifications() {
         } else {
           setLiveChallenges(prev => [c, ...prev.filter(item => item.id !== c.id)]);
           if (payload.eventType === 'INSERT') {
-            sendNativePush("NOUVEAU DÉFI 🔥", c.title);
           }
         }
       })
@@ -204,9 +163,6 @@ export default function ClientNotifications() {
         const tx = payload.new as TransactionRow;
         if (tx.status === 'REJECTED' || tx.status === 'CANCELLED') {
           setRejectedTransactions(prev => [tx, ...prev.filter(t => t.id !== tx.id)]);
-          const typeLabel = tx.type === 'DEPOSIT' ? 'Dépôt' : 'Retrait';
-          const reasonText = tx.admin_note ? ` Motif : ${tx.admin_note}` : '';
-          sendNativePush(`REFUS DE ${typeLabel.toUpperCase()} ❌`, `Votre demande de ${tx.amount} HTG a été refusée.${reasonText}`);
         }
       })
       .subscribe();
@@ -215,47 +171,12 @@ export default function ClientNotifications() {
   }, [isTabVisible, userId]);
 
   const togglePush = async () => {
-    setIsRegistering(true);
     try {
-      const permission = await Notification.requestPermission();
-      
-      if (permission === "granted") {
-        const reg = await navigator.serviceWorker.ready;
-        
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-        });
-
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { error } = await supabase.from('push_subscriptions').upsert({ 
-            user_id: user.id, 
-            subscription: sub.toJSON() 
-          }, { onConflict: 'subscription' }); 
-            
-          if (!error) {
-            sendNativePush("NOTIFICATIONS ACTIVÉES ✅", "Le radar est actif.");
-            setPushEnabled(true);
-          } else {
-            alert("Erreur lors de la sauvegarde de l'abonnement.");
-          }
-        }
-      } else {
-        alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Erreur technique lors de l'abonnement.");
-    } finally { 
-      setIsRegistering(false); 
+      await subscribePush();
+      notify("Notifications push activées.", 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Erreur technique lors de l'abonnement.", 'danger');
     }
-  };
-
-  const urlBase64ToUint8Array = (bs: string) => {
-    const pad = '='.repeat((4 - bs.length % 4) % 4);
-    const b64 = (bs + pad).replace(/-/g, '+').replace(/_/g, '/');
-    return Uint8Array.from([...window.atob(b64)].map(c => c.charCodeAt(0)));
   };
 
   const handleMarkAllAsRead = async () => {
@@ -492,12 +413,12 @@ export default function ClientNotifications() {
       <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none">
         <button 
           onClick={togglePush}
-          disabled={isRegistering}
+          disabled={pushLoading}
           className={`pointer-events-auto px-8 py-4 rounded-2xl font-black text-[10px] tracking-widest flex items-center gap-3 active:scale-95 transition-all shadow-2xl ${
             pushEnabled ? 'bg-slate-800 text-emerald-500 border border-emerald-500/20' : 'bg-emerald-500 text-black shadow-emerald-500/40'
           }`}
         >
-          {isRegistering ? <Loader2 size={16} className="animate-spin" /> : pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+          {pushLoading ? <Loader2 size={16} className="animate-spin" /> : pushEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           {pushEnabled ? 'PUSH_ACTIF' : 'ACTIVER_PUSH'}
         </button>
       </div>

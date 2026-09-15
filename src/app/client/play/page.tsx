@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 import { 
   Loader2, 
   Ticket, 
@@ -38,6 +39,7 @@ interface Mise {
 }
 
 export default function PlayZone() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const [session, setSession] = useState<Tirage | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -107,14 +109,14 @@ export default function PlayZone() {
 
   const placerMise = async () => {
     const montantNum = parseInt(montant);
-    if (!selectedNumber || isNaN(montantNum) || montantNum <= 0 || !session) return alert("Sélection invalide.");
+    if (!selectedNumber || isNaN(montantNum) || montantNum <= 0 || !session) return notify("Sélection invalide.", 'warning');
     
     // SÉCURITÉ DOUBLE : Vérification avant envoi
     if (alreadyPlayedNumbers.includes(selectedNumber)) {
-      return alert("Vous avez déjà une mise sur ce chiffre pour ce tirage.");
+      return notify("Vous avez déjà une mise sur ce chiffre pour ce tirage.", 'warning');
     }
 
-    if (montantNum > balance) return alert("Solde insuffisant.");
+    if (montantNum > balance) return notify("Solde insuffisant.", 'danger');
 
     setIsSubmitting(true);
     try {
@@ -143,7 +145,7 @@ export default function PlayZone() {
       syncData(); 
       setTimeout(() => setLastTicket(null), 4000); 
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      notify("Erreur : " + err.message, 'danger');
     } finally {
       setIsSubmitting(false);
     }

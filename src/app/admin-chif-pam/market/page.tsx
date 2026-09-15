@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { AdminMarketService } from '@/services/admin/market';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 interface PackForm {
     nom: string;
@@ -12,6 +13,7 @@ interface PackForm {
 }
 
 export default function AdminMarket() {
+    const { confirm, notify } = useAppFeedback();
     const [packs, setPacks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [form, setForm] = useState<PackForm>({ 
@@ -41,7 +43,7 @@ export default function AdminMarket() {
         const result = await AdminMarketService.createPack(form);
 
         if (!result.success) {
-            alert("Erreur lors de l'ajout : " + result.message);
+            notify("Erreur lors de l'ajout : " + result.message, 'danger');
         } else {
             setForm({ nom: '', prix_htg: 0, jetons_quantite: 0, bonus_star_pourcent: 0 });
             fetchPacks();
@@ -51,17 +53,17 @@ export default function AdminMarket() {
     const toggleStatus = async (id: string, currentStatus: boolean) => {
         const result = await AdminMarketService.togglePackStatus(id, currentStatus);
         if (!result.success) {
-            alert("Erreur de mise à jour : " + result.message);
+            notify("Erreur de mise à jour : " + result.message, 'danger');
             return;
         }
         fetchPacks();
     };
 
     const deletePack = async (id: string) => {
-        if (confirm("Supprimer définitivement ce pack ?")) {
+        if (await confirm("Supprimer définitivement ce pack ?")) {
             const result = await AdminMarketService.deletePack(id);
             if (!result.success) {
-                alert("Erreur de suppression : " + result.message);
+                notify("Erreur de suppression : " + result.message, 'danger');
                 return;
             }
             fetchPacks();

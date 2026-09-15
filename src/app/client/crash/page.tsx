@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 // --- TYPES TYPÉS STRICTEMENT ---
 type GameStatus = 'idle' | 'running' | 'crashed' | 'collected';
@@ -52,6 +53,7 @@ const triggerHaptic = (pattern: number[] = [8, 20, 8]): void => {
 };
 
 export default function CrashElite() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   
   // --- ÉTATS ---
@@ -195,7 +197,7 @@ export default function CrashElite() {
     } catch (e: unknown) {
       const errMessage = e instanceof Error ? e.message : "Erreur lors du retrait.";
       console.error(e);
-      alert(errMessage);
+      notify(errMessage, 'danger');
     } finally {
       setLoading(false);
       isProcessingRef.current = false;
@@ -242,7 +244,7 @@ export default function CrashElite() {
     
     const finalBet = Math.floor(bet);
     if (finalBet > jetonsCP || finalBet < 10) {
-      alert("Mise invalide (minimum 10 CP).");
+      notify("Mise invalide (minimum 10 CP).", 'warning');
       return;
     }
 
@@ -283,7 +285,7 @@ export default function CrashElite() {
     } catch (error: unknown) {
       const errMessage = error instanceof Error ? error.message : "Erreur technique au lancement.";
       console.error(error);
-      alert(errMessage);
+      notify(errMessage, 'danger');
       setLoading(false);
       isProcessingRef.current = false;
     }

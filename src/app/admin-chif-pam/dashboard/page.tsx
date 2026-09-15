@@ -166,6 +166,23 @@ export default function AdminDashboard() {
         ? `${stats.pendingAgentRequests} DEMANDES AGENT`
         : `${stats.fraudFlags} ALERTES FRAUDE P2P`;
 
+  const quickLinks = [
+    { href: '/admin-chif-pam/analytics', label: 'Analytics', icon: <BarChart3 size={24} />, color: 'bg-slate-800', textColor: 'text-emerald-300' },
+    { href: '/admin-chif-pam/challenges', label: 'Défis', icon: <Dices size={24} />, color: 'bg-fuchsia-500', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/coupon', label: 'Coupons', icon: <Ticket size={24} />, color: 'bg-amber-400', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/mini-jeux', label: 'Mini-jeux', icon: <Dices size={24} />, color: 'bg-emerald-500', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/loterie', label: 'Loterie', icon: <Sparkles size={24} />, color: 'bg-cyan-400', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/market', label: 'Boutique', icon: <Wallet size={24} />, color: 'bg-orange-400', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/demandes', label: 'Finances', icon: <ClipboardList size={24} />, color: 'bg-white', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/users', label: 'Utilisateurs', icon: <Users size={24} />, color: 'bg-blue-500', textColor: 'text-white' },
+    { href: '/admin-chif-pam/notifications', label: 'Notifications', icon: <Bell size={24} />, color: 'bg-rose-400', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/agent-requests', label: 'Agents', icon: <Users size={24} />, color: 'bg-violet-400', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/chat', label: 'Support', icon: <MessageSquare size={24} />, color: 'bg-slate-700', textColor: 'text-emerald-300' },
+    { href: '/admin-chif-pam/p2p', label: 'Marché P2P', icon: <ShieldAlert size={24} />, color: 'bg-lime-300', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/phone-duplicates', label: 'Doublons téléphone', icon: <AlertCircle size={24} />, color: 'bg-red-400', textColor: 'text-slate-950' },
+    { href: '/admin-chif-pam/phone-issues', label: 'Incidents téléphone', icon: <ShieldAlert size={24} />, color: 'bg-yellow-300', textColor: 'text-slate-950' },
+  ];
+
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
       <div className="flex">
@@ -189,6 +206,12 @@ export default function AdminDashboard() {
             <SidebarLink href="/admin-chif-pam/notifications" icon={<Bell size={20}/>} label="Notifications" active={pathname.includes('notifications')} />
             <SidebarLink href="/admin-chif-pam/agent-requests" icon={<Users size={20}/>} label="Agents" active={pathname.includes('agent-requests')} />
             <SidebarLink href="/admin-chif-pam/chat" icon={<MessageSquare size={20}/>} label="Support Client" active={pathname.includes('chat')} />
+            <SidebarLink href="/admin-chif-pam/p2p" icon={<Sparkles size={20}/>} label="Marché P2P" active={pathname.includes('p2p')} />
+            <SidebarLink href="/admin-chif-pam/market" icon={<Wallet size={20}/>} label="Boutique" active={pathname.includes('market')} />
+            <SidebarLink href="/admin-chif-pam/mini-jeux" icon={<Dices size={20}/>} label="Mini-jeux" active={pathname.includes('mini-jeux')} />
+            <SidebarLink href="/admin-chif-pam/loterie" icon={<Sparkles size={20}/>} label="Loterie" active={pathname.includes('loterie')} />
+            <SidebarLink href="/admin-chif-pam/phone-duplicates" icon={<ShieldAlert size={20}/>} label="Doublons téléphone" active={pathname.includes('phone-duplicates')} />
+            <SidebarLink href="/admin-chif-pam/phone-issues" icon={<AlertCircle size={20}/>} label="Incidents téléphone" active={pathname.includes('phone-issues')} />
           </nav>
         </aside>
 
@@ -277,6 +300,19 @@ export default function AdminDashboard() {
               {stats.unreadMessages > 0 && <ActionCard href="/admin-chif-pam/chat" label="Support non lu" count={stats.unreadMessages} icon={<MessageSquare size={24}/>} color="bg-slate-800" textColor="text-emerald-500" />}
               {stats.pendingAgentRequests > 0 && <ActionCard href="/admin-chif-pam/agent-requests" label="Demandes agent" count={stats.pendingAgentRequests} icon={<Users size={24}/>} color="bg-emerald-500" />}
               {stats.fraudFlags > 0 && <ActionCard href="/admin-chif-pam/p2p" label="Alertes fraude P2P" count={stats.fraudFlags} icon={<ShieldAlert size={24}/>} color="bg-amber-500" textColor="text-slate-950" />}
+            </div>
+          </div>
+
+          <div className="space-y-4 pb-12">
+            <div className="flex items-end justify-between px-6">
+              <div>
+                <h3 className="text-[10px] text-slate-300 tracking-[0.4em] font-bold uppercase">Accès rapide</h3>
+                <p className="mt-1 text-[10px] normal-case tracking-normal text-slate-600">Toutes les pages de gestion, toujours disponibles.</p>
+              </div>
+              <LayoutDashboard size={18} className="text-emerald-500/60" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {quickLinks.map((link) => <ActionCard key={link.href} {...link} />)}
             </div>
           </div>
         </main>

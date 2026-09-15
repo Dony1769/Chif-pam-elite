@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { resolveGameEconomy } from '@/lib/game-economy';
 import { AnimatedCounter, NeonGameShell, ProgressBar } from '@/components/game/NeonGameShell';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 // --- TYPAGES TYPESCRIPT STRICTS ---
 interface UserProfile {
@@ -145,6 +146,7 @@ const triggerHapticFeedback = (pattern: number | number[] = [10, 30, 10]) => {
 };
 
 function BiometricGameContent() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
@@ -296,12 +298,12 @@ function BiometricGameContent() {
     const finalFee = challengeId ? Math.floor(Number(challengeFee)) : Math.floor(betCP);
     
     if (isNaN(finalFee) || finalFee < 25) { 
-      alert("Mise minimum valide : 25 CP"); 
+      notify("Mise minimum valide : 25 CP", 'warning');
       return; 
     }
     
     if (profile.jetons_cp < finalFee) {
-      alert("Solde de CP insuffisant pour démarrer.");
+      notify("Solde de CP insuffisant pour démarrer.", 'danger');
       return;
     }
 
@@ -342,7 +344,7 @@ function BiometricGameContent() {
       generatePattern(5);
     } catch (e: unknown) { 
       const err = e as Error;
-      alert(err.message || "Erreur de communication avec le serveur."); 
+      notify(err.message || "Erreur de communication avec le serveur.", 'danger');
       isProcessingRef.current = false;
     } finally { 
       setLoading(false); 

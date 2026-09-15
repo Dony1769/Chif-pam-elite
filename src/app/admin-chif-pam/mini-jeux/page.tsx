@@ -9,6 +9,7 @@ import {
   Dna, Brain, Lock, Layers, Box, Zap, Play, Pause, RefreshCw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 interface GameStats {
   volume: number;
@@ -38,6 +39,7 @@ type GameCardProps = {
 };
 
 export default function AdminMiniGames() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -131,7 +133,7 @@ export default function AdminMiniGames() {
         [gameId]: { ...prev[gameId], isActive: !currentStatus }
       }));
     } catch (err: unknown) {
-      alert("Erreur de mise à jour: " + (err instanceof Error ? err.message : 'Erreur inconnue'));
+      notify("Erreur de mise à jour: " + (err instanceof Error ? err.message : 'Erreur inconnue'), 'danger');
     } finally {
       setUpdating(null);
     }

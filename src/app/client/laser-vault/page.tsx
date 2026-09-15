@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShieldAlert, Unlock, Lock, ChevronLeft, Loader2, ServerOff, Coins, Sparkles, Delete } from 'lucide-react';
 import { NeonGameShell } from '@/components/game/NeonGameShell';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 // --- INTERFACES & TYPES ---
 interface ProfileLike {
@@ -173,6 +174,7 @@ const EliteAvatar = ({ status, isScared }: { status: string; isScared: boolean }
 );
 
 function QuickCalcGameContent() {
+  const { notify } = useAppFeedback();
   const router = useRouter();
   const searchParams = useSearchParams();
   const challengeId = searchParams.get('challengeId');
@@ -243,13 +245,13 @@ function QuickCalcGameContent() {
     const effectiveFee = challengeId ? Number(challengeFee) : Math.floor(betCP);
     
     if (effectiveFee < 10) {
-      alert('Mise minimum : 10 CP');
+      notify('Mise minimum : 10 CP', 'warning');
       return;
     }
     triggerHaptic();
 
     if (effectiveFee > (profile?.jetons_cp || 0)) {
-      alert('Solde CP insuffisant');
+      notify('Solde CP insuffisant', 'danger');
       return;
     }
 
@@ -296,7 +298,7 @@ function QuickCalcGameContent() {
       setStatus('playing');
       playSound('beep');
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : 'Impossible de démarrer la partie');
+      notify(error instanceof Error ? error.message : 'Impossible de démarrer la partie', 'danger');
     } finally {
       setLoading(false);
     }

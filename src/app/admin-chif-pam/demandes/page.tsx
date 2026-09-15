@@ -9,10 +9,12 @@ import {
   Eye, Loader2, Smartphone, Wallet2, 
   ArrowRightLeft, Search, Filter
 } from 'lucide-react';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 type TabType = 'pending' | 'approved' | 'rejected' | 'all';
 
 export default function AdminDemandes() {
+  const { confirm, prompt, notify } = useAppFeedback();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -58,12 +60,12 @@ export default function AdminDemandes() {
 
   const traiterDemande = async (trans: any, status: 'approved' | 'rejected') => {
     const actionText = status === 'approved' ? 'APPROUVER' : 'REFUSER';
-    if (!confirm(`${actionText} cette transaction de ${trans.amount} HTG ?`)) return;
+    if (!(await confirm(`${actionText} cette transaction de ${trans.amount} HTG ?`))) return;
     
     setProcessingId(trans.id);
     let note = '';
     if (status === 'rejected') {
-      note = prompt("Raison du refus :") || "Demande refusée par l'admin";
+      note = (await prompt("Raison du refus :", "", "Refuser la transaction")) || "Demande refusée par l'admin";
     }
 
     try {
@@ -73,7 +75,7 @@ export default function AdminDemandes() {
       }
       await fetchTransactions();
     } catch (err: any) {
-      alert("Erreur système : " + err.message);
+      notify("Erreur système : " + err.message, 'danger');
     } finally {
       setProcessingId(null);
     }

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { LOTTERY_MOMENTS } from '@/lib/constants/lottery';
 import { AdminLotteryService } from '@/services/admin/lottery';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 type Tirage = {
   id: string;
@@ -21,6 +22,7 @@ type MiseAmount = {
 };
 
 export default function AdminLoterie() {
+  const { confirm, notify } = useAppFeedback();
   const [currentTirage, setCurrentTirage] = useState<Tirage | null>(null);
   const [multiplicateur, setMultiplicateur] = useState(10);
   const [loading, setLoading] = useState(true);
@@ -80,7 +82,7 @@ export default function AdminLoterie() {
   const ouvrirSession = async (moment: string) => {
     // Si currentTirage existe, c'est qu'une session est déjà ouverte dans la DB
     if (currentTirage) {
-      alert("Une session est déjà ouverte dans la base de données. Fermez-la d'abord.");
+      notify("Une session est déjà ouverte dans la base de données. Fermez-la d'abord.", 'warning');
       return;
     }
 
@@ -95,9 +97,9 @@ export default function AdminLoterie() {
       
       // Mise à jour immédiate de l'interface après le clic réussi
       await fetchAdminData();
-      alert(result.message);
+      notify(result.message, 'success');
     } catch (err: unknown) {
-      alert("Erreur lors de l'ouverture : " + (err instanceof Error ? err.message : 'Erreur inconnue'));
+      notify("Erreur lors de l'ouverture : " + (err instanceof Error ? err.message : 'Erreur inconnue'), 'danger');
     } finally {
       setIsProcessing(false);
       isActionInProgress.current = false;
@@ -107,7 +109,7 @@ export default function AdminLoterie() {
   // ACTION 2 : CLÔTURER (Seulement sur clic)
   const cloturerEtPayer = async () => {
     if (!currentTirage || isProcessing) return;
-    if (!window.confirm(`Voulez-vous fermer la session et valider le ${currentTirage.chiffre_gagnant} ?`)) return;
+    if (!(await confirm(`Voulez-vous fermer la session et valider le ${currentTirage.chiffre_gagnant} ?`))) return;
 
     setIsProcessing(true);
     isActionInProgress.current = true;
@@ -121,10 +123,10 @@ export default function AdminLoterie() {
       // 3. Reset TOTAL
       setCurrentTirage(null);
       setStats({ totalMises: 0, totalMontant: 0 });
-      alert(result.message);
+      notify(result.message, 'success');
       
     } catch (err: unknown) {
-      alert("Erreur lors de la clôture : " + (err instanceof Error ? err.message : 'Erreur inconnue'));
+      notify("Erreur lors de la clôture : " + (err instanceof Error ? err.message : 'Erreur inconnue'), 'danger');
     } finally {
       setIsProcessing(false);
       isActionInProgress.current = false;
