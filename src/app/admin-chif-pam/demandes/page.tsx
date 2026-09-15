@@ -27,7 +27,7 @@ export default function AdminDemandes() {
     const baseQuery = supabase
       .from('transactions')
       .select(`
-        id, user_id, type, amount, status, phone_number, admin_note, created_at, processed_at,
+        id, user_id, type, amount, status, method, phone_number, admin_note, created_at, processed_at,
         profiles ( id, username, role, balance, locked_balance )
       `)
       .order('created_at', { ascending: false })
