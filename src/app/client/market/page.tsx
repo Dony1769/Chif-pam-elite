@@ -474,8 +474,11 @@ export default function MarketPage() {
 
         {/* ONGLETS MONNAIES */}
         <div className="flex flex-wrap gap-2 rounded-[22px] border border-white/10 bg-white/5 p-1.5">
-          <button type="button" onClick={() => router.push('/client/p2p')} className="flex flex-1 items-center justify-center gap-2 rounded-[16px] bg-emerald-500/15 px-3 py-3.5 text-[11px] font-black uppercase tracking-[0.25em] text-emerald-200 transition hover:bg-emerald-500/25">
-            <Coins size={16} /> Acheter du CP en HTG
+          <button type="button" onClick={() => router.push('/client/p2p')} className="group relative flex flex-1 items-center justify-center gap-3 overflow-hidden rounded-[16px] border border-emerald-300/70 bg-gradient-to-r from-emerald-300 via-cyan-300 to-emerald-400 px-4 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-slate-950 shadow-[0_0_28px_rgba(45,212,191,0.4)] ring-2 ring-emerald-300/20 transition hover:-translate-y-0.5 hover:shadow-[0_0_42px_rgba(45,212,191,0.65)]">
+            <span className="absolute inset-0 -translate-x-full bg-white/35 transition-transform duration-700 group-hover:translate-x-full" />
+            <Zap size={18} className="relative animate-pulse" />
+            <span className="relative">Acheter CP via P2P</span>
+            <ArrowRight size={17} className="relative transition-transform group-hover:translate-x-1" />
           </button>
           <TabButton active onClick={() => setActiveTab('diamonds')} label="Échange Diamants" icon={<Gem size={16} />} />
         </div>
