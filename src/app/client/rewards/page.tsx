@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Float, OrbitControls } from "@react-three/drei";
-import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
+import { RewardLevelUpModal } from "@/components/ui/RewardLevelUpModal";
 import {
   Award,
   CalendarDays,
@@ -24,15 +24,16 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
-import { getDailyReward } from "@/lib/game-economy";
+import { getDailyReward, getXpRequiredForLevel } from "@/lib/game-economy";
 
 const MAX_CP_REWARD = 50;
 type RewardType = "cp" | "diamonds" | "xp";
 type RewardsConfigItem = { day_number: number; title: string; reward_amount: number; reward_type: RewardType };
-type ProfileData = { id: string; username?: string | null; jetons_cp?: number; diamonds?: number; xp?: number };
+type ProfileData = { id: string; username?: string | null; jetons_cp?: number; diamonds?: number; xp?: number; level?: number };
 type RewardIconComponent = React.ComponentType<{ size?: number; className?: string }>;
 
 type RewardMeta = { label: string; icon: RewardIconComponent; accent: string; glow: string; iconShell: string };
+type RewardModalState = { level: number; levelUp: boolean; diamondsRewarded: number; rewardAmount: number; rewardType: RewardType; currentXp: number; nextLevelXp: number } | null;
 const rewardTypeMeta: Record<RewardType, RewardMeta> = {
   cp: { label: "CP", icon: Coins, accent: "text-emerald-300", glow: "shadow-emerald-500/20", iconShell: "border-emerald-300/30 bg-emerald-300/10" },
   diamonds: { label: "Diamants", icon: Gem, accent: "text-sky-300", glow: "shadow-sky-500/20", iconShell: "border-sky-300/30 bg-sky-300/10" },
@@ -88,6 +89,7 @@ export default function RewardsPage() {
   const [claimedDays, setClaimedDays] = useState<number[]>([]);
   const [claiming, setClaiming] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState({ hours: 0, minutes: 0, seconds: 0 });
+  const [rewardModal, setRewardModal] = useState<RewardModalState>(null);
 
   const currentDate = useMemo(() => new Date(), []);
   const currentYear = currentDate.getFullYear();
@@ -137,10 +139,6 @@ export default function RewardsPage() {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const playRewardSound = () => {
-    try { void new Audio("/sounds/win.mp3").play(); } catch { /* Audio may be blocked until interaction. */ }
-  };
-
   const handleClaimDaily = async () => {
     if (!profile || claiming || claimedDays.includes(todayDayNumber)) return;
     setClaiming(true);
@@ -154,11 +152,12 @@ export default function RewardsPage() {
         notify(data?.message ?? "Impossible de réclamer le bonus.", "danger");
         return;
       }
-      setProfile((prev) => prev ? { ...prev, jetons_cp: rewardType === "cp" ? (prev.jetons_cp || 0) + rewardAmount : prev.jetons_cp, diamonds: rewardType === "diamonds" ? (prev.diamonds || 0) + rewardAmount : prev.diamonds, xp: rewardType === "xp" ? (prev.xp || 0) + rewardAmount : prev.xp } : prev);
+      const result = data as { new_cp?: number; new_diamonds?: number; new_xp?: number; new_level?: number; level_up?: boolean; diamonds_rewarded?: number; next_level_xp?: number };
+      const currentXp = Number(result.new_xp ?? profile.xp ?? 0);
+      const newLevel = Number(result.new_level ?? profile.level ?? 1);
+      setProfile((prev) => prev ? { ...prev, jetons_cp: Number(result.new_cp ?? prev.jetons_cp ?? 0), diamonds: Number(result.new_diamonds ?? prev.diamonds ?? 0), xp: currentXp } : prev);
       setClaimedDays((prev) => [...prev, todayDayNumber]);
-      confetti({ particleCount: 150, spread: 75, origin: { y: 0.62 }, colors: ["#34d399", "#fbbf24", "#38bdf8", "#ffffff"] });
-      playRewardSound();
-      notify("Bonus quotidien réclamé !", "success");
+      setRewardModal({ level: newLevel, levelUp: Boolean(result.level_up), diamondsRewarded: Number(result.diamonds_rewarded ?? 0), rewardAmount, rewardType, currentXp, nextLevelXp: Number(result.next_level_xp ?? getXpRequiredForLevel(newLevel + 1)) });
     } catch (error) {
       notify("Erreur: " + (error instanceof Error ? error.message : "Erreur inconnue"), "danger");
     } finally {
@@ -170,6 +169,7 @@ export default function RewardsPage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 pb-28 text-slate-100">
+      <RewardLevelUpModal open={Boolean(rewardModal)} level={rewardModal?.level ?? 1} levelUp={rewardModal?.levelUp ?? false} diamondsRewarded={rewardModal?.diamondsRewarded ?? 0} rewardAmount={rewardModal?.rewardAmount ?? 0} rewardType={rewardModal?.rewardType ?? "cp"} currentXp={rewardModal?.currentXp ?? 0} nextLevelXp={rewardModal?.nextLevelXp ?? 1000} onClose={() => setRewardModal(null)} />
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_5%,rgba(16,185,129,0.16),transparent_30%),radial-gradient(circle_at_85%_18%,rgba(245,158,11,0.12),transparent_28%)]" />
       <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
         <section className="relative overflow-hidden rounded-4xl border border-emerald-300/20 bg-linear-to-br from-amber-500/10 via-emerald-500/5 to-transparent p-5 shadow-[0_28px_100px_rgba(16,185,129,0.14)] sm:p-8">

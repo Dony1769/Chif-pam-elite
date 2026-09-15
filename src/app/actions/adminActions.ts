@@ -170,69 +170,21 @@ export async function adminProcessTransaction(
 
     const cleanNote = sanitizeAdminNote(adminNote || '');
 
-    const { data: transaction, error: txError } = await supabaseAdmin
-      .from('transactions')
-      .select('id,user_id,type,amount,status,profiles(id,locked_balance)')
-      .eq('id', transactionId)
-      .single();
+    const { data, error } = await supabaseAdmin.rpc('admin_process_finance_transaction', {
+      p_transaction_id: transactionId,
+      p_decision: decision,
+      p_admin_note: cleanNote,
+    });
 
-    if (txError || !transaction) {
-      return { success: false, message: 'Transaction introuvable.' };
+    if (error) {
+      return { success: false, message: error.message };
     }
 
-    if (transaction.status !== 'pending') {
-      return { success: false, message: 'Cette transaction a déjà été traitée.' };
-    }
-
-    const amount = Number(transaction.amount || 0);
-
-    if (transaction.type === 'deposit' && decision === 'approved') {
-      const { error } = await supabaseAdmin.rpc('increment_balance', {
-        user_id: transaction.user_id,
-        amount,
-      });
-      if (error) {
-        return { success: false, message: error.message };
-      }
-    }
-
-    if (transaction.type === 'withdrawal') {
-      if (decision === 'rejected') {
-        const { error } = await supabaseAdmin.rpc('refund_withdrawal', {
-          user_id_param: transaction.user_id,
-          amount_param: amount,
-        });
-        if (error) {
-          return { success: false, message: error.message };
-        }
-      } else {
-        const locked = Number((transaction as { profiles?: { locked_balance?: number | null } })?.profiles?.locked_balance || 0);
-        const newLocked = Math.max(0, locked - amount);
-        const { error } = await supabaseAdmin
-          .from('profiles')
-          .update({ locked_balance: newLocked })
-          .eq('id', transaction.user_id);
-        if (error) {
-          return { success: false, message: error.message };
-        }
-      }
-    }
-
-    const { error: updateError } = await supabaseAdmin
-      .from('transactions')
-      .update({
-        status: decision,
-        admin_note: cleanNote,
-        processed_at: new Date().toISOString(),
-      })
-      .eq('id', transactionId)
-      .eq('status', 'pending');
-
-    if (updateError) {
-      return { success: false, message: updateError.message };
-    }
-
-    return { success: true, message: 'Transaction traitée.' };
+    const result = data as { success?: boolean; message?: string } | null;
+    return {
+      success: result?.success ?? false,
+      message: result?.message || 'Transaction traitée.',
+    };
   } catch (err: unknown) {
     return { success: false, message: 'Erreur serveur : ' + getErrorMessage(err) };
   }

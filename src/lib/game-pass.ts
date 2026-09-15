@@ -1,4 +1,4 @@
-import { ECONOMY_CONFIG } from '@/lib/game-economy';
+import { ECONOMY_CONFIG, getLevelForXp } from '@/lib/game-economy';
 
 export type GamePassHistoryEntry = {
   id: string;
@@ -27,7 +27,7 @@ export const GAME_PASS_AVATARS = [...ECONOMY_CONFIG.gamePass.avatars] as const;
 
 export const computeGamePassSummary = (xp: number, fallbackTitle?: string) => {
   const safeXp = Math.max(0, Math.floor(xp || 0));
-  const level = Math.max(1, Math.floor(safeXp / ECONOMY_CONFIG.gamePass.xpPerLevel) + 1);
+  const level = getLevelForXp(safeXp);
   const title = fallbackTitle || ECONOMY_CONFIG.gamePass.defaultTitle;
 
   const reward = [...ECONOMY_CONFIG.rewards.gamePass].sort((a, b) => a.level - b.level).find((entry) => level >= entry.level) ?? ECONOMY_CONFIG.rewards.gamePass[0];

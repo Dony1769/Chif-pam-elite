@@ -316,6 +316,24 @@ export const GAME_ECONOMY_CONFIG: Record<GameEconomyGameId, GameEconomyConfig> =
   }
 };
 
+export const XP_LEVEL_BASE = 1000;
+
+export function getXpRequiredForLevel(level: number): number {
+  const safeLevel = Math.max(1, Math.floor(level));
+  return XP_LEVEL_BASE * (safeLevel - 1) ** 2;
+}
+
+export function getLevelForXp(xp: number): number {
+  const safeXp = Math.max(0, Math.floor(xp || 0));
+  return Math.max(1, Math.floor(Math.sqrt(safeXp / XP_LEVEL_BASE)) + 1);
+}
+
+export function getLevelUpDiamondReward(fromLevel: number, toLevel: number): number {
+  const start = Math.max(1, Math.floor(fromLevel));
+  const end = Math.max(start, Math.floor(toLevel));
+  return 50 * ((end * (end + 1) / 2) - (start * (start + 1) / 2));
+}
+
 export function getGameEconomyConfig(gameId: GameEconomyGameId): GameEconomyConfig {
   return GAME_ECONOMY_CONFIG[gameId];
 }
