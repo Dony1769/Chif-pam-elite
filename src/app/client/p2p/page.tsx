@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeftRight, Loader2, ShieldCheck, TrendingUp } from "lucide-react";
+import { ArrowLeftRight, Loader2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -11,6 +11,7 @@ type Offer = {
   rate_htg_per_cp: number;
   min_cp: number;
   max_cp: number;
+  available_balance: number;
   reputation_level: number;
   successful_clients_count: number;
   username: string;
@@ -33,12 +34,18 @@ export default function P2PMarketPage() {
       const agentIds = rows.map((row) => row.agent_id);
       const [{ data: agents }, { data: profiles }] = await Promise.all([
         supabase.from("agent_profiles").select("user_id, reputation_level, successful_clients_count").in("user_id", agentIds),
-        supabase.from("profiles").select("id, username").in("id", agentIds),
+        supabase.from("profiles").select("id, username, balance, locked_balance").in("id", agentIds),
       ]);
       setOffers(rows.map((row) => {
         const agent = agents?.find((entry) => entry.user_id === row.agent_id);
         const profile = profiles?.find((entry) => entry.id === row.agent_id);
-        return { ...row, reputation_level: agent?.reputation_level ?? 0, successful_clients_count: agent?.successful_clients_count ?? 0, username: profile?.username ?? "Agent" };
+        return {
+          ...row,
+          available_balance: Math.max(0, Number(profile?.balance ?? 0) - Number(profile?.locked_balance ?? 0)),
+          reputation_level: agent?.reputation_level ?? 0,
+          successful_clients_count: agent?.successful_clients_count ?? 0,
+          username: profile?.username ?? "Agent",
+        };
       }));
       setLoading(false);
     };
@@ -50,10 +57,10 @@ export default function P2PMarketPage() {
     setSubmitting(true);
     setMessage(null);
     const offer = offers.find((entry) => entry.id === selectedOffer);
-    const { error } = direction === "buy_cp"
+    const { data: transaction, error } = direction === "buy_cp"
       ? await supabase.rpc("p2p_buy_cp", { p_offer_id: selectedOffer, p_amount_cp: Number(amount) })
       : await supabase.rpc("p2p_sell_cp", { p_agent_id: offer?.agent_id, p_amount_cp: Number(amount) });
-    setMessage(error?.message ?? "Transaction P2P terminée avec succès.");
+    setMessage(error?.message ?? `${Number(transaction?.amount_cp ?? amount).toLocaleString()} CP avec @${offer?.username} pour ${Number(transaction?.amount_htg ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 2 })} HTG.`);
     setSubmitting(false);
   };
 
@@ -64,7 +71,7 @@ export default function P2PMarketPage() {
         <section className="rounded-3xl border border-emerald-300/20 bg-emerald-300/5 p-5"><div className="flex items-start gap-3"><ShieldCheck className="mt-1 text-emerald-300" size={20} /><p className="text-sm leading-6 text-slate-300">Les gourdes et les CP restent dans la plateforme. Le prix final est calculé et validé par Supabase.</p></div></section>
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-xl font-black">Agents disponibles</h2><span className="text-xs text-slate-500">{offers.length} offre(s)</span></div>{loading ? <Loader2 className="animate-spin text-emerald-300" /> : offers.map((offer) => <button type="button" key={offer.id} onClick={() => setSelectedOffer(offer.id)} className={`w-full rounded-2xl border p-4 text-left transition ${selectedOffer === offer.id ? "border-emerald-300 bg-emerald-300/10" : "border-white/10 bg-white/[0.03] hover:border-emerald-300/40"}`}><div className="flex items-center justify-between"><span className="font-black">@{offer.username}</span><span className="font-mono text-emerald-200">{offer.rate_htg_per_cp} HTG/CP</span></div><div className="mt-3 flex gap-4 text-xs text-slate-400"><span>Niveau {offer.reputation_level}</span><span>{offer.successful_clients_count} clients uniques</span><span>{offer.min_cp} - {offer.max_cp} CP</span></div></button>)}</section>
-          <section className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5"><div className="flex rounded-xl border border-white/10 p-1"><button type="button" onClick={() => setDirection("buy_cp")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${direction === "buy_cp" ? "bg-emerald-300 text-slate-950" : "text-slate-400"}`}>Acheter CP</button><button type="button" onClick={() => setDirection("sell_cp")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${direction === "sell_cp" ? "bg-amber-300 text-slate-950" : "text-slate-400"}`}>Revendre CP</button></div><label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Montant CP<input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white" /></label>{selectedOffer && <p className="text-xs text-slate-400"><TrendingUp size={14} className="mr-1 inline text-emerald-300" />Le montant HTG sera calculé côté serveur.</p>}<button type="button" onClick={execute} disabled={submitting || !selectedOffer} className="w-full rounded-xl bg-emerald-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">{submitting ? "Validation..." : "Valider la transaction"}</button>{message && <p className="text-sm text-emerald-200">{message}</p>}</section>
+          <section className="space-y-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5"><div className="flex rounded-xl border border-white/10 p-1"><button type="button" onClick={() => setDirection("buy_cp")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${direction === "buy_cp" ? "bg-emerald-300 text-slate-950" : "text-slate-400"}`}>Acheter CP</button><button type="button" onClick={() => setDirection("sell_cp")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${direction === "sell_cp" ? "bg-amber-300 text-slate-950" : "text-slate-400"}`}>Revendre CP</button></div><label className="block text-xs font-bold uppercase tracking-wider text-slate-400">Montant CP<input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white" /></label>{selectedOffer && (() => { const offer = offers.find((entry) => entry.id === selectedOffer); const cp = Math.max(0, Math.floor(Number(amount) || 0)); const paid = cp * Number(offer?.rate_htg_per_cp ?? 0); return <div className="space-y-1 rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-4 text-sm"><p className="font-black text-white">@{offer?.username}</p><p className="text-slate-300">Prix payé : <strong className="text-emerald-200">{paid.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} HTG</strong></p><p className="text-slate-400">{cp.toLocaleString()} CP à {Number(offer?.rate_htg_per_cp ?? 0).toFixed(4)} HTG/CP</p><p className="text-slate-400">Solde disponible agent : {Number(offer?.available_balance ?? 0).toLocaleString("fr-FR")} HTG</p></div>; })()}<button type="button" onClick={execute} disabled={submitting || !selectedOffer} className="w-full rounded-xl bg-emerald-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">{submitting ? "Validation..." : "Valider la transaction"}</button>{message && <p className="text-sm text-emerald-200">{message}</p>}</section>
         </div>
       </div>
     </main>

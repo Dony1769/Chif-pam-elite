@@ -1,4 +1,5 @@
 import { FINANCE_PAYMENT_METHODS, type FinancePaymentMethod } from '@/lib/constants/finance';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { validatePhoneNumber, validatePositiveAmount } from '@/lib/validation';
 
 export type FinanceDepositInput = {
@@ -30,7 +31,7 @@ export function validateDepositInput(input: FinanceDepositInput): { ok: true; me
   return { ok: true, method: input.method as FinancePaymentMethod };
 }
 
-export function validateWithdrawalInput(input: FinanceWithdrawalInput): { ok: true; method: FinancePaymentMethod } | { ok: false; message: string } {
+export function validateWithdrawalInput(input: FinanceWithdrawalInput): { ok: true; method: FinancePaymentMethod; phone: string } | { ok: false; message: string } {
   const amountCheck = validatePositiveAmount(input.amount, 'Le montant');
   if (!amountCheck.ok) {
     return { ok: false, message: amountCheck.message || 'Montant invalide.' };
@@ -45,5 +46,5 @@ export function validateWithdrawalInput(input: FinanceWithdrawalInput): { ok: tr
     return { ok: false, message: phoneCheck.message || 'Numéro invalide.' };
   }
 
-  return { ok: true, method: input.method as FinancePaymentMethod };
+  return { ok: true, method: input.method as FinancePaymentMethod, phone: normalizePhoneNumber(input.phone) };
 }

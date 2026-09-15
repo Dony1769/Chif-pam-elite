@@ -26,6 +26,15 @@ export async function submitDepositTransaction(amount: number, method: string, p
     }
 
     const supabaseAdmin = getSupabaseAdminClient();
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', session.userId)
+      .single();
+    if (profileError || !['client', 'agent'].includes(profile?.role ?? '')) {
+      return { success: false, message: 'Accès finance non autorisé.' };
+    }
+
     const { error } = await supabaseAdmin.from('transactions').insert({
       user_id: session.userId,
       type: 'deposit',
@@ -58,6 +67,14 @@ export async function submitWithdrawalTransaction(amount: number, method: string
     }
 
     const supabaseAdmin = getSupabaseAdminClient();
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', session.userId)
+      .single();
+    if (profileError || !['client', 'agent'].includes(profile?.role ?? '')) {
+      return { success: false, message: 'Accès finance non autorisé.' };
+    }
 
     const { error: rpcError } = await supabaseAdmin.rpc('initiate_withdrawal', {
       user_id_param: session.userId,
@@ -71,7 +88,7 @@ export async function submitWithdrawalTransaction(amount: number, method: string
       user_id: session.userId,
       type: 'withdrawal',
       amount,
-      phone_number: phoneNumber.trim(),
+      phone_number: validation.phone,
       method: validation.method,
       status: 'pending',
     });

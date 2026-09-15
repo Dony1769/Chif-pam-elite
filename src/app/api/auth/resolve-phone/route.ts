@@ -8,13 +8,15 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { phone?: string };
     const rawPhone = String(body.phone ?? '');
-    if (!/^\d{8}$/.test(rawPhone) && !/^509\d{8}$/.test(rawPhone) && !/^\+509\d{8}$/.test(rawPhone)) {
-      return NextResponse.json({ success: false, message: 'Le numéro de téléphone doit contenir exactement 8 chiffres.' }, { status: 400 });
+    let phone: string;
+    try {
+      phone = normalizePhoneNumber(rawPhone);
+    } catch {
+      return NextResponse.json({ success: false, message: 'Le numéro de téléphone doit contenir 8 chiffres ou un format international valide.' }, { status: 400 });
     }
-    const phone = normalizePhoneNumber(rawPhone);
     const admin = getSupabaseAdminClient();
     const { data, error } = await admin.from('profiles').select('id, email').eq('phone', phone).maybeSingle();
-    if (error) return NextResponse.json({ success: false, message: 'Impossible de vérifier le numéro.' }, { status: 500 });
+    if (error) return NextResponse.json({ success: false, message: 'Impossible de vérifier le numéro pour le moment. Réessayez.' }, { status: 500 });
     if (!data?.email) return NextResponse.json({ success: false, message: 'Compte sans identifiant de connexion valide.' }, { status: 401 });
     return NextResponse.json({ success: true, email: data.email });
   } catch (error) {

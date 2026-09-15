@@ -1,3 +1,5 @@
+import { normalizePhoneNumber } from '@/lib/phone';
+
 export function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -84,12 +86,15 @@ export function sanitizeCode(value: string): string {
 }
 
 export function validatePhoneNumber(value: string): { ok: boolean; message?: string } {
-  const normalized = value.replace(/\s+/g, '').trim();
-  if (!normalized) {
+  if (!String(value ?? '').trim()) {
     return { ok: false, message: 'Le numéro est requis.' };
   }
-  if (!/^\+?\d{8,15}$/.test(normalized)) {
+
+  try {
+    normalizePhoneNumber(value);
+  } catch {
     return { ok: false, message: 'Le numéro de téléphone est invalide.' };
   }
+
   return { ok: true };
 }
