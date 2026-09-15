@@ -48,6 +48,7 @@ const adminItems: ShellNavItem[] = [
   { href: "/admin-chif-pam/chat", label: "Support", icon: <MessageSquare size={18} /> },
   { href: "/admin-chif-pam/notifications", label: "Notifications", icon: <Bell size={18} /> },
   { href: "/admin-chif-pam/p2p", label: "Marché P2P", icon: <Sparkles size={18} /> },
+  { href: "/admin-chif-pam/agent-requests", label: "Demandes agent", icon: <Users size={18} /> },
   { href: "/admin-chif-pam/phone-issues", label: "Incidents téléphone", icon: <AlertTriangle size={18} /> },
 ];
 

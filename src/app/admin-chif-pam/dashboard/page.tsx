@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { 
   XAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid 
 } from 'recharts';
@@ -10,7 +10,7 @@ import {
   Users, Wallet, ArrowUpCircle, Bell,
   ArrowDownCircle, Loader2, RefreshCw, LayoutDashboard,
   Dices, MessageSquare, Ticket, ClipboardList,
-  Target, AlertCircle, ChevronRight, BarChart3
+  AlertCircle, ChevronRight, BarChart3, Sparkles, ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,7 +21,6 @@ export default function AdminDashboard() {
   // Loading silencieux (pour le bouton refresh manuel)
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const router = useRouter();
   const pathname = usePathname();
   
   const [stats, setStats] = useState({
@@ -29,7 +28,12 @@ export default function AdminDashboard() {
     totalBalance: 0, 
     pendingDepots: 0, 
     pendingRetraits: 0,
-    unreadMessages: 0
+    unreadMessages: 0,
+    pendingAgentRequests: 0,
+    activeAgents: 0,
+    averageP2PRate: 0,
+    p2pVolume24h: 0,
+    fraudFlags: 0,
   });
   const [chartData, setChartData] = useState<any[]>([]);
 
@@ -47,6 +51,9 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchGlobalStats(false))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, () => fetchGlobalStats(false))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mises' }, () => fetchGlobalStats(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_requests' }, () => fetchGlobalStats(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'p2p_transactions' }, () => fetchGlobalStats(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'p2p_fraud_flags' }, () => fetchGlobalStats(false))
       .subscribe();
 
     // 3. Intervalle de sécurité (30 secondes) - Rafraîchissement silencieux
@@ -72,6 +79,11 @@ export default function AdminDashboard() {
         depotsRes,
         retraitsRes,
         msgRes,
+        agentRequestsRes,
+        activeAgentsRes,
+        p2pRatesRes,
+        p2pVolumeRes,
+        fraudFlagsRes,
         fluxRes
       ] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
@@ -79,6 +91,11 @@ export default function AdminDashboard() {
         supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['deposit', 'depot']),
         supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['withdrawal', 'retrait']),
         supabase.from('messages').select('*', { count: 'exact', head: true }).eq('is_read_by_admin', false).eq('is_admin_message', false),
+        supabase.from('agent_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('agent_profiles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('p2p_offers').select('rate_htg_per_cp').eq('active', true),
+        supabase.from('p2p_transactions').select('amount_htg').eq('status', 'completed').gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+        supabase.from('p2p_fraud_flags').select('*', { count: 'exact', head: true }).eq('reviewed', false),
         // Pour le graph
         supabase.from('mises').select('montant, gain, status, created_at').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       ]);
@@ -109,7 +126,12 @@ export default function AdminDashboard() {
         totalBalance: balanceRes.data || 0,
         pendingDepots: depotsRes.count || 0,
         pendingRetraits: retraitsRes.count || 0,
-        unreadMessages: msgRes.count || 0
+        unreadMessages: msgRes.count || 0,
+        pendingAgentRequests: agentRequestsRes.count || 0,
+        activeAgents: activeAgentsRes.count || 0,
+        averageP2PRate: p2pRatesRes.data?.length ? p2pRatesRes.data.reduce((sum, row) => sum + Number(row.rate_htg_per_cp), 0) / p2pRatesRes.data.length : 0,
+        p2pVolume24h: p2pVolumeRes.data?.reduce((sum, row) => sum + Number(row.amount_htg), 0) || 0,
+        fraudFlags: fraudFlagsRes.count || 0,
       });
 
     } catch (error) {
@@ -128,6 +150,21 @@ export default function AdminDashboard() {
   );
 
   const totalPending = stats.pendingDepots + stats.pendingRetraits;
+  const hasActionableAlerts = totalPending > 0 || stats.unreadMessages > 0 || stats.pendingAgentRequests > 0 || stats.fraudFlags > 0;
+  const alertHref = stats.unreadMessages > 0
+    ? '/admin-chif-pam/chat'
+    : totalPending > 0
+      ? '/admin-chif-pam/demandes'
+      : stats.pendingAgentRequests > 0
+        ? '/admin-chif-pam/agent-requests'
+        : '/admin-chif-pam/p2p';
+  const alertText = stats.unreadMessages > 0
+    ? `${stats.unreadMessages} MESSAGES NON LUS`
+    : totalPending > 0
+      ? `${totalPending} ACTIONS FINANCIERES`
+      : stats.pendingAgentRequests > 0
+        ? `${stats.pendingAgentRequests} DEMANDES AGENT`
+        : `${stats.fraudFlags} ALERTES FRAUDE P2P`;
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-black italic uppercase tracking-tighter">
@@ -150,6 +187,7 @@ export default function AdminDashboard() {
             <SidebarLink href="/admin-chif-pam/demandes" icon={<Wallet size={20}/>} label="Finances / Demandes" active={pathname.includes('demandes')} />
             <SidebarLink href="/admin-chif-pam/users" icon={<Users size={20}/>} label="Utilisateurs" active={pathname.includes('users')} />
             <SidebarLink href="/admin-chif-pam/notifications" icon={<Bell size={20}/>} label="Notifications" active={pathname.includes('notifications')} />
+            <SidebarLink href="/admin-chif-pam/agent-requests" icon={<Users size={20}/>} label="Agents" active={pathname.includes('agent-requests')} />
             <SidebarLink href="/admin-chif-pam/chat" icon={<MessageSquare size={20}/>} label="Support Client" active={pathname.includes('chat')} />
           </nav>
         </aside>
@@ -176,7 +214,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* BANDEAU ALERTE (Apparaît s'il y a du travail) */}
-          {(totalPending > 0 || stats.unreadMessages > 0) && (
+          {hasActionableAlerts && (
             <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-[2.5rem] flex items-center justify-between shadow-[0_0_30px_rgba(16,185,129,0.1)] animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-5">
                 <div className="bg-emerald-500 p-3 rounded-2xl text-slate-950">
@@ -185,22 +223,29 @@ export default function AdminDashboard() {
                 <div className="flex flex-col">
                   <span className="text-[11px] tracking-[0.2em] font-black uppercase text-white">Statut Critique</span>
                   <span className="text-sm font-black text-emerald-500">
-                    {totalPending} ACTIONS FINANCIÈRES & {stats.unreadMessages} MESSAGES
+                    {alertText}
                   </span>
                 </div>
               </div>
-              <Link href={stats.unreadMessages > 0 ? "/admin-chif-pam/chat" : "/admin-chif-pam/demandes"} className="text-[10px] bg-emerald-500 text-slate-950 px-8 py-4 rounded-2xl flex items-center gap-2 hover:bg-white transition-all font-black italic shadow-lg shadow-emerald-500/20">
+              <Link href={alertHref} className="text-[10px] bg-emerald-500 text-slate-950 px-8 py-4 rounded-2xl flex items-center gap-2 hover:bg-white transition-all font-black italic shadow-lg shadow-emerald-500/20">
                 TRAITER <ChevronRight size={14} />
               </Link>
             </div>
           )}
 
           {/* KPI CARDS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <StatCard title="Total Joueurs" value={stats.totalUsers.toLocaleString()} icon={<Users />} color="blue" />
             <StatCard title="Trésorerie" value={stats.totalBalance.toLocaleString()} icon={<Wallet />} color="emerald" />
             <StatCard title="Dépôts Attente" value={stats.pendingDepots} icon={<ArrowUpCircle />} color="amber" />
             <StatCard title="Retraits Attente" value={stats.pendingRetraits} icon={<ArrowDownCircle />} color="rose" />
+            <StatCard title="Demandes Agent" value={stats.pendingAgentRequests} icon={<Users />} color="blue" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <MarketStat label="Agents actifs" value={stats.activeAgents.toLocaleString()} icon={<Users size={18} />} />
+            <MarketStat label="Taux moyen P2P" value={`${stats.averageP2PRate.toFixed(4)} HTG/CP`} icon={<Sparkles size={18} />} />
+            <MarketStat label="Volume P2P 24h" value={`${stats.p2pVolume24h.toLocaleString()} HTG`} icon={<ShieldAlert size={18} />} />
           </div>
 
           {/* GRAPH & ACTIONS */}
@@ -225,29 +270,23 @@ export default function AdminDashboard() {
              </ResponsiveContainer>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
-            <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Game Management</h3>
-               <ActionCard href="/admin-chif-pam/analytics" label="Analytics & Économie" count="NEW" icon={<BarChart3 size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
-               <ActionCard href="/admin-chif-pam/challenges" label="Gestion des défis" count="LIVE" icon={<Dices size={24}/>} color="bg-emerald-500" />
-               <ActionCard href="/admin-chif-pam/mini-jeux" label="Audit Mini-Jeux" icon={<Target size={24}/>} color="bg-slate-900" textColor="text-emerald-500" border="border-emerald-500/20" />
-               <ActionCard href="/admin-chif-pam/coupon" label="Coupons & Promos" icon={<Ticket size={24}/>} color="bg-indigo-600" textColor="text-white" />
-            </div>
-
-            <div className="space-y-4">
-               <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Financial & Support</h3>
-               <ActionCard href="/admin-chif-pam/demandes" label="Validation Flux" count={totalPending} icon={<ClipboardList size={24}/>} color="bg-white" />
-               <div className="grid grid-cols-2 gap-4">
-                  <ActionCard href="/admin-chif-pam/notifications" label="Alertes" icon={<Bell size={20}/>} color="bg-amber-500/10" textColor="text-amber-500" border="border-amber-500/20" />
-                  <ActionCard href="/admin-chif-pam/chat" label="Support" count={stats.unreadMessages} icon={<MessageSquare size={20}/>} color="bg-slate-800" textColor="text-emerald-500" />
-               </div>
-               <ActionCard href="/admin-chif-pam/users" label="Audit Utilisateurs" icon={<Users size={24}/>} color="bg-slate-900" textColor="text-blue-500" border="border-blue-500/20" />
+          <div className="space-y-4 pb-12">
+            <h3 className="text-[10px] text-slate-600 tracking-[0.4em] px-6 font-bold uppercase">Actions requises</h3>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {totalPending > 0 && <ActionCard href="/admin-chif-pam/demandes" label="Validation Flux" count={totalPending} icon={<ClipboardList size={24}/>} color="bg-white" />}
+              {stats.unreadMessages > 0 && <ActionCard href="/admin-chif-pam/chat" label="Support non lu" count={stats.unreadMessages} icon={<MessageSquare size={24}/>} color="bg-slate-800" textColor="text-emerald-500" />}
+              {stats.pendingAgentRequests > 0 && <ActionCard href="/admin-chif-pam/agent-requests" label="Demandes agent" count={stats.pendingAgentRequests} icon={<Users size={24}/>} color="bg-emerald-500" />}
+              {stats.fraudFlags > 0 && <ActionCard href="/admin-chif-pam/p2p" label="Alertes fraude P2P" count={stats.fraudFlags} icon={<ShieldAlert size={24}/>} color="bg-amber-500" textColor="text-slate-950" />}
             </div>
           </div>
         </main>
       </div>
     </div>
   );
+}
+
+function MarketStat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+  return <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-slate-900/60 p-4"><span className="text-emerald-400">{icon}</span><div><p className="text-[9px] text-slate-500">{label}</p><p className="text-sm font-black text-white">{value}</p></div></div>;
 }
 
 // --- UI COMPONENTS ---

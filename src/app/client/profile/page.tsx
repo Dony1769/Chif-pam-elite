@@ -62,6 +62,7 @@ interface Profile {
   avatar?: string;
   history?: ProfileHistoryEntry[];
   public_profile?: boolean;
+  role?: string | null;
 }
 
 interface ChartPoint {
@@ -109,6 +110,8 @@ export default function ProfilePage() {
 
   // Toast / Notification locale
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [agentRequestPending, setAgentRequestPending] = useState(false);
+  const [agentRequestLoading, setAgentRequestLoading] = useState(false);
 
   const showToast = useCallback((msg: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -123,6 +126,22 @@ export default function ProfilePage() {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (profile?.role !== 'client') return;
+    void supabase.from('agent_requests').select('id').eq('status', 'pending').maybeSingle().then(({ data }) => {
+      setAgentRequestPending(Boolean(data));
+    });
+  }, [profile?.role]);
+
+  const requestAgentStatus = async () => {
+    if (!window.confirm('Le passage agent remettra votre solde HTG et CP à zéro. Confirmez-vous cette demande ?')) return;
+    setAgentRequestLoading(true);
+    const { error } = await supabase.rpc('submit_agent_request');
+    setAgentRequestPending(!error);
+    showToast(error?.message ?? 'Demande agent envoyée à l’administration.');
+    setAgentRequestLoading(false);
+  };
 
   // Traitement sécurisé des données du graphique de solde
   const processPerformanceData = useCallback((trans: TransactionItem[], mises: MiseItem[], initialBalance: number) => {
@@ -780,6 +799,15 @@ export default function ProfilePage() {
                 </DSButton>
               </div>
             </DSCard>
+            {profile?.role === 'client' && (
+              <DSCard className="rounded-[2rem] border border-amber-400/25 bg-amber-400/5 p-6">
+                <p className="text-sm font-black text-amber-100">Devenir agent</p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">L’acceptation par l’administration remettra vos soldes HTG et CP à zéro.</p>
+                <button type="button" onClick={requestAgentStatus} disabled={agentRequestPending || agentRequestLoading} className="mt-3 rounded-xl border border-amber-300/30 px-4 py-2 text-xs font-black text-amber-200 disabled:opacity-50">
+                  {agentRequestLoading ? 'Envoi...' : agentRequestPending ? 'Demande en attente' : 'Demander le statut agent'}
+                </button>
+              </DSCard>
+            )}
           </div>
         )}
 
