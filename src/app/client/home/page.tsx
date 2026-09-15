@@ -256,10 +256,6 @@ export default function ClientHome() {
 
   const handleQuickConvert = async () => {
     if (!profile) return;
-    if (cpToHtgRate === null) {
-      setFeedbackMessage({ type: 'error', text: 'Le taux de conversion est encore indisponible.' });
-      return;
-    }
     
     const montantCP = Math.floor(cpToConvert);
 
@@ -286,10 +282,13 @@ export default function ClientHome() {
         setFeedbackMessage({ type: 'error', text: error.message || 'Erreur lors de la conversion.' });
       } else {
         playPing();
-        const montantObtenu = (montantCP * (cpToHtgRate ?? 0)).toFixed(2);
+        await fetchData();
+        const montantObtenu = cpToHtgRate === null ? null : (montantCP * cpToHtgRate).toFixed(2);
         setFeedbackMessage({ 
           type: 'success', 
-          text: `Conversion réussie ! ${montantCP} CP convertis en ~${montantObtenu} HTG.` 
+          text: montantObtenu === null
+            ? `Conversion réussie ! ${montantCP} CP ont été crédités sur votre solde HTG.`
+            : `Conversion réussie ! ${montantCP} CP convertis en ~${montantObtenu} HTG.`
         });
       }
     } catch (err) {
@@ -533,7 +532,7 @@ export default function ClientHome() {
                       />
                       <DSButton
                         onClick={handleQuickConvert}
-                        disabled={isConverting || rateLoading || rateError || cpToHtgRate === null || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
+                        disabled={isConverting || profileLoading || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
                         variant="success"
                         size="sm"
                         className="shrink-0 flex items-center justify-center gap-2 py-2.5"
