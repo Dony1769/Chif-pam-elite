@@ -1,93 +1,93 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
-import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Canvas } from "@react-three/fiber";
+import { Float, OrbitControls } from "@react-three/drei";
+import confetti from "canvas-confetti";
+import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import {
-  Calendar as CalendarIcon,
+  Award,
+  CalendarDays,
+  Check,
   CheckCircle2,
-  Star,
+  Clock3,
   Coins,
   Gem,
+  Gift,
+  LockKeyhole,
   Loader2,
   Sparkles,
-  Clock,
-  Flame,
-  Gift,
-  Lock,
-  Award,
+  Star,
+  Trophy,
+  Zap,
 } from "lucide-react";
 import { getDailyReward } from "@/lib/game-economy";
-import { motion } from "framer-motion";
-import RewardedVideo from "@/components/ads/RewardedVideo";
 
-// --- CONSTANTES ET REGLES ECONMIQUES ---
 const MAX_CP_REWARD = 50;
-
-// --- TYPES ---
 type RewardType = "cp" | "diamonds" | "xp";
-
-type RewardsConfigItem = {
-  day_number: number;
-  title: string;
-  reward_amount: number;
-  reward_type: RewardType;
-};
-
-type ProfileData = {
-  id: string;
-  username?: string | null;
-  jetons_cp?: number;
-  diamonds?: number;
-  xp?: number;
-};
-
+type RewardsConfigItem = { day_number: number; title: string; reward_amount: number; reward_type: RewardType };
+type ProfileData = { id: string; username?: string | null; jetons_cp?: number; diamonds?: number; xp?: number };
 type RewardIconComponent = React.ComponentType<{ size?: number; className?: string }>;
 
-// --- METADATA CONFIG ---
-const rewardTypeMeta: Record<
-  RewardType,
-  { label: string; icon: RewardIconComponent; color: string; badge: string }
-> = {
-  cp: {
-    label: "CP",
-    icon: Coins,
-    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
-    badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  },
-  diamonds: {
-    label: "Diamants",
-    icon: Gem,
-    color: "text-sky-400 bg-sky-500/10 border-sky-500/30",
-    badge: "bg-sky-500/20 text-sky-300 border-sky-500/30",
-  },
-  xp: {
-    label: "XP",
-    icon: Star,
-    color: "text-amber-400 bg-amber-500/10 border-amber-500/30",
-    badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  },
+type RewardMeta = { label: string; icon: RewardIconComponent; accent: string; glow: string; iconShell: string };
+const rewardTypeMeta: Record<RewardType, RewardMeta> = {
+  cp: { label: "CP", icon: Coins, accent: "text-emerald-300", glow: "shadow-emerald-500/20", iconShell: "border-emerald-300/30 bg-emerald-300/10" },
+  diamonds: { label: "Diamants", icon: Gem, accent: "text-sky-300", glow: "shadow-sky-500/20", iconShell: "border-sky-300/30 bg-sky-300/10" },
+  xp: { label: "XP", icon: Star, accent: "text-amber-300", glow: "shadow-amber-500/20", iconShell: "border-amber-300/30 bg-amber-300/10" },
 };
 
-function clampCpReward(type: RewardType, amount: number): number {
-  if (type === "cp") {
-    return Math.min(amount, MAX_CP_REWARD);
-  }
-  return amount;
+function clampCpReward(type: RewardType, amount: number) {
+  return type === "cp" ? Math.min(amount, MAX_CP_REWARD) : amount;
+}
+
+function TreasureGem() {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div className="h-65 w-full sm:h-80" onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+      <Canvas camera={{ position: [0, 0.1, 4.4], fov: 42 }} dpr={[1, 2]}>
+        <ambientLight intensity={0.7} color="#d6fff1" />
+        <pointLight position={[2.5, 2.5, 3]} intensity={hovered ? 12 : 7} color={hovered ? "#fbbf24" : "#34d399"} />
+        <pointLight position={[-2, -1, 2]} intensity={4} color="#38bdf8" />
+        <Float speed={hovered ? 3 : 1.5} rotationIntensity={hovered ? 0.55 : 0.25} floatIntensity={hovered ? 1.1 : 0.65}>
+          <group rotation={[0.25, 0.25, 0]}>
+            <mesh rotation={[0.2, 0.5, 0.1]} scale={hovered ? 1.12 : 1}>
+              <icosahedronGeometry args={[1.15, 1]} />
+              <meshPhysicalMaterial color={hovered ? "#fde68a" : "#34d399"} roughness={0.12} metalness={0.4} transmission={0.18} thickness={1.2} clearcoat={1} clearcoatRoughness={0.08} emissive={hovered ? "#b45309" : "#047857"} emissiveIntensity={hovered ? 0.55 : 0.3} />
+            </mesh>
+            <mesh rotation={[0.2, 0.5, 0.1]} scale={hovered ? 1.16 : 1.04}>
+              <icosahedronGeometry args={[1.15, 1]} />
+              <meshBasicMaterial color="#fef3c7" transparent opacity={hovered ? 0.16 : 0.08} wireframe />
+            </mesh>
+          </group>
+        </Float>
+        <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={hovered ? 3.5 : 1.5} minPolarAngle={Math.PI / 2.8} maxPolarAngle={Math.PI / 1.7} />
+      </Canvas>
+    </div>
+  );
+}
+
+function ResourceBadge({ label, value, icon: Icon, tone }: { label: string; value: number; icon: RewardIconComponent; tone: string }) {
+  return (
+    <motion.div whileHover={{ y: -4, scale: 1.03 }} className={`rounded-2xl border border-white/10 bg-white/6 p-3 backdrop-blur-xl ${tone}`}>
+      <Icon size={17} className="mb-2" />
+      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-1 text-lg font-black text-white">{value.toLocaleString("fr-FR")}</p>
+    </motion.div>
+  );
 }
 
 export default function RewardsPage() {
   const { notify } = useAppFeedback();
+  const router = useRouter();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [rewardsConfig, setRewardsConfig] = useState<RewardsConfigItem[]>([]);
   const [claimedDays, setClaimedDays] = useState<number[]>([]);
   const [claiming, setClaiming] = useState(false);
-  const [showRewardedAd, setShowRewardedAd] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState({ hours: 0, minutes: 0, seconds: 0 });
-
-  const router = useRouter();
 
   const currentDate = useMemo(() => new Date(), []);
   const currentYear = currentDate.getFullYear();
@@ -95,86 +95,39 @@ export default function RewardsPage() {
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const todayDayNumber = currentDate.getDate();
 
-  // Compte à rebours minuit
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
       const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       const diff = Math.max(0, tomorrow.getTime() - now.getTime());
-
-      setTimeRemaining({
-        hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
-        minutes: Math.floor((diff / (1000 * 60)) % 60),
-        seconds: Math.floor((diff / 1000) % 60),
-      });
+      setTimeRemaining({ hours: Math.floor((diff / 3600000) % 24), minutes: Math.floor((diff / 60000) % 60), seconds: Math.floor((diff / 1000) % 60) });
     };
-
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Chargement des données + Génération de secours si BDD vide
   const fetchData = useCallback(async () => {
     try {
-      const response = await supabase.auth.getUser();
-      const user = response.data?.user;
-      if (!user) {
-        router.push("/connexion");
-        return;
-      }
-
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push("/connexion"); return; }
       const [profRes, rewRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, username, jetons_cp, diamonds, xp")
-          .eq("id", user.id)
-          .single(),
-        supabase
-          .from("daily_rewards_config")
-          .select("*")
-          .lte("day_number", daysInMonth)
-          .order("day_number", { ascending: true }),
+        supabase.from("profiles").select("id, username, jetons_cp, diamonds, xp").eq("id", user.id).single(),
+        supabase.from("daily_rewards_config").select("*").lte("day_number", daysInMonth).order("day_number", { ascending: true }),
       ]);
-
       setProfile(profRes.data ?? null);
-
-      let configItems: RewardsConfigItem[] = [];
-
-      if (rewRes.data && rewRes.data.length > 0) {
-        configItems = rewRes.data.map((item) => ({
-          ...item,
-          reward_amount: clampCpReward(item.reward_type, item.reward_amount),
-        }));
-      } else {
-        // FALLBACK : Si la BDD est vide, on génère automatiquement le calendrier localement
-        configItems = Array.from({ length: daysInMonth }, (_, index) => {
-          const day = index + 1;
-          const reward = getDailyReward(day, 1) || { rewardType: "cp", rewardAmount: 10 };
-          return {
-            day_number: day,
-            title: `Bonus Jour ${day}`,
-            reward_amount: clampCpReward(reward.rewardType as RewardType, reward.rewardAmount),
-            reward_type: (reward.rewardType as RewardType) || "cp",
-          };
-        });
-      }
-
-      setRewardsConfig(configItems);
-
+      const configItems = rewRes.data?.length
+        ? rewRes.data.map((item) => ({ ...item, reward_amount: clampCpReward(item.reward_type as RewardType, item.reward_amount) }))
+        : Array.from({ length: daysInMonth }, (_, index) => {
+            const day = index + 1;
+            const reward = getDailyReward(day, 1) || { rewardType: "cp", rewardAmount: 10 };
+            return { day_number: day, title: `Bonus Jour ${day}`, reward_amount: clampCpReward(reward.rewardType as RewardType, reward.rewardAmount), reward_type: (reward.rewardType as RewardType) || "cp" };
+          });
+      setRewardsConfig(configItems as RewardsConfigItem[]);
       const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString();
       const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59).toISOString();
-
-      const { data: claims } = await supabase
-        .from("user_calendar_claims")
-        .select("day_number")
-        .eq("user_id", user.id)
-        .gte("claim_date", startOfMonth)
-        .lte("claim_date", endOfMonth);
-
-      if (claims) {
-        setClaimedDays(claims.map((c: { day_number: number }) => c.day_number));
-      }
+      const { data: claims } = await supabase.from("user_calendar_claims").select("day_number").eq("user_id", user.id).gte("claim_date", startOfMonth).lte("claim_date", endOfMonth);
+      setClaimedDays(claims?.map((claim: { day_number: number }) => claim.day_number) ?? []);
     } catch (error) {
       console.error("Erreur de chargement :", error);
     } finally {
@@ -182,211 +135,76 @@ export default function RewardsPage() {
     }
   }, [currentYear, currentMonth, daysInMonth, router]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const playRewardSound = () => {
-    try {
-      new Audio('/sounds/win.mp3').play().catch(() => {});
-    } catch {}
+    try { void new Audio("/sounds/win.mp3").play(); } catch { /* Audio may be blocked until interaction. */ }
   };
 
   const handleClaimDaily = async () => {
     if (!profile || claiming || claimedDays.includes(todayDayNumber)) return;
     setClaiming(true);
-
     try {
       const rawReward = getDailyReward(todayDayNumber, 1);
       const rewardType = (rawReward?.rewardType || "cp") as RewardType;
-      const rawAmount = rawReward?.rewardAmount || 0;
-      const rewardAmount = clampCpReward(rewardType, rawAmount);
-
-      const { data, error } = await supabase.rpc("claim_calendar_reward", {
-        p_user_id: profile.id,
-      });
-
+      const rewardAmount = clampCpReward(rewardType, rawReward?.rewardAmount || 0);
+      const { data, error } = await supabase.rpc("claim_calendar_reward", { p_user_id: profile.id });
       if (error) throw error;
-
       if (!data?.success) {
-        notify(data?.message ?? "Impossible de réclamer le bonus.", 'danger');
-      } else {
-        setProfile((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            jetons_cp: rewardType === "cp" ? (prev.jetons_cp || 0) + rewardAmount : prev.jetons_cp,
-            diamonds: rewardType === "diamonds" ? (prev.diamonds || 0) + rewardAmount : prev.diamonds,
-            xp: rewardType === "xp" ? (prev.xp || 0) + rewardAmount : prev.xp,
-          };
-        });
-
-        setClaimedDays((prev) => [...prev, todayDayNumber]);
-        playRewardSound();
+        notify(data?.message ?? "Impossible de réclamer le bonus.", "danger");
+        return;
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Erreur inconnue";
-      notify("Erreur: " + message, 'danger');
+      setProfile((prev) => prev ? { ...prev, jetons_cp: rewardType === "cp" ? (prev.jetons_cp || 0) + rewardAmount : prev.jetons_cp, diamonds: rewardType === "diamonds" ? (prev.diamonds || 0) + rewardAmount : prev.diamonds, xp: rewardType === "xp" ? (prev.xp || 0) + rewardAmount : prev.xp } : prev);
+      setClaimedDays((prev) => [...prev, todayDayNumber]);
+      confetti({ particleCount: 150, spread: 75, origin: { y: 0.62 }, colors: ["#34d399", "#fbbf24", "#38bdf8", "#ffffff"] });
+      playRewardSound();
+      notify("Bonus quotidien réclamé !", "success");
+    } catch (error) {
+      notify("Erreur: " + (error instanceof Error ? error.message : "Erreur inconnue"), "danger");
     } finally {
       setClaiming(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen w-full bg-slate-950 p-6 text-slate-300">
-        <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col items-center justify-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-emerald-400" />
-          <p className="text-center text-xs uppercase tracking-[0.35em] text-slate-500">
-            Chargement des Récompenses...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <main className="min-h-screen bg-slate-950 p-6 text-slate-300"><div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col items-center justify-center gap-4"><Loader2 className="h-12 w-12 animate-spin text-emerald-400" /><p className="text-center text-xs uppercase tracking-[0.35em] text-slate-500">Chargement des récompenses...</p></div></main>;
 
   return (
-    <main className="min-h-screen bg-slate-950 pb-28 text-slate-100 font-sans">
-      {showRewardedAd ? (
-        <RewardedVideo
-          onClose={() => setShowRewardedAd(false)}
-          onReward={() => {
-            void fetchData();
-          }}
-        />
-      ) : null}
-
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-8">
-        
-        {/* BANNIERE */}
-        <section className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6 sm:p-8 shadow-2xl">
-          <div className="relative grid gap-6 lg:grid-cols-12 lg:items-center">
-            <div className="lg:col-span-7 space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                <Sparkles size={14} className="animate-pulse" /> Récompense Quotidienne
-              </div>
-              <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-                Bonus de Connexion
-              </h1>
-              <div className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 backdrop-blur-md">
-                <Clock size={16} className="text-amber-400 animate-spin" />
-                <span>Prochain bonus dans :</span>
-                <span className="font-mono font-bold text-amber-300">
-                  {String(timeRemaining.hours).padStart(2, "0")}h{" "}
-                  {String(timeRemaining.minutes).padStart(2, "0")}m{" "}
-                  {String(timeRemaining.seconds).padStart(2, "0")}s
-                </span>
-              </div>
+    <main className="min-h-screen overflow-hidden bg-slate-950 pb-28 text-slate-100">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_5%,rgba(16,185,129,0.16),transparent_30%),radial-gradient(circle_at_85%_18%,rgba(245,158,11,0.12),transparent_28%)]" />
+      <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-4xl border border-emerald-300/20 bg-linear-to-br from-amber-500/10 via-emerald-500/5 to-transparent p-5 shadow-[0_28px_100px_rgba(16,185,129,0.14)] sm:p-8">
+          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-amber-300/10 blur-3xl" />
+          <div className="relative grid items-center gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.28em] text-amber-200"><Trophy size={14} /> Récompenses quotidiennes</div>
+              <h1 className="max-w-xl text-4xl font-black uppercase leading-[0.95] tracking-tight text-white sm:text-6xl">Calendrier de récompenses</h1>
+              <p className="max-w-lg text-sm leading-6 text-slate-300">Chaque jour ouvre une nouvelle chance de renforcer votre progression.</p>
+              <div className="inline-flex items-center gap-3 rounded-xl border border-amber-300/30 bg-slate-950/65 px-4 py-3 shadow-[0_0_30px_rgba(251,191,36,0.12)] backdrop-blur-xl"><Clock3 size={17} className="text-amber-300" /><span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Prochain bonus</span><span className="font-mono text-sm font-black tabular-nums text-amber-200">{String(timeRemaining.hours).padStart(2, "0")}:{String(timeRemaining.minutes).padStart(2, "0")}:{String(timeRemaining.seconds).padStart(2, "0")}</span></div>
+              <div className="grid max-w-lg grid-cols-3 gap-2"><ResourceBadge label="CP" value={profile?.jetons_cp ?? 0} icon={Coins} tone="text-emerald-300" /><ResourceBadge label="Diamants" value={profile?.diamonds ?? 0} icon={Gem} tone="text-sky-300" /><ResourceBadge label="XP" value={profile?.xp ?? 0} icon={Star} tone="text-amber-300" /></div>
             </div>
-
-            {/* Ressources */}
-            <div className="lg:col-span-5 grid grid-cols-3 gap-3">
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-center">
-                <Coins size={20} className="mx-auto text-emerald-300 mb-2" />
-                <p className="text-[10px] font-bold text-slate-400">CP</p>
-                <p className="text-xl font-black text-white">{profile?.jetons_cp ?? 0}</p>
-              </div>
-              <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 text-center">
-                <Gem size={20} className="mx-auto text-sky-300 mb-2" />
-                <p className="text-[10px] font-bold text-slate-400">Diamants</p>
-                <p className="text-xl font-black text-white">{profile?.diamonds ?? 0}</p>
-              </div>
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-center">
-                <Star size={20} className="mx-auto text-amber-300 mb-2" />
-                <p className="text-[10px] font-bold text-slate-400">XP</p>
-                <p className="text-xl font-black text-white">{profile?.xp ?? 0}</p>
-              </div>
-            </div>
+            <div className="relative"><div className="absolute inset-8 rounded-full bg-emerald-400/10 blur-3xl" /><TreasureGem /><div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-[9px] font-black uppercase tracking-[0.22em] text-slate-400 backdrop-blur">Artefact du jour</div></div>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-amber-400/25 bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-950 p-5 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-amber-300">Bonus instantane</p>
-              <h2 className="mt-1 text-xl font-black text-white">Publicite recompensee Monetag</h2>
-              <p className="mt-1 text-xs text-slate-300">Activez la pub puis reclamez un bonus protege cote serveur: +5 diamants et +10 XP.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowRewardedAd(true)}
-              className="rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-300 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black shadow-lg shadow-amber-500/20 transition hover:brightness-105 active:scale-95"
-            >
-              Activer maintenant
-            </button>
-          </div>
-        </section>
-
-        {/* SECTION CALENDRIER */}
-        <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-          <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-white/5">
-            <h2 className="text-lg font-black text-white flex items-center gap-2">
-              <Gift className="text-emerald-400" size={20} /> Calendrier des Récompenses
-            </h2>
-            <div className="text-xs text-slate-300 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
-              Série : <strong className="text-amber-300">{claimedDays.length} jour(s)</strong>
-            </div>
-          </div>
-
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {rewardsConfig.map((day) => {
+        <motion.section initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/4 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><CalendarDays size={19} /></div><div><h2 className="text-lg font-black uppercase tracking-tight text-white">Le calendrier</h2><p className="text-xs text-slate-500">Une récompense disponible chaque jour</p></div></div><div className="inline-flex items-center gap-2 self-start rounded-xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs font-bold text-amber-200 sm:self-auto"><Zap size={14} /> Série : {claimedDays.length} jour(s)</div></div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+            {rewardsConfig.map((day, index) => {
               const isToday = day.day_number === todayDayNumber;
               const isClaimed = claimedDays.includes(day.day_number);
               const isLocked = day.day_number > todayDayNumber;
-              const rewardMeta = rewardTypeMeta[day.reward_type] || rewardTypeMeta.cp;
-              const RewardIcon = rewardMeta.icon;
-
-              return (
-                <div
-                  key={day.day_number}
-                  className={`relative flex flex-col justify-between rounded-2xl border p-4 ${
-                    isClaimed
-                      ? "border-emerald-500/20 bg-emerald-950/20"
-                      : isToday
-                      ? "border-amber-400/60 bg-slate-900 ring-2 ring-amber-400/30"
-                      : "border-white/10 bg-slate-900/60"
-                  } ${isLocked ? "opacity-40 bg-slate-950" : ""}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-slate-400">
-                      Jour {day.day_number}
-                    </span>
-                    {isClaimed ? (
-                      <CheckCircle2 size={16} className="text-emerald-400" />
-                    ) : isLocked ? (
-                      <Lock size={14} className="text-slate-500" />
-                    ) : null}
-                  </div>
-
-                  <div className="my-4 text-center space-y-1">
-                    <div className={`mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border ${rewardMeta.color}`}>
-                      <RewardIcon size={20} />
-                    </div>
-                    <p className="text-xs font-bold text-white">{day.title}</p>
-                    <p className="text-sm font-black text-amber-300">
-                      +{day.reward_amount} {rewardMeta.label}
-                    </p>
-                  </div>
-
-                  {isToday && !isClaimed ? (
-                    <button
-                      onClick={handleClaimDaily}
-                      disabled={claiming}
-                      className="w-full rounded-xl bg-amber-400 py-2 text-xs font-black uppercase text-slate-950"
-                    >
-                      {claiming ? <Loader2 size={14} className="mx-auto animate-spin" /> : "Réclamer"}
-                    </button>
-                  ) : (
-                    <div className="text-center text-[10px] font-bold uppercase text-slate-500 py-1">
-                      {isClaimed ? "Réclamé" : isLocked ? "Verrouillé" : "Manqué"}
-                    </div>
-                  )}
-                </div>
-              );
+              const meta = rewardTypeMeta[day.reward_type] || rewardTypeMeta.cp;
+              const RewardIcon = meta.icon;
+              return <motion.article key={day.day_number} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.025 }} whileHover={!isLocked ? { y: -5 } : undefined} className={`relative flex min-h-47.5 flex-col justify-between overflow-hidden rounded-2xl border p-3.5 transition ${isClaimed ? "border-emerald-300/15 bg-emerald-950/25 opacity-75" : isToday ? "border-amber-300/70 bg-slate-900 shadow-[0_0_34px_rgba(251,191,36,0.18)] ring-1 ring-amber-300/30" : "border-white/10 bg-slate-900/60"} ${isLocked ? "opacity-35 grayscale" : ""}`}>
+                {isToday && !isClaimed && <motion.div animate={{ opacity: [0.2, 0.65, 0.2] }} transition={{ repeat: Infinity, duration: 2.2 }} className="absolute inset-0 rounded-2xl border border-amber-300/50" />}
+                <div className="relative flex items-center justify-between"><span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Jour {day.day_number}</span>{isClaimed ? <CheckCircle2 size={16} className="text-emerald-300" /> : isLocked ? <LockKeyhole size={15} className="text-slate-500" /> : <Sparkles size={14} className="text-amber-300" />}</div>
+                <div className="relative my-3 text-center"><div className={`mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border ${meta.iconShell} ${meta.glow} shadow-lg`}><RewardIcon size={21} className={meta.accent} /></div><p className="mt-3 truncate text-[11px] font-bold text-white">{day.title}</p><p className={`mt-1 text-sm font-black ${meta.accent}`}>+{day.reward_amount} {meta.label}</p></div>
+                <div className="relative">{isToday && !isClaimed ? <button type="button" onClick={() => void handleClaimDaily()} disabled={claiming} className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-amber-300 py-2 text-[10px] font-black uppercase tracking-wide text-slate-950 shadow-[0_8px_20px_rgba(251,191,36,0.25)] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60">{claiming ? <Loader2 size={14} className="animate-spin" /> : <Gift size={14} />} {claiming ? "Ouverture..." : "Réclamer le bonus"}</button> : <div className={`flex items-center justify-center gap-1 py-2 text-[10px] font-black uppercase tracking-wide ${isClaimed ? "text-emerald-300" : "text-slate-600"}`}>{isClaimed ? <><Check size={13} /> Réclamé</> : isLocked ? <><LockKeyhole size={12} /> Verrouillé</> : "Manqué"}</div>}</div>
+              </motion.article>;
             })}
           </div>
         </motion.section>
-
+        <div className="flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600"><Award size={14} /> Revenez demain pour poursuivre votre série</div>
       </div>
     </main>
   );
