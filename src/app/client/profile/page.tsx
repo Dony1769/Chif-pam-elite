@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { DSCard, DSButton, DSInput } from '@/components/ui/primitives';
 import { computeGamePassSummary, createGamePassHistoryEntry, GAME_PASS_AVATARS } from '@/lib/game-pass';
+import { getLevelForXp, getXpRequiredForLevel } from '@/lib/game-economy';
 
 // Logo ChifPam
 const LogoChifPamSmall = () => (
@@ -250,19 +251,20 @@ export default function ProfilePage() {
       })() : null;
 
       if (prof) {
+        const serverXp = Number(prof.xp ?? 0);
         const computed = computeGamePassSummary(
-          prof.xp || storedGamePass?.xp || 0, 
+          serverXp,
           prof.title || storedGamePass?.title || 'Voyageur'
         );
         
         const mergedProfile: Profile = {
           ...prof,
           ...storedGamePass,
-          xp: prof.xp ?? storedGamePass?.xp ?? computed.xp,
-          level: prof.level ?? storedGamePass?.level ?? computed.level,
-          badge: prof.badge || storedGamePass?.badge || computed.badge,
+          xp: serverXp,
+          level: getLevelForXp(serverXp),
+          badge: computed.badge,
           title: prof.title || storedGamePass?.title || computed.title,
-          rank: prof.rank || storedGamePass?.rank || computed.rank,
+          rank: computed.rank,
           avatar: prof.avatar || storedGamePass?.avatar || GAME_PASS_AVATARS[0],
           history: prof.history || storedGamePass?.history || [createGamePassHistoryEntry('Bienvenue', 'Compte créé')],
           public_profile: prof.public_profile ?? storedGamePass?.public_profile ?? true,
@@ -425,10 +427,6 @@ export default function ProfilePage() {
         title: sanitizedTitle,
         public_profile: gamePassPublic,
         avatar: gamePassAvatar,
-        xp: nextProfile.xp,
-        level: nextProfile.level,
-        badge: nextProfile.badge,
-        rank: nextProfile.rank,
       }).eq('id', user.id);
 
       if (profError) throw profError;
@@ -497,11 +495,12 @@ export default function ProfilePage() {
   // Calcul du progrès du niveau basé sur la formule quadratique
   const currentXP = profile?.xp || 0;
   const currentLevel = profile?.level || 1;
-  const currentLevelThreshold = (currentLevel - 1) * (currentLevel - 1) * 1000;
-  const nextLevelThreshold = currentLevel * currentLevel * 1000;
+  const currentLevelThreshold = getXpRequiredForLevel(currentLevel);
+  const nextLevelThreshold = getXpRequiredForLevel(currentLevel + 1);
   const xpInCurrentLevel = Math.max(0, currentXP - currentLevelThreshold);
   const xpRequiredForNext = Math.max(1, nextLevelThreshold - currentLevelThreshold);
   const progressPercent = Math.min(100, Math.max(0, (xpInCurrentLevel / xpRequiredForNext) * 100));
+  const xpRemaining = Math.max(0, nextLevelThreshold - currentXP);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_32%),linear-gradient(135deg,#020617_0%,#050816_60%,#020617_100%)] pb-32 text-white">
@@ -542,7 +541,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Section Carte Profil Personnalisée */}
-        <section className="relative overflow-hidden rounded-[2rem] border border-emerald-500/20 bg-gradient-to-br from-slate-950/90 via-slate-900/80 to-slate-950/70 p-6 shadow-[0_24px_70px_rgba(2,8,23,0.42)]">
+        <section className="relative overflow-hidden rounded-4xl border border-emerald-500/20 bg-linear-to-br from-slate-950/90 via-slate-900/80 to-slate-950/70 p-6 shadow-[0_24px_70px_rgba(2,8,23,0.42)]">
           {isInstallable && (
             <button 
               onClick={install} 
@@ -553,7 +552,7 @@ export default function ProfilePage() {
           )}
 
           <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
-            <div className={`relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 bg-gradient-to-br from-slate-900 to-slate-950 ${getBorderColorStyle(levelPerks?.border_color)}`}>
+            <div className={`relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-2 bg-linear-to-br from-slate-900 to-slate-950 ${getBorderColorStyle(levelPerks?.border_color)}`}>
               <span className="text-4xl">{profile?.avatar || GAME_PASS_AVATARS[0]}</span>
               <div className="absolute -bottom-1 -right-1 rounded-full border border-emerald-400/30 bg-slate-950 p-1.5 shadow-md">
                 <Crown size={14} className="text-amber-300" />
@@ -582,12 +581,12 @@ export default function ProfilePage() {
                 </div>
                 <div className="h-2.5 overflow-hidden rounded-full border border-white/10 bg-white/5">
                   <div 
-                    className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 transition-all duration-500" 
+                    className="h-full rounded-full bg-linear-to-r from-cyan-400 via-emerald-400 to-amber-300 transition-all duration-500"
                     style={{ width: `${progressPercent}%` }} 
                   />
                 </div>
                 <p className="mt-1 text-right text-[8px] font-bold tracking-wider text-slate-500 uppercase">
-                  Prochain niveau : {nextLevelThreshold.toLocaleString()} XP
+                  {xpRemaining.toLocaleString('fr-FR')} XP avant le niveau {currentLevel + 1}
                 </p>
               </div>
             </div>
@@ -649,7 +648,7 @@ export default function ProfilePage() {
           <div className="space-y-5">
             
             {/* CARTE DES AVANTAGES DE NIVEAU (LEVEL PERKS) */}
-            <DSCard className="rounded-[2rem] border border-amber-500/20 bg-slate-900/90 p-5 shadow-xl">
+            <DSCard className="rounded-4xl border border-amber-500/20 bg-slate-900/90 p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
                   <Zap size={18} className="text-amber-400 animate-pulse" />
@@ -686,7 +685,7 @@ export default function ProfilePage() {
             </DSCard>
 
             {/* Carte Parrainage */}
-            <DSCard className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-600 to-emerald-900 p-6 text-white shadow-[0_20px_60px_rgba(16,185,129,0.18)]">
+            <DSCard className="relative overflow-hidden rounded-4xl bg-linear-to-br from-emerald-600 to-emerald-900 p-6 text-white shadow-[0_20px_60px_rgba(16,185,129,0.18)]">
               <div className="absolute right-0 top-0 p-4 opacity-15 pointer-events-none">
                 <Gift size={100} />
               </div>
@@ -735,7 +734,7 @@ export default function ProfilePage() {
         {activeTab === 'stats' && (
           <div className="space-y-5">
             {/* Graphique de Solde */}
-            <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 p-6 shadow-xl">
+            <div className="overflow-hidden rounded-4xl border border-white/10 bg-slate-900/80 p-6 shadow-xl">
               <div className="mb-4">
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Évolution du Solde Principal</p>
                 <h2 className="text-3xl font-black text-emerald-400">
@@ -769,7 +768,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Activation Coupon */}
-            <DSCard className="rounded-[2rem] p-5">
+            <DSCard className="rounded-4xl p-5">
               <div className="mb-3 flex items-center gap-2 text-emerald-400">
                 <Ticket size={18} />
                 <p className="text-[10px] font-black uppercase tracking-[0.28em]">Code Promo / Coupon</p>
@@ -793,7 +792,7 @@ export default function ProfilePage() {
               </div>
             </DSCard>
             {profile?.role === 'client' && (
-              <DSCard className="rounded-[2rem] border border-amber-400/25 bg-amber-400/5 p-6">
+              <DSCard className="rounded-4xl border border-amber-400/25 bg-amber-400/5 p-6">
                 <p className="text-sm font-black text-amber-100">Devenir agent</p>
                 <p className="mt-1 text-xs leading-5 text-slate-400">L’acceptation par l’administration remettra vos soldes HTG et CP à zéro.</p>
                 <button type="button" onClick={requestAgentStatus} disabled={agentRequestPending || agentRequestLoading} className="mt-3 rounded-xl border border-amber-300/30 px-4 py-2 text-xs font-black text-amber-200 disabled:opacity-50">
@@ -807,7 +806,7 @@ export default function ProfilePage() {
         {/* ONGLET 3 : RÉGLAGES */}
         {activeTab === 'settings' && (
           <div className="space-y-5">
-            <DSCard className="rounded-[2rem] p-6">
+            <DSCard className="rounded-4xl p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Shield size={18} className="text-emerald-400" />
                 <h3 className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-300">

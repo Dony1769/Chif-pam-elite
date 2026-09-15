@@ -10,11 +10,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DSButton, DSCard, DSHeader, DSPage, DSPanel } from '@/components/ui/primitives';
+import { DSButton, DSCard, DSHeader, DSPage, DSPanel, DSSkeleton } from '@/components/ui/primitives';
 import ThreeSurface from '@/components/three/ThreeSurface';
-
-// Taux de conversion CP -> HTG officiel : 100 CP = ~5.88 HTG
-const CP_TO_HTG_RATE = 0.05882352941176470588; 
 
 export interface Profile {
   id: string;
@@ -62,7 +59,11 @@ ChifPamLogo.displayName = 'ChifPamLogo';
 
 export default function ClientHome() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [profileLoading, setProfileLoading] = useState<boolean>(true);
+  const [summaryLoading, setSummaryLoading] = useState<boolean>(true);
+  const [cpToHtgRate, setCpToHtgRate] = useState<number | null>(null);
+  const [rateLoading, setRateLoading] = useState<boolean>(true);
+  const [rateError, setRateError] = useState<boolean>(false);
   const [unreadNotifs, setUnreadNotifs] = useState<number>(0);
   const [unreadChat, setUnreadChat] = useState<number>(0); 
   const [activeChallengesCount, setActiveChallengesCount] = useState<number>(0);
@@ -88,13 +89,14 @@ export default function ClientHome() {
 
   const calculatedHTG = useMemo(() => {
     const cp = Math.max(0, Number(cpToConvert) || 0);
-    return (cp * CP_TO_HTG_RATE).toFixed(2);
-  }, [cpToConvert]);
+    return cpToHtgRate === null ? null : (cp * cpToHtgRate).toFixed(2);
+  }, [cpToConvert, cpToHtgRate]);
 
   const totalEstimatedHTG = useMemo(() => {
+    if (cpToHtgRate === null) return null;
     if (!profile?.jetons_cp) return "0.00";
-    return (profile.jetons_cp * CP_TO_HTG_RATE).toFixed(2);
-  }, [profile?.jetons_cp]);
+    return (profile.jetons_cp * cpToHtgRate).toFixed(2);
+  }, [cpToHtgRate, profile?.jetons_cp]);
 
   const playPing = useCallback(() => {
     try {
@@ -150,14 +152,16 @@ export default function ClientHome() {
 
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
+      setProfileLoading(true);
+      setSummaryLoading(true);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
         setCurrentUserId(null);
         setProfile(null);
         setUnreadNotifs(0);
         setUnreadChat(0);
-        setLoading(false);
+        setProfileLoading(false);
+        setSummaryLoading(false);
         return;
       }
       setCurrentUserId(user.id);
@@ -173,6 +177,7 @@ export default function ClientHome() {
       } else {
         setProfile(prof as Profile);
       }
+      setProfileLoading(false);
 
       const [notifCountRes, challengesCountRes, chatCountRes] = await Promise.all([
         supabase
@@ -197,17 +202,40 @@ export default function ClientHome() {
       setUnreadNotifs(notifCountRes.count || 0);
       setActiveChallengesCount(challengesCountRes.count || 0);
       setUnreadChat(chatCountRes.count || 0);
+      setSummaryLoading(false);
 
     } catch (error) {
       console.error('Erreur globale fetchData:', error);
+      setProfileLoading(false);
+      setSummaryLoading(false);
     } finally {
-      setLoading(false);
+      setProfileLoading(false);
+      setSummaryLoading(false);
     }
   }, [pathname]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    const fetchConversionRate = async () => {
+      setRateLoading(true);
+      setRateError(false);
+      const { data, error } = await supabase.rpc('get_cp_to_htg_rate');
+      const numericRate = Number(data);
+      if (error || !Number.isFinite(numericRate) || numericRate <= 0) {
+        console.error('Erreur chargement taux CP -> HTG:', error);
+        setRateError(true);
+        setCpToHtgRate(null);
+      } else {
+        setCpToHtgRate(numericRate);
+      }
+      setRateLoading(false);
+    };
+
+    fetchConversionRate();
+  }, []);
 
   useEffect(() => {
     if (!currentUserId || !isTabVisible) return;
@@ -228,6 +256,10 @@ export default function ClientHome() {
 
   const handleQuickConvert = async () => {
     if (!profile) return;
+    if (cpToHtgRate === null) {
+      setFeedbackMessage({ type: 'error', text: 'Le taux de conversion est encore indisponible.' });
+      return;
+    }
     
     const montantCP = Math.floor(cpToConvert);
 
@@ -254,7 +286,7 @@ export default function ClientHome() {
         setFeedbackMessage({ type: 'error', text: error.message || 'Erreur lors de la conversion.' });
       } else {
         playPing();
-        const montantObtenu = (montantCP * CP_TO_HTG_RATE).toFixed(2);
+        const montantObtenu = (montantCP * (cpToHtgRate ?? 0)).toFixed(2);
         setFeedbackMessage({ 
           type: 'success', 
           text: `Conversion réussie ! ${montantCP} CP convertis en ~${montantObtenu} HTG.` 
@@ -273,15 +305,6 @@ export default function ClientHome() {
     { id: 'laser', href: '/client/laser-vault', icon: <Lock className="text-indigo-400" />, title: 'Laser Vault', desc: 'Réactivité & précision ultime', players: '2.1k actifs' },
     { id: 'biometric', href: '/client/biometric-hack', icon: <Fingerprint className="text-emerald-400" />, title: 'Biometric Lab', desc: 'Mémoire adaptative & logique', players: '650 actifs' }
   ], []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
-        <Activity className="animate-spin text-emerald-500 w-10 h-10" />
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Chargement de votre espace...</p>
-      </div>
-    );
-  }
 
   const isVipUser = profile?.vip_status && profile.vip_status !== 'free';
 
@@ -478,11 +501,15 @@ export default function ClientHome() {
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <p className="text-3xl sm:text-5xl font-black tracking-tighter text-white">
-                      {(profile?.jetons_cp || 0).toLocaleString()} <span className="text-base sm:text-lg text-emerald-400">CP</span>
-                    </p>
+                    {profileLoading ? (
+                      <DSSkeleton className="h-12 w-44" />
+                    ) : (
+                      <p className="text-3xl sm:text-5xl font-black tracking-tighter text-white">
+                        {(profile?.jetons_cp || 0).toLocaleString()} <span className="text-base sm:text-lg text-emerald-400">CP</span>
+                      </p>
+                    )}
                     <p className="text-xs text-slate-400 font-normal lowercase italic">
-                      Valeur estimée : <strong className="text-white font-black">{totalEstimatedHTG} HTG</strong>
+                      Valeur estimée : <strong className="text-white font-black">{totalEstimatedHTG === null ? '—' : `${totalEstimatedHTG} HTG`}</strong>
                     </p>
                   </div>
 
@@ -490,7 +517,7 @@ export default function ClientHome() {
                   <div className="pt-3 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 lowercase font-normal italic">Montant à convertir :</span>
-                      <span className="text-emerald-300 font-black">{calculatedHTG} HTG</span>
+                      <span className="text-emerald-300 font-black">{calculatedHTG === null ? '—' : `${calculatedHTG} HTG`}</span>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -506,7 +533,7 @@ export default function ClientHome() {
                       />
                       <DSButton
                         onClick={handleQuickConvert}
-                        disabled={isConverting || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
+                        disabled={isConverting || rateLoading || rateError || cpToHtgRate === null || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
                         variant="success"
                         size="sm"
                         className="shrink-0 flex items-center justify-center gap-2 py-2.5"
@@ -515,7 +542,9 @@ export default function ClientHome() {
                         {isConverting ? '...' : 'Convertir'}
                       </DSButton>
                     </div>
-                    <p className="text-[9px] text-slate-500 font-normal lowercase italic">Taux : 100 CP = {(100 * CP_TO_HTG_RATE).toFixed(2)} HTG (Min. 100 CP)</p>
+                    <p className="text-[9px] text-slate-500 font-normal lowercase italic">
+                      {rateLoading ? 'Taux de conversion en cours de chargement...' : rateError ? 'Taux indisponible pour le moment.' : `Taux : 100 CP = ${(100 * (cpToHtgRate ?? 0)).toFixed(2)} HTG (Min. 100 CP)`}
+                    </p>
                   </div>
                 </div>
               </DSCard>
@@ -527,10 +556,14 @@ export default function ClientHome() {
                     <p className="text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.35em] text-slate-400">Solde principal</p>
                     <Wallet size={16} className="text-emerald-400" />
                   </div>
-                  <div className="mt-3 flex items-baseline gap-2">
-                    <p className="text-2xl sm:text-3xl font-black text-white">{(profile?.balance || 0).toLocaleString()}</p>
-                    <span className="text-xs text-emerald-400 font-black">HTG</span>
-                  </div>
+                  {profileLoading ? (
+                    <DSSkeleton className="mt-3 h-9 w-32" />
+                  ) : (
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <p className="text-2xl sm:text-3xl font-black text-white">{(profile?.balance || 0).toLocaleString()}</p>
+                      <span className="text-xs text-emerald-400 font-black">HTG</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Boutons d'action rapide market */}
@@ -543,7 +576,7 @@ export default function ClientHome() {
                     <span>Recharger</span>
                   </Link>
                   <Link 
-                    href="/client/market" 
+                    href="/client/finance" 
                     className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-black hover:bg-white/10 transition active:scale-95"
                   >
                     <ArrowUpRight size={12} />
@@ -551,12 +584,10 @@ export default function ClientHome() {
                   </Link>
                 </div>
 
-                <div className="pt-3 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-[9px] text-slate-500 lowercase italic">Retraits instantanés</span>
-                  <Link href="/client/market" className="text-[10px] text-emerald-400 hover:underline">
-                    Boutique →
-                  </Link>
-                </div>
+                <Link href="/client/finance" className="pt-3 border-t border-white/5 flex items-center justify-between text-left group">
+                  <span className="text-[9px] text-slate-500 lowercase italic group-hover:text-slate-300">Retraits instantanés</span>
+                  <ArrowUpRight size={14} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </Link>
               </DSCard>
             </DSPanel>
 
@@ -568,26 +599,35 @@ export default function ClientHome() {
                   <p className="mt-0.5 text-xs text-slate-300 font-normal lowercase italic">Participez pour accumuler des jetons CP supplémentaires.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Link href="/live" className="text-[10px] uppercase tracking-[0.2em] text-fuchsia-300 hover:text-fuchsia-200 transition">
-                    Live →
-                  </Link>
                   <Link href="/client/list" className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 hover:text-emerald-300 transition">
                     Tout voir →
                   </Link>
                 </div>
               </div>
 
+              <Link href="/live" className="group mb-4 block">
+                <DSCard className="relative overflow-hidden border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/20 via-slate-950/80 to-emerald-500/10 p-4 shadow-[0_0_24px_rgba(217,70,239,0.12)] transition hover:border-fuchsia-300/60">
+                  <div className="absolute -right-3 -top-6 text-fuchsia-400/10 transition-transform duration-500 group-hover:scale-110">
+                    <Activity size={112} />
+                  </div>
+                  <div className="relative z-10 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-400/15 p-3 text-fuchsia-300">
+                        <Activity size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.25em] text-fuchsia-300">Live Arena</p>
+                        <p className="mt-1 text-sm font-black text-white">Mises réelles & multijoueur</p>
+                      </div>
+                    </div>
+                    <ArrowUpRight className="shrink-0 text-fuchsia-300 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" size={20} />
+                  </div>
+                </DSCard>
+              </Link>
+
               <div className="space-y-3">
-                {gamesList.map((game) => (
-                  <GameRow 
-                    key={game.id}
-                    href={game.href} 
-                    icon={game.icon} 
-                    title={game.title} 
-                    desc={game.desc} 
-                    players={game.players} 
-                    tag={game.tag}
-                  />
+                {profileLoading || summaryLoading ? [1, 2, 3].map((item) => <DSSkeleton key={item} className="h-16 w-full" />) : gamesList.map((game) => (
+                  <GameRow key={game.id} href={game.href} icon={game.icon} title={game.title} desc={game.desc} players={game.players} tag={game.tag} />
                 ))}
               </div>
             </DSPanel>
@@ -628,34 +668,34 @@ export default function ClientHome() {
               <p className="text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.35em] text-slate-400">Accès Rapides</p>
               <div className="space-y-2">
                 <Link
-                  href="/client/market"
+                  href="/client/finance"
                   className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-98"
                 >
                   <span className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-purple-400" />
-                    Marketplace
+                    <Wallet size={16} className="text-emerald-400" />
+                    Gérer mon solde
                   </span>
                   <ChevronRight size={14} className="text-slate-500" />
                 </Link>
 
                 <Link
-                  href="/client/challenges"
+                  href="/client/notifications"
                   className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-98"
                 >
                   <span className="flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-emerald-400" />
-                    Mes Défis
+                    <Bell size={16} className="text-amber-400" />
+                    Voir mes alertes
                   </span>
                   <ChevronRight size={14} className="text-slate-500" />
                 </Link>
 
                 <Link
-                  href="/client/profile"
+                  href="/client/chat"
                   className="flex items-center justify-between w-full rounded-xl border border-transparent bg-transparent px-4 py-2.5 text-xs font-black uppercase tracking-[0.15em] text-slate-400 transition hover:text-white"
                 >
                   <span className="flex items-center gap-2">
-                    <User size={16} />
-                    Paramètres du profil
+                    <Activity size={16} />
+                    Contacter le support
                   </span>
                 </Link>
               </div>
