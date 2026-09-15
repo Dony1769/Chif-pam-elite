@@ -26,8 +26,8 @@ export default function ClientReports() {
         if (!user) return;
 
         const [mines, crash] = await Promise.all([
-          supabase.from('mines_games').select('*').eq('user_id', user.id),
-          supabase.from('crash_games').select('*').eq('user_id', user.id)
+          supabase.from('mines_games').select('bet_amount, is_won, multiplier').eq('user_id', user.id),
+          supabase.from('crash_games').select('bet_amount, status, multiplier').eq('user_id', user.id)
         ]);
 
         const mData = mines.data || [];

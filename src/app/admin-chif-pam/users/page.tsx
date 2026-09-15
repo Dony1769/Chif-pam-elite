@@ -28,8 +28,9 @@ export default function AdminUsers() {
     setLoading(true);
     const { data } = await supabase
       .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('id, username, phone, balance, is_banned, ban_reason, created_at, role')
+      .order('created_at', { ascending: false })
+      .limit(100);
       
     setUsers((data as UserProfile[]) || []);
     setLoading(false);

@@ -130,9 +130,19 @@ export default function AdminArena() {
     );
 
     if (expiredActive.length > 0) {
-      for (const expCh of expiredActive) {
-        await AdminChallengesService.close(expCh.id);
-        expCh.is_active = false;
+      const { error: closeError } = await supabase
+        .from('challenges')
+        .update({ is_active: false })
+        .eq('is_active', true)
+        .not('ends_at', 'is', null)
+        .lte('ends_at', now.toISOString());
+
+      if (closeError) {
+        console.error(closeError);
+      } else {
+        for (const challenge of expiredActive) {
+          challenge.is_active = false;
+        }
       }
     }
 

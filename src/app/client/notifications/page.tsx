@@ -80,19 +80,22 @@ export default function ClientNotifications() {
           .from('notifications')
           .select('id, title, content, created_at, is_read')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase
           .from('challenges')
           .select('id, title, prize_pool_cp, created_at, ends_at, is_active')
           .eq('is_active', true)
           .or(`ends_at.is.null,ends_at.gt.${nowIso}`)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(100),
         supabase
           .from('transactions')
           .select('id, user_id, type, status, amount, admin_note, created_at')
           .eq('user_id', user.id)
           .in('status', ['REJECTED', 'CANCELLED'])
           .order('created_at', { ascending: false })
+          .limit(100)
       ]);
 
       if (notifsRes.error) console.error('Erreur requete notifications:', notifsRes.error);

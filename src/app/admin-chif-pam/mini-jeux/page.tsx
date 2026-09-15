@@ -49,14 +49,17 @@ export default function AdminMiniGames() {
   const fetchAllGamesData = async () => {
     try {
       setLoading(true);
-      const { data: settings } = await supabase.from('game_settings').select('*').returns<GameSetting[]>();
+      const { data: settings } = await supabase.from('game_settings').select('game_id, is_active').returns<GameSetting[]>();
 
       const results: { [key: string]: GameStats } = {};
       let totalV = 0;
       let totalP = 0;
 
       for (const item of ADMIN_GAME_CONFIG) {
-        const { data, error } = await supabase.from(item.table).select('*').returns<DashboardGameRow[]>();
+        const { data, error } = await supabase
+          .from(item.table)
+          .select('bet_amount, multiplier, final_multiplier, is_won, status')
+          .returns<DashboardGameRow[]>();
         
         if (error) {
           results[item.id] = { volume: 0, profit: 0, count: 0, isActive: true };

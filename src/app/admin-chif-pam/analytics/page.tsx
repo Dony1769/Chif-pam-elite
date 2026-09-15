@@ -91,15 +91,15 @@ export default function AdminAnalyticsPage() {
         claimsRes,
         missionsRes,
       ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.rpc('get_total_balance'),
-        supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['deposit', 'depot']),
-        supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['withdrawal', 'retrait']),
-        supabase.from('game_settings').select('*').returns<GameSetting[]>(),
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['deposit', 'depot']),
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['withdrawal', 'retrait']),
+        supabase.from('game_settings').select('game_id, is_active').returns<GameSetting[]>(),
         supabase.from('mises').select('montant, gain, status, created_at').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()).order('created_at', { ascending: true }),
-        supabase.from('daily_rewards_config').select('*', { count: 'exact', head: true }),
-        supabase.from('user_calendar_claims').select('*', { count: 'exact', head: true }),
-        supabase.from('user_daily_missions').select('*', { count: 'exact', head: true }),
+        supabase.from('daily_rewards_config').select('id', { count: 'exact', head: true }),
+        supabase.from('user_calendar_claims').select('id', { count: 'exact', head: true }),
+        supabase.from('user_daily_missions').select('id', { count: 'exact', head: true }),
       ]);
 
       const analytics: GameAnalytic[] = [];
@@ -107,7 +107,10 @@ export default function AdminAnalyticsPage() {
       let totalNet7d = 0;
 
       for (const item of ADMIN_GAME_CONFIG) {
-        const { data, error } = await supabase.from(item.table).select('*').returns<DashboardGameRow[]>();
+        const { data, error } = await supabase
+          .from(item.table)
+          .select('bet_amount, multiplier, final_multiplier, is_won, status')
+          .returns<DashboardGameRow[]>();
         if (error) {
           analytics.push({ id: item.id, title: item.title, volume: 0, profit: 0, plays: 0, isActive: true });
           continue;

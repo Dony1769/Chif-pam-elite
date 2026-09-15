@@ -59,9 +59,10 @@ export class ChatService {
   static async fetchMessagesForClient(db: SupabaseClient, clientId: string): Promise<ChatMessage[]> {
     const { data, error } = await db
       .from('messages')
-      .select('*')
+      .select('id, user_id, content, created_at, is_admin_message, is_read_by_admin, is_read_by_client')
       .eq('user_id', clientId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (error) {
       console.error('Erreur lors du chargement des messages:', error);
@@ -109,7 +110,7 @@ export class ChatService {
         is_read_by_admin: isAdmin,
         is_read_by_client: !isAdmin,
       })
-      .select('*')
+      .select('id, user_id, content, created_at, is_admin_message, is_read_by_admin, is_read_by_client')
       .single();
 
     if (error) {

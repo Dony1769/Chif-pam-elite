@@ -86,16 +86,16 @@ export default function AdminDashboard() {
         fraudFlagsRes,
         fluxRes
       ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.rpc('get_total_balance'),
-        supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['deposit', 'depot']),
-        supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['withdrawal', 'retrait']),
-        supabase.from('messages').select('*', { count: 'exact', head: true }).eq('is_read_by_admin', false).eq('is_admin_message', false),
-        supabase.from('agent_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('agent_profiles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['deposit', 'depot']),
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending').in('type', ['withdrawal', 'retrait']),
+        supabase.from('messages').select('id', { count: 'exact', head: true }).eq('is_read_by_admin', false).eq('is_admin_message', false),
+        supabase.from('agent_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('agent_profiles').select('user_id', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('p2p_offers').select('rate_htg_per_cp').eq('active', true),
         supabase.from('p2p_transactions').select('amount_htg').eq('status', 'completed').gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
-        supabase.from('p2p_fraud_flags').select('*', { count: 'exact', head: true }).eq('reviewed', false),
+        supabase.from('p2p_fraud_flags').select('id', { count: 'exact', head: true }).eq('reviewed', false),
         // Pour le graph
         supabase.from('mises').select('montant, gain, status, created_at').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       ]);

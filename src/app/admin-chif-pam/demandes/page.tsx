@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { AdminTransactionsService } from '@/services/admin/transactions';
 import { 
@@ -23,27 +23,31 @@ export default function AdminDemandes() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('pending');
 
+  const fetchTransactions = useCallback(async () => {
+    const baseQuery = supabase
+      .from('transactions')
+      .select(`
+        id, user_id, type, amount, status, phone_number, admin_note, created_at, processed_at,
+        profiles ( id, username, role, balance, locked_balance )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    const { data, error } = activeTab === 'all'
+      ? await baseQuery
+      : await baseQuery.eq('status', activeTab);
+
+    if (error) console.error("Erreur:", error);
+    else setTransactions(data || []);
+    setLoading(false);
+  }, [activeTab]);
+
   useEffect(() => {
     fetchTransactions();
     const channel = supabase.channel('admin-finance-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchTransactions())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  const fetchTransactions = async () => {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select(`
-        *,
-        profiles ( id, username, role, balance, locked_balance )
-      `)
-      .order('created_at', { ascending: false });
-    
-    if (error) console.error("Erreur:", error);
-    else setTransactions(data || []);
-    setLoading(false);
-  };
+  }, [fetchTransactions]);
 
   // LOGIQUE DE FILTRAGE ET RECHERCHE (Optimisée)
   const filteredTransactions = useMemo(() => {

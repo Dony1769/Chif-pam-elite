@@ -6,10 +6,14 @@ export class PhoneNormalizationError extends Error {
 }
 
 export function normalizePhoneNumber(value: string): string {
-  const digits = String(value ?? '').replace(/\D/g, '');
+  const raw = String(value ?? '').trim();
+  const hasInternationalPrefix = raw.startsWith('+') || raw.startsWith('00');
+  let digits = raw.replace(/\D/g, '');
+
+  if (digits.startsWith('00')) digits = digits.slice(2);
   if (digits.length === 8) return `+509${digits}`;
   if (digits.length === 11 && digits.startsWith('509')) return `+${digits}`;
-  if (String(value ?? '').trim().startsWith('+') && digits.length >= 11 && digits.length <= 15) return `+${digits}`;
+  if (hasInternationalPrefix && digits.length >= 11 && digits.length <= 15) return `+${digits}`;
   throw new PhoneNormalizationError();
 }
 

@@ -74,7 +74,8 @@ export default function ClientHistory() {
         .from('transactions')
         .select('id, user_id, amount, type, status, created_at, admin_note')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (error) {
         throw error;

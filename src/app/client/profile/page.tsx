@@ -217,8 +217,8 @@ export default function ProfilePage() {
 
       const [profRes, transRes, misesRes, perksRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('transactions').select('amount, type, created_at, status').eq('user_id', user.id).eq('status', 'approved'),
-        supabase.from('mises').select('montant, status, created_at').eq('user_id', user.id),
+        supabase.from('transactions').select('amount, type, created_at, status').eq('user_id', user.id).eq('status', 'approved').order('created_at', { ascending: false }).limit(100),
+        supabase.from('mises').select('montant, status, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(100),
         supabase.rpc('get_user_level_perks', { user_id: user.id })
       ]);
 

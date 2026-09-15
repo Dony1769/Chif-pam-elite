@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         is_read_by_admin: asAdmin,
         is_read_by_client: !asAdmin,
       })
-      .select('*')
+      .select('id, user_id, content, created_at, is_admin_message, is_read_by_admin, is_read_by_client')
       .single();
 
     if (error) {

@@ -97,6 +97,10 @@ function LoginFormContent() {
       });
       const resolved = (await resolveResponse.json()) as { success?: boolean; email?: string; message?: string };
       if (!resolveResponse.ok || !resolved.success || !resolved.email) {
+        console.error('[connexion] phone resolution failed', {
+          status: resolveResponse.status,
+          message: resolved.message,
+        });
         throw new Error(resolved.message || 'Numéro ou mot de passe incorrect.');
       }
 
@@ -106,7 +110,14 @@ function LoginFormContent() {
         password 
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('[connexion] Supabase sign-in failed', {
+          code: authError.code,
+          message: authError.message,
+          status: authError.status,
+        });
+        throw authError;
+      }
 
       const user = authData?.user;
       if (!user) throw new Error("Erreur de session.");
@@ -119,6 +130,7 @@ function LoginFormContent() {
         .maybeSingle<ProfileData>();
 
       if (profileError) {
+        console.error('[connexion] profile lookup after sign-in failed', profileError);
         await supabase.auth.signOut();
         throw new Error("Impossible de vérifier les autorisations du profil.");
       }
@@ -135,6 +147,7 @@ function LoginFormContent() {
       window.location.replace(targetPath);
 
     } catch (err: unknown) {
+      console.error('[connexion] login flow failed', err);
       if (err instanceof Error) {
         // Personnalisation du message d'erreur d'identifiants
         if (err.message.includes("Invalid login credentials")) {

@@ -1,0 +1,37 @@
+BEGIN;
+
+CREATE INDEX IF NOT EXISTS idx_agent_requests_reviewed_by ON public.agent_requests (reviewed_by);
+CREATE INDEX IF NOT EXISTS idx_bankroll_transactions_ticket_id ON public.bankroll_transactions (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_bankroll_transactions_user_id ON public.bankroll_transactions (user_id);
+CREATE INDEX IF NOT EXISTS idx_bankrolls_user_id ON public.bankrolls (user_id);
+CREATE INDEX IF NOT EXISTS idx_bet_selections_match_id ON public.bet_selections (match_id);
+CREATE INDEX IF NOT EXISTS idx_bet_selections_ticket_id ON public.bet_selections (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_bet_selections_user_id ON public.bet_selections (user_id);
+CREATE INDEX IF NOT EXISTS idx_bets_tickets_user_id ON public.bets_tickets (user_id);
+CREATE INDEX IF NOT EXISTS idx_biometric_games_user_id ON public.biometric_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_challenge_attempts_challenge_id ON public.challenge_attempts (challenge_id);
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_id ON public.coupon_redemptions (coupon_id);
+CREATE INDEX IF NOT EXISTS idx_crash_games_user_id ON public.crash_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_elevator_games_user_id ON public.elevator_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_glass_games_user_id ON public.glass_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_jetons_transactions_user_id ON public.jetons_transactions (user_id);
+CREATE INDEX IF NOT EXISTS idx_market_policy_created_by ON public.market_policy (created_by);
+CREATE INDEX IF NOT EXISTS idx_mines_games_user_id ON public.mines_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_mises_tirage_id ON public.mises (tirage_id);
+CREATE INDEX IF NOT EXISTS idx_p2p_fraud_flags_agent_id ON public.p2p_fraud_flags (agent_id);
+CREATE INDEX IF NOT EXISTS idx_p2p_fraud_flags_buyer_id ON public.p2p_fraud_flags (buyer_id);
+CREATE INDEX IF NOT EXISTS idx_phone_account_issues_resolved_by ON public.phone_account_issues (resolved_by);
+CREATE INDEX IF NOT EXISTS idx_phone_merge_review_log_candidate_profile_id ON public.phone_merge_review_log (candidate_profile_id);
+CREATE INDEX IF NOT EXISTS idx_phone_merge_review_log_kept_profile_id ON public.phone_merge_review_log (kept_profile_id);
+CREATE INDEX IF NOT EXISTS idx_plinko_games_user_id ON public.plinko_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_referred_by ON public.profiles (referred_by);
+CREATE INDEX IF NOT EXISTS idx_quiz_games_user_id ON public.quiz_games (user_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_current_turn ON public.rooms (current_turn);
+CREATE INDEX IF NOT EXISTS idx_rooms_host_id ON public.rooms (host_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_winner_id ON public.rooms (winner_id);
+CREATE INDEX IF NOT EXISTS idx_user_calendar_claims_user_id ON public.user_calendar_claims (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_daily_missions_mission_code ON public.user_daily_missions (mission_code);
+CREATE INDEX IF NOT EXISTS idx_user_daily_missions_user_id ON public.user_daily_missions (user_id);
+CREATE INDEX IF NOT EXISTS idx_vault_games_user_id ON public.vault_games (user_id);
+
+COMMIT;
