@@ -238,6 +238,9 @@ export default function GameListPage() {
             <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
               {selectedCategory === 'Tous' ? 'Tous les jeux disponibles' : `Catégorie : ${selectedCategory}`} ({filteredGames.length})
             </h3>
+            <button type="button" onClick={() => router.push('/live')} className="text-[10px] font-black uppercase tracking-widest text-fuchsia-300 transition hover:text-fuchsia-200">
+              Jeux Live →
+            </button>
           </div>
 
           {filteredGames.length > 0 ? (

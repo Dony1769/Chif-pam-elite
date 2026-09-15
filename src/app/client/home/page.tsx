@@ -567,9 +567,14 @@ export default function ClientHome() {
                   <p className="text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.35em] text-slate-400">Missions & Activités</p>
                   <p className="mt-0.5 text-xs text-slate-300 font-normal lowercase italic">Participez pour accumuler des jetons CP supplémentaires.</p>
                 </div>
-                <Link href="/client/list" className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 hover:text-emerald-300 transition">
-                  Tout voir →
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link href="/live" className="text-[10px] uppercase tracking-[0.2em] text-fuchsia-300 hover:text-fuchsia-200 transition">
+                    Live →
+                  </Link>
+                  <Link href="/client/list" className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 hover:text-emerald-300 transition">
+                    Tout voir →
+                  </Link>
+                </div>
               </div>
 
               <div className="space-y-3">

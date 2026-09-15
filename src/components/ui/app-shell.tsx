@@ -58,7 +58,7 @@ const clientItems: ShellNavItem[] = [
   { href: "/client/rewards", label: "Récompenses", icon: <Gift size={18} /> },
   { href: "/client/challenges", label: "Défis", icon: <Shield size={18} /> },
   { href: "/client/market", label: "Offres", icon: <ShoppingBag size={18} /> },
-  { href: "/client/uno", label: "UNO Live", icon: <Sparkles size={18} /> },
+  { href: "/live", label: "Live", icon: <Sparkles size={18} /> },
   { href: "/client/profile", label: "Profil", icon: <User size={18} /> },
   { href: "/client/vip", label: "VIP", icon: <Crown size={18} /> },
 ];
@@ -166,23 +166,24 @@ function FloatingChatBubble() {
     const initAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        fetchUnreadCount(user.id);
+        void fetchUnreadCount(user.id);
 
         // Ecoute en temps réel des nouveaux messages
-        channel = supabase.channel(`realtime_chat_bubble_${user.id}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "messages",
-              filter: `user_id=eq.${user.id}`,
-            },
-            () => {
-              fetchUnreadCount(user.id);
-            }
-          )
-          .subscribe();
+        const channelName = `realtime_chat_bubble_${user.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        channel = supabase.channel(channelName);
+        channel.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            void fetchUnreadCount(user.id);
+          }
+        );
+        channel.subscribe();
       }
     };
 
