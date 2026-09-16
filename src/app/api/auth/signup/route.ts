@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/server/supabase/admin';
-import { normalizePhoneNumber, phoneDigits } from '@/lib/phone';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { isSameOriginRequest, sanitizePlainText } from '@/lib/security';
 
 type SignupPayload = {
   phone?: string;
   password?: string;
   username?: string;
+  email?: string;
   referralCode?: string;
 };
 
@@ -16,6 +17,10 @@ function isValidPassword(password: string): boolean {
 
 function isValidUsername(username: string): boolean {
   return /^[a-zA-Z0-9_\-. ]{3,24}$/.test(username);
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
 export async function POST(request: Request) {
@@ -37,9 +42,9 @@ export async function POST(request: Request) {
     } catch (error) {
       return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Numero invalide.' }, { status: 400 });
     }
-    const phoneForEmail = phoneDigits(phone);
     const password = String(body.password ?? '');
     const username = sanitizePlainText(String(body.username ?? ''), 24);
+    const email = String(body.email ?? '').trim().toLowerCase();
     const referralCode = sanitizePlainText(String(body.referralCode ?? ''), 24).toUpperCase();
 
     if (!isValidPassword(password)) {
@@ -55,9 +60,11 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ success: false, message: 'Adresse email invalide.' }, { status: 400 });
+    }
 
     const supabaseAdmin = getSupabaseAdminClient();
-    const internalEmail = `${phoneForEmail}@chifpam.ht`;
     const { data: existingProfile, error: uniquenessError } = await supabaseAdmin
       .from('profiles')
       .select('id, email')
@@ -69,25 +76,22 @@ export async function POST(request: Request) {
     if (existingProfile) {
       return NextResponse.json({ success: false, message: 'Ce numéro est déjà associé à un compte. Connectez-vous ou utilisez le reset du mot de passe.' }, { status: 409 });
     }
-
-    let referrerId: string | null = null;
-    let startBalance = 0;
-
-    if (referralCode.length > 0) {
-      const { data: foundId } = await supabaseAdmin.rpc('get_referrer_id_by_code', {
-        code_input: referralCode,
-      });
-
-      if (typeof foundId === 'string' && foundId.length > 0) {
-        referrerId = foundId;
-        startBalance = 10;
-      }
+    const { data: existingEmail, error: emailLookupError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+    if (emailLookupError) {
+      return NextResponse.json({ success: false, message: 'Impossible de vérifier cet email pour le moment. Réessayez.' }, { status: 503 });
+    }
+    if (existingEmail) {
+      return NextResponse.json({ success: false, message: 'Cet email est déjà associé à un compte.' }, { status: 409 });
     }
 
     const { data: userData, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
-      email: internalEmail,
+      email,
       password,
-      email_confirm: true,
+      email_confirm: false,
       user_metadata: {
         username,
         phone,
@@ -112,17 +116,15 @@ export async function POST(request: Request) {
 
     const userId = userData.user.id;
 
-    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
-      id: userId,
-      phone,
-      username,
-      email: internalEmail,
-      balance: startBalance,
-      referred_by: referrerId,
-      role: 'client',
-    });
+    // The auth.users trigger owns profile creation. Verify it completed before
+    // reporting success instead of attempting a second profiles insert.
+    const { data: createdProfile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
 
-    if (profileError) {
+    if (profileError || !createdProfile) {
       await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
       return NextResponse.json(
         { success: false, message: 'Compte cree mais profil invalide. Reessayez.' },

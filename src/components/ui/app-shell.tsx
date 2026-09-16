@@ -260,7 +260,7 @@ function PhoneIssueBanner() {
   if (!issue || dismissed) return null;
   const invalid = issue.issue_type === 'invalid_phone';
   return (
-    <div className="fixed inset-x-3 top-3 z-[60] mx-auto flex max-w-xl items-start gap-3 rounded-2xl border border-amber-300/30 bg-slate-950/95 p-4 text-amber-100 shadow-2xl backdrop-blur-xl">
+    <div className="fixed inset-x-3 top-3 z-60 mx-auto flex max-w-xl items-start gap-3 rounded-2xl border border-amber-300/30 bg-slate-950/95 p-4 text-amber-100 shadow-2xl backdrop-blur-xl">
       <AlertTriangle className="mt-0.5 shrink-0 text-amber-300" size={18} />
       <p className="flex-1 text-xs leading-5">{invalid ? 'Votre numéro de téléphone doit être corrigé dans les paramètres de votre profil.' : 'Veuillez contacter le support afin de vérifier les informations de votre compte.'}</p>
       <button type="button" onClick={() => router.push(invalid ? '/client/profile' : '/client/chat')} className="shrink-0 rounded-lg bg-amber-300 px-3 py-2 text-[10px] font-black text-slate-950">{invalid ? 'Corriger' : 'Support'}</button>

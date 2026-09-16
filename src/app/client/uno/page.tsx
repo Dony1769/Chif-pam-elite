@@ -70,14 +70,14 @@ function UnoCardView({
       type="button"
       onClick={onPlay}
       disabled={!playable}
-      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-2xl font-black shadow-2xl transition-all duration-200 sm:min-w-20 brightness-110 contrast-125 saturate-150 ${
+      className={`relative grid aspect-3/4 min-w-16 place-items-center rounded-2xl border-4 p-2 text-2xl font-black shadow-2xl transition-all duration-200 sm:min-w-20 brightness-110 contrast-125 saturate-150 ${
         card.color === "black"
           ? "border-white bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#06b6d4_270deg_360deg)] text-white shadow-fuchsia-500/20"
           : `${unoColorClass(card.color)} text-white`
       } ${
         playable
           ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:scale-105 hover:shadow-emerald-400/50 active:scale-95"
-          : "cursor-default opacity-50 grayscale-[40%]"
+          : "cursor-default opacity-50 grayscale-40"
       } ${isSelected ? "ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 -translate-y-4 scale-105" : ""}`}
       aria-label={`Carte ${unoValueLabel(card.value)}`}
     >
@@ -548,7 +548,7 @@ export default function UnoPage() {
     <main className="min-h-[calc(100vh-8rem)] overflow-hidden rounded-[30px] bg-[#080d1a] px-4 py-6 text-white sm:px-8">
       <ThreeSurface
         variant="uno"
-        className="pointer-events-none -right-10 top-10 z-0 h-[28rem] w-[34rem] opacity-50"
+        className="pointer-events-none -right-10 top-10 z-0 h-112 w-136 opacity-50"
       />
 
       <div className="relative z-10 mx-auto max-w-6xl">
@@ -707,7 +707,7 @@ export default function UnoPage() {
               </div>
             </section>
 
-            <section className="space-y-5 rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:p-7">
+            <section className="space-y-5 rounded-[28px] border border-white/10 bg-white/4 p-5 sm:p-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
                   Nouvelle table
@@ -793,7 +793,7 @@ export default function UnoPage() {
         {/* VIEW: ROOM */}
         {view === "room" && room && (
           <section className="space-y-6">
-            <div className="flex flex-col justify-between gap-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:p-7">
+            <div className="flex flex-col justify-between gap-4 rounded-[28px] border border-white/10 bg-white/4 p-5 sm:flex-row sm:items-center sm:p-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-300">
                   {room.status === "waiting"
@@ -1026,7 +1026,7 @@ function GameBoard({
       </div>
 
       {/* Tapis de jeu central */}
-      <div className="relative flex min-h-[360px] flex-col items-center justify-center overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_center,#16213d_0%,#080d1a_65%)] p-8">
+      <div className="relative flex min-h-90 flex-col items-center justify-center overflow-hidden rounded-4xl border border-white/10 bg-[radial-gradient(circle_at_center,#16213d_0%,#080d1a_65%)] p-8">
         <div className="absolute left-5 top-5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
           Tour {room.turn_number}
         </div>
@@ -1046,7 +1046,7 @@ function GameBoard({
         </div>
 
         <div className="flex items-center gap-5">
-          <div className="grid aspect-[3/4] w-20 place-items-center rounded-2xl border-4 border-white/20 bg-linear-to-br from-fuchsia-700 to-slate-950 text-3xl shadow-2xl">
+          <div className="grid aspect-3/4 w-20 place-items-center rounded-2xl border-4 border-white/20 bg-linear-to-br from-fuchsia-700 to-slate-950 text-3xl shadow-2xl">
             <Disc3 />
           </div>
           <UnoCardView card={room.top_card} playable={false} />
@@ -1072,7 +1072,7 @@ function GameBoard({
       </div>
 
       {/* Sélecteur de couleur pour les cartes Jokers (+4 / Wild) */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-center">
+      <div className="rounded-2xl border border-white/10 bg-white/2 p-3 text-center">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
           Choisir une couleur pour les cartes Jokers
         </p>
@@ -1094,7 +1094,7 @@ function GameBoard({
       </div>
 
       {/* Main du joueur */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
             Votre main ({player?.hand.length ?? 0} cartes)
@@ -1167,7 +1167,7 @@ function FinishedMatchScreen({
     <motion.section
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`relative overflow-hidden rounded-[32px] border p-6 text-center sm:p-10 ${
+      className={`relative overflow-hidden rounded-4xl border p-6 text-center sm:p-10 ${
         isIWinner
           ? "border-amber-300/40 bg-linear-to-br from-amber-500/20 via-slate-950 to-emerald-500/20 shadow-[0_0_50px_rgba(245,158,11,0.2)]"
           : "border-rose-500/30 bg-linear-to-br from-rose-950/30 via-slate-950 to-slate-900"

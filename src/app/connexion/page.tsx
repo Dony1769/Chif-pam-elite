@@ -267,7 +267,7 @@ function LoginFormContent() {
 export default function Connexion() {
   return (
     <div className="ds-page text-slate-100 flex flex-col font-sans overflow-x-hidden ds-fade-up min-h-screen bg-[#020617]">
-      <ThreeSurface variant="auth" className="pointer-events-none -right-12 top-16 z-0 h-[30rem] w-[34rem] opacity-60" />
+      <ThreeSurface variant="auth" className="pointer-events-none -right-12 top-16 z-0 h-120 w-136 opacity-60" />
       <nav className="p-6 md:px-12 flex justify-between items-center w-full max-w-7xl mx-auto">
         <Link href="/">
           <LogoChifPam />
@@ -285,7 +285,7 @@ export default function Connexion() {
             </div>
             <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter leading-none mb-4 text-white">
               Bon <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500">Retour.</span>
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-cyan-500">Retour.</span>
             </h1>
             <p className="text-slate-400 text-sm leading-relaxed">
               Connectez-vous à votre espace personnel pour suivre vos activités, vos récompenses et vos opérations.

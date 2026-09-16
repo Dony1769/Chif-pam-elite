@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
-  UserCircle, Phone, Lock, ArrowRight, 
+  UserCircle, Phone, Mail, Lock, ArrowRight, 
   Loader2, AlertCircle, Trophy, 
   ShieldCheck, Gamepad2, ScrollText, Eye, EyeOff, Gift,
   Users 
@@ -18,6 +18,7 @@ function SignupForm() {
   const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [username, setUsername] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
   const [referralCode, setReferralCode] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -47,6 +48,7 @@ function SignupForm() {
     
     if (password.length < 8) return setError("Le mot de passe doit contenir au moins 8 caractères.");
     if (username.trim().length < 3) return setError("Le pseudo doit contenir au moins 3 caractères.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return setError("Veuillez saisir une adresse email valide.");
 
     setLoading(true);
 
@@ -60,6 +62,7 @@ function SignupForm() {
           phone: normalizePhoneNumber(`+509${phone}`),
           password,
           username,
+          email: email.trim().toLowerCase(),
           referralCode,
         }),
       });
@@ -130,6 +133,22 @@ function SignupForm() {
               value={username} 
               onChange={(e) => setUsername(e.target.value)} 
               placeholder="Votre Nom de code" 
+              className="pl-12 py-4 font-bold"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Email réel</label>
+          <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
+            <DSInput
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="vous@exemple.com"
+              autoComplete="email"
               className="pl-12 py-4 font-bold"
             />
           </div>

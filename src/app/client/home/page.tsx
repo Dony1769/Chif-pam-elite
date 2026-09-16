@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  Bell, Lock, Trophy, Activity, ChevronRight, Brain, Fingerprint,
+  Bell, Lock, Trophy, Activity, ChevronRight, Brain, Fingerprint, Calendar,
   Menu, X, Crown, ShieldCheck, Gift, Sparkles, Coins, ArrowRightLeft,
   Flame, User, LogOut, CheckCircle2, Wallet, PlusCircle, ArrowUpRight
 } from 'lucide-react';
@@ -19,6 +19,8 @@ export interface Profile {
   jetons_cp: number;
   balance: number;
   vip_status: string | null;
+  vip_expiry: string | null;
+  auto_renew: boolean | null;
   login_streak: number | null;
   rank?: string;
 }
@@ -71,6 +73,7 @@ export default function ClientHome() {
   const [isConverting, setIsConverting] = useState<boolean>(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isTabVisible, setIsTabVisible] = useState<boolean>(true);
+  const [isWideViewport, setIsWideViewport] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // État local pour le montant personnalisable de conversion CP
@@ -80,6 +83,23 @@ export default function ClientHome() {
   const pathname = usePathname();
 
   const globalNotificationCount = unreadNotifs;
+  const isVipActive = Boolean(
+    profile?.vip_status &&
+    profile.vip_status !== 'free' &&
+    profile.vip_expiry &&
+    new Date(profile.vip_expiry).getTime() > Date.now()
+  );
+  const vipExpiryLabel = profile?.vip_expiry
+    ? new Date(profile.vip_expiry).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+    : null;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 640px)');
+    const updateViewport = () => setIsWideViewport(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener('change', updateViewport);
+    return () => mediaQuery.removeEventListener('change', updateViewport);
+  }, []);
 
   useEffect(() => {
     if (profile?.jetons_cp !== undefined) {
@@ -168,7 +188,7 @@ export default function ClientHome() {
 
       const { data: prof, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username, jetons_cp, balance, vip_status, login_streak')
+        .select('id, username, jetons_cp, balance, vip_status, vip_expiry, auto_renew, login_streak')
         .eq('id', user.id)
         .single();
 
@@ -305,11 +325,11 @@ export default function ClientHome() {
     { id: 'biometric', href: '/client/biometric-hack', icon: <Fingerprint className="text-emerald-400" />, title: 'Biometric Lab', desc: 'Mémoire adaptative & logique', players: '650 actifs' }
   ], []);
 
-  const isVipUser = profile?.vip_status && profile.vip_status !== 'free';
-
   return (
-    <DSPage className="text-white font-black italic uppercase pb-12 sm:pb-20 overflow-x-hidden relative ds-fade-up">
-      <ThreeSurface variant="home" className="pointer-events-none -right-10 left-auto top-0 z-0 h-[32rem] w-[42rem] opacity-70" />
+    <DSPage className={`text-white font-black italic uppercase pb-12 sm:pb-20 overflow-x-hidden relative ds-fade-up ${isVipActive ? 'bg-amber-950/10' : ''}`}>
+      {isWideViewport && (
+        <ThreeSurface variant={isVipActive ? 'vip' : 'home'} className="pointer-events-none -right-10 left-auto top-0 h-64 w-96 opacity-60 sm:h-96 sm:w-136 lg:h-128 lg:w-2xl" />
+      )}
 
       {/* Navigation latérale Drawer */}
       <AnimatePresence>
@@ -332,11 +352,11 @@ export default function ClientHome() {
               <div>
                 <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
                   <div className="flex items-center gap-3">
-                    <ChifPamLogo glowing={!isVipUser} />
+                    <ChifPamLogo glowing={!isVipActive} />
                     <div>
-                      <p className="text-xs font-black text-white lowercase truncate max-w-[140px]">@{profile?.username || 'utilisateur'}</p>
-                      <p className={`text-[9px] tracking-wider font-extrabold ${isVipUser ? 'text-amber-400' : 'text-slate-400'}`}>
-                        {isVipUser ? 'Membre VIP' : 'Compte Standard'}
+                      <p className="text-xs font-black text-white lowercase truncate max-w-35">@{profile?.username || 'utilisateur'}</p>
+                      <p className={`text-[10px] tracking-wider font-extrabold ${isVipActive ? 'text-amber-400' : 'text-slate-400'}`}>
+                        {isVipActive ? 'Membre VIP' : 'Compte Standard'}
                       </p>
                     </div>
                   </div>
@@ -393,7 +413,7 @@ export default function ClientHome() {
           </motion.div>
         )}
 
-        <div className="grid gap-5 sm:gap-6 xl:grid-cols-[1.4fr_0.8fr]">
+        <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.1fr_0.9fr] xl:grid-cols-[1.4fr_0.8fr]">
           <div className="space-y-5 sm:space-y-6">
             
             {/* Entête principal avec Logo ChifPam Illuminé pour Non-VIP */}
@@ -402,12 +422,12 @@ export default function ClientHome() {
                 
                 {/* Logo ChifPam Interactif */}
                 <div className="pt-1">
-                  <ChifPamLogo glowing={!isVipUser} />
+                  <ChifPamLogo glowing={!isVipActive} />
                 </div>
 
                 <div>
-                  <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em]">
-                    {isVipUser ? (
+                  <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em]">
+                    {isVipActive ? (
                       <span className="border-amber-400/30 bg-amber-400/10 text-amber-300 flex items-center gap-1">
                         <Crown size={12} /> VIP Actif
                       </span>
@@ -453,11 +473,39 @@ export default function ClientHome() {
             </div>
 
             {/* BANNIÈRE PROMOTIONNELLE POUR LES UTILISATEURS NON-VIP */}
-            {!isVipUser && (
+            {isVipActive ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-linear-to-r from-amber-400/20 via-slate-950/90 to-yellow-500/10 p-5 shadow-[0_0_30px_rgba(251,191,36,0.16)] sm:p-6"
+              >
+                <div className="absolute -right-5 -top-8 text-amber-300/10">
+                  <Crown size={150} />
+                </div>
+                <div className="relative z-10 space-y-3">
+                  <div className="flex items-center gap-2 text-[10px] font-black tracking-[0.2em] text-amber-300">
+                    <Crown size={15} /> Abonnement actif
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-black text-white">Niveau {profile?.vip_status}</h3>
+                      {vipExpiryLabel && (
+                        <p className="mt-1 flex items-center gap-2 text-[10px] font-normal lowercase text-amber-100/75">
+                          <Calendar size={13} /> Expire le {vipExpiryLabel}
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
+                      {profile?.auto_renew ? 'Renouvellement automatique' : 'Renouvellement manuel'}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="relative overflow-hidden p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-500/20 via-slate-900 to-amber-950/30 border border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] flex flex-col sm:flex-row items-center justify-between gap-4"
+                className="relative overflow-hidden p-5 sm:p-6 rounded-3xl bg-linear-to-r from-amber-500/20 via-slate-900 to-amber-950/30 border border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] flex flex-col sm:flex-row items-center justify-between gap-4"
               >
                 <div className="space-y-1 text-center sm:text-left">
                   <div className="inline-flex items-center gap-1.5 text-[10px] font-black text-amber-400 uppercase tracking-widest bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
@@ -472,7 +520,7 @@ export default function ClientHome() {
                 </div>
                 <Link 
                   href="/client/vip"
-                  className="w-full sm:w-auto shrink-0 py-3 px-5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 text-black font-black text-xs tracking-wider uppercase rounded-2xl shadow-lg hover:brightness-110 active:scale-95 text-center flex items-center justify-center gap-2"
+                  className="w-full sm:w-auto shrink-0 py-3 px-5 bg-linear-to-r from-amber-400 via-amber-500 to-amber-400 text-black font-black text-xs tracking-wider uppercase rounded-2xl shadow-lg hover:brightness-110 active:scale-95 text-center flex items-center justify-center gap-2"
                 >
                   <Sparkles size={14} /> Découvrir le VIP
                 </Link>
@@ -483,7 +531,7 @@ export default function ClientHome() {
             <DSPanel className="grid gap-4 xl:grid-cols-[1.45fr_0.9fr]">
               
               {/* Carte Points CP & Conversion Interactive */}
-              <DSCard className={`relative overflow-hidden p-5 sm:p-6 ${isVipUser ? 'border-amber-400/30 bg-gradient-to-br from-amber-400/10 via-slate-950/80 to-emerald-400/10' : ''}`}>
+              <DSCard className={`relative overflow-hidden p-5 sm:p-6 ${isVipActive ? 'border-amber-400/40 bg-linear-to-br from-amber-400/15 via-slate-950/80 to-yellow-400/10 shadow-[0_0_24px_rgba(251,191,36,0.10)]' : ''}`}>
                 <div className="absolute inset-y-0 right-0 flex items-center opacity-10 pointer-events-none">
                   <Coins size={120} className="text-emerald-500" />
                 </div>
@@ -530,6 +578,25 @@ export default function ClientHome() {
                         className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-black text-white focus:outline-none focus:border-emerald-500"
                         placeholder="Ex: 500"
                       />
+                      <div className="grid grid-cols-4 gap-1.5 sm:contents">
+                        {[100, 500, 1000].map((amount) => (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => setCpToConvert(Math.min(amount, profile?.jetons_cp || amount))}
+                            className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-2 py-2 text-[10px] font-black text-emerald-200 transition hover:bg-emerald-500/20 active:scale-95"
+                          >
+                            {amount}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setCpToConvert(profile?.jetons_cp || 0)}
+                          className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-2 py-2 text-[10px] font-black text-amber-200 transition hover:bg-amber-400/20 active:scale-95"
+                        >
+                          Max
+                        </button>
+                      </div>
                       <DSButton
                         onClick={handleQuickConvert}
                         disabled={isConverting || profileLoading || (profile?.jetons_cp || 0) < 100 || cpToConvert < 100}
@@ -541,7 +608,7 @@ export default function ClientHome() {
                         {isConverting ? '...' : 'Convertir'}
                       </DSButton>
                     </div>
-                    <p className="text-[9px] text-slate-500 font-normal lowercase italic">
+                    <p className="text-[10px] text-slate-500 font-normal lowercase italic">
                       {rateLoading ? 'Taux de conversion en cours de chargement...' : rateError ? 'Taux indisponible pour le moment.' : `Taux : 100 CP = ${(100 * (cpToHtgRate ?? 0)).toFixed(2)} HTG (Min. 100 CP)`}
                     </p>
                   </div>
@@ -584,7 +651,7 @@ export default function ClientHome() {
                 </div>
 
                 <Link href="/client/finance" className="pt-3 border-t border-white/5 flex items-center justify-between text-left group">
-                  <span className="text-[9px] text-slate-500 lowercase italic group-hover:text-slate-300">Retraits instantanés</span>
+                  <span className="text-[10px] text-slate-500 lowercase italic group-hover:text-slate-300">Retraits instantanés</span>
                   <ArrowUpRight size={14} className="text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                 </Link>
               </DSCard>
@@ -605,7 +672,7 @@ export default function ClientHome() {
               </div>
 
               <Link href="/live" className="group mb-4 block">
-                <DSCard className="relative overflow-hidden border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/20 via-slate-950/80 to-emerald-500/10 p-4 shadow-[0_0_24px_rgba(217,70,239,0.12)] transition hover:border-fuchsia-300/60">
+                <DSCard className="relative overflow-hidden border-fuchsia-400/30 bg-linear-to-r from-fuchsia-500/20 via-slate-950/80 to-emerald-500/10 p-4 shadow-[0_0_24px_rgba(217,70,239,0.12)] transition hover:border-fuchsia-300/60">
                   <div className="absolute -right-3 -top-6 text-fuchsia-400/10 transition-transform duration-500 group-hover:scale-110">
                     <Activity size={112} />
                   </div>
@@ -642,22 +709,22 @@ export default function ClientHome() {
                   <p className="text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.35em] text-slate-400">Synthèse</p>
                   <p className="mt-0.5 text-base font-black text-white">Activité du compte</p>
                 </div>
-                <div className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[9px] uppercase tracking-[0.15em] text-emerald-300">
+                <div className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[10px] uppercase tracking-[0.15em] text-emerald-300">
                   {activeChallengesCount} Parcours en cours
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-white/5 bg-white/5 p-3.5 sm:p-4">
-                  <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400">Chat Support</p>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Chat Support</p>
                   <p className="mt-1 sm:mt-2 text-2xl font-black text-white">{unreadChat}</p>
-                  <p className="text-[8px] text-slate-500 mt-0.5 lowercase italic">{unreadChat > 0 ? 'Nouveaux messages' : 'À jour'}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 lowercase italic">{unreadChat > 0 ? 'Nouveaux messages' : 'À jour'}</p>
                 </div>
 
                 <div className="rounded-2xl border border-white/5 bg-white/5 p-3.5 sm:p-4">
-                  <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400">Alertes</p>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Alertes</p>
                   <p className="mt-1 sm:mt-2 text-2xl font-black text-white">{unreadNotifs}</p>
-                  <p className="text-[8px] text-slate-500 mt-0.5 lowercase italic">{unreadNotifs > 0 ? 'Non lues' : 'Aucune'}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 lowercase italic">{unreadNotifs > 0 ? 'Non lues' : 'Aucune'}</p>
                 </div>
               </div>
             </DSCard>
@@ -668,7 +735,7 @@ export default function ClientHome() {
               <div className="space-y-2">
                 <Link
                   href="/client/finance"
-                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-98"
+                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-95"
                 >
                   <span className="flex items-center gap-2">
                     <Wallet size={16} className="text-emerald-400" />
@@ -679,7 +746,7 @@ export default function ClientHome() {
 
                 <Link
                   href="/client/notifications"
-                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-98"
+                  className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-[0.15em] text-white transition hover:bg-white/10 hover:border-emerald-500/40 active:scale-95"
                 >
                   <span className="flex items-center gap-2">
                     <Bell size={16} className="text-amber-400" />
@@ -727,7 +794,7 @@ const MenuLink = React.memo(({
       {label}
     </span>
     {badge !== undefined && (
-      <span className="ml-auto bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] px-2 py-0.5 rounded-full font-black">
+      <span className="ml-auto bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] px-2 py-0.5 rounded-full font-black">
         {badge}
       </span>
     )}
@@ -764,7 +831,7 @@ const GameRow = React.memo(({
         <div className="flex items-center gap-2">
           <h4 className="text-xs font-black italic tracking-wider uppercase text-white truncate">{title}</h4>
           {tag && (
-            <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[8px] px-1.5 py-0.5 rounded font-black uppercase shrink-0">
+            <span className="bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-black uppercase shrink-0">
               {tag}
             </span>
           )}
@@ -774,7 +841,7 @@ const GameRow = React.memo(({
     </div>
 
     <div className="flex items-center gap-2 shrink-0 ml-2">
-      <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[8px] sm:text-[9px] text-emerald-400 font-black">
+      <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg text-[10px] text-emerald-400 font-black">
         {players}
       </span>
       <ChevronRight size={14} className="text-slate-600 group-hover:text-emerald-400 transition" />

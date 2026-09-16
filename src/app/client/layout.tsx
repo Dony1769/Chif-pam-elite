@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';  
 import { APP_ROUTES, isAdminRole, isAgentRole } from '@/lib/auth-routing';
 import { ClientAppShell } from '@/components/ui/app-shell';
+import { EmailVerificationGate } from '@/components/auth/EmailVerificationGate';
   
 export default function ClientLayout({ children }: { children: React.ReactNode }) {  
   const router = useRouter();  
-  const [loading, setLoading] = useState(true);  
+  const [loading, setLoading] = useState(true);
+  const [emailVerified, setEmailVerified] = useState(true);
   
   useEffect(() => {  
     const checkUser = async () => {  
@@ -20,7 +22,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, is_banned')
+        .select('role, is_banned, email_verified')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -39,6 +41,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         return;
       }
 
+      setEmailVerified(profile?.email_verified === true);
       setLoading(false);  
     };  
     checkUser();  
@@ -60,5 +63,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     );  
   }  
   
-  return <ClientAppShell>{children}</ClientAppShell>;  
+  if (!emailVerified) {
+    return <EmailVerificationGate onVerified={() => setEmailVerified(true)} />;
+  }
+
+  return <ClientAppShell>{children}</ClientAppShell>;
 }  
