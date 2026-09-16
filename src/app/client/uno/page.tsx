@@ -19,6 +19,8 @@ import {
   X,
   AlertTriangle,
   LogOut,
+  Trophy,
+  Home,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -51,6 +53,7 @@ function errorMessage(error: unknown): string {
    COMPOSANTS VISUELS (CARTE & DIALOGUES)
    ============================================================================ */
 
+/* Rendu optimisé d'une carte UNO avec couleurs vives, contraste élevé et brillance */
 function UnoCardView({
   card,
   playable,
@@ -67,19 +70,21 @@ function UnoCardView({
       type="button"
       onClick={onPlay}
       disabled={!playable}
-      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-xl font-black shadow-xl transition-all duration-200 sm:min-w-20 ${
+      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-2xl font-black shadow-2xl transition-all duration-200 sm:min-w-20 brightness-110 contrast-125 saturate-150 ${
         card.color === "black"
-          ? "border-white/80 bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#38bdf8_270deg_360deg)] text-white"
-          : unoColorClass(card.color)
+          ? "border-white bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#06b6d4_270deg_360deg)] text-white shadow-fuchsia-500/20"
+          : `${unoColorClass(card.color)} text-white`
       } ${
         playable
-          ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:shadow-emerald-400/40 active:scale-95"
-          : "cursor-default opacity-60 grayscale-[30%]"
-      } ${isSelected ? "ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 -translate-y-3" : ""}`}
+          ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:scale-105 hover:shadow-emerald-400/50 active:scale-95"
+          : "cursor-default opacity-50 grayscale-[40%]"
+      } ${isSelected ? "ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 -translate-y-4 scale-105" : ""}`}
       aria-label={`Carte ${unoValueLabel(card.value)}`}
     >
-      <span className="absolute inset-2 rounded-xl border border-white/35" />
-      <span className="relative z-10 drop-shadow-md">{unoValueLabel(card.value)}</span>
+      <span className="absolute inset-1.5 rounded-xl border-2 border-white/40 bg-white/10 backdrop-blur-[1px]" />
+      <span className="relative z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] font-black tracking-tighter">
+        {unoValueLabel(card.value)}
+      </span>
     </button>
   );
 }
@@ -228,8 +233,9 @@ export default function UnoPage() {
       setPlayerNames({});
     }
 
-    if (roomData.status === "finished") setView("finished");
+    // Basculement persistant vers l'écran de résultat si la partie est terminée
     if (roomData.status === "finished") {
+      setView("finished");
       const { data: matchData } = await supabase
         .from("matches")
         .select("final_standings")
@@ -418,6 +424,14 @@ export default function UnoPage() {
       showMessage("Vous avez quitté la salle.");
     });
 
+  /* Action de retour au salon initial après fin de match */
+  const handleBackToLobby = () => {
+    setRoom(null);
+    setPlayers([]);
+    setStandings([]);
+    setView("lobby");
+  };
+
   const copyMatchCode = async () => {
     try {
       await navigator.clipboard.writeText(`MATCH-${room?.match_code ?? matchCode}`);
@@ -447,7 +461,6 @@ export default function UnoPage() {
     runAction(async () => {
       if (!room) return;
 
-      // Si c'est une carte noire (+4 / Joker) et qu'aucune couleur n'a été choisie
       if (card.color === "black" && !selectedColor) {
         setSelectedCardId(card.id);
         showMessage("Veuillez sélectionner une couleur ci-dessous avant de jouer la carte Joker !");
@@ -507,8 +520,10 @@ export default function UnoPage() {
           <button
             type="button"
             onClick={() => {
-              if (room && room.status !== "finished" && room.status !== "cancelled") {
+              if (room && room.status !== "finished" && room.status !== "cancelled" && view !== "finished") {
                 setShowLeaveModal(true);
+              } else if (view === "finished") {
+                handleBackToLobby();
               } else {
                 router.push("/client/list");
               }
@@ -618,6 +633,17 @@ export default function UnoPage() {
         </AnimatePresence>
 
         {helpOpen && <UnoHelpModal onClose={() => setHelpOpen(false)} />}
+
+        {/* VIEW: FINISHED (ÉCRAN DE RÉSULTAT PERSISTANT) */}
+        {view === "finished" && room && (
+          <FinishedMatchScreen
+            room={room}
+            userId={userId}
+            standings={standings}
+            playerNames={playerNames}
+            onBackToLobby={handleBackToLobby}
+          />
+        )}
 
         {/* VIEW: LOBBY */}
         {view === "lobby" && (
@@ -845,13 +871,6 @@ export default function UnoPage() {
                 La partie a été annulée (abandon d'un joueur ou délai dépassé). Les mises ont été
                 remboursées automatiquement.
               </div>
-            ) : hasFinished ? (
-              <FinishedMatchScreen
-                room={room}
-                standings={standings}
-                playerNames={playerNames}
-                onContinue={() => router.push("/live")}
-              />
             ) : (
               <GameBoard
                 room={room}
@@ -918,8 +937,6 @@ function GameBoard({
   remainingTurnSeconds: number | null;
   onHelp: () => void;
 }) {
-  const winner = players.find((entry) => entry.user_id === room.winner_id);
-
   return (
     <div className="space-y-6">
       {/* Liste des adversaires */}
@@ -1003,13 +1020,6 @@ function GameBoard({
             UNO !
           </div>
         )}
-
-        {winner && (
-          <div className="mt-3 text-center text-emerald-200 font-bold">
-            <Crown size={18} className="inline mr-2 text-amber-300" /> Victoire du siège {winner.seat + 1} · +
-            {(room.pot_cp + room.vip_bonus_cp).toLocaleString()} CP
-          </div>
-        )}
       </div>
 
       {/* Sélecteur de couleur pour les cartes Jokers (+4 / Wild) */}
@@ -1082,73 +1092,105 @@ function GameBoard({
   );
 }
 
-/* Ecran de fin de match */
+/* Écran de fin de match optimisé et persistant */
 function FinishedMatchScreen({
   room,
+  userId,
   standings,
   playerNames,
-  onContinue,
+  onBackToLobby,
 }: {
   room: UnoRoom;
+  userId: string | null;
   standings: Standing[];
   playerNames: Record<string, string>;
-  onContinue: () => void;
+  onBackToLobby: () => void;
 }) {
+  const isIWinner = room.winner_id === userId;
   const winner = standings.find((entry) => entry.user_id === room.winner_id);
   const ranking = standings
     .filter((entry) => entry.user_id !== room.winner_id)
     .sort((left, right) => left.score - right.score);
 
+  const totalReward = room.pot_cp + room.vip_bonus_cp;
+
   return (
     <motion.section
-      initial={{ opacity: 0, scale: 0.96 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="relative overflow-hidden rounded-[32px] border border-amber-300/25 bg-linear-to-br from-amber-300/10 via-slate-950 to-emerald-300/10 p-6 text-center sm:p-10"
+      className={`relative overflow-hidden rounded-[32px] border p-6 text-center sm:p-10 ${
+        isIWinner
+          ? "border-amber-300/40 bg-linear-to-br from-amber-500/20 via-slate-950 to-emerald-500/20 shadow-[0_0_50px_rgba(245,158,11,0.2)]"
+          : "border-rose-500/30 bg-linear-to-br from-rose-950/30 via-slate-950 to-slate-900"
+      }`}
     >
-      <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-200">
-        Match terminé
-      </p>
-      <div className="relative mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full border-4 border-amber-300/70 bg-amber-300/15 text-3xl font-black text-amber-100 shadow-[0_0_45px_rgba(251,191,36,0.35)]">
+      <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-black uppercase tracking-[0.3em] text-slate-300">
+        <Trophy size={16} className={isIWinner ? "text-amber-300" : "text-slate-400"} />
+        Résultats de la partie
+      </div>
+
+      <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl">
+        {isIWinner ? (
+          <span className="text-amber-300 drop-shadow-md">Victoire écrasante !</span>
+        ) : (
+          <span className="text-rose-400">Défaite</span>
+        )}
+      </h1>
+
+      <div className="relative mx-auto mt-6 grid h-24 w-24 place-items-center rounded-full border-4 border-amber-300/80 bg-amber-400/20 text-4xl font-black text-amber-100 shadow-[0_0_30px_rgba(251,191,36,0.4)]">
         {(winner ? playerNames[winner.user_id] ?? winner.username ?? "J" : "J")
           .slice(0, 1)
           .toUpperCase()}
       </div>
-      <h1 className="relative mt-4 text-3xl font-black">
-        {winner ? playerNames[winner.user_id] ?? winner.username ?? `Joueur` : "Victoire"}
-      </h1>
-      <p className="relative mt-2 text-emerald-200">
-        +{(room.pot_cp + room.vip_bonus_cp).toLocaleString()} CP
+
+      <p className="mt-4 text-lg font-bold text-slate-200">
+        Gagnant :{" "}
+        <span className="text-amber-300 font-black">
+          {winner ? playerNames[winner.user_id] ?? winner.username ?? "Joueur" : "Joueur"}
+        </span>
       </p>
 
+      <div className="mt-4 inline-block rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-6 py-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Gain total distribué</p>
+        <p className="text-3xl font-black text-emerald-200 mt-1">
+          +{totalReward.toLocaleString()} CP
+        </p>
+      </div>
+
       {ranking.length > 0 && (
-        <div className="relative mx-auto mt-8 max-w-xl space-y-2 text-left">
+        <div className="relative mx-auto mt-8 max-w-md space-y-2 text-left">
           <p className="mb-3 text-center text-xs font-black uppercase tracking-[0.25em] text-slate-500">
-            Classement par points restants
+            Classement final (Points restants)
           </p>
           {ranking.map((entry, index) => (
             <div
               key={entry.user_id}
-              className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+              className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/80 px-4 py-3"
             >
               <span className="flex items-center gap-3">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/15 text-xs font-black text-fuchsia-100">
-                  {index + 2}
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-xs font-black text-slate-300">
+                  #{index + 2}
                 </span>
-                <span>{playerNames[entry.user_id] ?? entry.username ?? `Joueur`}</span>
+                <span className="font-bold text-slate-200">
+                  {playerNames[entry.user_id] ?? entry.username ?? `Joueur`}
+                </span>
               </span>
-              <span className="font-mono text-sm text-slate-300">{entry.score} points</span>
+              <span className="font-mono text-sm font-bold text-slate-400">{entry.score} pts</span>
             </div>
           ))}
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onContinue}
-        className="relative mt-8 rounded-xl bg-emerald-300 px-6 py-3 font-black text-slate-950 transition hover:bg-emerald-200 active:scale-95"
-      >
-        Continuer vers Live
-      </button>
+      <div className="mt-10 flex items-center justify-center gap-4">
+        <button
+          type="button"
+          onClick={onBackToLobby}
+          className="inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-6 py-3.5 text-sm font-black text-slate-950 transition hover:bg-emerald-300 active:scale-95 shadow-lg shadow-emerald-400/20"
+        >
+          <Home size={18} />
+          Retourner au salon principal
+        </button>
+      </div>
     </motion.section>
   );
 }
