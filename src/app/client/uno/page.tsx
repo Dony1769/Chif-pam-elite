@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Check,
@@ -17,6 +17,8 @@ import {
   Sparkles,
   Users,
   X,
+  AlertTriangle,
+  LogOut,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -31,25 +33,33 @@ import {
 import ThreeSurface from "@/components/three/ThreeSurface";
 
 type View = "lobby" | "room" | "finished";
+
 type PendingBet = {
   type: "create" | "join";
   amount: number;
   code?: string;
   maxPlayers?: number;
 };
+
 type Standing = { user_id: string; username: string | null; score: number };
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Une erreur est survenue.";
 }
 
+/* ============================================================================
+   COMPOSANTS VISUELS (CARTE & DIALOGUES)
+   ============================================================================ */
+
 function UnoCardView({
   card,
   playable,
+  isSelected,
   onPlay,
 }: {
   card: UnoCard;
   playable: boolean;
+  isSelected?: boolean;
   onPlay?: () => void;
 }) {
   return (
@@ -57,14 +67,92 @@ function UnoCardView({
       type="button"
       onClick={onPlay}
       disabled={!playable}
-      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-xl font-black shadow-xl transition sm:min-w-20 ${card.color === "black" ? "border-white/70 bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#38bdf8_270deg_360deg)] text-white" : unoColorClass(card.color)} ${playable ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:shadow-emerald-300/30" : "cursor-default opacity-85"}`}
+      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-xl font-black shadow-xl transition-all duration-200 sm:min-w-20 ${
+        card.color === "black"
+          ? "border-white/80 bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#38bdf8_270deg_360deg)] text-white"
+          : unoColorClass(card.color)
+      } ${
+        playable
+          ? "cursor-pointer hover:-translate-y-4 hover:rotate-2 hover:shadow-emerald-400/40 active:scale-95"
+          : "cursor-default opacity-60 grayscale-[30%]"
+      } ${isSelected ? "ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 -translate-y-3" : ""}`}
       aria-label={`Carte ${unoValueLabel(card.value)}`}
     >
       <span className="absolute inset-2 rounded-xl border border-white/35" />
-      <span className="relative z-10">{unoValueLabel(card.value)}</span>
+      <span className="relative z-10 drop-shadow-md">{unoValueLabel(card.value)}</span>
     </button>
   );
 }
+
+/* Modal Pop-up pour confirmation d'abandon de salle */
+function LeaveRoomModal({
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="w-full max-w-md rounded-3xl border border-rose-500/30 bg-slate-900 p-6 shadow-2xl"
+      >
+        <div className="flex items-center gap-3 text-rose-400">
+          <div className="rounded-xl bg-rose-500/10 p-3 border border-rose-500/20">
+            <AlertTriangle size={24} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-white">Quitter la partie ?</h3>
+            <p className="text-xs text-rose-300">Attention, votre action a des conséquences !</p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-sm text-slate-300 leading-relaxed">
+          Êtes-vous sûr de vouloir abandonner la salle ? 
+          <br />
+          <span className="text-xs text-slate-400 mt-2 block">
+            • À 2 joueurs : Victoire par forfait attribuée à l'adversaire.
+            <br />
+            • À 3 ou 4 joueurs : La salle sera annulée et les mises remboursées.
+          </span>
+        </p>
+
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-300 hover:bg-white/10 transition"
+          >
+            Continuer à jouer
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-500 transition disabled:opacity-50"
+          >
+            <LogOut size={16} />
+            Quitter la salle
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ============================================================================
+   PAGE PRINCIPALE : UNO PAGE
+   ============================================================================ */
 
 export default function UnoPage() {
   const router = useRouter();
@@ -81,13 +169,14 @@ export default function UnoPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [pendingBet, setPendingBet] = useState<PendingBet | null>(null);
-  const [selectedColor, setSelectedColor] = useState<UnoCard["color"] | null>(
-    null,
-  );
+  const [selectedColor, setSelectedColor] = useState<UnoCard["color"] | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [remainingTurnSeconds, setRemainingTurnSeconds] = useState<number | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+
   const realtimeRefreshRef = useRef<number | null>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,10 +185,11 @@ export default function UnoPage() {
   const isHost = room?.host_id === userId;
   const isMyTurn = room?.current_turn === userId;
   const canStart = Boolean(
-    isHost && room?.status === "waiting" && players.length === room.max_players,
+    isHost && room?.status === "waiting" && players.length === room.max_players
   );
   const hasFinished = room?.status === "finished" || view === "finished";
 
+  /* Charger les données de la salle */
   const loadRoom = useCallback(async (roomId: string) => {
     const [
       { data: roomData, error: roomError },
@@ -112,30 +202,57 @@ export default function UnoPage() {
         .eq("room_id", roomId)
         .order("seat"),
     ]);
+
     if (roomError) throw roomError;
     if (playerError) throw playerError;
+
     setRoom(roomData as UnoRoom);
     setPlayers((playerData ?? []) as UnoPlayer[]);
+
     if ((playerData ?? []).length > 0) {
-      const { data: profileData, error: profileError } = await supabase.rpc("uno_get_player_profiles", { p_room_id: roomId });
-      if (profileError) throw profileError;
-      const profiles = (profileData ?? []) as Array<{ user_id: string; username: string | null }>;
-      setPlayerNames(
-        Object.fromEntries(
-          profiles.flatMap((profile) =>
-            profile.username ? [[profile.user_id, profile.username]] : [],
-          ),
-        ),
+      const { data: profileData, error: profileError } = await supabase.rpc(
+        "uno_get_player_profiles",
+        { p_room_id: roomId }
       );
+      if (!profileError && profileData) {
+        const profiles = profileData as Array<{ user_id: string; username: string | null }>;
+        setPlayerNames(
+          Object.fromEntries(
+            profiles.flatMap((profile) =>
+              profile.username ? [[profile.user_id, profile.username]] : []
+            )
+          )
+        );
+      }
     } else {
       setPlayerNames({});
     }
+
     if (roomData.status === "finished") setView("finished");
     if (roomData.status === "finished") {
-      const { data: matchData } = await supabase.from("matches").select("final_standings").eq("room_id", roomId).maybeSingle();
+      const { data: matchData } = await supabase
+        .from("matches")
+        .select("final_standings")
+        .eq("room_id", roomId)
+        .maybeSingle();
       setStandings((matchData?.final_standings ?? []) as Standing[]);
     }
   }, []);
+
+  /* Interception de la fermeture/rafraîchissement d'onglet */
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (room && room.status !== "finished" && room.status !== "cancelled") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [room]);
 
   useEffect(() => {
     let active = true;
@@ -147,6 +264,7 @@ export default function UnoPage() {
     };
   }, []);
 
+  /* Abonnement Realtime Supabase */
   useEffect(() => {
     if (!room?.id) return;
     const scheduleRoomRefresh = () => {
@@ -156,29 +274,21 @@ export default function UnoPage() {
         void loadRoom(room.id);
       }, 100);
     };
+
     const channel = supabase
       .channel(`uno_room_${room.id}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "rooms",
-          filter: `id=eq.${room.id}`,
-        },
-        scheduleRoomRefresh,
+        { event: "*", schema: "public", table: "rooms", filter: `id=eq.${room.id}` },
+        scheduleRoomRefresh
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "room_players",
-          filter: `room_id=eq.${room.id}`,
-        },
-        scheduleRoomRefresh,
+        { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${room.id}` },
+        scheduleRoomRefresh
       )
       .subscribe();
+
     return () => {
       if (realtimeRefreshRef.current !== null) {
         window.clearTimeout(realtimeRefreshRef.current);
@@ -188,6 +298,7 @@ export default function UnoPage() {
     };
   }, [loadRoom, room?.id]);
 
+  /* Chronomètre d'attente de salle */
   useEffect(() => {
     const expiresAt = room?.expires_at;
     if (room?.status !== "waiting" || !expiresAt) {
@@ -196,10 +307,7 @@ export default function UnoPage() {
     }
     const updateRemaining = () => {
       setRemainingSeconds(
-        Math.max(
-          0,
-          Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000),
-        ),
+        Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000))
       );
     };
     updateRemaining();
@@ -207,9 +315,16 @@ export default function UnoPage() {
     return () => window.clearInterval(timer);
   }, [room?.expires_at, room?.status]);
 
+  /* Chronomètre du tour de jeu */
   useEffect(() => {
-    if (room?.status !== "playing" || !room.turn_deadline_at) { setRemainingTurnSeconds(null); return; }
-    const update = () => setRemainingTurnSeconds(Math.max(0, Math.ceil((new Date(room.turn_deadline_at as string).getTime() - Date.now()) / 1000)));
+    if (room?.status !== "playing" || !room.turn_deadline_at) {
+      setRemainingTurnSeconds(null);
+      return;
+    }
+    const update = () =>
+      setRemainingTurnSeconds(
+        Math.max(0, Math.ceil((new Date(room.turn_deadline_at as string).getTime() - Date.now()) / 1000))
+      );
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
@@ -220,7 +335,7 @@ export default function UnoPage() {
       if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
     },
-    [],
+    []
   );
 
   const showMessage = useCallback((nextMessage: string) => {
@@ -285,19 +400,33 @@ export default function UnoPage() {
       setView("room");
     });
 
+  /* Traitement de l'abandon volontaire de la salle */
+  const handleConfirmLeaveRoom = () =>
+    runAction(async () => {
+      setShowLeaveModal(false);
+      if (!room) return;
+
+      const { error } = await supabase.rpc("uno_leave_room", {
+        p_room_id: room.id,
+      });
+
+      if (error) throw error;
+
+      setRoom(null);
+      setPlayers([]);
+      setView("lobby");
+      showMessage("Vous avez quitté la salle.");
+    });
+
   const copyMatchCode = async () => {
     try {
-      await navigator.clipboard.writeText(
-        `MATCH-${room?.match_code ?? matchCode}`,
-      );
+      await navigator.clipboard.writeText(`MATCH-${room?.match_code ?? matchCode}`);
       setCopied(true);
-      showMessage("Code copié");
+      showMessage("Code copié dans le presse-papier");
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
-      showMessage(
-        "Impossible de copier le code. Vérifiez les permissions du navigateur.",
-      );
+      showMessage("Impossible de copier le code.");
     }
   };
 
@@ -317,18 +446,26 @@ export default function UnoPage() {
   const playCard = (card: UnoCard) =>
     runAction(async () => {
       if (!room) return;
-      const color = card.color === "black" ? selectedColor : null;
-      if (card.color === "black" && !color) {
-        showMessage("Choisissez une couleur avant de jouer cette carte.");
+
+      // Si c'est une carte noire (+4 / Joker) et qu'aucune couleur n'a été choisie
+      if (card.color === "black" && !selectedColor) {
+        setSelectedCardId(card.id);
+        showMessage("Veuillez sélectionner une couleur ci-dessous avant de jouer la carte Joker !");
         return;
       }
+
+      const colorToPlay = card.color === "black" ? selectedColor : null;
+
       const { error } = await supabase.rpc("uno_play_card", {
         p_room_id: room.id,
         p_card_id: card.id,
-        p_color: color,
+        p_color: colorToPlay,
       });
+
       if (error) throw error;
+
       setSelectedColor(null);
+      setSelectedCardId(null);
       await loadRoom(room.id);
     });
 
@@ -350,11 +487,11 @@ export default function UnoPage() {
             (card) =>
               card.color === "black" ||
               card.color === room?.current_color ||
-              card.value === room?.top_card?.value,
+              card.value === room?.top_card?.value
           )
-          .map((card) => card.id),
+          .map((card) => card.id)
       ),
-    [myPlayer?.hand, room?.current_color, room?.top_card?.value],
+    [myPlayer?.hand, room?.current_color, room?.top_card?.value]
   );
 
   return (
@@ -363,16 +500,25 @@ export default function UnoPage() {
         variant="uno"
         className="pointer-events-none -right-10 top-10 z-0 h-[28rem] w-[34rem] opacity-50"
       />
+
       <div className="relative z-10 mx-auto max-w-6xl">
+        {/* En-tête */}
         <header className="mb-8 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => router.push("/client/list")}
+            onClick={() => {
+              if (room && room.status !== "finished" && room.status !== "cancelled") {
+                setShowLeaveModal(true);
+              } else {
+                router.push("/client/list");
+              }
+            }}
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:border-emerald-300/40"
             aria-label="Retour"
           >
             <ArrowLeft size={18} />
           </button>
+
           <div className="text-center">
             <p className="text-[10px] font-black uppercase tracking-[0.35em] text-fuchsia-300">
               ChifPam Arena
@@ -381,29 +527,38 @@ export default function UnoPage() {
               UNO <span className="text-emerald-300">LIVE</span>
             </h2>
           </div>
+
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setHelpOpen(true)} className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-2 text-xs font-bold text-fuchsia-100"><HelpCircle size={15} /> Comment jouer</button>
-            <div className="flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-200">
-            <ShieldCheck size={15} /> CP sécurisé
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-2 text-xs font-bold text-fuchsia-100"
+            >
+              <HelpCircle size={15} /> Comment jouer
+            </button>
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-200">
+              <ShieldCheck size={15} /> CP sécurisé
             </div>
           </div>
         </header>
 
         {message && (
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="mb-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
             role="status"
           >
             {message}
-          </div>
+          </motion.div>
         )}
 
+        {/* Dialogue de confirmation de mise */}
         {pendingBet && (
           <div
             className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 px-4 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="bet-confirmation-title"
           >
             <div className="w-full max-w-md rounded-3xl border border-emerald-300/25 bg-slate-950 p-6 shadow-2xl">
               <div className="flex items-start justify-between gap-4">
@@ -411,10 +566,7 @@ export default function UnoPage() {
                   <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-300">
                     Confirmation requise
                   </p>
-                  <h2
-                    id="bet-confirmation-title"
-                    className="mt-2 text-2xl font-black"
-                  >
+                  <h2 className="mt-2 text-2xl font-black">
                     Engager {pendingBet.amount.toLocaleString()} CP ?
                   </h2>
                 </div>
@@ -422,7 +574,6 @@ export default function UnoPage() {
                   type="button"
                   onClick={() => setPendingBet(null)}
                   className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"
-                  aria-label="Annuler"
                 >
                   <X size={18} />
                 </button>
@@ -455,8 +606,20 @@ export default function UnoPage() {
           </div>
         )}
 
+        {/* Pop-up d'avertissement d'abandon de salle */}
+        <AnimatePresence>
+          {showLeaveModal && (
+            <LeaveRoomModal
+              onConfirm={handleConfirmLeaveRoom}
+              onCancel={() => setShowLeaveModal(false)}
+              loading={loading}
+            />
+          )}
+        </AnimatePresence>
+
         {helpOpen && <UnoHelpModal onClose={() => setHelpOpen(false)} />}
 
+        {/* VIEW: LOBBY */}
         {view === "lobby" && (
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <section className="relative overflow-hidden rounded-[28px] border border-fuchsia-300/20 bg-linear-to-br from-fuchsia-950/70 via-slate-950 to-emerald-950/50 p-6 sm:p-8">
@@ -473,15 +636,12 @@ export default function UnoPage() {
                 Supabase.
               </p>
               <div className="mt-8 flex flex-wrap gap-3 text-xs font-bold text-slate-300">
-                <span className="rounded-full bg-white/10 px-3 py-2">
-                  +2 / +4
-                </span>
-                <span className="rounded-full bg-white/10 px-3 py-2">Sens</span>
-                <span className="rounded-full bg-white/10 px-3 py-2">
-                  Bonus VIP +5%
-                </span>
+                <span className="rounded-full bg-white/10 px-3 py-2">+2 / +4</span>
+                <span className="rounded-full bg-white/10 px-3 py-2">Inversion</span>
+                <span className="rounded-full bg-white/10 px-3 py-2">Bonus VIP +5%</span>
               </div>
             </section>
+
             <section className="space-y-5 rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:p-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
@@ -509,7 +669,11 @@ export default function UnoPage() {
                       type="button"
                       key={value}
                       onClick={() => setMaxPlayers(value)}
-                      className={`rounded-xl border px-3 py-3 text-sm font-black ${maxPlayers === value ? "border-emerald-300 bg-emerald-300/15 text-emerald-200" : "border-white/10 bg-white/5 text-slate-400"}`}
+                      className={`rounded-xl border px-3 py-3 text-sm font-black ${
+                        maxPlayers === value
+                          ? "border-emerald-300 bg-emerald-300/15 text-emerald-200"
+                          : "border-white/10 bg-white/5 text-slate-400"
+                      }`}
                     >
                       {value}
                     </button>
@@ -524,17 +688,17 @@ export default function UnoPage() {
               >
                 <Plus size={18} /> Créer une partie
               </button>
+
               <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-600">
                 <span className="h-px flex-1 bg-white/10" /> ou rejoindre{" "}
                 <span className="h-px flex-1 bg-white/10" />
               </div>
+
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
                 ID du match
                 <input
                   value={matchCode}
-                  onChange={(event) =>
-                    setMatchCode(event.target.value.toUpperCase())
-                  }
+                  onChange={(event) => setMatchCode(event.target.value.toUpperCase())}
                   placeholder="Ex: 8X2K9P"
                   className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 font-mono text-white outline-none focus:border-fuchsia-300/60"
                 />
@@ -561,6 +725,7 @@ export default function UnoPage() {
           </div>
         )}
 
+        {/* VIEW: ROOM */}
         {view === "room" && room && (
           <section className="space-y-6">
             <div className="flex flex-col justify-between gap-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-center sm:p-7">
@@ -569,8 +734,8 @@ export default function UnoPage() {
                   {room.status === "waiting"
                     ? "Salon d’attente"
                     : room.status === "cancelled"
-                      ? "Salon fermé"
-                      : "Partie en cours"}
+                    ? "Salon fermé"
+                    : "Partie en cours"}
                 </p>
                 <div className="mt-2 flex items-center gap-3">
                   <h1 className="font-mono text-3xl font-black tracking-widest">
@@ -580,30 +745,32 @@ export default function UnoPage() {
                     type="button"
                     onClick={copyMatchCode}
                     className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white"
-                    aria-label={copied ? "Code copié" : "Copier le code"}
                   >
-                    {copied ? (
-                      <Check size={16} className="text-emerald-300" />
-                    ) : (
-                      <Copy size={16} />
-                    )}
+                    {copied ? <Check size={16} className="text-emerald-300" /> : <Copy size={16} />}
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-sm font-bold text-slate-300">
-                <Users size={18} /> {players.length}/{room.max_players}{" "}
-                <span className="text-emerald-300">
-                  {room.pot_cp.toLocaleString()} CP
-                </span>
+
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 text-sm font-bold text-slate-300">
+                  <Users size={18} /> {players.length}/{room.max_players}{" "}
+                  <span className="text-emerald-300">{room.pot_cp.toLocaleString()} CP</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveModal(true)}
+                  className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/20 transition"
+                >
+                  Quitter
+                </button>
               </div>
             </div>
+
             {room.status === "waiting" ? (
               <div className="grid gap-6 lg:grid-cols-[1fr_0.65fr]">
                 <div className="grid gap-3 sm:grid-cols-2">
                   {Array.from({ length: room.max_players }).map((_, index) => {
-                    const player = players.find(
-                      (entry) => entry.seat === index,
-                    );
+                    const player = players.find((entry) => entry.seat === index);
                     return (
                       <div
                         key={index}
@@ -629,8 +796,16 @@ export default function UnoPage() {
                             <p className="text-xs text-emerald-300">
                               Mise {player.bet_cp.toLocaleString()} CP
                             </p>
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${player.is_connected ? "text-emerald-300" : "text-amber-300"}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${player.is_connected ? "bg-emerald-300" : "bg-amber-300"}`} />
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold ${
+                                player.is_connected ? "text-emerald-300" : "text-amber-300"
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  player.is_connected ? "bg-emerald-300" : "bg-amber-300"
+                                }`}
+                              />
                               {player.is_connected ? "En ligne" : "Déconnecté"}
                             </span>
                           </div>
@@ -639,20 +814,20 @@ export default function UnoPage() {
                     );
                   })}
                 </div>
+
                 <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/5 p-5">
                   <p className="text-sm leading-6 text-slate-300">
-                    Le match démarre automatiquement quand la salle est pleine.
-                    Les mises sont remboursées si le délai expire.
+                    Le match démarre automatiquement quand la salle est pleine. Les mises sont
+                    remboursées si le délai expire.
                   </p>
                   <p className="mt-4 font-mono text-2xl font-black text-emerald-200">
                     {remainingSeconds === null
                       ? "--:--"
                       : `${Math.floor(remainingSeconds / 60)
                           .toString()
-                          .padStart(
-                            2,
-                            "0",
-                          )}:${(remainingSeconds % 60).toString().padStart(2, "0")}`}
+                          .padStart(2, "0")}:${(remainingSeconds % 60)
+                          .toString()
+                          .padStart(2, "0")}`}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">Temps restant</p>
                   <button
@@ -661,18 +836,22 @@ export default function UnoPage() {
                     disabled={!canStart || loading || remainingSeconds === 0}
                     className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <Play size={17} />{" "}
-                    {loading ? "Préparation..." : "Démarrer la partie"}
+                    <Play size={17} /> {loading ? "Préparation..." : "Démarrer la partie"}
                   </button>
                 </div>
               </div>
             ) : room.status === "cancelled" ? (
               <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-6 text-sm text-amber-100">
-                Le délai de 8 minutes est écoulé. Les mises engagées ont été
+                La partie a été annulée (abandon d'un joueur ou délai dépassé). Les mises ont été
                 remboursées automatiquement.
               </div>
             ) : hasFinished ? (
-              <FinishedMatchScreen room={room} standings={standings} playerNames={playerNames} onContinue={() => router.push("/live")} />
+              <FinishedMatchScreen
+                room={room}
+                standings={standings}
+                playerNames={playerNames}
+                onContinue={() => router.push("/live")}
+              />
             ) : (
               <GameBoard
                 room={room}
@@ -683,6 +862,8 @@ export default function UnoPage() {
                 playable={playable}
                 selectedColor={selectedColor}
                 setSelectedColor={setSelectedColor}
+                selectedCardId={selectedCardId}
+                setSelectedCardId={setSelectedCardId}
                 playCard={playCard}
                 drawCard={drawCard}
                 loading={loading}
@@ -698,6 +879,10 @@ export default function UnoPage() {
   );
 }
 
+/* ============================================================================
+   PLATEAU DE JEU (GAME BOARD)
+   ============================================================================ */
+
 function GameBoard({
   room,
   player,
@@ -707,6 +892,8 @@ function GameBoard({
   playable,
   selectedColor,
   setSelectedColor,
+  selectedCardId,
+  setSelectedCardId,
   playCard,
   drawCard,
   loading,
@@ -722,6 +909,8 @@ function GameBoard({
   playable: Set<string>;
   selectedColor: UnoCard["color"] | null;
   setSelectedColor: (color: UnoCard["color"] | null) => void;
+  selectedCardId: string | null;
+  setSelectedCardId: (id: string | null) => void;
   playCard: (card: UnoCard) => void;
   drawCard: () => void;
   loading: boolean;
@@ -730,129 +919,323 @@ function GameBoard({
   onHelp: () => void;
 }) {
   const winner = players.find((entry) => entry.user_id === room.winner_id);
+
   return (
     <div className="space-y-6">
+      {/* Liste des adversaires */}
       <div className="flex flex-wrap items-center justify-center gap-3">
         {players
           .filter((entry) => entry.user_id !== player?.user_id)
           .map((entry) => (
             <div
               key={entry.user_id}
-              className={`rounded-full border px-4 py-2 text-xs font-bold ${room.current_turn === entry.user_id ? "border-fuchsia-300 bg-fuchsia-300/15 text-fuchsia-100 shadow-[0_0_25px_rgba(232,121,249,0.35)]" : "border-white/10 bg-white/5 text-slate-400"}`}
+              className={`rounded-full border px-4 py-2 text-xs font-bold transition-all ${
+                room.current_turn === entry.user_id
+                  ? "border-fuchsia-300 bg-fuchsia-300/15 text-fuchsia-100 shadow-[0_0_25px_rgba(232,121,249,0.35)]"
+                  : "border-white/10 bg-white/5 text-slate-400"
+              }`}
             >
-              <span className="inline-flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/20 text-[10px] text-fuchsia-100">{(playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`).slice(0, 1).toUpperCase()}</span>{playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`} · {entry.hand.length} cartes</span>
-              <span className={`ml-2 inline-flex items-center gap-1 ${entry.is_connected ? "text-emerald-300" : "text-amber-300"}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${entry.is_connected ? "bg-emerald-300" : "bg-amber-300"}`} />
+              <span className="inline-flex items-center gap-2">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/20 text-[10px] text-fuchsia-100">
+                  {(playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`)
+                    .slice(0, 1)
+                    .toUpperCase()}
+                </span>
+                {playerNames[entry.user_id] ?? `Joueur ${entry.seat + 1}`} · {entry.hand.length} cartes
+              </span>
+              <span
+                className={`ml-2 inline-flex items-center gap-1 ${
+                  entry.is_connected ? "text-emerald-300" : "text-amber-300"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    entry.is_connected ? "bg-emerald-300" : "bg-amber-300"
+                  }`}
+                />
                 {entry.is_connected ? "En ligne" : "Déconnecté"}
               </span>
             </div>
           ))}
       </div>
+
+      {/* Tapis de jeu central */}
       <div className="relative flex min-h-[360px] flex-col items-center justify-center overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_center,#16213d_0%,#080d1a_65%)] p-8">
         <div className="absolute left-5 top-5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
           Tour {room.turn_number}
         </div>
         <div className="absolute right-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">
-          <span>Couleur <span className="text-emerald-300">{room.current_color}</span></span>
-          <span className={remainingTurnSeconds !== null && remainingTurnSeconds <= 10 ? "text-rose-300" : "text-amber-200"}>⏱ {remainingTurnSeconds ?? "--"}s</span>
+          <span>
+            Couleur active : <span className="text-emerald-300 font-extrabold uppercase">{room.current_color}</span>
+          </span>
+          <span
+            className={
+              remainingTurnSeconds !== null && remainingTurnSeconds <= 10
+                ? "text-rose-300 font-extrabold"
+                : "text-amber-200"
+            }
+          >
+            ⏱ {remainingTurnSeconds ?? "--"}s
+          </span>
         </div>
+
         <div className="flex items-center gap-5">
           <div className="grid aspect-[3/4] w-20 place-items-center rounded-2xl border-4 border-white/20 bg-linear-to-br from-fuchsia-700 to-slate-950 text-3xl shadow-2xl">
             <Disc3 />
           </div>
           <UnoCardView card={room.top_card} playable={false} />
         </div>
+
         <p
-          className={`mt-8 text-sm font-black uppercase tracking-[0.2em] ${isMyTurn ? "animate-pulse text-emerald-300" : "text-slate-500"}`}
+          className={`mt-8 text-sm font-black uppercase tracking-[0.2em] ${
+            isMyTurn ? "animate-pulse text-emerald-300" : "text-slate-500"
+          }`}
         >
           {hasFinished
             ? "Partie terminée"
             : isMyTurn
-              ? "Votre tour"
-              : "Tour adverse"}
+            ? "C'est votre tour de jouer !"
+            : "En attente du coup adverse..."}
         </p>
-        {isMyTurn && player?.hand.length === 1 && <div className="mt-3 rounded-full bg-rose-500 px-4 py-2 text-sm font-black tracking-[0.25em] text-white shadow-[0_0_30px_rgba(244,63,94,0.45)]">UNO !</div>}
+
+        {isMyTurn && player?.hand.length === 1 && (
+          <div className="mt-3 rounded-full bg-rose-500 px-4 py-2 text-sm font-black tracking-[0.25em] text-white shadow-[0_0_30px_rgba(244,63,94,0.45)]">
+            UNO !
+          </div>
+        )}
+
         {winner && (
-          <div className="mt-3 text-center text-emerald-200">
-            <TrophyIcon /> Victoire du siège {winner.seat + 1} · +
+          <div className="mt-3 text-center text-emerald-200 font-bold">
+            <Crown size={18} className="inline mr-2 text-amber-300" /> Victoire du siège {winner.seat + 1} · +
             {(room.pot_cp + room.vip_bonus_cp).toLocaleString()} CP
           </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {UNO_COLORS.map((color) => (
-          <button
-            type="button"
-            key={color.value}
-            onClick={() => setSelectedColor(color.value)}
-            className={`h-8 w-8 rounded-full ${color.className} ${selectedColor === color.value ? "ring-4 ring-white/60 ring-offset-2 ring-offset-[#080d1a]" : "opacity-70"}`}
-            aria-label={`Choisir ${color.label}`}
-          />
-        ))}
+
+      {/* Sélecteur de couleur pour les cartes Jokers (+4 / Wild) */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-center">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+          Choisir une couleur pour les cartes Jokers
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {UNO_COLORS.map((color) => (
+            <button
+              type="button"
+              key={color.value}
+              onClick={() => setSelectedColor(color.value)}
+              className={`h-9 w-9 rounded-full ${color.className} ${
+                selectedColor === color.value
+                  ? "ring-4 ring-white ring-offset-2 ring-offset-[#080d1a] scale-110"
+                  : "opacity-70 hover:opacity-100"
+              } transition-all`}
+              aria-label={`Choisir ${color.label}`}
+            />
+          ))}
+        </div>
       </div>
+
+      {/* Main du joueur */}
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-            Votre main
+            Votre main ({player?.hand.length ?? 0} cartes)
           </p>
-          <button
-            type="button"
-            onClick={drawCard}
-            disabled={!isMyTurn || loading || hasFinished}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 disabled:opacity-40"
-          >
-            <RefreshCw size={14} /> Piocher
-          </button>
-          <button type="button" onClick={onHelp} className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300"><HelpCircle size={14} /> Règles</button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={drawCard}
+              disabled={!isMyTurn || loading || hasFinished}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 disabled:opacity-40"
+            >
+              <RefreshCw size={14} /> Piocher une carte
+            </button>
+            <button
+              type="button"
+              onClick={onHelp}
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300"
+            >
+              <HelpCircle size={14} /> Règles
+            </button>
+          </div>
         </div>
+
         <div className="flex min-h-28 flex-wrap justify-center gap-2 sm:gap-3">
-          {(player?.hand ?? []).map((card) => (
-            <motion.div key={card.id} layout>
-              <UnoCardView
-                card={card}
-                playable={
-                  isMyTurn && playable.has(card.id) && !loading && !hasFinished
-                }
-                onPlay={() => playCard(card)}
-              />
-            </motion.div>
-          ))}
+          {(player?.hand ?? []).map((card) => {
+            const isCardPlayable = isMyTurn && playable.has(card.id) && !loading && !hasFinished;
+            return (
+              <motion.div key={card.id} layout>
+                <UnoCardView
+                  card={card}
+                  playable={isCardPlayable}
+                  isSelected={selectedCardId === card.id}
+                  onPlay={() => {
+                    setSelectedCardId(card.id);
+                    playCard(card);
+                  }}
+                />
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
 
-function FinishedMatchScreen({ room, standings, playerNames, onContinue }: { room: UnoRoom; standings: Standing[]; playerNames: Record<string, string>; onContinue: () => void }) {
+/* Ecran de fin de match */
+function FinishedMatchScreen({
+  room,
+  standings,
+  playerNames,
+  onContinue,
+}: {
+  room: UnoRoom;
+  standings: Standing[];
+  playerNames: Record<string, string>;
+  onContinue: () => void;
+}) {
   const winner = standings.find((entry) => entry.user_id === room.winner_id);
-  const ranking = standings.filter((entry) => entry.user_id !== room.winner_id).sort((left, right) => left.score - right.score);
-  return <motion.section initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="relative overflow-hidden rounded-[32px] border border-amber-300/25 bg-linear-to-br from-amber-300/10 via-slate-950 to-emerald-300/10 p-6 text-center sm:p-10">
-    <div className="pointer-events-none absolute inset-0 opacity-40"><span className="absolute left-[12%] top-8 h-2 w-8 rotate-45 bg-amber-300" /><span className="absolute right-[16%] top-20 h-2 w-8 -rotate-45 bg-fuchsia-300" /><span className="absolute bottom-20 left-[25%] h-2 w-8 rotate-90 bg-emerald-300" /></div>
-    <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-200">Match terminé</p>
-    <div className="relative mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full border-4 border-amber-300/70 bg-amber-300/15 text-3xl font-black text-amber-100 shadow-[0_0_45px_rgba(251,191,36,0.35)]">{(winner ? (playerNames[winner.user_id] ?? winner.username ?? "J") : "J").slice(0, 1).toUpperCase()}</div>
-    <h1 className="relative mt-4 text-3xl font-black">{winner ? (playerNames[winner.user_id] ?? winner.username ?? `Joueur`) : "Victoire"}</h1>
-    <p className="relative mt-2 text-emerald-200">+{(room.pot_cp + room.vip_bonus_cp).toLocaleString()} CP</p>
-    {ranking.length > 0 && <div className="relative mx-auto mt-8 max-w-xl space-y-2 text-left"><p className="mb-3 text-center text-xs font-black uppercase tracking-[0.25em] text-slate-500">Classement par points restants</p>{ranking.map((entry, index) => <div key={entry.user_id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"><span className="flex items-center gap-3"><span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/15 text-xs font-black text-fuchsia-100">{index + 2}</span><span>{playerNames[entry.user_id] ?? entry.username ?? `Joueur`}</span></span><span className="font-mono text-sm text-slate-300">{entry.score} points</span></div>)}</div>}
-    <button type="button" onClick={onContinue} className="relative mt-8 rounded-xl bg-emerald-300 px-6 py-3 font-black text-slate-950 transition hover:bg-emerald-200 active:scale-95">Continuer vers Live</button>
-  </motion.section>;
+  const ranking = standings
+    .filter((entry) => entry.user_id !== room.winner_id)
+    .sort((left, right) => left.score - right.score);
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative overflow-hidden rounded-[32px] border border-amber-300/25 bg-linear-to-br from-amber-300/10 via-slate-950 to-emerald-300/10 p-6 text-center sm:p-10"
+    >
+      <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-200">
+        Match terminé
+      </p>
+      <div className="relative mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full border-4 border-amber-300/70 bg-amber-300/15 text-3xl font-black text-amber-100 shadow-[0_0_45px_rgba(251,191,36,0.35)]">
+        {(winner ? playerNames[winner.user_id] ?? winner.username ?? "J" : "J")
+          .slice(0, 1)
+          .toUpperCase()}
+      </div>
+      <h1 className="relative mt-4 text-3xl font-black">
+        {winner ? playerNames[winner.user_id] ?? winner.username ?? `Joueur` : "Victoire"}
+      </h1>
+      <p className="relative mt-2 text-emerald-200">
+        +{(room.pot_cp + room.vip_bonus_cp).toLocaleString()} CP
+      </p>
+
+      {ranking.length > 0 && (
+        <div className="relative mx-auto mt-8 max-w-xl space-y-2 text-left">
+          <p className="mb-3 text-center text-xs font-black uppercase tracking-[0.25em] text-slate-500">
+            Classement par points restants
+          </p>
+          {ranking.map((entry, index) => (
+            <div
+              key={entry.user_id}
+              className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+            >
+              <span className="flex items-center gap-3">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-fuchsia-300/15 text-xs font-black text-fuchsia-100">
+                  {index + 2}
+                </span>
+                <span>{playerNames[entry.user_id] ?? entry.username ?? `Joueur`}</span>
+              </span>
+              <span className="font-mono text-sm text-slate-300">{entry.score} points</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onContinue}
+        className="relative mt-8 rounded-xl bg-emerald-300 px-6 py-3 font-black text-slate-950 transition hover:bg-emerald-200 active:scale-95"
+      >
+        Continuer vers Live
+      </button>
+    </motion.section>
+  );
 }
 
+/* Modal explicative du règlement */
 function UnoHelpModal({ onClose }: { onClose: () => void }) {
   const examples: Array<{ card: UnoCard; title: string; description: string }> = [
-    { card: { id: "help-number", color: "red", value: "7" }, title: "Carte numérique", description: "Jouez une carte de même couleur ou de même valeur." },
-    { card: { id: "help-skip", color: "yellow", value: "skip" }, title: "Passe", description: "Le joueur suivant perd son tour." },
-    { card: { id: "help-reverse", color: "blue", value: "reverse" }, title: "Renverse", description: "Inverse le sens à 3-4 joueurs; à 2 joueurs, vous rejouez." },
-    { card: { id: "help-draw2", color: "green", value: "draw2" }, title: "+2", description: "Le joueur suivant pioche deux cartes et perd son tour." },
-    { card: { id: "help-wild", color: "black", value: "wild" }, title: "Joker", description: "Choisissez la couleur qui continuera la partie." },
-    { card: { id: "help-wild4", color: "black", value: "wild4" }, title: "+4", description: "Choisissez une couleur; le joueur suivant pioche quatre cartes." },
+    {
+      card: { id: "help-number", color: "red", value: "7" },
+      title: "Carte numérique",
+      description: "Jouez une carte de même couleur ou de même valeur.",
+    },
+    {
+      card: { id: "help-skip", color: "yellow", value: "skip" },
+      title: "Passe",
+      description: "Le joueur suivant perd son tour.",
+    },
+    {
+      card: { id: "help-reverse", color: "blue", value: "reverse" },
+      title: "Renverse",
+      description: "Inverse le sens à 3-4 joueurs; à 2 joueurs, vous rejouez.",
+    },
+    {
+      card: { id: "help-draw2", color: "green", value: "draw2" },
+      title: "+2",
+      description: "Le joueur suivant pioche deux cartes et perd son tour.",
+    },
+    {
+      card: { id: "help-wild", color: "black", value: "wild" },
+      title: "Joker",
+      description: "Choisissez la couleur qui continuera la partie.",
+    },
+    {
+      card: { id: "help-wild4", color: "black", value: "wild4" },
+      title: "+4",
+      description: "Choisissez une couleur; le joueur suivant pioche quatre cartes.",
+    },
   ];
-  return <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/80 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="uno-help-title"><div className="max-h-[min(88vh,760px)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-fuchsia-300/25 bg-[#0b1222] p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.3em] text-fuchsia-300">UNO Live</p><h2 id="uno-help-title" className="mt-2 text-2xl font-black">Comment jouer</h2></div><button type="button" onClick={onClose} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300">Fermer</button></div><p className="mt-5 text-sm leading-6 text-slate-300">À tour de rôle, posez une carte qui correspond à la couleur ou à la valeur de la carte visible. À 2 joueurs, piochez jusqu’à obtenir une carte jouable; à 3-4 joueurs, une carte non jouable fait passer le tour.</p><div className="mt-6 grid gap-3 sm:grid-cols-2">{examples.map((example) => <div key={example.card.id} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-3"><UnoCardView card={example.card} playable={false} /><div><h3 className="font-black text-white">{example.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{example.description}</p></div></div>)}</div><button type="button" onClick={onClose} className="mt-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-200">J’ai compris</button></div></div>;
-}
 
-function TrophyIcon() {
   return (
-    <span className="mr-2 inline-flex">
-      <Crown size={18} />
-    </span>
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 px-4 py-6 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="max-h-[min(88vh,760px)] w-full max-w-2xl overflow-y-auto rounded-3xl border border-fuchsia-300/25 bg-[#0b1222] p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-fuchsia-300">
+              UNO Live
+            </p>
+            <h2 className="mt-2 text-2xl font-black">Comment jouer</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300"
+          >
+            Fermer
+          </button>
+        </div>
+        <p className="mt-5 text-sm leading-6 text-slate-300">
+          À tour de rôle, posez une carte qui correspond à la couleur ou à la valeur de la carte
+          visible.
+        </p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {examples.map((example) => (
+            <div
+              key={example.card.id}
+              className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-3"
+            >
+              <UnoCardView card={example.card} playable={false} />
+              <div>
+                <h3 className="font-black text-white">{example.title}</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-400">{example.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-200"
+        >
+          J’ai compris
+        </button>
+      </div>
+    </div>
   );
 }
