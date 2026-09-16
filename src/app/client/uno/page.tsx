@@ -94,10 +94,14 @@ function LeaveRoomModal({
   onConfirm,
   onCancel,
   loading,
+  isWaiting,
+  isHost,
 }: {
   onConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
+  isWaiting: boolean;
+  isHost: boolean;
 }) {
   return (
     <div
@@ -116,19 +120,37 @@ function LeaveRoomModal({
             <AlertTriangle size={24} />
           </div>
           <div>
-            <h3 className="text-xl font-black text-white">Quitter la partie ?</h3>
-            <p className="text-xs text-rose-300">Attention, votre action a des conséquences !</p>
+            <h3 className="text-xl font-black text-white">
+              {isWaiting ? "Quitter le salon ?" : "Quitter la partie ?"}
+            </h3>
+            <p className="text-xs text-rose-300">Confirmation d'abandon</p>
           </div>
         </div>
 
         <p className="mt-4 text-sm text-slate-300 leading-relaxed">
-          Êtes-vous sûr de vouloir abandonner la salle ? 
-          <br />
-          <span className="text-xs text-slate-400 mt-2 block">
-            • À 2 joueurs : Victoire par forfait attribuée à l'adversaire.
-            <br />
-            • À 3 ou 4 joueurs : La salle sera annulée et les mises remboursées.
-          </span>
+          {isWaiting ? (
+            isHost ? (
+              <span>
+                En tant qu'hôte, si vous quittez la salle d'attente, elle sera{" "}
+                <strong className="text-rose-400">fermée</strong> et les mises de tous les joueurs présents seront{" "}
+                <strong className="text-emerald-400">intégralement remboursées</strong>.
+              </span>
+            ) : (
+              <span>
+                Votre mise vous sera <strong className="text-emerald-400">remboursée</strong> et vous quitterez la salle d'attente.
+              </span>
+            )
+          ) : (
+            <span>
+              Êtes-vous sûr de vouloir abandonner la partie en cours ? 
+              <br />
+              <span className="text-xs text-slate-400 mt-2 block">
+                • À 2 joueurs : Victoire par forfait attribuée à l'adversaire.
+                <br />
+                • À 3 ou 4 joueurs : La partie sera annulée et les mises remboursées.
+              </span>
+            </span>
+          )}
         </p>
 
         <div className="mt-6 flex items-center justify-end gap-3">
@@ -138,7 +160,7 @@ function LeaveRoomModal({
             disabled={loading}
             className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-300 hover:bg-white/10 transition"
           >
-            Continuer à jouer
+            {isWaiting ? "Rester dans la salle" : "Continuer à jouer"}
           </button>
           <button
             type="button"
@@ -147,7 +169,7 @@ function LeaveRoomModal({
             className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-500 transition disabled:opacity-50"
           >
             <LogOut size={16} />
-            Quitter la salle
+            Quitter
           </button>
         </div>
       </motion.div>
@@ -304,22 +326,35 @@ export default function UnoPage() {
     };
   }, [loadRoom, room?.id]);
 
-  /* Chronomètre d'attente de salle */
+  /* Chronomètre d'attente de salle et fermeture automatique après 8 minutes */
   useEffect(() => {
     const expiresAt = room?.expires_at;
     if (room?.status !== "waiting" || !expiresAt) {
       setRemainingSeconds(null);
       return;
     }
+
     const updateRemaining = () => {
-      setRemainingSeconds(
-        Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000))
-      );
+      const remaining = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      setRemainingSeconds(remaining);
+
+      // Si le temps d'attente est dépassé (8 minutes écoulées)
+      if (remaining === 0 && room.id) {
+        void (async () => {
+          try {
+            await supabase.rpc("uno_cancel_expired_room", { p_room_id: room.id });
+            await loadRoom(room.id);
+          } catch (e) {
+            console.error("Erreur lors de la fermeture automatique de la salle expirée", e);
+          }
+        })();
+      }
     };
+
     updateRemaining();
     const timer = window.setInterval(updateRemaining, 1000);
     return () => window.clearInterval(timer);
-  }, [room?.expires_at, room?.status]);
+  }, [room?.expires_at, room?.status, room?.id, loadRoom]);
 
   /* Chronomètre du tour de jeu */
   useEffect(() => {
@@ -406,22 +441,24 @@ export default function UnoPage() {
       setView("room");
     });
 
-  /* Traitement de l'abandon volontaire de la salle */
+  /* Traitement de l'abandon de la salle avec gestion dynamique */
   const handleConfirmLeaveRoom = () =>
     runAction(async () => {
       setShowLeaveModal(false);
       if (!room) return;
 
-      const { error } = await supabase.rpc("uno_leave_room", {
+      const { data, error } = await supabase.rpc("uno_leave_room", {
         p_room_id: room.id,
       });
 
       if (error) throw error;
 
+      const resMessage = (data as { message?: string })?.message ?? "Vous avez quitté la salle.";
+
       setRoom(null);
       setPlayers([]);
       setView("lobby");
-      showMessage("Vous avez quitté la salle.");
+      showMessage(resMessage);
     });
 
   /* Action de retour au salon initial après fin de match */
@@ -628,6 +665,8 @@ export default function UnoPage() {
               onConfirm={handleConfirmLeaveRoom}
               onCancel={() => setShowLeaveModal(false)}
               loading={loading}
+              isWaiting={room?.status === "waiting"}
+              isHost={isHost}
             />
           )}
         </AnimatePresence>
@@ -867,9 +906,19 @@ export default function UnoPage() {
                 </div>
               </div>
             ) : room.status === "cancelled" ? (
-              <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-6 text-sm text-amber-100">
-                La partie a été annulée (abandon d'un joueur ou délai dépassé). Les mises ont été
-                remboursées automatiquement.
+              <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-6 text-center text-amber-100">
+                <p className="text-lg font-black text-amber-300">La salle a été fermée.</p>
+                <p className="mt-2 text-sm text-slate-300">
+                  La partie a été annulée (abandon, hôte parti ou délai de 8 minutes dépassé).
+                  Toutes les mises engagées ont été entièrement remboursées.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleBackToLobby}
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-amber-300 px-5 py-2.5 text-xs font-black text-slate-950 hover:bg-amber-200 transition"
+                >
+                  <Home size={16} /> Retourner au salon
+                </button>
               </div>
             ) : (
               <GameBoard
