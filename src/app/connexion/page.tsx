@@ -34,6 +34,8 @@ function LoginFormContent() {
     if (searchParams.get('signup') === 'success') {
       setSuccessMessage("Inscription réussie ! Vous pouvez maintenant vous connecter.");
     }
+    const authError = searchParams.get('auth_error');
+    if (authError) setErrorMessage(authError);
   }, [searchParams]);
 
   // Le préfixe +509 est affiché séparément; seule la partie locale est saisie.
