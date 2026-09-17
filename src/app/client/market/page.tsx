@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MarketSwitcher } from '@/components/client/MarketSwitcher';
 
 // --- TYPES TYPESCRIPT STRICTS ---
 export type Profile = {
@@ -415,6 +416,19 @@ export default function MarketPage() {
       </div>
 
       <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
+
+        <MarketSwitcher active="official" />
+
+        <section className="flex flex-col gap-4 rounded-[24px] border border-cyan-300/25 bg-cyan-300/8 p-5 shadow-[0_0_35px_rgba(34,211,238,0.12)] sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Paiement local disponible</p>
+            <h2 className="mt-1 text-lg font-black text-white">Besoin de CP via MonCash/NatCash ?</h2>
+            <p className="mt-1 text-sm text-slate-300">Passez par le Marché P2P Agent pour acheter directement auprès d&apos;un agent local.</p>
+          </div>
+          <button type="button" onClick={() => router.push('/client/p2p')} className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-200/50 bg-cyan-200 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-950 shadow-[0_0_24px_rgba(34,211,238,0.45)] transition hover:-translate-y-0.5 hover:bg-cyan-100">
+            Marché P2P Agent
+          </button>
+        </section>
 
         {/* INVITATION À SE CONNECTER */}
         {!userId && (

@@ -13,6 +13,7 @@ import {
   AlertCircle, ChevronRight, BarChart3, Sparkles, ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
+import AdminQuickActionCenter from '@/components/admin/AdminQuickActionCenter';
 
 export default function AdminDashboard() {
   // Loading initial (Vrai chargement)
@@ -255,6 +256,8 @@ export default function AdminDashboard() {
               </Link>
             </div>
           )}
+
+          <AdminQuickActionCenter />
 
           {/* KPI CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">

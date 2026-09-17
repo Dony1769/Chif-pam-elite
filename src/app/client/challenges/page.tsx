@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { isActiveVipSubscription } from "@/lib/auth-routing";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -38,6 +39,7 @@ type Profile = {
   id: string;
   jetons_cp: number;
   vip_status: "free" | "weekly" | "monthly" | null;
+  vip_expiry: string | null;
 };
 
 function ChallengeTimer({ endsAt }: { endsAt?: string }) {
@@ -93,6 +95,7 @@ export default function ArenaPage() {
 
   const calculateEntryFeeCP = useCallback((baseCP: number): number => {
     if (!profile) return baseCP;
+    if (!isActiveVipSubscription(profile.vip_status, profile.vip_expiry)) return baseCP;
     if (profile.vip_status === "monthly") return Math.floor(baseCP * 0.7);
     if (profile.vip_status === "weekly") return Math.floor(baseCP * 0.85);
     return baseCP;
@@ -112,7 +115,7 @@ export default function ArenaPage() {
       const [pRes, cRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("id, jetons_cp, vip_status")
+          .select("id, jetons_cp, vip_status, vip_expiry")
           .eq("id", user.id)
           .single(),
         supabase
@@ -145,6 +148,13 @@ export default function ArenaPage() {
     void fetchData(isMounted);
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        setProfile(null);
+        setChallenges([]);
+        router.replace("/connexion");
+      }
+    });
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user || !isMounted) return;
@@ -168,9 +178,10 @@ export default function ArenaPage() {
 
     return () => {
       isMounted = false;
+      authListener.subscription.unsubscribe();
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [fetchData]);
+  }, [fetchData, router]);
 
   const handleEntry = async (challenge: ChallengeItem, fee: number) => {
     setErrorMessage(null);
@@ -312,8 +323,8 @@ export default function ArenaPage() {
               </div>
             </div>
             <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3 text-xs text-slate-400">
-              <span>Statut VIP : <strong className="uppercase text-white">{profile?.vip_status || "Free"}</strong></span>
-              <span>Réduction : <strong className="text-emerald-400">{profile?.vip_status === "monthly" ? "30%" : profile?.vip_status === "weekly" ? "15%" : "0%"}</strong></span>
+              <span>Statut VIP : <strong className="uppercase text-white">{isActiveVipSubscription(profile?.vip_status, profile?.vip_expiry) ? profile?.vip_status : "free"}</strong></span>
+              <span>Réduction : <strong className="text-emerald-400">{isActiveVipSubscription(profile?.vip_status, profile?.vip_expiry) ? profile?.vip_status === "monthly" ? "30%" : "15%" : "0%"}</strong></span>
             </div>
           </div>
 

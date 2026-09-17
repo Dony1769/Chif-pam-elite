@@ -115,6 +115,34 @@ export async function adminSetUserBanStatus(
   }
 }
 
+export async function adminResolvePhoneDuplicate(
+  keptProfileId: string,
+  candidateProfileId: string,
+  normalizedPhone: string,
+  action: 'merged' | 'blocked_related_data'
+): Promise<ActionResult> {
+  try {
+    const adminSession = await requireAdminSession();
+    if (!adminSession.ok) return { success: false, message: adminSession.message };
+    if (!isUuid(keptProfileId) || !isUuid(candidateProfileId) || keptProfileId === candidateProfileId) return { success: false, message: 'Comptes invalides pour cette revue.' };
+    const { data: profiles, error: profilesError } = await supabaseAdmin.from('profiles').select('id, role').in('id', [keptProfileId, candidateProfileId]);
+    if (profilesError) return { success: false, message: profilesError.message };
+    if (profiles?.length !== 2 || profiles.some((profile) => profile.role === 'admin')) return { success: false, message: 'Un compte administrateur ne peut pas être modéré ici.' };
+    const banReason = action === 'merged' ? `Compte fusionné avec ${keptProfileId}` : 'Compte suspect : doublon téléphonique';
+    const { error: banError } = await supabaseAdmin.from('profiles').update({ is_banned: true, ban_reason: banReason }).eq('id', candidateProfileId);
+    if (banError) return { success: false, message: banError.message };
+    const now = new Date().toISOString();
+    const { error: duplicateError } = await supabaseAdmin.from('phone_normalization_duplicates').update({ reviewed: true, reviewed_at: now, review_note: banReason }).in('profile_id', [keptProfileId, candidateProfileId]);
+    if (duplicateError) return { success: false, message: duplicateError.message };
+    await supabaseAdmin.from('phone_account_issues').update({ resolved: true, resolved_at: now, resolved_by: adminSession.userId }).in('profile_id', [keptProfileId, candidateProfileId]);
+    const { error: logError } = await supabaseAdmin.from('phone_merge_review_log').insert({ kept_profile_id: keptProfileId, candidate_profile_id: candidateProfileId, normalized_phone: normalizedPhone, action, related_data: { handled_by: adminSession.userId, account_preserved: keptProfileId } });
+    if (logError) return { success: false, message: logError.message };
+    return { success: true, message: action === 'merged' ? 'Compte suspect bloqué et revue de fusion enregistrée.' : 'Compte suspect bloqué.' };
+  } catch (err: unknown) {
+    return { success: false, message: 'Erreur serveur : ' + getErrorMessage(err) };
+  }
+}
+
 export async function adminSetUserBalance(
   targetUserId: string,
   newBalance: number

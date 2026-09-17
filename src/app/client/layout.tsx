@@ -1,24 +1,39 @@
 "use client";  
 import { useEffect, useState } from 'react';  
 import { supabase } from '@/lib/supabase';  
-import { useRouter } from 'next/navigation';  
+import { useRouter, useSearchParams } from 'next/navigation';  
 import { Loader2 } from 'lucide-react';  
 import { APP_ROUTES, isAdminRole, isAgentRole } from '@/lib/auth-routing';
+import { signOutAndClearClientSession } from '@/lib/client-session';
 import { ClientAppShell } from '@/components/ui/app-shell';
 import { EmailVerificationGate } from '@/components/auth/EmailVerificationGate';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
   
 export default function ClientLayout({ children }: { children: React.ReactNode }) {  
   const router = useRouter();  
+  const searchParams = useSearchParams();
+  const { notify } = useAppFeedback();
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const authError = searchParams.get('auth_error');
+    if (!authError) return;
+
+    notify(authError, 'danger');
+    router.replace(APP_ROUTES.clientHome);
+  }, [notify, router, searchParams]);
   
   useEffect(() => {  
     const checkUser = async () => {  
       const { data: { session } } = await supabase.auth.getSession();  
       if (!session) {
+        setAuthenticated(false);
         setLoading(false);
         return;
       }
+      setAuthenticated(true);
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -27,7 +42,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         .maybeSingle();
 
       if (profile?.is_banned) {
-        await supabase.auth.signOut();
+        await signOutAndClearClientSession();
         router.replace(APP_ROUTES.login);
         return;
       }
@@ -44,7 +59,19 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       setEmailVerified(profile?.email_verified === true);
       setLoading(false);  
     };  
-    checkUser();  
+    void checkUser();
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setAuthenticated(false);
+        setEmailVerified(true);
+        setLoading(false);
+        router.replace(APP_ROUTES.login);
+        return;
+      }
+      setAuthenticated(true);
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, [router]);  
   
   if (loading) {  
@@ -63,6 +90,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     );  
   }  
   
+  if (!authenticated) return null;
+
   if (!emailVerified) {
     return <EmailVerificationGate onVerified={() => setEmailVerified(true)} />;
   }

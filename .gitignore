@@ -93,6 +93,12 @@ credentials*.json
 out
 .nuxt
 dist
+.turbo/
+.cache/
+supabase/.temp/
+.supabase/
+playwright-report/
+test-results/
 .svelte-kit/
 **/.vitepress/dist
 **/.vitepress/cache

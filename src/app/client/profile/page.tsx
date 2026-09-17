@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { signOutAndClearClientSession } from '@/lib/client-session';
 import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePWAInstall } from "@/hooks/usePWAInstall";
@@ -308,6 +309,24 @@ export default function ProfilePage() {
     };
   }, [fetchCompleteData]);
 
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setProfile(null);
+        setLevelPerks(null);
+        setChartData([]);
+        setCurrentBalance(0);
+        setNewUsername('');
+        setGamePassTitle('Voyageur');
+        setGamePassPublic(true);
+        setLoading(false);
+        router.replace('/connexion');
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, [router]);
+
   // Échange du coupon sécurisé
   const handleRedeemCoupon = async () => {
     const cleanCode = couponCode.trim().toUpperCase();
@@ -462,14 +481,15 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     try { 
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('game-pass');
-      }
-      await supabase.auth.signOut(); 
+      await signOutAndClearClientSession();
     } catch (err) {
       console.error("Erreur de déconnexion:", err);
     } finally {
-      router.push('/connexion');
+      setProfile(null);
+      setLevelPerks(null);
+      setChartData([]);
+      router.replace('/connexion');
+      router.refresh();
     }
   };
 

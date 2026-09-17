@@ -20,3 +20,15 @@ export function getHomeRouteForRole(role?: string | null): string {
   if (isAgentRole(role)) return APP_ROUTES.agentDashboard;
   return APP_ROUTES.clientHome;
 }
+
+export function isActiveVipSubscription(
+  status?: string | null,
+  expiry?: string | null,
+  now = Date.now()
+): boolean {
+  if (status !== 'weekly' && status !== 'monthly') return false;
+  if (!expiry) return false;
+
+  const expiryTime = new Date(expiry).getTime();
+  return Number.isFinite(expiryTime) && expiryTime > now;
+}

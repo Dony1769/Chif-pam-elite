@@ -12,9 +12,12 @@ import {
   Crown,
   Dices,
   Gift,
+  CircleHelp,
   Home,
+  History,
   LayoutDashboard,
   MessageSquare,
+  MoreHorizontal,
   Shield,
   ShieldAlert,
   ShoppingBag,
@@ -23,6 +26,7 @@ import {
   Trophy,
   Users,
   Wallet,
+  WalletCards,
   User,
   LogIn,
   LogOut,
@@ -31,6 +35,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { supabase } from "@/lib/supabase";
+import { signOutAndClearClientSession } from "@/lib/client-session";
 
 type ShellNavItem = {
   href: string;
@@ -66,6 +71,12 @@ const clientItems: ShellNavItem[] = [
   { href: "/live", label: "Live", icon: <Sparkles size={18} /> },
   { href: "/client/profile", label: "Profil", icon: <User size={18} /> },
   { href: "/client/vip", label: "VIP", icon: <Crown size={18} /> },
+];
+
+const clientSecondaryItems: ShellNavItem[] = [
+  { href: "/client/finance", label: "Finance", icon: <WalletCards size={18} /> },
+  { href: "/client/history", label: "Historique", icon: <History size={18} /> },
+  { href: "/client/help", label: "Centre d'aide", icon: <CircleHelp size={18} /> },
 ];
 
 function BrandMark() {
@@ -112,6 +123,78 @@ function ShellNav({ items, compact = false }: { items: ShellNavItem[]; compact?:
                 {active ? <span className="absolute inset-y-2 left-1 w-0.5 rounded-full bg-(--accent)" /> : null}
               </>
             )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function QuickAccessNav({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let active = true;
+
+    const loadUnreadCount = async (userId: string) => {
+      if (pathname === "/client/chat") {
+        setUnreadCount(0);
+        return;
+      }
+      const { count, error } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_admin_message", true)
+        .eq("is_read_by_client", false);
+      if (!error && active) setUnreadCount(count ?? 0);
+    };
+
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      void loadUnreadCount(user.id);
+      channel = supabase
+        .channel(`quick_access_chat_${user.id}_${Date.now()}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, () => {
+          void loadUnreadCount(user.id);
+        });
+      channel.subscribe();
+    };
+
+    void init();
+    return () => {
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
+    };
+  }, [pathname]);
+
+  const items = [
+    ...clientSecondaryItems.slice(0, 2),
+    { href: "/client/chat", label: "Support / Chat", icon: <MessageSquare size={18} /> },
+    clientSecondaryItems[2],
+  ];
+
+  return (
+    <nav className={cn(compact ? "grid grid-cols-2 gap-2" : "space-y-2")} aria-label="Accès rapides">
+      {items.map((item) => {
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isChat = item.href === "/client/chat";
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            className={cn(
+              "relative flex items-center gap-3 rounded-2xl border px-3.5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] transition",
+              active ? "border-emerald-300/35 bg-emerald-300/12 text-emerald-100" : "border-white/8 bg-white/3 text-(--fg-3) hover:border-white/18 hover:bg-white/6 hover:text-(--fg-2)"
+            )}
+          >
+            <span className={active ? "text-(--accent)" : "opacity-85"}>{item.icon}</span>
+            <span className="truncate">{item.label}</span>
+            {isChat && unreadCount > 0 ? <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}
           </Link>
         );
       })}
@@ -275,6 +358,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
   const isClient = role === "client";
   const showBackButton = isClient && pathname !== "/client/home";
   const [authUser, setAuthUser] = useState<{ id: string } | null>(null);
+  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -308,8 +392,12 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
+    try {
+      await signOutAndClearClientSession();
+    } finally {
+      router.replace("/connexion");
+      router.refresh();
+    }
   };
 
   const handleBack = () => {
@@ -346,6 +434,13 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
             </div>
 
             <ShellNav items={items} />
+
+            {isClient ? (
+              <div className="mt-6 border-t border-white/8 pt-5">
+                <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-(--fg-4)">Accès rapides</p>
+                <QuickAccessNav />
+              </div>
+            ) : null}
 
             <div className="mt-auto rounded-2xl border border-white/10 bg-white/3 p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-(--fg-4)">Mode</p>
@@ -433,8 +528,25 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
           <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 pt-2 lg:hidden">
             <div className="mx-auto flex max-w-md items-center justify-between rounded-[28px] border border-white/12 bg-slate-950/85 px-2 py-2 shadow-[0_24px_65px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
               <ShellNav items={items} compact />
+              <button
+                type="button"
+                onClick={() => setQuickMenuOpen((open) => !open)}
+                aria-expanded={quickMenuOpen}
+                aria-controls="client-quick-access"
+                className={cn("flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[9px] font-semibold uppercase tracking-[0.08em] transition", quickMenuOpen ? "bg-cyan-300/15 text-cyan-100" : "bg-white/4 text-(--fg-4) hover:bg-white/8 hover:text-(--fg-2)")}
+              >
+                {quickMenuOpen ? <X size={18} /> : <MoreHorizontal size={18} />}
+                <span>Plus</span>
+              </button>
             </div>
           </div>
+
+          {quickMenuOpen ? (
+            <div id="client-quick-access" className="fixed inset-x-4 bottom-24 z-40 rounded-[26px] border border-cyan-300/20 bg-slate-950/95 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.55)] backdrop-blur-2xl lg:hidden">
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">Accès rapides</p>
+              <QuickAccessNav compact onNavigate={() => setQuickMenuOpen(false)} />
+            </div>
+          ) : null}
 
           {/* Bouton de retour en arrière */}
           {showBackButton ? (

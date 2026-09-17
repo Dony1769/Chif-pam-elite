@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { signOutAndClearClientSession } from '@/lib/client-session';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
   Bell, Lock, Trophy, Activity, ChevronRight, Brain, Fingerprint, Calendar,
@@ -377,7 +378,10 @@ export default function ClientHome() {
 
               <div className="pt-6 border-t border-white/10 mt-auto">
                 <button
-                  onClick={() => supabase.auth.signOut().then(() => router.push('/'))}
+                  onClick={() => signOutAndClearClientSession().finally(() => {
+                    router.replace('/connexion');
+                    router.refresh();
+                  })}
                   className="flex items-center gap-3 w-full p-3 rounded-xl bg-red-500/10 text-red-400 text-xs tracking-widest font-black transition hover:bg-red-500/20 active:scale-95"
                 >
                   <LogOut size={16} />

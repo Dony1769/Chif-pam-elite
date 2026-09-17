@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { signOutAndClearClientSession } from "@/lib/client-session";
+import { APP_ROUTES, isAgentRole } from "@/lib/auth-routing";
 import { BarChart3, ClipboardList, Landmark, LogOut, Store, Loader2 } from "lucide-react";
 
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
@@ -11,13 +13,38 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) router.replace("/connexion");
-      else setReady(true);
-    });
+    const checkAgentRole = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace(APP_ROUTES.login);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (!profile || !isAgentRole(profile.role)) {
+        const message = encodeURIComponent("Accès réservé aux agents agréés");
+        router.replace(`${APP_ROUTES.clientHome}?auth_error=${message}`);
+        return;
+      }
+
+      setReady(true);
+    };
+
+    void checkAgentRole();
   }, [router]);
   if (!ready) return <div className="grid min-h-screen place-items-center bg-[#05070b]"><Loader2 className="animate-spin text-emerald-300" /></div>;
-  const signOut = async () => { await supabase.auth.signOut(); router.replace("/connexion"); };
+  const signOut = async () => {
+    try {
+      await signOutAndClearClientSession();
+    } finally {
+      router.replace("/connexion");
+    }
+  };
   const items = [
     ["/agent/dashboard", "Dashboard", BarChart3],
     ["/agent/offer", "Offre", Store],

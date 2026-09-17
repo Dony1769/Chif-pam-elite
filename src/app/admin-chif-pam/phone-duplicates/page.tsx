@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, ShieldAlert, User, Calendar, Smartphone, Wallet2, Search, RefreshCcw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { adminResolvePhoneDuplicate } from '@/app/actions/adminActions';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
 
 interface DuplicatePhoneRecord {
   profile_id: string;
@@ -14,9 +16,11 @@ interface DuplicatePhoneRecord {
   balance: number | string | null;
   reviewed: boolean;
   review_note: string | null;
+  username: string | null;
 }
 
 export default function AdminPhoneDuplicatesPage() {
+  const { confirm, notify } = useAppFeedback();
   const [rows, setRows] = useState<DuplicatePhoneRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -26,11 +30,14 @@ export default function AdminPhoneDuplicatesPage() {
     const { data, error } = await supabase
       .from('phone_normalization_duplicates')
       .select('*')
+      .eq('reviewed', false)
       .order('normalized_phone', { ascending: true })
       .order('created_at', { ascending: true });
 
     if (!error) {
-      setRows((data ?? []) as DuplicatePhoneRecord[]);
+      const profileIds = (data ?? []).map((row) => row.profile_id);
+      const { data: profiles } = profileIds.length ? await supabase.from('profiles').select('id, username').in('id', profileIds) : { data: [] };
+      setRows((data ?? []).map((row) => ({ ...row, username: profiles?.find((profile) => profile.id === row.profile_id)?.username ?? null })) as DuplicatePhoneRecord[]);
     }
     setLoading(false);
   };
@@ -41,11 +48,14 @@ export default function AdminPhoneDuplicatesPage() {
       const { data, error } = await supabase
         .from('phone_normalization_duplicates')
         .select('*')
+        .eq('reviewed', false)
         .order('normalized_phone', { ascending: true })
         .order('created_at', { ascending: true });
 
       if (!error) {
-        setRows((data ?? []) as DuplicatePhoneRecord[]);
+        const profileIds = (data ?? []).map((row) => row.profile_id);
+        const { data: profiles } = profileIds.length ? await supabase.from('profiles').select('id, username').in('id', profileIds) : { data: [] };
+        setRows((data ?? []).map((row) => ({ ...row, username: profiles?.find((profile) => profile.id === row.profile_id)?.username ?? null })) as DuplicatePhoneRecord[]);
       }
       setLoading(false);
     };
@@ -61,7 +71,8 @@ export default function AdminPhoneDuplicatesPage() {
       const original = String(row.phone_original ?? '').toLowerCase();
       const normalized = String(row.normalized_phone ?? '').toLowerCase();
       const role = (row.role ?? '').toLowerCase();
-      return profile.includes(needle) || original.includes(needle) || normalized.includes(needle) || role.includes(needle);
+      const username = (row.username ?? '').toLowerCase();
+      return profile.includes(needle) || original.includes(needle) || normalized.includes(needle) || role.includes(needle) || username.includes(needle);
     });
   }, [rows, search]);
 
@@ -75,6 +86,14 @@ export default function AdminPhoneDuplicatesPage() {
     }
     return [...groups.entries()].map(([normalizedPhone, items]) => ({ normalizedPhone, items }));
   }, [filteredRows]);
+
+  const resolveDuplicate = async (kept: DuplicatePhoneRecord, candidate: DuplicatePhoneRecord, action: 'merged' | 'blocked_related_data') => {
+    const actionLabel = action === 'merged' ? 'fusionner et bloquer le compte suspect' : 'bloquer le compte suspect';
+    if (!(await confirm(`Voulez-vous ${actionLabel} @${candidate.username ?? candidate.profile_id} ?`))) return;
+    const result = await adminResolvePhoneDuplicate(kept.profile_id, candidate.profile_id, kept.normalized_phone, action);
+    notify(result.message, result.success ? 'success' : 'danger');
+    if (result.success) await fetchDuplicates();
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 text-white">
@@ -116,7 +135,7 @@ export default function AdminPhoneDuplicatesPage() {
         </div>
         <div className="rounded-[2rem] border border-cyan-500/20 bg-cyan-500/5 p-5">
           <p className="text-[9px] font-black uppercase tracking-[0.18em] text-cyan-400">Journalisation</p>
-          <p className="mt-4 text-sm font-bold text-cyan-200">Aucune fusion automatique. Review admin requise.</p>
+          <p className="mt-4 text-sm font-bold text-cyan-200">Le compte le plus ancien est conservé; chaque revue bloque le suspect et est journalisée.</p>
         </div>
       </div>
 
@@ -147,7 +166,7 @@ export default function AdminPhoneDuplicatesPage() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
                           <User size={14} />
-                          <span>Profil : {row.profile_id}</span>
+                          <span>Profil : @{row.username ?? 'sans pseudo'} · {row.profile_id}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-slate-300">
                           <span className="font-bold text-slate-500">Original :</span>
@@ -177,6 +196,13 @@ export default function AdminPhoneDuplicatesPage() {
                           <span>{row.reviewed ? 'Reviewée' : 'À revoir'}</span>
                         </div>
                       </div>
+
+                      {items[0]?.profile_id !== row.profile_id && (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button type="button" onClick={() => void resolveDuplicate(items[0], row, 'blocked_related_data')} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-200 transition hover:bg-rose-500/20">Bloquer suspect</button>
+                          <button type="button" onClick={() => void resolveDuplicate(items[0], row, 'merged')} className="rounded-xl bg-emerald-400 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 transition hover:bg-white">Fusionner</button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

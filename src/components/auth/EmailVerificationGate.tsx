@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Loader2, LogOut, MailCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { signOutAndClearClientSession } from '@/lib/client-session';
 import { appUrl } from '@/lib/app-url';
 import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
 
@@ -73,7 +74,7 @@ export function EmailVerificationGate({ onVerified }: { onVerified: () => void }
             Envoyer le lien de confirmation
           </DSButton>
         </form>
-        <button type="button" onClick={() => void supabase.auth.signOut()} className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white">
+        <button type="button" onClick={() => void signOutAndClearClientSession()} className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white">
           <LogOut size={14} /> Se déconnecter
         </button>
       </DSCard>
