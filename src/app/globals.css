@@ -87,6 +87,8 @@
 
   --background: var(--slate-0);
   --foreground: var(--fg-1);
+  --font-geist-sans: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+  --font-geist-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 }
 
 @theme inline {

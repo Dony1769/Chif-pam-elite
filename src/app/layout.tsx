@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import PWARegister from "@/components/PWARegister";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import UISoundEffects from "@/components/ui/UISoundEffects";
@@ -8,20 +7,6 @@ import { AppFeedbackProvider } from "@/components/ui/AppFeedbackProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ThreeSurface from "@/components/three/ThreeSurface";
 import "./globals.css";
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-  display: "swap",
-  preload: true,
-});
-const ibmMono = IBM_Plex_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-  preload: true,
-});
 
 export const metadata: Metadata = {
   title: "Chif Pam",
@@ -43,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       </head>
 
-      <body className={`${spaceGrotesk.variable} ${ibmMono.variable} antialiased`}>
+      <body className="antialiased">
         <ThreeSurface variant="ambient" className="fixed z-0 opacity-25" />
         <PWARegister />
         <WebVitalsReporter />
