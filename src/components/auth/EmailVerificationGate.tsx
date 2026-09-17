@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Loader2, LogOut, MailCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { appUrl } from '@/lib/app-url';
 import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
 
 export function EmailVerificationGate({ onVerified }: { onVerified: () => void }) {
@@ -42,7 +43,7 @@ export function EmailVerificationGate({ onVerified }: { onVerified: () => void }
       if (!response.ok || !result.success || !result.email) throw new Error(result.message || 'Impossible de préparer la confirmation.');
       const { error: updateError } = await supabase.auth.updateUser(
         { email: result.email },
-        { emailRedirectTo: `${window.location.origin}/auth/callback` }
+        { emailRedirectTo: `${appUrl}/auth/callback` }
       );
       if (updateError) throw updateError;
       setMessage('Vérifiez votre boîte mail pour confirmer votre adresse. Cette fenêtre restera active jusqu’à la confirmation.');
