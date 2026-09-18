@@ -70,7 +70,7 @@ function UnoCardView({
       type="button"
       onClick={onPlay}
       disabled={!playable}
-      className={`relative grid aspect-3/4 min-w-16 place-items-center rounded-2xl border-4 p-2 text-2xl font-black shadow-2xl transition-all duration-200 sm:min-w-20 brightness-110 contrast-125 saturate-150 ${
+      className={`relative grid aspect-[3/4] min-w-16 place-items-center rounded-2xl border-4 p-2 text-2xl font-black shadow-2xl transition-all duration-200 sm:min-w-20 brightness-110 contrast-125 saturate-150 ${
         card.color === "black"
           ? "border-white bg-[conic-gradient(#ef4444_0deg_90deg,#facc15_90deg_180deg,#22c55e_180deg_270deg,#06b6d4_270deg_360deg)] text-white shadow-fuchsia-500/20"
           : `${unoColorClass(card.color)} text-white`
@@ -255,7 +255,6 @@ export default function UnoPage() {
       setPlayerNames({});
     }
 
-    // Basculement persistant vers l'écran de résultat si la partie est terminée
     if (roomData.status === "finished") {
       setView("finished");
       const { data: matchData } = await supabase
@@ -267,7 +266,6 @@ export default function UnoPage() {
     }
   }, []);
 
-  /* Interception de la fermeture/rafraîchissement d'onglet */
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (room && room.status !== "finished" && room.status !== "cancelled") {
@@ -292,7 +290,6 @@ export default function UnoPage() {
     };
   }, []);
 
-  /* Abonnement Realtime Supabase */
   useEffect(() => {
     if (!room?.id) return;
     const scheduleRoomRefresh = () => {
@@ -326,7 +323,6 @@ export default function UnoPage() {
     };
   }, [loadRoom, room?.id]);
 
-  /* Chronomètre d'attente de salle et fermeture automatique après 8 minutes */
   useEffect(() => {
     const expiresAt = room?.expires_at;
     if (room?.status !== "waiting" || !expiresAt) {
@@ -338,7 +334,6 @@ export default function UnoPage() {
       const remaining = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000));
       setRemainingSeconds(remaining);
 
-      // Si le temps d'attente est dépassé (8 minutes écoulées)
       if (remaining === 0 && room.id) {
         void (async () => {
           try {
@@ -356,7 +351,6 @@ export default function UnoPage() {
     return () => window.clearInterval(timer);
   }, [room?.expires_at, room?.status, room?.id, loadRoom]);
 
-  /* Chronomètre du tour de jeu */
   useEffect(() => {
     if (room?.status !== "playing" || !room.turn_deadline_at) {
       setRemainingTurnSeconds(null);
@@ -441,7 +435,6 @@ export default function UnoPage() {
       setView("room");
     });
 
-  /* Traitement de l'abandon de la salle avec gestion dynamique */
   const handleConfirmLeaveRoom = () =>
     runAction(async () => {
       setShowLeaveModal(false);
@@ -461,7 +454,6 @@ export default function UnoPage() {
       showMessage(resMessage);
     });
 
-  /* Action de retour au salon initial après fin de match */
   const handleBackToLobby = () => {
     setRoom(null);
     setPlayers([]);
@@ -552,7 +544,6 @@ export default function UnoPage() {
       />
 
       <div className="relative z-10 mx-auto max-w-6xl">
-        {/* En-tête */}
         <header className="mb-8 flex items-center justify-between gap-3">
           <button
             type="button"
@@ -605,7 +596,6 @@ export default function UnoPage() {
           </motion.div>
         )}
 
-        {/* Dialogue de confirmation de mise */}
         {pendingBet && (
           <div
             className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 px-4 backdrop-blur-sm"
@@ -658,7 +648,6 @@ export default function UnoPage() {
           </div>
         )}
 
-        {/* Pop-up d'avertissement d'abandon de salle */}
         <AnimatePresence>
           {showLeaveModal && (
             <LeaveRoomModal
@@ -673,7 +662,6 @@ export default function UnoPage() {
 
         {helpOpen && <UnoHelpModal onClose={() => setHelpOpen(false)} />}
 
-        {/* VIEW: FINISHED (ÉCRAN DE RÉSULTAT PERSISTANT) */}
         {view === "finished" && room && (
           <FinishedMatchScreen
             room={room}
@@ -684,7 +672,6 @@ export default function UnoPage() {
           />
         )}
 
-        {/* VIEW: LOBBY */}
         {view === "lobby" && (
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <section className="relative overflow-hidden rounded-[28px] border border-fuchsia-300/20 bg-linear-to-br from-fuchsia-950/70 via-slate-950 to-emerald-950/50 p-6 sm:p-8">
@@ -790,7 +777,6 @@ export default function UnoPage() {
           </div>
         )}
 
-        {/* VIEW: ROOM */}
         {view === "room" && room && (
           <section className="space-y-6">
             <div className="flex flex-col justify-between gap-4 rounded-[28px] border border-white/10 bg-white/4 p-5 sm:flex-row sm:items-center sm:p-7">
@@ -947,10 +933,6 @@ export default function UnoPage() {
   );
 }
 
-/* ============================================================================
-   PLATEAU DE JEU (GAME BOARD)
-   ============================================================================ */
-
 function GameBoard({
   room,
   player,
@@ -988,7 +970,6 @@ function GameBoard({
 }) {
   return (
     <div className="space-y-6">
-      {/* Liste des adversaires */}
       <div className="flex flex-wrap items-center justify-center gap-3">
         {players
           .filter((entry) => entry.user_id !== player?.user_id)
@@ -1025,7 +1006,6 @@ function GameBoard({
           ))}
       </div>
 
-      {/* Tapis de jeu central */}
       <div className="relative flex min-h-90 flex-col items-center justify-center overflow-hidden rounded-4xl border border-white/10 bg-[radial-gradient(circle_at_center,#16213d_0%,#080d1a_65%)] p-8">
         <div className="absolute left-5 top-5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
           Tour {room.turn_number}
@@ -1046,7 +1026,7 @@ function GameBoard({
         </div>
 
         <div className="flex items-center gap-5">
-          <div className="grid aspect-3/4 w-20 place-items-center rounded-2xl border-4 border-white/20 bg-linear-to-br from-fuchsia-700 to-slate-950 text-3xl shadow-2xl">
+          <div className="grid aspect-[3/4] w-20 place-items-center rounded-2xl border-4 border-white/20 bg-linear-to-br from-fuchsia-700 to-slate-950 text-3xl shadow-2xl">
             <Disc3 />
           </div>
           <UnoCardView card={room.top_card} playable={false} />
@@ -1071,7 +1051,6 @@ function GameBoard({
         )}
       </div>
 
-      {/* Sélecteur de couleur pour les cartes Jokers (+4 / Wild) */}
       <div className="rounded-2xl border border-white/10 bg-white/2 p-3 text-center">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
           Choisir une couleur pour les cartes Jokers
@@ -1093,7 +1072,6 @@ function GameBoard({
         </div>
       </div>
 
-      {/* Main du joueur */}
       <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
@@ -1141,7 +1119,6 @@ function GameBoard({
   );
 }
 
-/* Écran de fin de match optimisé et persistant */
 function FinishedMatchScreen({
   room,
   userId,
@@ -1244,7 +1221,6 @@ function FinishedMatchScreen({
   );
 }
 
-/* Modal explicative du règlement */
 function UnoHelpModal({ onClose }: { onClose: () => void }) {
   const examples: Array<{ card: UnoCard; title: string; description: string }> = [
     {
@@ -1301,10 +1277,14 @@ function UnoHelpModal({ onClose }: { onClose: () => void }) {
             Fermer
           </button>
         </div>
-        <p className="mt-5 text-sm leading-6 text-slate-300">
-          À tour de rôle, posez une carte qui correspond à la couleur ou à la valeur de la carte
-          visible.
-        </p>
+        <div className="mt-5 text-sm leading-6 text-slate-300 space-y-2">
+          <p>
+            À tour de rôle, posez une carte qui correspond à la couleur ou à la valeur de la carte visible.
+          </p>
+          <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-200">
+            <strong>Règle de la pioche :</strong> Si la pioche est vide, la dernière carte jouée reste sur la défausse et toutes les autres cartes défaussées sont mélangées pour former une nouvelle pioche. La partie ne s'arrête pas.
+          </p>
+        </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {examples.map((example) => (
             <div
