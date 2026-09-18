@@ -49,11 +49,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Une erreur est survenue.";
 }
 
-/* ============================================================================
-   COMPOSANTS VISUELS (CARTE & DIALOGUES)
-   ============================================================================ */
-
-/* Rendu d'une carte UNO */
 function UnoCardView({
   card,
   playable,
@@ -89,7 +84,6 @@ function UnoCardView({
   );
 }
 
-/* Modal Pop-up pour confirmation d'abandon de salle */
 function LeaveRoomModal({
   onConfirm,
   onCancel,
@@ -142,7 +136,7 @@ function LeaveRoomModal({
             )
           ) : (
             <span>
-              Êtes-vous sûr de vouloir abandonner la partie en cours ? 
+              Êtes-vous sûr de vouloir abandonner la partie en cours ?
               <br />
               <span className="text-xs text-slate-400 mt-2 block">
                 • À 2 joueurs : Victoire par forfait attribuée à l'adversaire.
@@ -177,10 +171,6 @@ function LeaveRoomModal({
   );
 }
 
-/* ============================================================================
-   PAGE PRINCIPALE : UNO PAGE
-   ============================================================================ */
-
 export default function UnoPage() {
   const router = useRouter();
   const [view, setView] = useState<View>("lobby");
@@ -199,7 +189,6 @@ export default function UnoPage() {
   const [selectedColor, setSelectedColor] = useState<UnoCard["color"] | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
-  const [remainingTurnSeconds, setRemainingTurnSeconds] = useState<number | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -216,7 +205,6 @@ export default function UnoPage() {
   );
   const hasFinished = room?.status === "finished" || view === "finished";
 
-  /* Charger les données de la salle */
   const loadRoom = useCallback(async (roomId: string) => {
     const [
       { data: roomData, error: roomError },
@@ -350,20 +338,6 @@ export default function UnoPage() {
     const timer = window.setInterval(updateRemaining, 1000);
     return () => window.clearInterval(timer);
   }, [room?.expires_at, room?.status, room?.id, loadRoom]);
-
-  useEffect(() => {
-    if (room?.status !== "playing" || !room.turn_deadline_at) {
-      setRemainingTurnSeconds(null);
-      return;
-    }
-    const update = () =>
-      setRemainingTurnSeconds(
-        Math.max(0, Math.ceil((new Date(room.turn_deadline_at as string).getTime() - Date.now()) / 1000))
-      );
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, [room?.turn_deadline_at, room?.status]);
 
   useEffect(
     () => () => {
@@ -511,19 +485,13 @@ export default function UnoPage() {
       await loadRoom(room.id);
     });
 
-  /* Fonction Piocher révisée */
   const drawCard = () =>
     runAction(async () => {
       if (!room) return;
-
       const { error } = await supabase.rpc("uno_draw_card", {
         p_room_id: room.id,
       });
-
       if (error) throw error;
-
-      setSelectedColor(null);
-      setSelectedCardId(null);
       await loadRoom(room.id);
     });
 
@@ -928,7 +896,6 @@ export default function UnoPage() {
                 drawCard={drawCard}
                 loading={loading}
                 hasFinished={hasFinished}
-                remainingTurnSeconds={remainingTurnSeconds}
                 onHelp={() => setHelpOpen(true)}
               />
             )}
@@ -954,7 +921,6 @@ function GameBoard({
   drawCard,
   loading,
   hasFinished,
-  remainingTurnSeconds,
   onHelp,
 }: {
   room: UnoRoom;
@@ -971,7 +937,6 @@ function GameBoard({
   drawCard: () => void;
   loading: boolean;
   hasFinished: boolean;
-  remainingTurnSeconds: number | null;
   onHelp: () => void;
 }) {
   return (
@@ -1016,11 +981,12 @@ function GameBoard({
         <div className="absolute left-5 top-5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
           Tour {room.turn_number}
         </div>
-
-        {/* Badge Couleur Active épuré (Timer retiré) */}
-        <div className="absolute right-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">
+        <div className="absolute right-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300">
           <span>
-            Couleur active : <span className="text-emerald-300 font-extrabold uppercase">{room.current_color}</span>
+            Couleur active :{" "}
+            <span className="text-emerald-300 font-extrabold uppercase">
+              {room.current_color}
+            </span>
           </span>
         </div>
 
@@ -1077,7 +1043,6 @@ function GameBoard({
             Votre main ({player?.hand.length ?? 0} cartes)
           </p>
           <div className="flex items-center gap-2">
-            {/* Bouton piocher réparé et débloqué pendant votre tour */}
             <button
               type="button"
               onClick={drawCard}
@@ -1198,7 +1163,7 @@ function FinishedMatchScreen({
                   #{index + 2}
                 </span>
                 <span className="font-bold text-slate-200">
-                  {playerNames[entry.user_id] ?? entry.username ?? `Joueur`}
+                  {playerNames[entry.user_id] ?? entry.username ?? "Joueur"}
                 </span>
               </span>
               <span className="font-mono text-sm font-bold text-slate-400">{entry.score} pts</span>
