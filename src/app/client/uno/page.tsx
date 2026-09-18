@@ -53,7 +53,7 @@ function errorMessage(error: unknown): string {
    COMPOSANTS VISUELS (CARTE & DIALOGUES)
    ============================================================================ */
 
-/* Rendu optimisé d'une carte UNO avec couleurs vives, contraste élevé et brillance */
+/* Rendu d'une carte UNO */
 function UnoCardView({
   card,
   playable,
@@ -511,13 +511,19 @@ export default function UnoPage() {
       await loadRoom(room.id);
     });
 
+  /* Fonction Piocher révisée */
   const drawCard = () =>
     runAction(async () => {
       if (!room) return;
+
       const { error } = await supabase.rpc("uno_draw_card", {
         p_room_id: room.id,
       });
+
       if (error) throw error;
+
+      setSelectedColor(null);
+      setSelectedCardId(null);
       await loadRoom(room.id);
     });
 
@@ -1010,18 +1016,11 @@ function GameBoard({
         <div className="absolute left-5 top-5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
           Tour {room.turn_number}
         </div>
+
+        {/* Badge Couleur Active épuré (Timer retiré) */}
         <div className="absolute right-5 top-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">
           <span>
             Couleur active : <span className="text-emerald-300 font-extrabold uppercase">{room.current_color}</span>
-          </span>
-          <span
-            className={
-              remainingTurnSeconds !== null && remainingTurnSeconds <= 10
-                ? "text-rose-300 font-extrabold"
-                : "text-amber-200"
-            }
-          >
-            ⏱ {remainingTurnSeconds ?? "--"}s
           </span>
         </div>
 
@@ -1078,6 +1077,7 @@ function GameBoard({
             Votre main ({player?.hand.length ?? 0} cartes)
           </p>
           <div className="flex items-center gap-2">
+            {/* Bouton piocher réparé et débloqué pendant votre tour */}
             <button
               type="button"
               onClick={drawCard}
