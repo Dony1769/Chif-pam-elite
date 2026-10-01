@@ -9,6 +9,10 @@ import React, {
 
 import { useRouter } from "next/navigation";
 
+import { supabase } from "@/lib/supabase";
+import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
+
 import {
   AlertTriangle,
   ArrowLeft,
@@ -26,11 +30,10 @@ import {
   Zap,
 } from "lucide-react";
 
-import { AnimatePresence, motion } from "framer-motion";
-
-import { supabase } from "@/lib/supabase";
-import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 
 import {
   DSButton,
@@ -42,9 +45,9 @@ import {
 
 import ThreeSurface from "@/components/three/ThreeSurface";
 
-/* -------------------------------------------------------------------------- */
-/* TYPES                                                                      */
-/* -------------------------------------------------------------------------- */
+/* ==========================================================================
+   TYPES
+   ========================================================================== */
 
 type FilterType =
   | "TOUT"
@@ -99,9 +102,9 @@ type AlertItem = {
   link?: string;
 };
 
-/* -------------------------------------------------------------------------- */
-/* CONSTANTES                                                                 */
-/* -------------------------------------------------------------------------- */
+/* ==========================================================================
+   CONSTANTES
+   ========================================================================== */
 
 const FILTERS: FilterType[] = [
   "TOUT",
@@ -119,13 +122,20 @@ const FILTER_LABELS: Record<FilterType, string> = {
 
 const MAX_ITEMS = 100;
 
-/* -------------------------------------------------------------------------- */
-/* HELPERS                                                                    */
-/* -------------------------------------------------------------------------- */
+/* ==========================================================================
+   HELPERS
+   ========================================================================== */
 
 function isExpired(date: string | null): boolean {
-  return Boolean(
-    date && new Date(date).getTime() <= Date.now()
+  if (!date) {
+    return false;
+  }
+
+  const timestamp = new Date(date).getTime();
+
+  return (
+    Number.isFinite(timestamp) &&
+    timestamp <= Date.now()
   );
 }
 
@@ -188,9 +198,9 @@ function isRejectionNotification(
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* COMPOSANT                                                                  */
-/* -------------------------------------------------------------------------- */
+/* ==========================================================================
+   COMPOSANT
+   ========================================================================== */
 
 export default function ClientNotifications() {
   const router = useRouter();
@@ -202,9 +212,9 @@ export default function ClientNotifications() {
     subscribe: subscribePush,
   } = usePushNotifications();
 
-  /* ------------------------------------------------------------------------ */
-  /* STATE                                                                    */
-  /* ------------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------------
+     STATE
+     ------------------------------------------------------------------------ */
 
   const [notifications, setNotifications] =
     useState<NotificationRow[]>([]);
@@ -212,8 +222,10 @@ export default function ClientNotifications() {
   const [liveChallenges, setLiveChallenges] =
     useState<ChallengeRow[]>([]);
 
-  const [rejectedTransactions, setRejectedTransactions] =
-    useState<TransactionRow[]>([]);
+  const [
+    rejectedTransactions,
+    setRejectedTransactions,
+  ] = useState<TransactionRow[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -230,9 +242,9 @@ export default function ClientNotifications() {
   const [isMarkingRead, setIsMarkingRead] =
     useState(false);
 
-  /* ------------------------------------------------------------------------ */
-  /* VISIBILITÉ                                                               */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     VISIBILITÉ DE L'ONGLET
+     ========================================================================== */
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -254,127 +266,174 @@ export default function ClientNotifications() {
     };
   }, []);
 
-  /* ------------------------------------------------------------------------ */
-  /* CHARGEMENT GLOBAL                                                        */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     CHARGEMENT GLOBAL
+     ========================================================================== */
 
-  const fetchAllData = useCallback(async () => {
-    try {
-      setLoading(true);
+  const fetchAllData = useCallback(
+    async () => {
+      try {
+        setLoading(true);
 
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
 
-      if (authError || !user) {
-        router.replace("/connexion");
-        return;
-      }
+        if (authError || !user) {
+          router.replace("/connexion");
+          return;
+        }
 
-      setUserId(user.id);
+        setUserId(user.id);
 
-      const nowIso =
-        new Date().toISOString();
+        const nowIso =
+          new Date().toISOString();
 
-      const [
-        notificationsResult,
-        challengesResult,
-        transactionsResult,
-      ] = await Promise.all([
-        supabase
-          .from("notifications")
-          .select(
-            "id, title, content, message, created_at, is_read, link, admin_note"
-          )
-          .eq("user_id", user.id)
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(MAX_ITEMS),
+        const [
+          notificationsResult,
+          challengesResult,
+          transactionsResult,
+        ] = await Promise.all([
+          /* ----------------------------------
+             NOTIFICATIONS
+             ---------------------------------- */
 
-        supabase
-          .from("challenges")
-          .select(
-            "id, title, prize_pool_cp, created_at, ends_at, is_active"
-          )
-          .eq("is_active", true)
-          .or(
-            `ends_at.is.null,ends_at.gt.${nowIso}`
-          )
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(MAX_ITEMS),
+          supabase
+            .from("notifications")
+            .select(
+              [
+                "id",
+                "title",
+                "content",
+                "message",
+                "created_at",
+                "is_read",
+                "link",
+                "admin_note",
+              ].join(", ")
+            )
+            .eq("user_id", user.id)
+            .order("created_at", {
+              ascending: false,
+            })
+            .limit(MAX_ITEMS),
 
-        supabase
-          .from("transactions")
-          .select(
-            "id, user_id, type, status, amount, admin_note, created_at"
-          )
-          .eq("user_id", user.id)
-          .in("status", [
-            "REJECTED",
-            "CANCELLED",
-          ])
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(MAX_ITEMS),
-      ]);
+          /* ----------------------------------
+             DÉFIS ACTIFS
+             ---------------------------------- */
 
-      if (notificationsResult.error) {
-        console.error(
-          "Erreur notifications:",
-          notificationsResult.error
+          supabase
+            .from("challenges")
+            .select(
+              [
+                "id",
+                "title",
+                "prize_pool_cp",
+                "created_at",
+                "ends_at",
+                "is_active",
+              ].join(", ")
+            )
+            .eq("is_active", true)
+            .or(
+              `ends_at.is.null,ends_at.gt.${nowIso}`
+            )
+            .order("created_at", {
+              ascending: false,
+            })
+            .limit(MAX_ITEMS),
+
+          /* ----------------------------------
+             TRANSACTIONS REFUSÉES / ANNULÉES
+             ---------------------------------- */
+
+          supabase
+            .from("transactions")
+            .select(
+              [
+                "id",
+                "user_id",
+                "type",
+                "status",
+                "amount",
+                "admin_note",
+                "created_at",
+              ].join(", ")
+            )
+            .eq("user_id", user.id)
+            .in("status", [
+              "REJECTED",
+              "CANCELLED",
+            ])
+            .order("created_at", {
+              ascending: false,
+            })
+            .limit(MAX_ITEMS),
+        ]);
+
+        /* --------------------------------------------------------------------
+           LOGS ERREURS
+           -------------------------------------------------------------------- */
+
+        if (notificationsResult.error) {
+          console.error(
+            "Erreur notifications:",
+            notificationsResult.error
+          );
+        }
+
+        if (challengesResult.error) {
+          console.error(
+            "Erreur challenges:",
+            challengesResult.error
+          );
+        }
+
+        if (transactionsResult.error) {
+          console.error(
+            "Erreur transactions:",
+            transactionsResult.error
+          );
+        }
+
+        /* --------------------------------------------------------------------
+           STATES
+           -------------------------------------------------------------------- */
+
+        setNotifications(
+          (notificationsResult.data ??
+            []) as NotificationRow[]
         );
-      }
 
-      if (challengesResult.error) {
-        console.error(
-          "Erreur challenges:",
-          challengesResult.error
+        setLiveChallenges(
+          (challengesResult.data ??
+            []) as ChallengeRow[]
         );
-      }
 
-      if (transactionsResult.error) {
-        console.error(
-          "Erreur transactions:",
-          transactionsResult.error
+        setRejectedTransactions(
+          (transactionsResult.data ??
+            []) as TransactionRow[]
         );
+      } catch (error) {
+        console.error(
+          "Erreur globale centre des alertes:",
+          error
+        );
+      } finally {
+        setLoading(false);
       }
-
-      setNotifications(
-        (notificationsResult.data ??
-          []) as NotificationRow[]
-      );
-
-      setLiveChallenges(
-        (challengesResult.data ??
-          []) as ChallengeRow[]
-      );
-
-      setRejectedTransactions(
-        (transactionsResult.data ??
-          []) as TransactionRow[]
-      );
-    } catch (error) {
-      console.error(
-        "Erreur globale centre des alertes:",
-        error
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   useEffect(() => {
-    fetchAllData();
+    void fetchAllData();
   }, [fetchAllData]);
 
-  /* ------------------------------------------------------------------------ */
-  /* REALTIME                                                                 */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     REALTIME
+     ========================================================================== */
 
   useEffect(() => {
     if (!userId || !isTabVisible) {
@@ -387,7 +446,9 @@ export default function ClientNotifications() {
     const channel = supabase
       .channel(channelName)
 
-      /* --------------------------- NOTIFICATIONS ------------------------- */
+      /* ======================================================================
+         NOTIFICATIONS
+         ====================================================================== */
 
       .on(
         "postgres_changes",
@@ -398,19 +459,31 @@ export default function ClientNotifications() {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          if (payload.eventType === "DELETE") {
+          /* DELETE */
+
+          if (
+            payload.eventType === "DELETE"
+          ) {
             const deleted =
               payload.old as NotificationRow;
 
-            setNotifications((previous) =>
-              previous.filter(
-                (notification) =>
-                  notification.id !== deleted.id
-              )
+            if (!deleted?.id) {
+              return;
+            }
+
+            setNotifications(
+              (previous) =>
+                previous.filter(
+                  (notification) =>
+                    notification.id !==
+                    deleted.id
+                )
             );
 
             return;
           }
+
+          /* INSERT / UPDATE */
 
           const notification =
             payload.new as NotificationRow;
@@ -419,22 +492,27 @@ export default function ClientNotifications() {
             return;
           }
 
-          setNotifications((previous) => {
-            const withoutCurrent =
-              previous.filter(
-                (item) =>
-                  item.id !== notification.id
-              );
+          setNotifications(
+            (previous) => {
+              const withoutCurrent =
+                previous.filter(
+                  (item) =>
+                    item.id !==
+                    notification.id
+                );
 
-            return [
-              notification,
-              ...withoutCurrent,
-            ].slice(0, MAX_ITEMS);
-          });
+              return [
+                notification,
+                ...withoutCurrent,
+              ].slice(0, MAX_ITEMS);
+            }
+          );
         }
       )
 
-      /* ----------------------------- CHALLENGES -------------------------- */
+      /* ======================================================================
+         CHALLENGES
+         ====================================================================== */
 
       .on(
         "postgres_changes",
@@ -444,19 +522,31 @@ export default function ClientNotifications() {
           table: "challenges",
         },
         (payload) => {
-          if (payload.eventType === "DELETE") {
+          /* DELETE */
+
+          if (
+            payload.eventType === "DELETE"
+          ) {
             const deleted =
               payload.old as ChallengeRow;
 
-            setLiveChallenges((previous) =>
-              previous.filter(
-                (challenge) =>
-                  challenge.id !== deleted.id
-              )
+            if (!deleted?.id) {
+              return;
+            }
+
+            setLiveChallenges(
+              (previous) =>
+                previous.filter(
+                  (challenge) =>
+                    challenge.id !==
+                    deleted.id
+                )
             );
 
             return;
           }
+
+          /* INSERT / UPDATE */
 
           const challenge =
             payload.new as ChallengeRow;
@@ -469,26 +559,32 @@ export default function ClientNotifications() {
             !challenge.is_active ||
             isExpired(challenge.ends_at);
 
-          setLiveChallenges((previous) => {
-            if (invalid) {
-              return previous.filter(
-                (item) =>
-                  item.id !== challenge.id
-              );
-            }
+          setLiveChallenges(
+            (previous) => {
+              if (invalid) {
+                return previous.filter(
+                  (item) =>
+                    item.id !==
+                    challenge.id
+                );
+              }
 
-            return [
-              challenge,
-              ...previous.filter(
-                (item) =>
-                  item.id !== challenge.id
-              ),
-            ].slice(0, MAX_ITEMS);
-          });
+              return [
+                challenge,
+                ...previous.filter(
+                  (item) =>
+                    item.id !==
+                    challenge.id
+                ),
+              ].slice(0, MAX_ITEMS);
+            }
+          );
         }
       )
 
-      /* --------------------------- TRANSACTIONS -------------------------- */
+      /* ======================================================================
+         TRANSACTIONS
+         ====================================================================== */
 
       .on(
         "postgres_changes",
@@ -499,19 +595,31 @@ export default function ClientNotifications() {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          if (payload.eventType === "DELETE") {
+          /* DELETE */
+
+          if (
+            payload.eventType === "DELETE"
+          ) {
             const deleted =
               payload.old as TransactionRow;
 
-            setRejectedTransactions((previous) =>
-              previous.filter(
-                (transaction) =>
-                  transaction.id !== deleted.id
-              )
+            if (!deleted?.id) {
+              return;
+            }
+
+            setRejectedTransactions(
+              (previous) =>
+                previous.filter(
+                  (transaction) =>
+                    transaction.id !==
+                    deleted.id
+                )
             );
 
             return;
           }
+
+          /* INSERT / UPDATE */
 
           const transaction =
             payload.new as TransactionRow;
@@ -521,27 +629,37 @@ export default function ClientNotifications() {
           }
 
           const isRejected =
-            transaction.status === "REJECTED" ||
-            transaction.status === "CANCELLED";
+            transaction.status ===
+              "REJECTED" ||
+            transaction.status ===
+              "CANCELLED";
 
-          setRejectedTransactions((previous) => {
-            if (!isRejected) {
-              return previous.filter(
-                (item) =>
-                  item.id !== transaction.id
-              );
+          setRejectedTransactions(
+            (previous) => {
+              if (!isRejected) {
+                return previous.filter(
+                  (item) =>
+                    item.id !==
+                    transaction.id
+                );
+              }
+
+              return [
+                transaction,
+                ...previous.filter(
+                  (item) =>
+                    item.id !==
+                    transaction.id
+                ),
+              ].slice(0, MAX_ITEMS);
             }
-
-            return [
-              transaction,
-              ...previous.filter(
-                (item) =>
-                  item.id !== transaction.id
-              ),
-            ].slice(0, MAX_ITEMS);
-          });
+          );
         }
       )
+
+      /* ======================================================================
+         SUBSCRIBE
+         ====================================================================== */
 
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR") {
@@ -552,17 +670,25 @@ export default function ClientNotifications() {
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(
+        channel
+      );
     };
-  }, [userId, isTabVisible]);
+  }, [
+    userId,
+    isTabVisible,
+  ]);
 
-  /* ------------------------------------------------------------------------ */
-  /* PUSH                                                                     */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     PUSH NOTIFICATIONS
+     ========================================================================== */
 
   const togglePush = useCallback(
     async () => {
-      if (pushLoading || pushEnabled) {
+      if (
+        pushLoading ||
+        pushEnabled
+      ) {
         return;
       }
 
@@ -590,36 +716,43 @@ export default function ClientNotifications() {
     ]
   );
 
-  /* ------------------------------------------------------------------------ */
-  /* MARQUER TOUT COMME LU                                                   */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     MARQUER TOUTES LES NOTIFICATIONS COMME LUES
+     ========================================================================== */
 
   const handleMarkAllAsRead =
     useCallback(async () => {
-      if (!userId || isMarkingRead) {
+      if (
+        !userId ||
+        isMarkingRead
+      ) {
         return;
       }
 
       try {
         setIsMarkingRead(true);
 
-        const { error } = await supabase
-          .from("notifications")
-          .update({
-            is_read: true,
-          })
-          .eq("user_id", userId)
-          .eq("is_read", false);
+        const { error } =
+          await supabase
+            .from("notifications")
+            .update({
+              is_read: true,
+            })
+            .eq("user_id", userId)
+            .eq("is_read", false);
 
         if (error) {
           throw error;
         }
 
-        setNotifications((previous) =>
-          previous.map((notification) => ({
-            ...notification,
-            is_read: true,
-          }))
+        setNotifications(
+          (previous) =>
+            previous.map(
+              (notification) => ({
+                ...notification,
+                is_read: true,
+              })
+            )
         );
 
         notify(
@@ -645,15 +778,17 @@ export default function ClientNotifications() {
       userId,
     ]);
 
-  /* ------------------------------------------------------------------------ */
-  /* NORMALISATION DES ALERTES                                                */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     NORMALISATION DES ALERTES
+     ========================================================================== */
 
-  const allAlerts = useMemo<AlertItem[]>(
-    () => {
+  const allAlerts =
+    useMemo<AlertItem[]>(() => {
       const now = Date.now();
 
-      /* ------------------------------ DÉFIS ------------------------------- */
+      /* ----------------------------------------------------------------------
+         DÉFIS
+         ---------------------------------------------------------------------- */
 
       const challengeAlerts: AlertItem[] =
         liveChallenges
@@ -675,28 +810,42 @@ export default function ClientNotifications() {
           })
           .map((challenge) => ({
             id: `challenge-${challenge.id}`,
+
             title:
               `NOUVEAU DÉFI : ${challenge.title}`,
+
             content:
-              `Récompense : ${challenge.prize_pool_cp.toLocaleString(
+              `Récompense : ${Number(
+                challenge.prize_pool_cp
+              ).toLocaleString(
                 "fr-FR"
               )} CP. Bonne chance !`,
+
             created_at:
               challenge.created_at,
+
             is_read: false,
+
             is_challenge: true,
+
             is_victory: false,
+
             is_rejection: false,
-            link: "/client/challenges",
+
+            link:
+              "/client/challenges",
           }));
 
-      /* ------------------------ TRANSACTIONS REFUSÉES --------------------- */
+      /* ----------------------------------------------------------------------
+         TRANSACTIONS REFUSÉES
+         ---------------------------------------------------------------------- */
 
       const rejectionAlerts: AlertItem[] =
         rejectedTransactions.map(
           (transaction) => {
             const typeLabel =
-              transaction.type === "DEPOSIT"
+              transaction.type ===
+              "DEPOSIT"
                 ? "DÉPÔT"
                 : "RETRAIT";
 
@@ -707,29 +856,44 @@ export default function ClientNotifications() {
                 : "ÉCHEC";
 
             return {
-              id: `transaction-${transaction.id}`,
+              id:
+                `transaction-${transaction.id}`,
+
               title:
-                `${statusLabel} DE ${typeLabel} (${transaction.amount.toLocaleString(
+                `${statusLabel} DE ${typeLabel} (${Number(
+                  transaction.amount
+                ).toLocaleString(
                   "fr-FR"
                 )} HTG)`,
+
               content:
                 transaction.admin_note
                   ? `Raison : ${transaction.admin_note}`
                   : "Votre demande n'a pas pu être validée par l'administration.",
+
               created_at:
                 transaction.created_at,
+
               is_read: false,
+
               is_challenge: false,
+
               is_victory: false,
+
               is_rejection: true,
+
               admin_note:
                 transaction.admin_note,
-              link: "/client/finance",
+
+              link:
+                "/client/finance",
             };
           }
         );
 
-      /* -------------------------- NOTIFICATIONS --------------------------- */
+      /* ----------------------------------------------------------------------
+         NOTIFICATIONS
+         ---------------------------------------------------------------------- */
 
       const notificationAlerts: AlertItem[] =
         notifications.map(
@@ -773,6 +937,10 @@ export default function ClientNotifications() {
           })
         );
 
+      /* ----------------------------------------------------------------------
+         MERGE + SORT
+         ---------------------------------------------------------------------- */
+
       return [
         ...challengeAlerts,
         ...rejectionAlerts,
@@ -786,91 +954,98 @@ export default function ClientNotifications() {
             a.created_at
           ).getTime()
       );
-    },
-    [
+    }, [
       liveChallenges,
       notifications,
       rejectedTransactions,
-    ]
-  );
+    ]);
 
-  /* ------------------------------------------------------------------------ */
-  /* FILTRAGE                                                                 */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     FILTRAGE
+     ========================================================================== */
 
-  const filteredAlerts = useMemo(
-    () => {
-      return allAlerts.filter((alert) => {
-        switch (activeFilter) {
-          case "VICTOIRES":
-            return alert.is_victory;
+  const filteredAlerts =
+    useMemo(() => {
+      return allAlerts.filter(
+        (alert) => {
+          switch (activeFilter) {
+            case "VICTOIRES":
+              return alert.is_victory;
 
-          case "DÉFIS":
-            return alert.is_challenge;
+            case "DÉFIS":
+              return alert.is_challenge;
 
-          case "SYSTÈME":
-            return (
-              !alert.is_challenge &&
-              !alert.is_victory
-            );
+            case "SYSTÈME":
+              return (
+                !alert.is_challenge &&
+                !alert.is_victory
+              );
 
-          case "TOUT":
-          default:
-            return true;
+            case "TOUT":
+            default:
+              return true;
+          }
         }
-      });
-    },
-    [
+      );
+    }, [
       activeFilter,
       allAlerts,
-    ]
-  );
+    ]);
 
-  /* ------------------------------------------------------------------------ */
-  /* COMPTEURS                                                                */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     COMPTEURS
+     ========================================================================== */
 
   const counts = useMemo(
     () => ({
       TOUT: allAlerts.filter(
-        (alert) => !alert.is_read
+        (alert) =>
+          !alert.is_read
       ).length,
 
-      VICTOIRES: allAlerts.filter(
-        (alert) =>
-          !alert.is_read &&
-          alert.is_victory
-      ).length,
+      VICTOIRES:
+        allAlerts.filter(
+          (alert) =>
+            !alert.is_read &&
+            alert.is_victory
+        ).length,
 
-      DÉFIS: allAlerts.filter(
-        (alert) =>
-          !alert.is_read &&
-          alert.is_challenge
-      ).length,
+      DÉFIS:
+        allAlerts.filter(
+          (alert) =>
+            !alert.is_read &&
+            alert.is_challenge
+        ).length,
 
-      SYSTÈME: allAlerts.filter(
-        (alert) =>
-          !alert.is_read &&
-          !alert.is_challenge &&
-          !alert.is_victory
-      ).length,
+      SYSTÈME:
+        allAlerts.filter(
+          (alert) =>
+            !alert.is_read &&
+            !alert.is_challenge &&
+            !alert.is_victory
+        ).length,
     }),
     [allAlerts]
   );
 
-  const unreadCount = counts.TOUT;
+  const unreadCount =
+    counts.TOUT;
 
-  /* ------------------------------------------------------------------------ */
-  /* LOADING                                                                  */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     LOADING
+     ========================================================================== */
 
   if (loading) {
     return (
       <DSPage className="min-h-screen overflow-hidden">
         <div className="relative mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+          {/* ATMOSPHÈRE */}
+
           <div className="pointer-events-none absolute -right-40 -top-32 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
 
           <div className="pointer-events-none absolute -left-40 top-72 h-80 w-80 rounded-full bg-cyan-500/5 blur-3xl" />
+
+          {/* SKELETON */}
 
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -878,6 +1053,7 @@ export default function ClientNotifications() {
 
               <div className="space-y-2 text-center">
                 <DSSkeleton className="mx-auto h-5 w-48" />
+
                 <DSSkeleton className="mx-auto h-2 w-32" />
               </div>
 
@@ -898,7 +1074,9 @@ export default function ClientNotifications() {
 
                       <div className="flex-1 space-y-3">
                         <DSSkeleton className="h-4 w-2/3" />
+
                         <DSSkeleton className="h-3 w-full" />
+
                         <DSSkeleton className="h-3 w-1/3" />
                       </div>
                     </div>
@@ -912,15 +1090,15 @@ export default function ClientNotifications() {
     );
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* RENDER                                                                   */
-  /* ------------------------------------------------------------------------ */
+  /* ==========================================================================
+     RENDER
+     ========================================================================== */
 
   return (
     <DSPage className="relative min-h-screen overflow-x-hidden pb-28 text-white">
-      {/* ------------------------------------------------------------------ */}
-      {/* ATMOSPHÈRE                                                         */}
-      {/* ------------------------------------------------------------------ */}
+      {/* =====================================================================
+          ATMOSPHÈRE
+          ===================================================================== */}
 
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -right-48 -top-48 h-[32rem] w-[32rem] rounded-full bg-emerald-500/[0.07] blur-3xl" />
@@ -930,6 +1108,10 @@ export default function ClientNotifications() {
         <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-indigo-500/[0.025] blur-3xl" />
       </div>
 
+      {/* =====================================================================
+          3D SURFACE
+          ===================================================================== */}
+
       <div className="pointer-events-none absolute right-0 top-0 hidden h-72 w-[30rem] opacity-35 lg:block">
         <ThreeSurface
           variant="home"
@@ -937,14 +1119,14 @@ export default function ClientNotifications() {
         />
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* CONTENU                                                            */}
-      {/* ------------------------------------------------------------------ */}
+      {/* =====================================================================
+          CONTENU
+          ===================================================================== */}
 
       <div className="relative mx-auto w-full max-w-6xl px-3 py-4 sm:px-6 sm:py-7">
-        {/* ---------------------------------------------------------------- */}
-        {/* HEADER                                                            */}
-        {/* ---------------------------------------------------------------- */}
+        {/* ===================================================================
+            HEADER
+            =================================================================== */}
 
         <motion.header
           initial={{
@@ -961,6 +1143,8 @@ export default function ClientNotifications() {
           className="sticky top-2 z-30 mb-5 rounded-[1.75rem] border border-white/10 bg-[#020617]/80 p-3 shadow-2xl backdrop-blur-2xl sm:top-4 sm:p-4"
         >
           <div className="flex items-center justify-between gap-3">
+            {/* RETOUR */}
+
             <button
               type="button"
               onClick={() =>
@@ -976,6 +1160,8 @@ export default function ClientNotifications() {
                 className="transition-transform group-hover:-translate-x-0.5"
               />
             </button>
+
+            {/* TITRE */}
 
             <div className="min-w-0 text-center">
               <div className="flex items-center justify-center gap-2">
@@ -998,6 +1184,8 @@ export default function ClientNotifications() {
                 RADAR_ACTIF · SYNCHRONISÉ
               </p>
             </div>
+
+            {/* MARK READ */}
 
             <button
               type="button"
@@ -1025,9 +1213,9 @@ export default function ClientNotifications() {
             </button>
           </div>
 
-          {/* ---------------------------------------------------------------- */}
-          {/* FILTRES                                                          */}
-          {/* ---------------------------------------------------------------- */}
+          {/* ================================================================
+              FILTRES
+              ================================================================ */}
 
           <div className="mt-3 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex min-w-max gap-1.5">
@@ -1112,9 +1300,9 @@ export default function ClientNotifications() {
           </div>
         </motion.header>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* INTRODUCTION                                                      */}
-        {/* ---------------------------------------------------------------- */}
+        {/* ===================================================================
+            INTRODUCTION
+            =================================================================== */}
 
         <motion.div
           initial={{
@@ -1147,9 +1335,9 @@ export default function ClientNotifications() {
           </div>
         </motion.div>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* LISTE                                                             */}
-        {/* ---------------------------------------------------------------- */}
+        {/* ===================================================================
+            LISTE DES ALERTES
+            =================================================================== */}
 
         <div className="space-y-3">
           <AnimatePresence
@@ -1158,6 +1346,10 @@ export default function ClientNotifications() {
           >
             {filteredAlerts.length ===
             0 ? (
+              /* =============================================================
+                 EMPTY
+                 ============================================================= */
+
               <motion.div
                 key="empty"
                 initial={{
@@ -1191,11 +1383,17 @@ export default function ClientNotifications() {
                   </p>
 
                   <p className="mt-2 max-w-xs text-[10px] font-normal lowercase not-italic leading-relaxed text-slate-700">
-                    Le radar ChifPam est calme pour le moment.
+                    Le radar ChifPam
+                    est calme pour le
+                    moment.
                   </p>
                 </DSCard>
               </motion.div>
             ) : (
+              /* =============================================================
+                 ALERTS
+                 ============================================================= */
+
               filteredAlerts.map(
                 (alert, index) => {
                   const rejection =
@@ -1260,7 +1458,9 @@ export default function ClientNotifications() {
                             : "border-white/5 bg-white/[0.015] opacity-55 hover:opacity-75"
                         }`}
                       >
-                        {/* ACCENT LATÉRAL */}
+                        {/* =================================================
+                            ACCENT LATÉRAL
+                            ================================================= */}
 
                         <div
                           className={`absolute inset-y-0 left-0 w-[2px] ${
@@ -1276,7 +1476,9 @@ export default function ClientNotifications() {
                           }`}
                         />
 
-                        {/* GLOW */}
+                        {/* =================================================
+                            GLOW
+                            ================================================= */}
 
                         {unread && (
                           <div
@@ -1292,7 +1494,9 @@ export default function ClientNotifications() {
                           />
                         )}
 
-                        {/* DOT NON LU */}
+                        {/* =================================================
+                            INDICATEUR NON LU
+                            ================================================= */}
 
                         {unread && (
                           <div className="absolute right-4 top-4">
@@ -1320,8 +1524,14 @@ export default function ClientNotifications() {
                           </div>
                         )}
 
+                        {/* =================================================
+                            CONTENU
+                            ================================================= */}
+
                         <div className="relative z-10 flex gap-3.5 sm:gap-4">
-                          {/* ICÔNE */}
+                          {/* =================================================
+                              ICÔNE
+                              ================================================= */}
 
                           <div
                             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-300 group-hover:scale-105 sm:h-12 sm:w-12 ${
@@ -1353,11 +1563,15 @@ export default function ClientNotifications() {
                             )}
                           </div>
 
-                          {/* CONTENU */}
+                          {/* =================================================
+                              TEXTE
+                              ================================================= */}
 
                           <div className="min-w-0 flex-1 pr-2">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
+                                {/* BADGES */}
+
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   {challenge && (
                                     <span className="rounded-md border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-blue-400">
@@ -1378,6 +1592,8 @@ export default function ClientNotifications() {
                                   )}
                                 </div>
 
+                                {/* TITRE */}
+
                                 <h3
                                   className={`mt-1 text-[12px] font-black leading-tight tracking-tight sm:text-sm ${
                                     rejection
@@ -1395,6 +1611,8 @@ export default function ClientNotifications() {
                                 </h3>
                               </div>
 
+                              {/* CHEVRON */}
+
                               {alert.link && (
                                 <ChevronRight
                                   size={15}
@@ -1402,6 +1620,8 @@ export default function ClientNotifications() {
                                 />
                               )}
                             </div>
+
+                            {/* DESCRIPTION */}
 
                             <p
                               className={`mt-2 text-[10px] font-normal leading-relaxed sm:text-[11px] ${
@@ -1416,6 +1636,8 @@ export default function ClientNotifications() {
                                 alert.content
                               }
                             </p>
+
+                            {/* META */}
 
                             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
@@ -1452,7 +1674,8 @@ export default function ClientNotifications() {
                                   <Coins
                                     size={9}
                                   />
-                                  Solde mis à jour
+                                  Solde mis à
+                                  jour
                                 </span>
                               )}
                             </div>
@@ -1467,9 +1690,9 @@ export default function ClientNotifications() {
           </AnimatePresence>
         </div>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* PANNEAU PUSH                                                      */}
-        {/* ---------------------------------------------------------------- */}
+        {/* ===================================================================
+            PANNEAU PUSH
+            =================================================================== */}
 
         <motion.div
           initial={{
@@ -1487,6 +1710,8 @@ export default function ClientNotifications() {
           className="mt-5"
         >
           <DSPanel className="relative overflow-hidden border-white/5 p-4 sm:p-5">
+            {/* ICON BACKGROUND */}
+
             <div className="pointer-events-none absolute -right-12 -top-16 opacity-[0.035]">
               {pushEnabled ? (
                 <Bell size={170} />
@@ -1496,6 +1721,8 @@ export default function ClientNotifications() {
             </div>
 
             <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              {/* DESCRIPTION */}
+
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div
@@ -1506,15 +1733,20 @@ export default function ClientNotifications() {
                     }`}
                   >
                     {pushEnabled ? (
-                      <Bell size={16} />
+                      <Bell
+                        size={16}
+                      />
                     ) : (
-                      <BellOff size={16} />
+                      <BellOff
+                        size={16}
+                      />
                     )}
                   </div>
 
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-[0.22em] text-white">
-                      Notifications push
+                      Notifications
+                      push
                     </p>
 
                     <p className="mt-0.5 text-[9px] font-normal lowercase not-italic text-slate-500">
@@ -1526,9 +1758,13 @@ export default function ClientNotifications() {
                 </div>
               </div>
 
+              {/* BUTTON */}
+
               <DSButton
                 type="button"
-                onClick={togglePush}
+                onClick={
+                  togglePush
+                }
                 disabled={
                   pushLoading ||
                   pushEnabled
@@ -1547,9 +1783,13 @@ export default function ClientNotifications() {
                     className="animate-spin"
                   />
                 ) : pushEnabled ? (
-                  <Check size={14} />
+                  <Check
+                    size={14}
+                  />
                 ) : (
-                  <Bell size={14} />
+                  <Bell
+                    size={14}
+                  />
                 )}
 
                 {pushEnabled
@@ -1560,18 +1800,19 @@ export default function ClientNotifications() {
           </DSPanel>
         </motion.div>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* FOOTER STATUS                                                     */}
-        {/* ---------------------------------------------------------------- */}
+        {/* ===================================================================
+            FOOTER STATUS
+            =================================================================== */}
 
         <div className="mt-5 flex items-center justify-center gap-2 text-[7px] font-black uppercase tracking-[0.22em] text-slate-700">
           <span className="h-1 w-1 rounded-full bg-emerald-500/60" />
 
-          ChifPam notification radar
+          ChifPam notification
+          radar
 
           <span className="h-1 w-1 rounded-full bg-emerald-500/60" />
         </div>
       </div>
     </DSPage>
   );
-    }
+      }
