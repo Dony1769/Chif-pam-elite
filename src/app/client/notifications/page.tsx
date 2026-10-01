@@ -119,6 +119,13 @@ const FILTER_LABELS: Record<FilterType, string> = {
 
 const MAX_ITEMS = 100;
 
+/*
+ * Pendant un zoom navigateur, celui-ci déclenche plusieurs événements resize.
+ * On coupe temporairement les effets GPU/3D coûteux afin d'éviter les pics
+ * de calcul pendant le recalcul du layout.
+ */
+const RESIZE_DEBOUNCE_MS = 180;
+
 /* ==========================================================================
    TYPE GUARDS / NORMALISATION
    ========================================================================== */
@@ -253,44 +260,41 @@ function normalizeTransaction(
     return null;
   }
 
-  const rawType = asString(
-    value.type
-  );
-
-  const rawStatus = asString(
-    value.status
-  );
+  const rawType = asString(value.type);
+  const rawStatus = asString(value.status);
 
   const type: TransactionRow["type"] =
     rawType === "WITHDRAWAL"
       ? "WITHDRAWAL"
       : "DEPOSIT";
 
-  const allowedStatuses: TransactionRow["status"][] =
-    [
-      "PENDING",
-      "APPROVED",
-      "REJECTED",
-      "CANCELLED",
-    ];
+  let status: TransactionRow["status"];
 
-  const status: TransactionRow["status"] =
-    allowedStatuses.includes(
-      rawStatus as TransactionRow["status"]
-    )
-      ? (rawStatus as TransactionRow["status"])
-      : "PENDING";
+  switch (rawStatus) {
+    case "APPROVED":
+      status = "APPROVED";
+      break;
+
+    case "REJECTED":
+      status = "REJECTED";
+      break;
+
+    case "CANCELLED":
+      status = "CANCELLED";
+      break;
+
+    case "PENDING":
+    default:
+      status = "PENDING";
+      break;
+  }
 
   return {
     id,
-    user_id: asString(
-      value.user_id
-    ),
+    user_id: asString(value.user_id),
     type,
     status,
-    amount: asNumber(
-      value.amount
-    ),
+    amount: asNumber(value.amount),
     admin_note: asNullableString(
       value.admin_note
     ),
@@ -315,7 +319,8 @@ function normalizeArray<T>(
     .filter(
       (item): item is T =>
         item !== null
-    );
+    )
+    .slice(0, MAX_ITEMS);
 }
 
 /* ==========================================================================
@@ -325,10 +330,16 @@ function normalizeArray<T>(
 function isExpired(
   date: string | null
 ): boolean {
-  return Boolean(
-    date &&
-      new Date(date).getTime() <=
-        Date.now()
+  if (!date) {
+    return false;
+  }
+
+  const timestamp =
+    new Date(date).getTime();
+
+  return (
+    Number.isFinite(timestamp) &&
+    timestamp <= Date.now()
   );
 }
 
@@ -421,23 +432,17 @@ export default function ClientNotifications() {
   const [
     notifications,
     setNotifications,
-  ] = useState<NotificationRow[]>(
-    []
-  );
+  ] = useState<NotificationRow[]>([]);
 
   const [
     liveChallenges,
     setLiveChallenges,
-  ] = useState<ChallengeRow[]>(
-    []
-  );
+  ] = useState<ChallengeRow[]>([]);
 
   const [
     rejectedTransactions,
     setRejectedTransactions,
-  ] = useState<TransactionRow[]>(
-    []
-  );
+  ] = useState<TransactionRow[]>([]);
 
   const [
     loading,
@@ -447,16 +452,12 @@ export default function ClientNotifications() {
   const [
     activeFilter,
     setActiveFilter,
-  ] = useState<FilterType>(
-    "TOUT"
-  );
+  ] = useState<FilterType>("TOUT");
 
   const [
     userId,
     setUserId,
-  ] = useState<string | null>(
-    null
-  );
+  ] = useState<string | null>(null);
 
   const [
     isTabVisible,
@@ -467,6 +468,15 @@ export default function ClientNotifications() {
     isMarkingRead,
     setIsMarkingRead,
   ] = useState(false);
+
+  /*
+   * true = effets visuels complets
+   * false = mode performance temporaire pendant resize/zoom
+   */
+  const [
+    visualEffectsEnabled,
+    setVisualEffectsEnabled,
+  ] = useState(true);
 
   /* ==========================================================================
      VISIBILITÉ
@@ -495,6 +505,67 @@ export default function ClientNotifications() {
   }, []);
 
   /* ==========================================================================
+     MODE PERFORMANCE PENDANT ZOOM / RESIZE
+     ========================================================================== */
+
+  useEffect(() => {
+    let timeoutId: ReturnType<
+      typeof setTimeout
+    > | null = null;
+
+    let rafId: number | null = null;
+
+    const handleResize = () => {
+      /*
+       * On coupe immédiatement les effets coûteux.
+       */
+      setVisualEffectsEnabled(false);
+
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+
+      /*
+       * On attend la fin du cycle de layout du navigateur
+       * avant de programmer la restauration des effets.
+       */
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+
+      rafId =
+        requestAnimationFrame(() => {
+          timeoutId = setTimeout(() => {
+            setVisualEffectsEnabled(true);
+          }, RESIZE_DEBOUNCE_MS);
+        });
+    };
+
+    window.addEventListener(
+      "resize",
+      handleResize,
+      {
+        passive: true,
+      }
+    );
+
+    return () => {
+      window.removeEventListener(
+        "resize",
+        handleResize
+      );
+
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, []);
+
+  /* ==========================================================================
      CHARGEMENT GLOBAL
      ========================================================================== */
 
@@ -512,9 +583,7 @@ export default function ClientNotifications() {
           await supabase.auth.getUser();
 
         if (authError || !user) {
-          router.replace(
-            "/connexion"
-          );
+          router.replace("/connexion");
           return;
         }
 
@@ -544,9 +613,7 @@ export default function ClientNotifications() {
                   ascending: false,
                 }
               )
-              .limit(
-                MAX_ITEMS
-              ),
+              .limit(MAX_ITEMS),
 
             supabase
               .from("challenges")
@@ -566,9 +633,7 @@ export default function ClientNotifications() {
                   ascending: false,
                 }
               )
-              .limit(
-                MAX_ITEMS
-              ),
+              .limit(MAX_ITEMS),
 
             supabase
               .from("transactions")
@@ -592,14 +657,8 @@ export default function ClientNotifications() {
                   ascending: false,
                 }
               )
-              .limit(
-                MAX_ITEMS
-              ),
+              .limit(MAX_ITEMS),
           ]);
-
-        /* --------------------------------------------------------------
-           ERREURS INDIVIDUELLES
-           -------------------------------------------------------------- */
 
         if (
           notificationsResult.error
@@ -627,10 +686,6 @@ export default function ClientNotifications() {
             transactionsResult.error
           );
         }
-
-        /* --------------------------------------------------------------
-           NORMALISATION
-           -------------------------------------------------------------- */
 
         const normalizedNotifications =
           normalizeArray(
@@ -726,9 +781,7 @@ export default function ClientNotifications() {
             setNotifications(
               (previous) =>
                 previous.filter(
-                  (
-                    notification
-                  ) =>
+                  (notification) =>
                     notification.id !==
                     deletedId
                 )
@@ -1065,10 +1118,6 @@ export default function ClientNotifications() {
       const now =
         Date.now();
 
-      /* --------------------------------------------------------------
-         DÉFIS
-         -------------------------------------------------------------- */
-
       const challengeAlerts: AlertItem[] =
         liveChallenges
           .filter(
@@ -1080,13 +1129,21 @@ export default function ClientNotifications() {
               }
 
               if (
-                challenge.ends_at &&
-                new Date(
-                  challenge.ends_at
-                ).getTime() <=
-                  now
+                challenge.ends_at
               ) {
-                return false;
+                const endsAt =
+                  new Date(
+                    challenge.ends_at
+                  ).getTime();
+
+                if (
+                  Number.isFinite(
+                    endsAt
+                  ) &&
+                  endsAt <= now
+                ) {
+                  return false;
+                }
               }
 
               return true;
@@ -1109,10 +1166,6 @@ export default function ClientNotifications() {
                 "/client/challenges",
             })
           );
-
-      /* --------------------------------------------------------------
-         TRANSACTIONS REFUSÉES
-         -------------------------------------------------------------- */
 
       const rejectionAlerts: AlertItem[] =
         rejectedTransactions.map(
@@ -1151,10 +1204,6 @@ export default function ClientNotifications() {
             };
           }
         );
-
-      /* --------------------------------------------------------------
-         NOTIFICATIONS
-         -------------------------------------------------------------- */
 
       const notificationAlerts: AlertItem[] =
         notifications.map(
@@ -1213,29 +1262,30 @@ export default function ClientNotifications() {
 
   const filteredAlerts =
     useMemo(() => {
-      return allAlerts.filter(
-        (alert) => {
-          switch (
-            activeFilter
-          ) {
-            case "VICTOIRES":
-              return alert.is_victory;
+      switch (activeFilter) {
+        case "VICTOIRES":
+          return allAlerts.filter(
+            (alert) =>
+              alert.is_victory
+          );
 
-            case "DÉFIS":
-              return alert.is_challenge;
+        case "DÉFIS":
+          return allAlerts.filter(
+            (alert) =>
+              alert.is_challenge
+          );
 
-            case "SYSTÈME":
-              return (
-                !alert.is_challenge &&
-                !alert.is_victory
-              );
+        case "SYSTÈME":
+          return allAlerts.filter(
+            (alert) =>
+              !alert.is_challenge &&
+              !alert.is_victory
+          );
 
-            case "TOUT":
-            default:
-              return true;
-          }
-        }
-      );
+        case "TOUT":
+        default:
+          return allAlerts;
+      }
     }, [
       activeFilter,
       allAlerts,
@@ -1246,37 +1296,35 @@ export default function ClientNotifications() {
      ========================================================================== */
 
   const counts =
-    useMemo(
-      () => ({
-        TOUT: allAlerts.filter(
-          (alert) =>
-            !alert.is_read
-        ).length,
+    useMemo(() => {
+      let all = 0;
+      let victories = 0;
+      let challenges = 0;
+      let system = 0;
 
-        VICTOIRES:
-          allAlerts.filter(
-            (alert) =>
-              !alert.is_read &&
-              alert.is_victory
-          ).length,
+      for (const alert of allAlerts) {
+        if (alert.is_read) {
+          continue;
+        }
 
-        DÉFIS:
-          allAlerts.filter(
-            (alert) =>
-              !alert.is_read &&
-              alert.is_challenge
-          ).length,
+        all += 1;
 
-        SYSTÈME:
-          allAlerts.filter(
-            (alert) =>
-              !alert.is_read &&
-              !alert.is_challenge &&
-              !alert.is_victory
-          ).length,
-      }),
-      [allAlerts]
-    );
+        if (alert.is_challenge) {
+          challenges += 1;
+        } else if (alert.is_victory) {
+          victories += 1;
+        } else {
+          system += 1;
+        }
+      }
+
+      return {
+        TOUT: all,
+        VICTOIRES: victories,
+        DÉFIS: challenges,
+        SYSTÈME: system,
+      };
+    }, [allAlerts]);
 
   const unreadCount =
     counts.TOUT;
@@ -1352,19 +1400,43 @@ export default function ClientNotifications() {
           ------------------------------------------------------------------ */}
 
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -right-48 -top-48 h-[32rem] w-[32rem] rounded-full bg-emerald-500/[0.07] blur-3xl" />
+        <div
+          className={`absolute -right-48 -top-48 h-[32rem] w-[32rem] rounded-full ${
+            visualEffectsEnabled
+              ? "bg-emerald-500/[0.07] blur-3xl"
+              : "bg-emerald-500/[0.035]"
+          }`}
+        />
 
-        <div className="absolute -left-48 top-[35%] h-[28rem] w-[28rem] rounded-full bg-cyan-500/[0.035] blur-3xl" />
+        <div
+          className={`absolute -left-48 top-[35%] h-[28rem] w-[28rem] rounded-full ${
+            visualEffectsEnabled
+              ? "bg-cyan-500/[0.035] blur-3xl"
+              : "bg-cyan-500/[0.02]"
+          }`}
+        />
 
-        <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-indigo-500/[0.025] blur-3xl" />
-      </div>
-
-      <div className="pointer-events-none absolute right-0 top-0 hidden h-72 w-[30rem] opacity-35 lg:block">
-        <ThreeSurface
-          variant="home"
-          className="h-full w-full"
+        <div
+          className={`absolute bottom-0 right-0 h-96 w-96 rounded-full ${
+            visualEffectsEnabled
+              ? "bg-indigo-500/[0.025] blur-3xl"
+              : "bg-indigo-500/[0.015]"
+          }`}
         />
       </div>
+
+      {/* ------------------------------------------------------------------
+          3D — SUSPENDU PENDANT ZOOM / RESIZE
+          ------------------------------------------------------------------ */}
+
+      {visualEffectsEnabled && (
+        <div className="pointer-events-none absolute right-0 top-0 hidden h-72 w-[30rem] opacity-35 lg:block">
+          <ThreeSurface
+            variant="home"
+            className="h-full w-full"
+          />
+        </div>
+      )}
 
       {/* ------------------------------------------------------------------
           CONTENU
@@ -1378,16 +1450,20 @@ export default function ClientNotifications() {
         <motion.header
           initial={{
             opacity: 0,
-            y: -12,
+            y: -8,
           }}
           animate={{
             opacity: 1,
             y: 0,
           }}
           transition={{
-            duration: 0.45,
+            duration: 0.3,
           }}
-          className="sticky top-2 z-30 mb-5 rounded-[1.75rem] border border-white/10 bg-[#020617]/80 p-3 shadow-2xl backdrop-blur-2xl sm:top-4 sm:p-4"
+          className={`sticky top-2 z-30 mb-5 rounded-[1.75rem] border border-white/10 p-3 shadow-2xl sm:top-4 sm:p-4 ${
+            visualEffectsEnabled
+              ? "bg-[#020617]/80 backdrop-blur-2xl"
+              : "bg-[#020617]"
+          }`}
         >
           <div className="flex items-center justify-between gap-3">
             <button
@@ -1398,7 +1474,7 @@ export default function ClientNotifications() {
                 )
               }
               aria-label="Retour au tableau de bord"
-              className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.045] text-slate-300 transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-300 active:scale-90"
+              className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.045] text-slate-300 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-300 active:scale-90"
             >
               <ArrowLeft
                 size={19}
@@ -1441,7 +1517,7 @@ export default function ClientNotifications() {
                   0
               }
               aria-label="Marquer toutes les notifications comme lues"
-              className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-all hover:border-emerald-400/40 hover:bg-emerald-500/20 active:scale-90 disabled:cursor-not-allowed disabled:opacity-35"
+              className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-colors hover:border-emerald-400/40 hover:bg-emerald-500/20 active:scale-90 disabled:cursor-not-allowed disabled:opacity-35"
             >
               {isMarkingRead ? (
                 <Loader2
@@ -1457,9 +1533,7 @@ export default function ClientNotifications() {
             </button>
           </div>
 
-          {/* --------------------------------------------------------------
-              FILTRES
-              -------------------------------------------------------------- */}
+          {/* FILTRES */}
 
           <div className="mt-3 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex min-w-max gap-1.5">
@@ -1483,7 +1557,7 @@ export default function ClientNotifications() {
                           filter
                         )
                       }
-                      className={`relative flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition-all sm:px-4 ${
+                      className={`relative flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition-colors sm:px-4 ${
                         active
                           ? "border-emerald-400 bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.18)]"
                           : "border-white/5 bg-white/[0.035] text-slate-500 hover:border-white/10 hover:bg-white/[0.07] hover:text-slate-300"
@@ -1563,15 +1637,15 @@ export default function ClientNotifications() {
         <motion.div
           initial={{
             opacity: 0,
-            y: 10,
+            y: 8,
           }}
           animate={{
             opacity: 1,
             y: 0,
           }}
           transition={{
-            delay: 0.05,
-            duration: 0.4,
+            delay: 0.03,
+            duration: 0.3,
           }}
           className="mb-5 flex items-end justify-between gap-4 px-1"
         >
@@ -1598,7 +1672,6 @@ export default function ClientNotifications() {
 
         <div className="space-y-3">
           <AnimatePresence
-            mode="popLayout"
             initial={false}
           >
             {filteredAlerts.length ===
@@ -1607,20 +1680,23 @@ export default function ClientNotifications() {
                 key="empty"
                 initial={{
                   opacity: 0,
-                  scale: 0.97,
                 }}
                 animate={{
                   opacity: 1,
-                  scale: 1,
                 }}
                 exit={{
                   opacity: 0,
-                  scale: 0.97,
                 }}
               >
                 <DSCard className="flex min-h-[25rem] flex-col items-center justify-center border-white/5 bg-white/[0.015] text-center">
                   <div className="relative mb-5">
-                    <div className="absolute inset-0 rounded-full bg-emerald-500/10 blur-2xl" />
+                    <div
+                      className={`absolute inset-0 rounded-full bg-emerald-500/10 ${
+                        visualEffectsEnabled
+                          ? "blur-2xl"
+                          : ""
+                      }`}
+                    />
 
                     <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-white/5 bg-white/[0.025]">
                       <Inbox
@@ -1671,30 +1747,26 @@ export default function ClientNotifications() {
                       key={
                         alert.id
                       }
-                      layout
                       initial={{
                         opacity: 0,
-                        y: 12,
-                        scale: 0.985,
+                        y: 8,
                       }}
                       animate={{
                         opacity: 1,
                         y: 0,
-                        scale: 1,
                       }}
                       exit={{
                         opacity: 0,
-                        x: -20,
-                        scale: 0.97,
+                        x: -12,
                       }}
                       transition={{
-                        duration: 0.28,
+                        duration: 0.2,
                         delay:
                           Math.min(
                             index,
                             5
                           ) *
-                          0.025,
+                          0.02,
                       }}
                     >
                       <DSCard
@@ -1707,7 +1779,7 @@ export default function ClientNotifications() {
                             );
                           }
                         }}
-                        className={`group relative cursor-pointer overflow-hidden p-4 transition-all duration-300 sm:p-5 ${
+                        className={`group relative cursor-pointer overflow-hidden p-4 transition-colors duration-200 sm:p-5 ${
                           rejection
                             ? "border-red-500/30 bg-gradient-to-br from-red-950/30 via-slate-950/80 to-black hover:border-red-400/50"
                             : challenge
@@ -1739,7 +1811,11 @@ export default function ClientNotifications() {
 
                         {unread && (
                           <div
-                            className={`pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full blur-3xl ${
+                            className={`pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full ${
+                              visualEffectsEnabled
+                                ? "blur-3xl"
+                                : ""
+                            } ${
                               rejection
                                 ? "bg-red-500/10"
                                 : challenge
@@ -1756,15 +1832,17 @@ export default function ClientNotifications() {
                         {unread && (
                           <div className="absolute right-4 top-4">
                             <span className="relative flex h-2.5 w-2.5">
-                              <span
-                                className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${
-                                  rejection
-                                    ? "bg-red-400"
-                                    : challenge
-                                    ? "bg-blue-400"
-                                    : "bg-emerald-400"
-                                }`}
-                              />
+                              {visualEffectsEnabled && (
+                                <span
+                                  className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${
+                                    rejection
+                                      ? "bg-red-400"
+                                      : challenge
+                                      ? "bg-blue-400"
+                                      : "bg-emerald-400"
+                                  }`}
+                                />
+                              )}
 
                               <span
                                 className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
@@ -1783,7 +1861,7 @@ export default function ClientNotifications() {
                           {/* ICÔNE */}
 
                           <div
-                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-300 group-hover:scale-105 sm:h-12 sm:w-12 ${
+                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-200 group-hover:scale-105 sm:h-12 sm:w-12 ${
                               rejection
                                 ? "border-red-500/30 bg-red-500/10 text-red-400"
                                 : challenge
@@ -1867,7 +1945,7 @@ export default function ClientNotifications() {
                                   size={
                                     15
                                   }
-                                  className="mt-1 shrink-0 text-slate-700 transition-all group-hover:translate-x-0.5 group-hover:text-emerald-400"
+                                  className="mt-1 shrink-0 text-slate-700 transition-colors group-hover:text-emerald-400"
                                 />
                               )}
                             </div>
@@ -1913,7 +1991,7 @@ export default function ClientNotifications() {
                               )}
 
                               {challenge && (
-                                <span className="animate-pulse text-[7px] font-black uppercase tracking-[0.12em] text-blue-500">
+                                <span className="text-[7px] font-black uppercase tracking-[0.12em] text-blue-500">
                                   Voir le
                                   défi
                                 </span>
@@ -1949,15 +2027,15 @@ export default function ClientNotifications() {
         <motion.div
           initial={{
             opacity: 0,
-            y: 20,
+            y: 12,
           }}
           animate={{
             opacity: 1,
             y: 0,
           }}
           transition={{
-            delay: 0.2,
-            duration: 0.4,
+            delay: 0.15,
+            duration: 0.3,
           }}
           className="mt-5"
         >
