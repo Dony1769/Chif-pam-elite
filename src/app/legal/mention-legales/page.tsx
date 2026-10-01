@@ -28,12 +28,12 @@ const sections = [
           value="Plateforme de jeux d'adresse et de compétence en ligne"
         />
         <InfoRow
-          label="Responsable"
-          value="[À COMPLÉTER]"
+          label="Staff Responsable"
+          value="JGG PRODUCTION "
         />
         <InfoRow
           label="Adresse"
-          value="[À COMPLÉTER] — Haïti"
+          value=" Léogâne — Haïti "
         />
       </div>
     ),
