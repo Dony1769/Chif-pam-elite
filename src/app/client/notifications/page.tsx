@@ -30,10 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import {
-  AnimatePresence,
-  motion,
-} from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 import {
   DSButton,
@@ -59,11 +56,11 @@ type NotificationRow = {
   id: string;
   title: string | null;
   content: string | null;
-  message?: string | null;
+  message: string | null;
   created_at: string;
   is_read: boolean;
-  link?: string | null;
-  admin_note?: string | null;
+  link: string | null;
+  admin_note: string | null;
 };
 
 type ChallengeRow = {
@@ -123,42 +120,248 @@ const FILTER_LABELS: Record<FilterType, string> = {
 const MAX_ITEMS = 100;
 
 /* ==========================================================================
-   HELPERS
+   TYPE GUARDS / NORMALISATION
    ========================================================================== */
 
-function isExpired(date: string | null): boolean {
-  if (!date) {
-    return false;
-  }
-
-  const timestamp = new Date(date).getTime();
-
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
   return (
-    Number.isFinite(timestamp) &&
-    timestamp <= Date.now()
+    typeof value === "object" &&
+    value !== null
   );
 }
 
-function formatAlertTime(date: string): string {
+function asString(
+  value: unknown,
+  fallback = ""
+): string {
+  return typeof value === "string"
+    ? value
+    : fallback;
+}
+
+function asNullableString(
+  value: unknown
+): string | null {
+  return typeof value === "string"
+    ? value
+    : null;
+}
+
+function asNumber(
+  value: unknown,
+  fallback = 0
+): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? value
+      : fallback;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : fallback;
+  }
+
+  return fallback;
+}
+
+function asBoolean(
+  value: unknown,
+  fallback = false
+): boolean {
+  return typeof value === "boolean"
+    ? value
+    : fallback;
+}
+
+function normalizeNotification(
+  value: unknown
+): NotificationRow | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = asString(value.id);
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    title: asNullableString(value.title),
+    content: asNullableString(value.content),
+    message: asNullableString(value.message),
+    created_at: asString(value.created_at),
+    is_read: asBoolean(value.is_read),
+    link: asNullableString(value.link),
+    admin_note: asNullableString(
+      value.admin_note
+    ),
+  };
+}
+
+function normalizeChallenge(
+  value: unknown
+): ChallengeRow | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = asString(value.id);
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    title: asString(
+      value.title,
+      "Défi ChifPam"
+    ),
+    prize_pool_cp: asNumber(
+      value.prize_pool_cp
+    ),
+    created_at: asString(
+      value.created_at
+    ),
+    ends_at: asNullableString(
+      value.ends_at
+    ),
+    is_active: asBoolean(
+      value.is_active
+    ),
+  };
+}
+
+function normalizeTransaction(
+  value: unknown
+): TransactionRow | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = asString(value.id);
+
+  if (!id) {
+    return null;
+  }
+
+  const rawType = asString(
+    value.type
+  );
+
+  const rawStatus = asString(
+    value.status
+  );
+
+  const type: TransactionRow["type"] =
+    rawType === "WITHDRAWAL"
+      ? "WITHDRAWAL"
+      : "DEPOSIT";
+
+  const allowedStatuses: TransactionRow["status"][] =
+    [
+      "PENDING",
+      "APPROVED",
+      "REJECTED",
+      "CANCELLED",
+    ];
+
+  const status: TransactionRow["status"] =
+    allowedStatuses.includes(
+      rawStatus as TransactionRow["status"]
+    )
+      ? (rawStatus as TransactionRow["status"])
+      : "PENDING";
+
+  return {
+    id,
+    user_id: asString(
+      value.user_id
+    ),
+    type,
+    status,
+    amount: asNumber(
+      value.amount
+    ),
+    admin_note: asNullableString(
+      value.admin_note
+    ),
+    created_at: asString(
+      value.created_at
+    ),
+  };
+}
+
+function normalizeArray<T>(
+  value: unknown,
+  normalizer: (
+    item: unknown
+  ) => T | null
+): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map(normalizer)
+    .filter(
+      (item): item is T =>
+        item !== null
+    );
+}
+
+/* ==========================================================================
+   HELPERS
+   ========================================================================== */
+
+function isExpired(
+  date: string | null
+): boolean {
+  return Boolean(
+    date &&
+      new Date(date).getTime() <=
+        Date.now()
+  );
+}
+
+function formatAlertTime(
+  date: string
+): string {
   const value = new Date(date);
 
-  if (Number.isNaN(value.getTime())) {
+  if (
+    Number.isNaN(
+      value.getTime()
+    )
+  ) {
     return "DATE_INCONNUE";
   }
 
-  return value.toLocaleString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return value.toLocaleString(
+    "fr-FR",
+    {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  );
 }
 
 function isVictoryNotification(
   notification: NotificationRow
 ): boolean {
   const title =
-    notification.title?.toLowerCase() ?? "";
+    notification.title?.toLowerCase() ??
+    "";
 
   const message = (
     notification.message ??
@@ -181,7 +384,8 @@ function isRejectionNotification(
   notification: NotificationRow
 ): boolean {
   const title =
-    notification.title?.toLowerCase() ?? "";
+    notification.title?.toLowerCase() ??
+    "";
 
   const content = (
     notification.content ??
@@ -204,7 +408,9 @@ function isRejectionNotification(
 
 export default function ClientNotifications() {
   const router = useRouter();
-  const { notify } = useAppFeedback();
+
+  const { notify } =
+    useAppFeedback();
 
   const {
     enabled: pushEnabled,
@@ -212,46 +418,68 @@ export default function ClientNotifications() {
     subscribe: subscribePush,
   } = usePushNotifications();
 
-  /* ------------------------------------------------------------------------
-     STATE
-     ------------------------------------------------------------------------ */
+  const [
+    notifications,
+    setNotifications,
+  ] = useState<NotificationRow[]>(
+    []
+  );
 
-  const [notifications, setNotifications] =
-    useState<NotificationRow[]>([]);
-
-  const [liveChallenges, setLiveChallenges] =
-    useState<ChallengeRow[]>([]);
+  const [
+    liveChallenges,
+    setLiveChallenges,
+  ] = useState<ChallengeRow[]>(
+    []
+  );
 
   const [
     rejectedTransactions,
     setRejectedTransactions,
-  ] = useState<TransactionRow[]>([]);
+  ] = useState<TransactionRow[]>(
+    []
+  );
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [activeFilter, setActiveFilter] =
-    useState<FilterType>("TOUT");
+  const [
+    activeFilter,
+    setActiveFilter,
+  ] = useState<FilterType>(
+    "TOUT"
+  );
 
-  const [userId, setUserId] =
-    useState<string | null>(null);
+  const [
+    userId,
+    setUserId,
+  ] = useState<string | null>(
+    null
+  );
 
-  const [isTabVisible, setIsTabVisible] =
-    useState(true);
+  const [
+    isTabVisible,
+    setIsTabVisible,
+  ] = useState(true);
 
-  const [isMarkingRead, setIsMarkingRead] =
-    useState(false);
+  const [
+    isMarkingRead,
+    setIsMarkingRead,
+  ] = useState(false);
 
   /* ==========================================================================
-     VISIBILITÉ DE L'ONGLET
+     VISIBILITÉ
      ========================================================================== */
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsTabVisible(
-        document.visibilityState === "visible"
-      );
-    };
+    const handleVisibilityChange =
+      () => {
+        setIsTabVisible(
+          document.visibilityState ===
+            "visible"
+        );
+      };
 
     document.addEventListener(
       "visibilitychange",
@@ -270,18 +498,23 @@ export default function ClientNotifications() {
      CHARGEMENT GLOBAL
      ========================================================================== */
 
-  const fetchAllData = useCallback(
-    async () => {
+  const fetchAllData =
+    useCallback(async () => {
       try {
         setLoading(true);
 
         const {
-          data: { user },
+          data: {
+            user,
+          },
           error: authError,
-        } = await supabase.auth.getUser();
+        } =
+          await supabase.auth.getUser();
 
         if (authError || !user) {
-          router.replace("/connexion");
+          router.replace(
+            "/connexion"
+          );
           return;
         }
 
@@ -294,126 +527,139 @@ export default function ClientNotifications() {
           notificationsResult,
           challengesResult,
           transactionsResult,
-        ] = await Promise.all([
-          /* ----------------------------------
-             NOTIFICATIONS
-             ---------------------------------- */
-
-          supabase
-            .from("notifications")
-            .select(
-              [
-                "id",
-                "title",
-                "content",
-                "message",
-                "created_at",
-                "is_read",
-                "link",
-                "admin_note",
-              ].join(", ")
-            )
-            .eq("user_id", user.id)
-            .order("created_at", {
-              ascending: false,
-            })
-            .limit(MAX_ITEMS),
-
-          /* ----------------------------------
-             DÉFIS ACTIFS
-             ---------------------------------- */
-
-          supabase
-            .from("challenges")
-            .select(
-              [
-                "id",
-                "title",
-                "prize_pool_cp",
-                "created_at",
-                "ends_at",
-                "is_active",
-              ].join(", ")
-            )
-            .eq("is_active", true)
-            .or(
-              `ends_at.is.null,ends_at.gt.${nowIso}`
-            )
-            .order("created_at", {
-              ascending: false,
-            })
-            .limit(MAX_ITEMS),
-
-          /* ----------------------------------
-             TRANSACTIONS REFUSÉES / ANNULÉES
-             ---------------------------------- */
-
-          supabase
-            .from("transactions")
-            .select(
-              [
-                "id",
+        ] =
+          await Promise.all([
+            supabase
+              .from("notifications")
+              .select(
+                "id, title, content, message, created_at, is_read, link, admin_note"
+              )
+              .eq(
                 "user_id",
-                "type",
-                "status",
-                "amount",
-                "admin_note",
+                user.id
+              )
+              .order(
                 "created_at",
-              ].join(", ")
-            )
-            .eq("user_id", user.id)
-            .in("status", [
-              "REJECTED",
-              "CANCELLED",
-            ])
-            .order("created_at", {
-              ascending: false,
-            })
-            .limit(MAX_ITEMS),
-        ]);
+                {
+                  ascending: false,
+                }
+              )
+              .limit(
+                MAX_ITEMS
+              ),
 
-        /* --------------------------------------------------------------------
-           LOGS ERREURS
-           -------------------------------------------------------------------- */
+            supabase
+              .from("challenges")
+              .select(
+                "id, title, prize_pool_cp, created_at, ends_at, is_active"
+              )
+              .eq(
+                "is_active",
+                true
+              )
+              .or(
+                `ends_at.is.null,ends_at.gt.${nowIso}`
+              )
+              .order(
+                "created_at",
+                {
+                  ascending: false,
+                }
+              )
+              .limit(
+                MAX_ITEMS
+              ),
 
-        if (notificationsResult.error) {
+            supabase
+              .from("transactions")
+              .select(
+                "id, user_id, type, status, amount, admin_note, created_at"
+              )
+              .eq(
+                "user_id",
+                user.id
+              )
+              .in(
+                "status",
+                [
+                  "REJECTED",
+                  "CANCELLED",
+                ]
+              )
+              .order(
+                "created_at",
+                {
+                  ascending: false,
+                }
+              )
+              .limit(
+                MAX_ITEMS
+              ),
+          ]);
+
+        /* --------------------------------------------------------------
+           ERREURS INDIVIDUELLES
+           -------------------------------------------------------------- */
+
+        if (
+          notificationsResult.error
+        ) {
           console.error(
             "Erreur notifications:",
             notificationsResult.error
           );
         }
 
-        if (challengesResult.error) {
+        if (
+          challengesResult.error
+        ) {
           console.error(
             "Erreur challenges:",
             challengesResult.error
           );
         }
 
-        if (transactionsResult.error) {
+        if (
+          transactionsResult.error
+        ) {
           console.error(
             "Erreur transactions:",
             transactionsResult.error
           );
         }
 
-        /* --------------------------------------------------------------------
-           STATES
-           -------------------------------------------------------------------- */
+        /* --------------------------------------------------------------
+           NORMALISATION
+           -------------------------------------------------------------- */
+
+        const normalizedNotifications =
+          normalizeArray(
+            notificationsResult.data,
+            normalizeNotification
+          );
+
+        const normalizedChallenges =
+          normalizeArray(
+            challengesResult.data,
+            normalizeChallenge
+          );
+
+        const normalizedTransactions =
+          normalizeArray(
+            transactionsResult.data,
+            normalizeTransaction
+          );
 
         setNotifications(
-          (notificationsResult.data ??
-            []) as NotificationRow[]
+          normalizedNotifications
         );
 
         setLiveChallenges(
-          (challengesResult.data ??
-            []) as ChallengeRow[]
+          normalizedChallenges
         );
 
         setRejectedTransactions(
-          (transactionsResult.data ??
-            []) as TransactionRow[]
+          normalizedTransactions
         );
       } catch (error) {
         console.error(
@@ -423,9 +669,7 @@ export default function ClientNotifications() {
       } finally {
         setLoading(false);
       }
-    },
-    [router]
-  );
+    }, [router]);
 
   useEffect(() => {
     void fetchAllData();
@@ -436,7 +680,10 @@ export default function ClientNotifications() {
      ========================================================================== */
 
   useEffect(() => {
-    if (!userId || !isTabVisible) {
+    if (
+      !userId ||
+      !isTabVisible
+    ) {
       return;
     }
 
@@ -446,9 +693,9 @@ export default function ClientNotifications() {
     const channel = supabase
       .channel(channelName)
 
-      /* ======================================================================
+      /* --------------------------------------------------------------
          NOTIFICATIONS
-         ====================================================================== */
+         -------------------------------------------------------------- */
 
       .on(
         "postgres_changes",
@@ -459,36 +706,43 @@ export default function ClientNotifications() {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          /* DELETE */
-
           if (
-            payload.eventType === "DELETE"
+            payload.eventType ===
+            "DELETE"
           ) {
-            const deleted =
-              payload.old as NotificationRow;
+            const deletedId =
+              isRecord(
+                payload.old
+              )
+                ? asString(
+                    payload.old.id
+                  )
+                : "";
 
-            if (!deleted?.id) {
+            if (!deletedId) {
               return;
             }
 
             setNotifications(
               (previous) =>
                 previous.filter(
-                  (notification) =>
+                  (
+                    notification
+                  ) =>
                     notification.id !==
-                    deleted.id
+                    deletedId
                 )
             );
 
             return;
           }
 
-          /* INSERT / UPDATE */
-
           const notification =
-            payload.new as NotificationRow;
+            normalizeNotification(
+              payload.new
+            );
 
-          if (!notification?.id) {
+          if (!notification) {
             return;
           }
 
@@ -504,15 +758,18 @@ export default function ClientNotifications() {
               return [
                 notification,
                 ...withoutCurrent,
-              ].slice(0, MAX_ITEMS);
+              ].slice(
+                0,
+                MAX_ITEMS
+              );
             }
           );
         }
       )
 
-      /* ======================================================================
+      /* --------------------------------------------------------------
          CHALLENGES
-         ====================================================================== */
+         -------------------------------------------------------------- */
 
       .on(
         "postgres_changes",
@@ -522,15 +779,20 @@ export default function ClientNotifications() {
           table: "challenges",
         },
         (payload) => {
-          /* DELETE */
-
           if (
-            payload.eventType === "DELETE"
+            payload.eventType ===
+            "DELETE"
           ) {
-            const deleted =
-              payload.old as ChallengeRow;
+            const deletedId =
+              isRecord(
+                payload.old
+              )
+                ? asString(
+                    payload.old.id
+                  )
+                : "";
 
-            if (!deleted?.id) {
+            if (!deletedId) {
               return;
             }
 
@@ -539,25 +801,27 @@ export default function ClientNotifications() {
                 previous.filter(
                   (challenge) =>
                     challenge.id !==
-                    deleted.id
+                    deletedId
                 )
             );
 
             return;
           }
 
-          /* INSERT / UPDATE */
-
           const challenge =
-            payload.new as ChallengeRow;
+            normalizeChallenge(
+              payload.new
+            );
 
-          if (!challenge?.id) {
+          if (!challenge) {
             return;
           }
 
           const invalid =
             !challenge.is_active ||
-            isExpired(challenge.ends_at);
+            isExpired(
+              challenge.ends_at
+            );
 
           setLiveChallenges(
             (previous) => {
@@ -576,15 +840,18 @@ export default function ClientNotifications() {
                     item.id !==
                     challenge.id
                 ),
-              ].slice(0, MAX_ITEMS);
+              ].slice(
+                0,
+                MAX_ITEMS
+              );
             }
           );
         }
       )
 
-      /* ======================================================================
+      /* --------------------------------------------------------------
          TRANSACTIONS
-         ====================================================================== */
+         -------------------------------------------------------------- */
 
       .on(
         "postgres_changes",
@@ -595,15 +862,20 @@ export default function ClientNotifications() {
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          /* DELETE */
-
           if (
-            payload.eventType === "DELETE"
+            payload.eventType ===
+            "DELETE"
           ) {
-            const deleted =
-              payload.old as TransactionRow;
+            const deletedId =
+              isRecord(
+                payload.old
+              )
+                ? asString(
+                    payload.old.id
+                  )
+                : "";
 
-            if (!deleted?.id) {
+            if (!deletedId) {
               return;
             }
 
@@ -612,19 +884,19 @@ export default function ClientNotifications() {
                 previous.filter(
                   (transaction) =>
                     transaction.id !==
-                    deleted.id
+                    deletedId
                 )
             );
 
             return;
           }
 
-          /* INSERT / UPDATE */
-
           const transaction =
-            payload.new as TransactionRow;
+            normalizeTransaction(
+              payload.new
+            );
 
-          if (!transaction?.id) {
+          if (!transaction) {
             return;
           }
 
@@ -651,18 +923,20 @@ export default function ClientNotifications() {
                     item.id !==
                     transaction.id
                 ),
-              ].slice(0, MAX_ITEMS);
+              ].slice(
+                0,
+                MAX_ITEMS
+              );
             }
           );
         }
       )
 
-      /* ======================================================================
-         SUBSCRIBE
-         ====================================================================== */
-
       .subscribe((status) => {
-        if (status === "CHANNEL_ERROR") {
+        if (
+          status ===
+          "CHANNEL_ERROR"
+        ) {
           console.warn(
             "Synchronisation realtime des alertes indisponible."
           );
@@ -680,11 +954,11 @@ export default function ClientNotifications() {
   ]);
 
   /* ==========================================================================
-     PUSH NOTIFICATIONS
+     PUSH
      ========================================================================== */
 
-  const togglePush = useCallback(
-    async () => {
+  const togglePush =
+    useCallback(async () => {
       if (
         pushLoading ||
         pushEnabled
@@ -707,17 +981,15 @@ export default function ClientNotifications() {
           "danger"
         );
       }
-    },
-    [
+    }, [
       notify,
       pushEnabled,
       pushLoading,
       subscribePush,
-    ]
-  );
+    ]);
 
   /* ==========================================================================
-     MARQUER TOUTES LES NOTIFICATIONS COMME LUES
+     MARK ALL AS READ
      ========================================================================== */
 
   const handleMarkAllAsRead =
@@ -738,8 +1010,14 @@ export default function ClientNotifications() {
             .update({
               is_read: true,
             })
-            .eq("user_id", userId)
-            .eq("is_read", false);
+            .eq(
+              "user_id",
+              userId
+            )
+            .eq(
+              "is_read",
+              false
+            );
 
         if (error) {
           throw error;
@@ -784,61 +1062,57 @@ export default function ClientNotifications() {
 
   const allAlerts =
     useMemo<AlertItem[]>(() => {
-      const now = Date.now();
+      const now =
+        Date.now();
 
-      /* ----------------------------------------------------------------------
+      /* --------------------------------------------------------------
          DÉFIS
-         ---------------------------------------------------------------------- */
+         -------------------------------------------------------------- */
 
       const challengeAlerts: AlertItem[] =
         liveChallenges
-          .filter((challenge) => {
-            if (!challenge.is_active) {
-              return false;
+          .filter(
+            (challenge) => {
+              if (
+                !challenge.is_active
+              ) {
+                return false;
+              }
+
+              if (
+                challenge.ends_at &&
+                new Date(
+                  challenge.ends_at
+                ).getTime() <=
+                  now
+              ) {
+                return false;
+              }
+
+              return true;
             }
-
-            if (
-              challenge.ends_at &&
-              new Date(
-                challenge.ends_at
-              ).getTime() <= now
-            ) {
-              return false;
-            }
-
-            return true;
-          })
-          .map((challenge) => ({
-            id: `challenge-${challenge.id}`,
-
-            title:
-              `NOUVEAU DÉFI : ${challenge.title}`,
-
-            content:
-              `Récompense : ${Number(
-                challenge.prize_pool_cp
-              ).toLocaleString(
+          )
+          .map(
+            (challenge) => ({
+              id: `challenge-${challenge.id}`,
+              title: `NOUVEAU DÉFI : ${challenge.title}`,
+              content: `Récompense : ${challenge.prize_pool_cp.toLocaleString(
                 "fr-FR"
               )} CP. Bonne chance !`,
+              created_at:
+                challenge.created_at,
+              is_read: false,
+              is_challenge: true,
+              is_victory: false,
+              is_rejection: false,
+              link:
+                "/client/challenges",
+            })
+          );
 
-            created_at:
-              challenge.created_at,
-
-            is_read: false,
-
-            is_challenge: true,
-
-            is_victory: false,
-
-            is_rejection: false,
-
-            link:
-              "/client/challenges",
-          }));
-
-      /* ----------------------------------------------------------------------
+      /* --------------------------------------------------------------
          TRANSACTIONS REFUSÉES
-         ---------------------------------------------------------------------- */
+         -------------------------------------------------------------- */
 
       const rejectionAlerts: AlertItem[] =
         rejectedTransactions.map(
@@ -856,90 +1130,63 @@ export default function ClientNotifications() {
                 : "ÉCHEC";
 
             return {
-              id:
-                `transaction-${transaction.id}`,
-
-              title:
-                `${statusLabel} DE ${typeLabel} (${Number(
-                  transaction.amount
-                ).toLocaleString(
-                  "fr-FR"
-                )} HTG)`,
-
+              id: `transaction-${transaction.id}`,
+              title: `${statusLabel} DE ${typeLabel} (${transaction.amount.toLocaleString(
+                "fr-FR"
+              )} HTG)`,
               content:
                 transaction.admin_note
                   ? `Raison : ${transaction.admin_note}`
                   : "Votre demande n'a pas pu être validée par l'administration.",
-
               created_at:
                 transaction.created_at,
-
               is_read: false,
-
               is_challenge: false,
-
               is_victory: false,
-
               is_rejection: true,
-
               admin_note:
                 transaction.admin_note,
-
               link:
                 "/client/finance",
             };
           }
         );
 
-      /* ----------------------------------------------------------------------
+      /* --------------------------------------------------------------
          NOTIFICATIONS
-         ---------------------------------------------------------------------- */
+         -------------------------------------------------------------- */
 
       const notificationAlerts: AlertItem[] =
         notifications.map(
           (notification) => ({
-            id:
-              `notification-${notification.id}`,
-
+            id: `notification-${notification.id}`,
             title:
               notification.title?.trim() ||
               "ALERTE CHIFPAM",
-
             content:
               notification.content?.trim() ||
               notification.message?.trim() ||
               "Nouvelle information disponible.",
-
             created_at:
               notification.created_at,
-
             is_read:
               notification.is_read,
-
             is_challenge: false,
-
             is_victory:
               isVictoryNotification(
                 notification
               ),
-
             is_rejection:
               isRejectionNotification(
                 notification
               ),
-
             admin_note:
               notification.admin_note,
-
             link:
               notification.link ??
               undefined,
           })
         );
-
-      /* ----------------------------------------------------------------------
-         MERGE + SORT
-         ---------------------------------------------------------------------- */
 
       return [
         ...challengeAlerts,
@@ -968,7 +1215,9 @@ export default function ClientNotifications() {
     useMemo(() => {
       return allAlerts.filter(
         (alert) => {
-          switch (activeFilter) {
+          switch (
+            activeFilter
+          ) {
             case "VICTOIRES":
               return alert.is_victory;
 
@@ -996,37 +1245,38 @@ export default function ClientNotifications() {
      COMPTEURS
      ========================================================================== */
 
-  const counts = useMemo(
-    () => ({
-      TOUT: allAlerts.filter(
-        (alert) =>
-          !alert.is_read
-      ).length,
-
-      VICTOIRES:
-        allAlerts.filter(
+  const counts =
+    useMemo(
+      () => ({
+        TOUT: allAlerts.filter(
           (alert) =>
-            !alert.is_read &&
-            alert.is_victory
+            !alert.is_read
         ).length,
 
-      DÉFIS:
-        allAlerts.filter(
-          (alert) =>
-            !alert.is_read &&
-            alert.is_challenge
-        ).length,
+        VICTOIRES:
+          allAlerts.filter(
+            (alert) =>
+              !alert.is_read &&
+              alert.is_victory
+          ).length,
 
-      SYSTÈME:
-        allAlerts.filter(
-          (alert) =>
-            !alert.is_read &&
-            !alert.is_challenge &&
-            !alert.is_victory
-        ).length,
-    }),
-    [allAlerts]
-  );
+        DÉFIS:
+          allAlerts.filter(
+            (alert) =>
+              !alert.is_read &&
+              alert.is_challenge
+          ).length,
+
+        SYSTÈME:
+          allAlerts.filter(
+            (alert) =>
+              !alert.is_read &&
+              !alert.is_challenge &&
+              !alert.is_victory
+          ).length,
+      }),
+      [allAlerts]
+    );
 
   const unreadCount =
     counts.TOUT;
@@ -1039,13 +1289,9 @@ export default function ClientNotifications() {
     return (
       <DSPage className="min-h-screen overflow-hidden">
         <div className="relative mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-          {/* ATMOSPHÈRE */}
-
           <div className="pointer-events-none absolute -right-40 -top-32 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
 
           <div className="pointer-events-none absolute -left-40 top-72 h-80 w-80 rounded-full bg-cyan-500/5 blur-3xl" />
-
-          {/* SKELETON */}
 
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -1063,7 +1309,12 @@ export default function ClientNotifications() {
             <DSSkeleton className="h-14 w-full rounded-2xl" />
 
             <div className="space-y-3">
-              {[1, 2, 3, 4].map(
+              {[
+                1,
+                2,
+                3,
+                4,
+              ].map(
                 (item) => (
                   <DSCard
                     key={item}
@@ -1096,9 +1347,9 @@ export default function ClientNotifications() {
 
   return (
     <DSPage className="relative min-h-screen overflow-x-hidden pb-28 text-white">
-      {/* =====================================================================
+      {/* ------------------------------------------------------------------
           ATMOSPHÈRE
-          ===================================================================== */}
+          ------------------------------------------------------------------ */}
 
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -right-48 -top-48 h-[32rem] w-[32rem] rounded-full bg-emerald-500/[0.07] blur-3xl" />
@@ -1108,10 +1359,6 @@ export default function ClientNotifications() {
         <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-indigo-500/[0.025] blur-3xl" />
       </div>
 
-      {/* =====================================================================
-          3D SURFACE
-          ===================================================================== */}
-
       <div className="pointer-events-none absolute right-0 top-0 hidden h-72 w-[30rem] opacity-35 lg:block">
         <ThreeSurface
           variant="home"
@@ -1119,14 +1366,14 @@ export default function ClientNotifications() {
         />
       </div>
 
-      {/* =====================================================================
+      {/* ------------------------------------------------------------------
           CONTENU
-          ===================================================================== */}
+          ------------------------------------------------------------------ */}
 
       <div className="relative mx-auto w-full max-w-6xl px-3 py-4 sm:px-6 sm:py-7">
-        {/* ===================================================================
+        {/* ----------------------------------------------------------------
             HEADER
-            =================================================================== */}
+            ---------------------------------------------------------------- */}
 
         <motion.header
           initial={{
@@ -1143,8 +1390,6 @@ export default function ClientNotifications() {
           className="sticky top-2 z-30 mb-5 rounded-[1.75rem] border border-white/10 bg-[#020617]/80 p-3 shadow-2xl backdrop-blur-2xl sm:top-4 sm:p-4"
         >
           <div className="flex items-center justify-between gap-3">
-            {/* RETOUR */}
-
             <button
               type="button"
               onClick={() =>
@@ -1161,8 +1406,6 @@ export default function ClientNotifications() {
               />
             </button>
 
-            {/* TITRE */}
-
             <div className="min-w-0 text-center">
               <div className="flex items-center justify-center gap-2">
                 <span className="hidden h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)] sm:block" />
@@ -1171,9 +1414,11 @@ export default function ClientNotifications() {
                   CENTRE D&apos;ALERTES
                 </h1>
 
-                {unreadCount > 0 && (
+                {unreadCount >
+                  0 && (
                   <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[8px] font-black text-black">
-                    {unreadCount > 99
+                    {unreadCount >
+                    99
                       ? "99+"
                       : unreadCount}
                   </span>
@@ -1185,8 +1430,6 @@ export default function ClientNotifications() {
               </p>
             </div>
 
-            {/* MARK READ */}
-
             <button
               type="button"
               onClick={
@@ -1194,7 +1437,8 @@ export default function ClientNotifications() {
               }
               disabled={
                 isMarkingRead ||
-                unreadCount === 0
+                unreadCount ===
+                  0
               }
               aria-label="Marquer toutes les notifications comme lues"
               className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-all hover:border-emerald-400/40 hover:bg-emerald-500/20 active:scale-90 disabled:cursor-not-allowed disabled:opacity-35"
@@ -1213,9 +1457,9 @@ export default function ClientNotifications() {
             </button>
           </div>
 
-          {/* ================================================================
+          {/* --------------------------------------------------------------
               FILTRES
-              ================================================================ */}
+              -------------------------------------------------------------- */}
 
           <div className="mt-3 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex min-w-max gap-1.5">
@@ -1230,7 +1474,9 @@ export default function ClientNotifications() {
 
                   return (
                     <button
-                      key={filter}
+                      key={
+                        filter
+                      }
                       type="button"
                       onClick={() =>
                         setActiveFilter(
@@ -1246,28 +1492,36 @@ export default function ClientNotifications() {
                       {filter ===
                         "VICTOIRES" && (
                         <Trophy
-                          size={12}
+                          size={
+                            12
+                          }
                         />
                       )}
 
                       {filter ===
                         "DÉFIS" && (
                         <Flame
-                          size={12}
+                          size={
+                            12
+                          }
                         />
                       )}
 
                       {filter ===
                         "SYSTÈME" && (
                         <Shield
-                          size={12}
+                          size={
+                            12
+                          }
                         />
                       )}
 
                       {filter ===
                         "TOUT" && (
                         <Zap
-                          size={12}
+                          size={
+                            12
+                          }
                         />
                       )}
 
@@ -1279,7 +1533,8 @@ export default function ClientNotifications() {
                         }
                       </span>
 
-                      {count > 0 && (
+                      {count >
+                        0 && (
                         <span
                           className={`flex min-w-5 items-center justify-center rounded-md px-1 py-0.5 text-[8px] ${
                             active
@@ -1287,7 +1542,8 @@ export default function ClientNotifications() {
                               : "bg-emerald-500 text-black"
                           }`}
                         >
-                          {count > 99
+                          {count >
+                          99
                             ? "99+"
                             : count}
                         </span>
@@ -1300,9 +1556,9 @@ export default function ClientNotifications() {
           </div>
         </motion.header>
 
-        {/* ===================================================================
+        {/* ----------------------------------------------------------------
             INTRODUCTION
-            =================================================================== */}
+            ---------------------------------------------------------------- */}
 
         <motion.div
           initial={{
@@ -1325,7 +1581,8 @@ export default function ClientNotifications() {
             </p>
 
             <h2 className="mt-1 text-lg font-black tracking-tight text-white sm:text-xl">
-              Vos dernières alertes
+              Vos dernières
+              alertes
             </h2>
           </div>
 
@@ -1335,9 +1592,9 @@ export default function ClientNotifications() {
           </div>
         </motion.div>
 
-        {/* ===================================================================
-            LISTE DES ALERTES
-            =================================================================== */}
+        {/* ----------------------------------------------------------------
+            LISTE
+            ---------------------------------------------------------------- */}
 
         <div className="space-y-3">
           <AnimatePresence
@@ -1346,10 +1603,6 @@ export default function ClientNotifications() {
           >
             {filteredAlerts.length ===
             0 ? (
-              /* =============================================================
-                 EMPTY
-                 ============================================================= */
-
               <motion.div
                 key="empty"
                 initial={{
@@ -1371,8 +1624,12 @@ export default function ClientNotifications() {
 
                     <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-white/5 bg-white/[0.025]">
                       <Inbox
-                        size={34}
-                        strokeWidth={1.2}
+                        size={
+                          34
+                        }
+                        strokeWidth={
+                          1.2
+                        }
                         className="text-slate-700"
                       />
                     </div>
@@ -1383,19 +1640,20 @@ export default function ClientNotifications() {
                   </p>
 
                   <p className="mt-2 max-w-xs text-[10px] font-normal lowercase not-italic leading-relaxed text-slate-700">
-                    Le radar ChifPam
-                    est calme pour le
+                    Le radar
+                    ChifPam
+                    est calme
+                    pour le
                     moment.
                   </p>
                 </DSCard>
               </motion.div>
             ) : (
-              /* =============================================================
-                 ALERTS
-                 ============================================================= */
-
               filteredAlerts.map(
-                (alert, index) => {
+                (
+                  alert,
+                  index
+                ) => {
                   const rejection =
                     alert.is_rejection;
 
@@ -1410,7 +1668,9 @@ export default function ClientNotifications() {
 
                   return (
                     <motion.div
-                      key={alert.id}
+                      key={
+                        alert.id
+                      }
                       layout
                       initial={{
                         opacity: 0,
@@ -1433,7 +1693,8 @@ export default function ClientNotifications() {
                           Math.min(
                             index,
                             5
-                          ) * 0.025,
+                          ) *
+                          0.025,
                       }}
                     >
                       <DSCard
@@ -1458,9 +1719,7 @@ export default function ClientNotifications() {
                             : "border-white/5 bg-white/[0.015] opacity-55 hover:opacity-75"
                         }`}
                       >
-                        {/* =================================================
-                            ACCENT LATÉRAL
-                            ================================================= */}
+                        {/* ACCENT LATÉRAL */}
 
                         <div
                           className={`absolute inset-y-0 left-0 w-[2px] ${
@@ -1476,9 +1735,7 @@ export default function ClientNotifications() {
                           }`}
                         />
 
-                        {/* =================================================
-                            GLOW
-                            ================================================= */}
+                        {/* GLOW */}
 
                         {unread && (
                           <div
@@ -1494,9 +1751,7 @@ export default function ClientNotifications() {
                           />
                         )}
 
-                        {/* =================================================
-                            INDICATEUR NON LU
-                            ================================================= */}
+                        {/* DOT NON LU */}
 
                         {unread && (
                           <div className="absolute right-4 top-4">
@@ -1524,14 +1779,8 @@ export default function ClientNotifications() {
                           </div>
                         )}
 
-                        {/* =================================================
-                            CONTENU
-                            ================================================= */}
-
                         <div className="relative z-10 flex gap-3.5 sm:gap-4">
-                          {/* =================================================
-                              ICÔNE
-                              ================================================= */}
+                          {/* ICÔNE */}
 
                           <div
                             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-300 group-hover:scale-105 sm:h-12 sm:w-12 ${
@@ -1546,32 +1795,36 @@ export default function ClientNotifications() {
                           >
                             {rejection ? (
                               <AlertTriangle
-                                size={19}
+                                size={
+                                  19
+                                }
                               />
                             ) : challenge ? (
                               <Flame
-                                size={19}
+                                size={
+                                  19
+                                }
                               />
                             ) : victory ? (
                               <Trophy
-                                size={19}
+                                size={
+                                  19
+                                }
                               />
                             ) : (
                               <Shield
-                                size={19}
+                                size={
+                                  19
+                                }
                               />
                             )}
                           </div>
 
-                          {/* =================================================
-                              TEXTE
-                              ================================================= */}
+                          {/* CONTENU */}
 
                           <div className="min-w-0 flex-1 pr-2">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                {/* BADGES */}
-
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   {challenge && (
                                     <span className="rounded-md border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-blue-400">
@@ -1592,8 +1845,6 @@ export default function ClientNotifications() {
                                   )}
                                 </div>
 
-                                {/* TITRE */}
-
                                 <h3
                                   className={`mt-1 text-[12px] font-black leading-tight tracking-tight sm:text-sm ${
                                     rejection
@@ -1611,17 +1862,15 @@ export default function ClientNotifications() {
                                 </h3>
                               </div>
 
-                              {/* CHEVRON */}
-
                               {alert.link && (
                                 <ChevronRight
-                                  size={15}
+                                  size={
+                                    15
+                                  }
                                   className="mt-1 shrink-0 text-slate-700 transition-all group-hover:translate-x-0.5 group-hover:text-emerald-400"
                                 />
                               )}
                             </div>
-
-                            {/* DESCRIPTION */}
 
                             <p
                               className={`mt-2 text-[10px] font-normal leading-relaxed sm:text-[11px] ${
@@ -1637,8 +1886,6 @@ export default function ClientNotifications() {
                               }
                             </p>
 
-                            {/* META */}
-
                             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-[7px] font-black uppercase tracking-[0.14em] text-slate-600">
@@ -1650,7 +1897,9 @@ export default function ClientNotifications() {
                                 {!unread && (
                                   <span className="flex items-center gap-1 text-[7px] font-black uppercase tracking-[0.12em] text-slate-700">
                                     <Check
-                                      size={9}
+                                      size={
+                                        9
+                                      }
                                     />
                                     Lu
                                   </span>
@@ -1665,14 +1914,17 @@ export default function ClientNotifications() {
 
                               {challenge && (
                                 <span className="animate-pulse text-[7px] font-black uppercase tracking-[0.12em] text-blue-500">
-                                  Voir le défi
+                                  Voir le
+                                  défi
                                 </span>
                               )}
 
                               {victory && (
                                 <span className="flex items-center gap-1 text-[7px] font-black uppercase tracking-[0.12em] text-emerald-500">
                                   <Coins
-                                    size={9}
+                                    size={
+                                      9
+                                    }
                                   />
                                   Solde mis à
                                   jour
@@ -1690,9 +1942,9 @@ export default function ClientNotifications() {
           </AnimatePresence>
         </div>
 
-        {/* ===================================================================
-            PANNEAU PUSH
-            =================================================================== */}
+        {/* ----------------------------------------------------------------
+            PUSH
+            ---------------------------------------------------------------- */}
 
         <motion.div
           initial={{
@@ -1710,8 +1962,6 @@ export default function ClientNotifications() {
           className="mt-5"
         >
           <DSPanel className="relative overflow-hidden border-white/5 p-4 sm:p-5">
-            {/* ICON BACKGROUND */}
-
             <div className="pointer-events-none absolute -right-12 -top-16 opacity-[0.035]">
               {pushEnabled ? (
                 <Bell size={170} />
@@ -1721,8 +1971,6 @@ export default function ClientNotifications() {
             </div>
 
             <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              {/* DESCRIPTION */}
-
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div
@@ -1734,11 +1982,15 @@ export default function ClientNotifications() {
                   >
                     {pushEnabled ? (
                       <Bell
-                        size={16}
+                        size={
+                          16
+                        }
                       />
                     ) : (
                       <BellOff
-                        size={16}
+                        size={
+                          16
+                        }
                       />
                     )}
                   </div>
@@ -1757,8 +2009,6 @@ export default function ClientNotifications() {
                   </div>
                 </div>
               </div>
-
-              {/* BUTTON */}
 
               <DSButton
                 type="button"
@@ -1779,16 +2029,22 @@ export default function ClientNotifications() {
               >
                 {pushLoading ? (
                   <Loader2
-                    size={14}
+                    size={
+                      14
+                    }
                     className="animate-spin"
                   />
                 ) : pushEnabled ? (
                   <Check
-                    size={14}
+                    size={
+                      14
+                    }
                   />
                 ) : (
                   <Bell
-                    size={14}
+                    size={
+                      14
+                    }
                   />
                 )}
 
@@ -1800,14 +2056,15 @@ export default function ClientNotifications() {
           </DSPanel>
         </motion.div>
 
-        {/* ===================================================================
+        {/* ----------------------------------------------------------------
             FOOTER STATUS
-            =================================================================== */}
+            ---------------------------------------------------------------- */}
 
         <div className="mt-5 flex items-center justify-center gap-2 text-[7px] font-black uppercase tracking-[0.22em] text-slate-700">
           <span className="h-1 w-1 rounded-full bg-emerald-500/60" />
 
-          ChifPam notification
+          ChifPam
+          notification
           radar
 
           <span className="h-1 w-1 rounded-full bg-emerald-500/60" />
@@ -1815,4 +2072,4 @@ export default function ClientNotifications() {
       </div>
     </DSPage>
   );
-      }
+            }
