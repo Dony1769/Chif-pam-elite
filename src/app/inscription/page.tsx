@@ -1,144 +1,252 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  UserCircle, Phone, Mail, Lock, ArrowRight,
-  Loader2, AlertCircle, Trophy,
-  ShieldCheck, Gamepad2, ScrollText, Eye, EyeOff, Gift,
-  Users, Activity, CheckCircle2,
-} from 'lucide-react';
-import Link from 'next/link';
-import { LogoChifPam } from '@/components/LogoChifPam';
-import { normalizePhoneNumber } from '@/lib/phone';
-import { DSButton, DSCard, DSInput } from '@/components/ui/primitives';
-import ThreeSurface from '@/components/three/ThreeSurface';
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  Mail,
+  Phone,
+  ScrollText,
+  ShieldCheck,
+  UserCircle,
+  Users,
+} from "lucide-react";
+import Link from "next/link";
 
-// --- Utilitaires purement visuels : n'affectent jamais la validation réelle ---
+import { LogoChifPam } from "@/components/LogoChifPam";
+import { DSButton, DSCard, DSInput } from "@/components/ui/primitives";
+import ThreeSurface from "@/components/three/ThreeSurface";
+import { normalizePhoneNumber } from "@/lib/phone";
+
+/* -------------------------------------------------------------------------- */
+/* TYPES                                                                       */
+/* -------------------------------------------------------------------------- */
+
+type Strength = {
+  score: number;
+  label: string;
+  tone: string;
+};
+
+/* -------------------------------------------------------------------------- */
+/* HELPERS                                                                     */
+/* -------------------------------------------------------------------------- */
 
 function formatPhonePreview(digits: string): string {
-  if (!digits) return '';
-  const g1 = digits.slice(0, 4);
-  const g2 = digits.slice(4, 8);
-  return g2 ? `${g1} ${g2}` : g1;
+  if (!digits) return "";
+
+  const first = digits.slice(0, 4);
+  const second = digits.slice(4, 8);
+
+  return second ? `${first} ${second}` : first;
 }
 
-type Strength = { score: number; label: string; color: string };
+function getPasswordStrength(password: string): Strength {
+  if (!password) {
+    return {
+      score: 0,
+      label: "",
+      tone: "",
+    };
+  }
 
-function getPasswordStrength(pwd: string): Strength {
-  if (!pwd) return { score: 0, label: '', color: '' };
   let score = 0;
-  if (pwd.length >= 8) score++;
-  if (/[A-Z]/.test(pwd)) score++;
-  if (/[0-9]/.test(pwd)) score++;
-  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+
+  if (password.length >= 8) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
   const levels: Strength[] = [
-    { score: 1, label: 'Faible', color: 'bg-rose-500' },
-    { score: 2, label: 'Moyen', color: 'bg-amber-500' },
-    { score: 3, label: 'Solide', color: 'bg-emerald-500' },
-    { score: 4, label: 'Blindé', color: 'bg-cyan-400' },
+    {
+      score: 1,
+      label: "Faible",
+      tone: "bg-rose-400",
+    },
+    {
+      score: 2,
+      label: "Moyen",
+      tone: "bg-amber-400",
+    },
+    {
+      score: 3,
+      label: "Solide",
+      tone: "bg-emerald-400",
+    },
+    {
+      score: 4,
+      label: "Excellent",
+      tone: "bg-cyan-400",
+    },
   ];
-  return levels[Math.max(0, score - 1)] ?? { score: 0, label: '', color: '' };
+
+  return (
+    levels[Math.max(0, score - 1)] ?? {
+      score: 0,
+      label: "",
+      tone: "",
+    }
+  );
 }
 
-// Flux d'activité récente — preuve sociale, données de démonstration à brancher plus tard
-const RECENT_ACTIVITY = [
-  { name: 'J. Baptiste', amount: '2 400 HTG' },
-  { name: 'M. Joseph', amount: '850 HTG' },
-  { name: 'R. Pierre', amount: '5 100 HTG' },
-  { name: 'S. Alexis', amount: '1 200 HTG' },
-  { name: 'D. Louis', amount: '3 750 HTG' },
-];
+/* -------------------------------------------------------------------------- */
+/* FORM                                                                        */
+/* -------------------------------------------------------------------------- */
 
 function SignupForm() {
-  const [phone, setPhone] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [username, setUsername] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
-  const [referralCode, setReferralCode] = useState<string>('');
-  const [refDetected, setRefDetected] = useState<boolean>(false);
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
-
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [refDetected, setRefDetected] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const strength = useMemo(
+    () => getPasswordStrength(password),
+    [password]
+  );
+
   useEffect(() => {
-    const ref = searchParams.get('ref');
+    const ref = searchParams.get("ref");
+
     if (ref) {
       setReferralCode(ref.toUpperCase());
       setRefDetected(true);
     }
   }, [searchParams]);
 
-  const strength = useMemo(() => getPasswordStrength(password), [password]);
-
-  // Le préfixe +509 est fixe; seule la partie locale est saisie.
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(e.target.value.replace(/\D/g, '').slice(0, 8));
+  const handlePhoneChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setPhone(
+      event.target.value
+        .replace(/\D/g, "")
+        .slice(0, 8)
+    );
   };
 
-  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError('');
+  const handleSignup = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-    // Validations locales des champs
-    if (phone.length !== 8 || !/^\d{8}$/.test(phone)) {
-      return setError("Le numéro de téléphone doit contenir exactement 8 chiffres.");
+    if (loading) return;
+
+    setError("");
+
+    const cleanUsername = username.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!/^\d{8}$/.test(phone)) {
+      setError(
+        "Le numéro de téléphone doit contenir exactement 8 chiffres."
+      );
+      return;
     }
 
-    if (password.length < 8) return setError("Le mot de passe doit contenir au moins 8 caractères.");
-    if (username.trim().length < 3) return setError("Le pseudo doit contenir au moins 3 caractères.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return setError("Veuillez saisir une adresse email valide.");
+    if (password.length < 8) {
+      setError(
+        "Le mot de passe doit contenir au moins 8 caractères."
+      );
+      return;
+    }
+
+    if (cleanUsername.length < 3) {
+      setError(
+        "Le pseudo doit contenir au moins 3 caractères."
+      );
+      return;
+    }
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)
+    ) {
+      setError(
+        "Veuillez saisir une adresse email valide."
+      );
+      return;
+    }
 
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           phone: normalizePhoneNumber(`+509${phone}`),
           password,
-          username,
-          email: email.trim().toLowerCase(),
+          username: cleanUsername,
+          email: cleanEmail,
           referralCode,
         }),
       });
 
-      const result = (await response.json()) as { success?: boolean; message?: string };
+      const result = (await response.json()) as {
+        success?: boolean;
+        message?: string;
+      };
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Une erreur est survenue lors de l'inscription.");
+        throw new Error(
+          result.message ||
+            "Une erreur est survenue lors de l'inscription."
+        );
       }
 
-      router.push('/connexion?signup=success');
-
+      router.push("/connexion?signup=success");
     } catch (err: unknown) {
-      let rawMsg = "";
+      let rawMessage = "";
 
       if (err instanceof Error) {
-        rawMsg = err.message;
-      } else if (typeof err === 'object' && err !== null && 'message' in err) {
-        rawMsg = String((err as { message: unknown }).message);
+        rawMessage = err.message;
+      } else if (
+        typeof err === "object" &&
+        err !== null &&
+        "message" in err
+      ) {
+        rawMessage = String(
+          (err as { message: unknown }).message
+        );
       }
 
-      // Interception et formatage des erreurs Auth & Database
-      const lowerMsg = rawMsg.toLowerCase();
+      const lowerMessage = rawMessage.toLowerCase();
 
       if (
-        lowerMsg.includes("user already registered") ||
-        lowerMsg.includes("profiles_phone_key") ||
-        lowerMsg.includes("already exists")
+        lowerMessage.includes("user already registered") ||
+        lowerMessage.includes("profiles_phone_key") ||
+        lowerMessage.includes("already exists")
       ) {
-        setError("Nimewo w la gentan anrejistre kliyan , ou mèt al konekte san tèt kase");
-      } else if (lowerMsg.includes("profiles_username_key")) {
-        setError("Ce pseudo d'agent est déjà utilisé par un autre joueur.");
+        setError(
+          "Ce numéro est déjà associé à un compte. Vous pouvez vous connecter."
+        );
+      } else if (
+        lowerMessage.includes("profiles_username_key")
+      ) {
+        setError(
+          "Ce pseudo est déjà utilisé. Veuillez en choisir un autre."
+        );
       } else {
-        setError(rawMsg || "Une erreur est survenue lors de l'inscription. Veuillez réessayer.");
+        setError(
+          rawMessage ||
+            "Une erreur est survenue lors de l'inscription. Veuillez réessayer."
+        );
       }
     } finally {
       setLoading(false);
@@ -146,322 +254,565 @@ function SignupForm() {
   };
 
   return (
-    <div className="card-enter relative w-full max-w-md mx-auto">
-      <DSCard className="p-8 rounded-[2.5rem] relative w-full overflow-hidden">
-        {/* Balayage unique au chargement — un seul moment orchestré, pas d'effet répété */}
-        <div className="scan-line pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-emerald-400/10 to-transparent" />
+    <div className="relative w-full">
+      <DSCard className="relative overflow-hidden rounded-[28px] p-6 sm:p-8">
+        {/* Ambient top light */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-emerald-400/[0.07] via-cyan-400/[0.025] to-transparent"
+        />
 
-        <div className="mb-6 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3 text-emerald-400 text-xs font-bold relative">
-          <Gift size={20} className="shrink-0 text-emerald-400" />
-          <span>Inscrivez-vous et recevez jusqu'à <strong>10 HTG</strong> de bonus de bienvenue !</span>
-        </div>
+        {/* Subtle corner glow */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-24 h-48 w-48 rounded-full bg-cyan-400/[0.06] blur-3xl"
+        />
 
-        {error && (
-          <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-500 text-xs font-bold">
-            <AlertCircle size={18} className="shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="text-center mb-6 relative">
-          <h2 className="text-2xl font-black italic text-white uppercase tracking-tight">Nouvel Agent</h2>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Rejoignez l'arène</p>
-        </div>
-
-        <form onSubmit={handleSignup} className="space-y-4 relative">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Pseudo Agent</label>
-            <div className="relative rounded-2xl transition focus-within:ring-2 focus-within:ring-emerald-500/40">
-              <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
-              <DSInput
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Votre Nom de code"
-                className="pl-12 py-4 font-bold"
-              />
-            </div>
+        <div className="relative">
+          {/* Mobile brand */}
+          <div className="mb-7 flex justify-center md:hidden">
+            <Link
+              href="/"
+              aria-label="Retour à l'accueil ChifPam"
+              className="rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+            >
+              <LogoChifPam />
+            </Link>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Email réel</label>
-            <div className="relative rounded-2xl transition focus-within:ring-2 focus-within:ring-emerald-500/40">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
-              <DSInput
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="vous@exemple.com"
-                autoComplete="email"
-                className="pl-12 py-4 font-bold"
+          {/* Header */}
+          <div className="mb-7">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.07]">
+              <UserCircle
+                size={21}
+                className="text-emerald-300"
               />
             </div>
-          </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Téléphone</label>
-            <div className="relative flex items-center rounded-2xl transition focus-within:ring-2 focus-within:ring-emerald-500/40">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
-              <span className="absolute left-11 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm z-10 select-none">
-                +509
-              </span>
-              <DSInput
-                type="tel"
-                inputMode="numeric"
-                required
-                value={phone}
-                onChange={handlePhoneChange}
-                maxLength={8}
-                placeholder="0000 0000"
-                className="pl-24 py-4 font-bold tracking-widest"
-              />
-            </div>
-            <p className="text-[10px] text-slate-500 font-bold ml-3 tracking-widest h-4">
-              {phone.length > 0 ? `Format : +509 ${formatPhonePreview(phone)}` : ''}
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-300/80">
+              Création de compte
+            </p>
+
+            <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-[28px]">
+              Créer votre espace
+            </h1>
+
+            <p className="mt-2 max-w-sm text-sm leading-6 text-slate-400">
+              Configurez votre compte ChifPam en quelques étapes.
             </p>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-3">Sécurité</label>
-            <div className="relative rounded-2xl transition focus-within:ring-2 focus-within:ring-emerald-500/40">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 z-10" size={18} />
-              <DSInput
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mot de passe secret"
-                className="pl-12 pr-12 py-4 font-bold"
+          {/* Error */}
+          {error && (
+            <div
+              role="alert"
+              className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-400/15 bg-rose-400/[0.07] p-4 text-sm text-rose-200"
+            >
+              <AlertCircle
+                size={18}
+                className="mt-0.5 shrink-0 text-rose-400"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors z-10"
-                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form
+            onSubmit={handleSignup}
+            className="relative space-y-5"
+          >
+            {/* Username */}
+            <div className="space-y-2">
+              <label
+                htmlFor="signup-username"
+                className="ml-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400"
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <div className="flex items-center gap-2 px-3 h-5">
-              {password.length > 0 && (
-                <>
-                  <div className="flex gap-1 flex-1">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
-                          i < strength.score ? strength.color : 'bg-white/10'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 w-14 text-right">
-                    {strength.label}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
+                Pseudo
+              </label>
 
-          <div className="space-y-1 pt-1 border-t border-white/5">
-            <div className="flex items-center justify-between ml-3 mt-3">
-              <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Parrainage (Optionnel)</label>
-              {refDetected && (
-                <span className="text-[9px] font-bold text-cyan-400 flex items-center gap-1">
-                  <CheckCircle2 size={11} /> détecté
+              <div className="group relative">
+                <UserCircle
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-emerald-300"
+                />
+
+                <DSInput
+                  id="signup-username"
+                  type="text"
+                  required
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) =>
+                    setUsername(event.target.value)
+                  }
+                  placeholder="Votre pseudo"
+                  disabled={loading}
+                  className="rounded-2xl py-4 pl-12 font-medium transition-[border,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/25"
+                />
+              </div>
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <label
+                htmlFor="signup-email"
+                className="ml-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+              >
+                Adresse email
+              </label>
+
+              <div className="group relative">
+                <Mail
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-emerald-300"
+                />
+
+                <DSInput
+                  id="signup-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
+                  placeholder="vous@exemple.com"
+                  disabled={loading}
+                  className="rounded-2xl py-4 pl-12 font-medium transition-[border,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/25"
+                />
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div className="space-y-2">
+              <label
+                htmlFor="signup-phone"
+                className="ml-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+              >
+                Téléphone
+              </label>
+
+              <div className="group relative">
+                <Phone
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-emerald-300"
+                />
+
+                <span className="pointer-events-none absolute left-11 top-1/2 z-10 -translate-y-1/2 border-r border-white/10 pr-3 text-sm font-semibold text-slate-400">
+                  +509
                 </span>
+
+                <DSInput
+                  id="signup-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  required
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={handlePhoneChange}
+                  maxLength={8}
+                  placeholder="0000 0000"
+                  disabled={loading}
+                  className="rounded-2xl py-4 pl-[92px] font-medium tracking-[0.12em] transition-[border,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/25"
+                />
+              </div>
+
+              <div className="flex min-h-4 items-center justify-between px-1">
+                <p className="text-[10px] text-slate-600">
+                  {phone
+                    ? `+509 ${formatPhonePreview(phone)}`
+                    : "Votre numéro haïtien"}
+                </p>
+
+                {phone.length === 8 && (
+                  <CheckCircle2
+                    size={14}
+                    className="text-emerald-400"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <label
+                htmlFor="signup-password"
+                className="ml-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+              >
+                Mot de passe
+              </label>
+
+              <div className="group relative">
+                <Lock
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-emerald-300"
+                />
+
+                <DSInput
+                  id="signup-password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
+                  placeholder="Minimum 8 caractères"
+                  disabled={loading}
+                  className="rounded-2xl py-4 pl-12 pr-12 font-medium transition-[border,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-emerald-400/25"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPassword((value) => !value)
+                  }
+                  disabled={loading}
+                  aria-label={
+                    showPassword
+                      ? "Masquer le mot de passe"
+                      : "Afficher le mot de passe"
+                  }
+                  className="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-500 outline-none transition-colors hover:bg-white/[0.04] hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+                >
+                  {showPassword ? (
+                    <EyeOff size={17} />
+                  ) : (
+                    <Eye size={17} />
+                  )}
+                </button>
+              </div>
+
+              {password.length > 0 && (
+                <div className="px-1 pt-1">
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-1 gap-1">
+                      {[0, 1, 2, 3].map((index) => (
+                        <div
+                          key={index}
+                          className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                            index < strength.score
+                              ? strength.tone
+                              : "bg-white/[0.07]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    <span className="w-16 text-right text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+                      {strength.label}
+                    </span>
+                  </div>
+                </div>
               )}
             </div>
-            <div className="relative rounded-2xl transition focus-within:ring-2 focus-within:ring-emerald-500/40">
-              <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 z-10" size={18} />
-              <DSInput
-                type="text"
-                value={referralCode}
-                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                placeholder="CODE DU PARRAIN"
-                className="pl-12 py-4 font-bold uppercase text-emerald-400 border-emerald-500/30 focus:border-emerald-500"
-              />
+
+            {/* Referral */}
+            <div className="border-t border-white/[0.06] pt-5">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <label
+                  htmlFor="signup-referral"
+                  className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+                >
+                  Code de parrainage
+                </label>
+
+                <span className="text-[9px] uppercase tracking-wider text-slate-600">
+                  Optionnel
+                </span>
+              </div>
+
+              <div className="group relative">
+                <Users
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-cyan-300"
+                />
+
+                <DSInput
+                  id="signup-referral"
+                  type="text"
+                  value={referralCode}
+                  onChange={(event) =>
+                    setReferralCode(
+                      event.target.value.toUpperCase()
+                    )
+                  }
+                  placeholder="CODE"
+                  disabled={loading}
+                  className="rounded-2xl py-4 pl-12 pr-24 font-medium uppercase tracking-wider transition-[border,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-cyan-400/20"
+                />
+
+                {refDetected && (
+                  <span className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-lg border border-emerald-400/10 bg-emerald-400/[0.06] px-2 py-1 text-[9px] font-semibold text-emerald-300">
+                    <CheckCircle2 size={11} />
+                    Détecté
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="pt-2">
-            <p className="text-[9px] text-slate-500 text-center mb-4 leading-relaxed px-4">
-              En créant un compte, vous acceptez nos <Link href="/legal/conditions" className="text-emerald-500 underline hover:text-emerald-400">Conditions d'Utilisation</Link> et certifiez avoir plus de 18 ans.
-            </p>
+            {/* Terms */}
+            <div className="px-1 pt-1">
+              <p className="text-center text-[10px] leading-5 text-slate-500">
+                En créant votre compte, vous acceptez les{" "}
+                <Link
+                  href="/legal/conditions"
+                  className="font-medium text-emerald-300 underline decoration-emerald-300/30 underline-offset-2 transition-colors hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+                >
+                  Conditions d'Utilisation
+                </Link>{" "}
+                et certifiez avoir plus de 18 ans.
+              </p>
+            </div>
 
+            {/* Submit */}
             <DSButton
               type="submit"
               disabled={loading}
-              className="w-full py-5 font-black uppercase italic tracking-widest flex items-center justify-center gap-3"
+              className="group mt-1 flex w-full items-center justify-center gap-3 rounded-2xl py-4 font-semibold uppercase tracking-[0.14em] transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0"
             >
-              {loading ? <Loader2 className="animate-spin" /> : <><span>VALIDER L'INSCRIPTION</span><ArrowRight size={20} /></>}
+              {loading ? (
+                <>
+                  <Loader2
+                    size={19}
+                    className="animate-spin"
+                  />
+                  <span>Création...</span>
+                </>
+              ) : (
+                <>
+                  <span>Créer mon compte</span>
+                  <ArrowRight
+                    size={18}
+                    className="transition-transform duration-200 group-hover:translate-x-1"
+                  />
+                </>
+              )}
             </DSButton>
-          </div>
-        </form>
+          </form>
 
-        <div className="mt-6 text-center relative">
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">
-            Déjà un compte ? <Link href="/connexion" className="text-emerald-400 hover:text-emerald-300 transition-colors ml-1 underline underline-offset-4">Connexion</Link>
-          </p>
+          {/* Login */}
+          <div className="mt-7 border-t border-white/[0.06] pt-6 text-center">
+            <p className="text-xs text-slate-500">
+              Vous avez déjà un compte ?{" "}
+              <Link
+                href="/connexion"
+                className="font-semibold text-emerald-300 underline decoration-emerald-300/30 underline-offset-4 transition-colors hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+              >
+                Se connecter
+              </Link>
+            </p>
+          </div>
         </div>
       </DSCard>
-
-      <style jsx>{`
-        .card-enter {
-          animation: card-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-        @keyframes card-rise {
-          from { opacity: 0; transform: translateY(24px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .scan-line {
-          animation: scan-sweep 1.6s ease-out 1;
-        }
-        @keyframes scan-sweep {
-          0% { transform: translateY(-100%); opacity: 0; }
-          15% { opacity: 1; }
-          100% { transform: translateY(420%); opacity: 0; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .card-enter { animation: none; }
-          .scan-line { animation: none; opacity: 0; }
-        }
-      `}</style>
     </div>
   );
 }
 
-export default function Inscription() {
-  const [livePlayers, setLivePlayers] = useState<number>(2847);
+/* -------------------------------------------------------------------------- */
+/* SIDE PANEL                                                                  */
+/* -------------------------------------------------------------------------- */
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setLivePlayers((p) => Math.max(2100, p + Math.floor(Math.random() * 7) - 3));
-    }, 4000);
-    return () => clearInterval(id);
-  }, []);
-
+function SignupSidePanel() {
   return (
-    <div className="ds-page text-slate-100 flex flex-col font-sans overflow-x-hidden ds-fade-up min-h-screen bg-[#020617]">
-      <ThreeSurface variant="auth" className="pointer-events-none -right-12 top-16 z-0 h-[30rem] w-[34rem] opacity-60" />
-
-      <nav className="p-6 md:px-12 flex justify-between items-center w-full max-w-7xl mx-auto border-b border-white/5">
-        <Link href="/">
-          <LogoChifPam />
-        </Link>
-        <Link href="/connexion" className="text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-widest border border-white/10 px-4 py-2 rounded-full">
-          Connexion
-        </Link>
-      </nav>
-
-      <main className="flex-1 flex flex-col md:flex-row items-center justify-center gap-12 p-6 max-w-7xl mx-auto w-full relative z-10">
-        <div className="flex-1 relative text-center md:text-left space-y-8 max-w-lg">
-          {/* Grille radar en fond — motif "arène" propre au gaming compétitif */}
-          <div
-            className="pointer-events-none absolute -inset-x-12 -inset-y-16 opacity-[0.06] z-0"
-            style={{
-              backgroundImage:
-                'linear-gradient(rgba(28,190,135,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(28,190,135,0.9) 1px, transparent 1px)',
-              backgroundSize: '42px 42px',
-              maskImage: 'radial-gradient(ellipse at 30% 30%, black 0%, transparent 70%)',
-              WebkitMaskImage: 'radial-gradient(ellipse at 30% 30%, black 0%, transparent 70%)',
-            }}
+    <div className="relative hidden max-w-xl flex-1 md:block">
+      <div className="relative">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/10 bg-emerald-400/[0.05] px-3 py-1.5">
+          <ShieldCheck
+            size={13}
+            className="text-emerald-300"
           />
-
-          <div className="relative">
-            <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full text-emerald-500 text-[10px] font-black uppercase tracking-widest mb-4">
-              <Trophy size={12} /> N°1 Skill Gaming Haïti
-            </div>
-            <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter leading-none mb-4 text-white">
-              Rejoignez <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500">L'Élite.</span>
-            </h1>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              Créez votre compte sécurisé pour sauvegarder vos scores, participer aux classements nationaux et convertir vos compétences en récompenses réelles.
-            </p>
-          </div>
-
-          {/* Compteur live — indicateur fonctionnel, pas décoratif */}
-          <div className="relative inline-flex items-center gap-3 bg-black/30 border border-white/5 rounded-2xl px-4 py-3">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-            </span>
-            <span className="text-sm font-bold text-white tabular-nums">{livePlayers.toLocaleString('fr-FR')}</span>
-            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">joueurs en ligne</span>
-          </div>
-
-          {/* Flux d'activité récente */}
-          <div className="relative text-left">
-            <div className="flex items-center gap-2 text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">
-              <Activity size={12} className="text-emerald-500" /> Activité récente
-            </div>
-            <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-slate-900/50 py-3">
-              <div className="marquee-track flex gap-8 whitespace-nowrap px-4 w-max">
-                {[...RECENT_ACTIVITY, ...RECENT_ACTIVITY].map((entry, i) => (
-                  <span key={i} className="text-xs font-bold text-slate-400 flex items-center gap-2">
-                    <span className="text-white">{entry.name}</span>
-                    <span className="text-emerald-400">+{entry.amount}</span>
-                  </span>
-                ))}
-              </div>
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#020617] to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#020617] to-transparent" />
-            </div>
-          </div>
-
-          <div className="relative grid grid-cols-2 gap-4">
-            <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 flex flex-col gap-2 transition hover:border-emerald-500/30">
-              <ShieldCheck className="text-emerald-500" size={24} />
-              <div>
-                <h3 className="font-bold text-white text-xs uppercase">100% Sécurisé</h3>
-                <p className="text-[10px] text-slate-500">Protection des données</p>
-              </div>
-            </div>
-            <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 flex flex-col gap-2 transition hover:border-emerald-500/30">
-              <Gamepad2 className="text-blue-500" size={24} />
-              <div>
-                <h3 className="font-bold text-white text-xs uppercase">Jeu d'Adresse</h3>
-                <p className="text-[10px] text-slate-500">Basé sur le talent</p>
-              </div>
-            </div>
-          </div>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-emerald-300/80">
+            Espace sécurisé
+          </span>
         </div>
 
-        <div className="w-full max-w-md">
-          <Suspense fallback={<div className="flex justify-center py-20"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>}>
-            <SignupForm />
-          </Suspense>
+        <h1 className="max-w-xl text-5xl font-semibold leading-[0.98] tracking-[-0.04em] text-white lg:text-6xl">
+          Votre espace.
+          <br />
+          <span className="bg-gradient-to-r from-emerald-300 via-cyan-300 to-emerald-200 bg-clip-text text-transparent">
+            Votre identité.
+          </span>
+        </h1>
+
+        <p className="mt-6 max-w-lg text-sm leading-7 text-slate-400">
+          Un compte unique pour accéder à votre environnement
+          ChifPam, conserver vos informations et utiliser les
+          fonctionnalités disponibles sur la plateforme.
+        </p>
+      </div>
+
+      <div className="mt-10 grid gap-3">
+        {[
+          {
+            icon: ShieldCheck,
+            title: "Protection des données",
+            description:
+              "Vos informations sont traitées dans un espace conçu pour rester privé.",
+          },
+          {
+            icon: UserCircle,
+            title: "Profil personnel",
+            description:
+              "Votre identité et vos préférences restent associées à votre compte.",
+          },
+          {
+            icon: Lock,
+            title: "Accès sécurisé",
+            description:
+              "Un système d'authentification protège l'accès à votre espace.",
+          },
+        ].map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <div
+              key={item.title}
+              className="group flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/15 hover:bg-white/[0.04]"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-400/10 bg-emerald-400/[0.05]">
+                <Icon
+                  size={18}
+                  className="text-emerald-300"
+                />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-slate-200">
+                  {item.title}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {item.description}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-8 flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-600">
+        <div className="h-px w-8 bg-emerald-400/20" />
+        CHIFPAM
+        <div className="h-px flex-1 bg-white/[0.05]" />
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* PAGE                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export default function Inscription() {
+  return (
+    <div className="relative min-h-screen overflow-x-hidden bg-[var(--slate-0)] text-slate-100">
+      {/* Ambient background */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 bg-[var(--grad-hero)]"
+      />
+
+      <ThreeSurface
+        variant="auth"
+        className="pointer-events-none fixed -right-20 top-12 z-0 h-[34rem] w-[38rem] opacity-35"
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed left-[8%] top-[20%] z-0 h-72 w-72 rounded-full bg-emerald-400/[0.035] blur-[110px]"
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed bottom-[5%] right-[10%] z-0 h-72 w-72 rounded-full bg-cyan-400/[0.025] blur-[120px]"
+      />
+
+      {/* Technical grid */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 opacity-[0.025]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)",
+          backgroundSize: "72px 72px",
+          maskImage:
+            "radial-gradient(ellipse at center, black 0%, transparent 75%)",
+          WebkitMaskImage:
+            "radial-gradient(ellipse at center, black 0%, transparent 75%)",
+        }}
+      />
+
+      {/* Navigation */}
+      <nav className="relative z-20 border-b border-white/[0.05]">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 md:px-10 lg:px-12">
+          <Link
+            href="/"
+            aria-label="Accueil ChifPam"
+            className="rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+          >
+            <LogoChifPam />
+          </Link>
+
+          <Link
+            href="/connexion"
+            className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400 outline-none transition-all duration-200 hover:border-emerald-400/20 hover:bg-white/[0.05] hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+          >
+            Connexion
+          </Link>
+        </div>
+      </nav>
+
+      {/* Main */}
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-77px)] w-full max-w-7xl items-center px-6 py-12 md:px-10 lg:px-12 lg:py-16">
+        <div className="flex w-full flex-col items-center gap-12 lg:flex-row lg:justify-between lg:gap-20">
+          <SignupSidePanel />
+
+          <div className="w-full max-w-[440px]">
+            <Suspense
+              fallback={
+                <div className="flex min-h-[500px] items-center justify-center">
+                  <Loader2
+                    size={32}
+                    className="animate-spin text-emerald-300"
+                  />
+                </div>
+              }
+            >
+              <SignupForm />
+            </Suspense>
+          </div>
         </div>
       </main>
 
-      <footer className="w-full border-t border-white/5 bg-black/20 p-8 mt-12">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-slate-600 font-bold uppercase tracking-widest">
-          <p>© 2026 Chif Pam. Tous droits réservés.</p>
-          <div className="flex gap-6">
-            <Link href="/legal/confidentialite" className="hover:text-emerald-500 transition-colors">Politique de Confidentialité</Link>
-            <Link href="/legal/conditions" className="hover:text-emerald-500 transition-colors">Conditions d'Utilisation</Link>
-            <Link href="/legal/mention-legales" className="hover:text-white transition-colors flex items-center gap-1">
-              <ScrollText size={12} /> Mentions Légales
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/[0.05]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-7 text-[9px] font-medium uppercase tracking-[0.13em] text-slate-600 md:flex-row md:px-10 lg:px-12">
+          <p>© 2026 ChifPam. Tous droits réservés.</p>
+
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+            <Link
+              href="/legal/confidentialite"
+              className="transition-colors hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+            >
+              Confidentialité
+            </Link>
+
+            <Link
+              href="/legal/conditions"
+              className="transition-colors hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+            >
+              Conditions
+            </Link>
+
+            <Link
+              href="/legal/mention-legales"
+              className="flex items-center gap-1 transition-colors hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+            >
+              <ScrollText size={11} />
+              Mentions légales
             </Link>
           </div>
         </div>
       </footer>
-
-      <style jsx global>{`
-        .marquee-track {
-          animation: marquee 22s linear infinite;
-        }
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .marquee-track { animation: none; }
-        }
-      `}</style>
     </div>
   );
-                  }
+                    }
