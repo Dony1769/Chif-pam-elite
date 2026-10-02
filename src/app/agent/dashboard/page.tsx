@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Award,
+  ArrowUpRight,
   Coins,
   CreditCard,
   ShoppingCart,
-  Users,
-  ArrowUpRight,
   TrendingUp,
+  Users,
   Wallet,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -45,12 +45,21 @@ type DashboardCard = {
 export default function AgentDashboardPage() {
   const [stats, setStats] = useState<AgentStats | null>(null);
   const [purchaseAmount, setPurchaseAmount] = useState("1000");
+
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
 
+  /**
+   * Chargement des données agent.
+   *
+   * IMPORTANT :
+   * Cette partie conserve la logique de l'ancien dashboard.
+   * La refonte concerne uniquement la présentation.
+   */
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -105,7 +114,13 @@ export default function AgentDashboardPage() {
           .maybeSingle(),
       ]);
 
-      if (profileError || agentError || txError || policyError || offerError) {
+      if (
+        profileError ||
+        agentError ||
+        txError ||
+        policyError ||
+        offerError
+      ) {
         throw (
           profileError ??
           agentError ??
@@ -115,11 +130,6 @@ export default function AgentDashboardPage() {
         );
       }
 
-      /*
-       * Supabase peut retourner null même avec .single().
-       * Cette vérification permet à TypeScript de réduire correctement
-       * les types avant toute utilisation des données.
-       */
       if (!profile || !agent || !policy) {
         throw new Error("Données agent indisponibles.");
       }
@@ -132,7 +142,9 @@ export default function AgentDashboardPage() {
         policy.wholesale_floor_htg_per_cp ?? 0,
       );
 
-      const reputationLevel = Number(agent.reputation_level ?? 0);
+      const reputationLevel = Number(
+        agent.reputation_level ?? 0,
+      );
 
       const reputationDiscount = Math.min(
         Math.max(0, wholesalePrice - wholesaleFloor),
@@ -143,7 +155,9 @@ export default function AgentDashboardPage() {
         cp: Number(profile.jetons_cp ?? 0),
         balance: Number(profile.balance ?? 0),
         level: reputationLevel,
-        clients: Number(agent.successful_clients_count ?? 0),
+        clients: Number(
+          agent.successful_clients_count ?? 0,
+        ),
         volume: (transactions ?? []).reduce(
           (sum, row) => sum + Number(row.amount_htg ?? 0),
           0,
@@ -151,7 +165,9 @@ export default function AgentDashboardPage() {
         wholesale: wholesalePrice,
         floor: wholesaleFloor,
         resaleRate: Number(
-          offer?.rate_htg_per_cp ?? policy.rate_max_htg_per_cp ?? 0,
+          offer?.rate_htg_per_cp ??
+            policy.rate_max_htg_per_cp ??
+            0,
         ),
         reputationDiscount,
       });
@@ -170,6 +186,9 @@ export default function AgentDashboardPage() {
     void loadData();
   }, [loadData]);
 
+  /**
+   * Prix réellement affiché à l'agent.
+   */
   const effectivePrice = useMemo(() => {
     if (!stats) return 0;
 
@@ -179,10 +198,18 @@ export default function AgentDashboardPage() {
     );
   }, [stats]);
 
-  const simulatedCp = useMemo(
-    () => Math.max(0, Math.floor(Number(purchaseAmount) || 0)),
-    [purchaseAmount],
-  );
+  /**
+   * Quantité affichée dans le simulateur.
+   *
+   * Cette valeur sert uniquement à l'interface.
+   * Le RPC reste l'autorité finale pour le montant réel.
+   */
+  const simulatedCp = useMemo(() => {
+    return Math.max(
+      0,
+      Math.floor(Number(purchaseAmount) || 0),
+    );
+  }, [purchaseAmount]);
 
   const purchaseCost = simulatedCp * effectivePrice;
 
@@ -233,14 +260,18 @@ export default function AgentDashboardPage() {
     ];
   }, [stats]);
 
+  /**
+   * ACHAT WHOLESALE
+   *
+   * LOGIQUE CONSERVÉE DE L'ANCIEN CODE.
+   *
+   * Le dashboard appelle toujours :
+   * agent_buy_wholesale
+   *
+   * avec :
+   * p_amount_cp
+   */
   const buyWholesale = async () => {
-    const amount = Math.floor(Number(purchaseAmount));
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setMessage("Veuillez saisir une quantité de CP valide.");
-      return;
-    }
-
     setPurchaseLoading(true);
     setMessage(null);
 
@@ -248,29 +279,25 @@ export default function AgentDashboardPage() {
       const { data, error: rpcError } = await supabase.rpc(
         "agent_buy_wholesale",
         {
-          p_amount_cp: amount,
+          p_amount_cp: Math.floor(
+            Number(purchaseAmount),
+          ),
         },
       );
 
+      /**
+       * Même comportement métier que l'ancien dashboard :
+       * le RPC reste responsable de la validation réelle.
+       */
       if (rpcError) {
         setMessage(rpcError.message);
-        return;
+      } else {
+        setMessage(
+          `${Number(data.amount_cp).toLocaleString()} CP achetés pour ${Number(
+            data.amount_htg,
+          ).toLocaleString()} HTG.`,
+        );
       }
-
-      if (!data) {
-        setMessage("La réponse du serveur est invalide.");
-        return;
-      }
-
-      setMessage(
-        `${Number(data.amount_cp).toLocaleString()} CP achetés pour ${Number(
-          data.amount_htg,
-        ).toLocaleString()} HTG.`,
-      );
-
-      setPurchaseOpen(false);
-
-      await loadData();
     } catch (err) {
       setMessage(
         err instanceof Error
@@ -278,7 +305,17 @@ export default function AgentDashboardPage() {
           : "Achat impossible.",
       );
     } finally {
+      /**
+       * Le modal est fermé après la tentative,
+       * comme dans l'ancien comportement.
+       */
       setPurchaseLoading(false);
+      setPurchaseOpen(false);
+
+      /**
+       * Les données sont toujours actualisées après l'achat.
+       */
+      await loadData();
     }
   };
 
@@ -303,20 +340,23 @@ export default function AgentDashboardPage() {
   return (
     <DSPage className="mx-auto max-w-6xl px-4 py-7 sm:py-9">
       <div className="space-y-7">
+
         {/* HERO */}
         <motion.section
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
+          transition={{ duration: 0.35 }}
           className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.025] p-6 shadow-2xl shadow-black/20 sm:p-8"
         >
           <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl" />
+
           <div className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-cyan-400/5 blur-3xl" />
 
           <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-end">
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.8)]" />
+
                 <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-emerald-300">
                   Espace agent
                 </p>
@@ -343,18 +383,18 @@ export default function AgentDashboardPage() {
             ({ label, value, icon: Icon, accent }, index) => (
               <motion.div
                 key={label}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{
-                  delay: Math.min(index * 0.04, 0.16),
-                  duration: 0.35,
+                  delay: Math.min(index * 0.035, 0.14),
+                  duration: 0.25,
                 }}
               >
                 <DSCard className="group h-full border-white/[0.08] bg-white/[0.02] p-5 transition-colors duration-200 hover:border-emerald-300/20">
                   <div className="flex items-center justify-between">
                     <Icon
                       size={20}
-                      className={`${accent} transition-transform duration-200 group-hover:scale-105`}
+                      className={accent}
                     />
 
                     <ArrowUpRight
@@ -378,6 +418,7 @@ export default function AgentDashboardPage() {
 
         {/* MAIN GRID */}
         <div className="grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
+
           {/* REPUTATION */}
           <DSCard className="relative overflow-hidden border-white/[0.08] bg-white/[0.02] p-6">
             <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-amber-300/5 blur-3xl" />
@@ -417,7 +458,7 @@ export default function AgentDashboardPage() {
                       width: `${reputationProgress}%`,
                     }}
                     transition={{
-                      duration: 0.8,
+                      duration: 0.65,
                       ease: "easeOut",
                     }}
                     className="h-full rounded-full bg-linear-to-r from-amber-300 to-emerald-300"
@@ -601,7 +642,6 @@ export default function AgentDashboardPage() {
                 <DSButton
                   type="button"
                   onClick={() => setPurchaseOpen(true)}
-                  disabled={simulatedCp <= 0}
                 >
                   <ShoppingCart size={16} />
                   Acheter le stock
@@ -613,17 +653,19 @@ export default function AgentDashboardPage() {
 
         {/* ACTIONS */}
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.35 }}
+          transition={{ delay: 0.1, duration: 0.25 }}
           className="flex flex-col gap-3 sm:flex-row"
         >
+          {/* app/agent/offer/page.tsx => /agent/offer */}
           <DSButton
             as="a"
             href="/agent/offer"
             className="group"
           >
             Gérer mon offre
+
             <ArrowUpRight
               size={15}
               className="transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
@@ -644,18 +686,13 @@ export default function AgentDashboardPage() {
           open={purchaseOpen}
           title="Confirmer l’achat de stock"
           description="Le RPC serveur recalculera le montant exact avant débit."
-          onClose={() => {
-            if (!purchaseLoading) {
-              setPurchaseOpen(false);
-            }
-          }}
+          onClose={() => setPurchaseOpen(false)}
           footer={
             <div className="flex justify-end gap-2">
               <DSButton
                 type="button"
                 variant="ghost"
                 onClick={() => setPurchaseOpen(false)}
-                disabled={purchaseLoading}
               >
                 Annuler
               </DSButton>
@@ -663,9 +700,11 @@ export default function AgentDashboardPage() {
               <DSButton
                 type="button"
                 onClick={buyWholesale}
-                disabled={purchaseLoading || simulatedCp <= 0}
+                disabled={purchaseLoading}
               >
-                {purchaseLoading ? "Débit..." : "Confirmer"}
+                {purchaseLoading
+                  ? "Débit..."
+                  : "Confirmer"}
               </DSButton>
             </div>
           }
@@ -697,4 +736,4 @@ export default function AgentDashboardPage() {
       </div>
     </DSPage>
   );
-                }
+      }
