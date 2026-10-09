@@ -16,6 +16,7 @@ import {
   getClubTierName,
 } from './rules';
 
+
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
 // ---------------------------------------------------------------
