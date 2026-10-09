@@ -242,6 +242,21 @@ export default function GameListPage() {
               Jeux Live →
             </button>
           </div>
+          // À ajouter dans le tableau GAMES dans client/list/page.tsx
+{
+  id: 'fccareer',
+  name: 'FC Career 27',
+  desc: 'Carrière Pro : 51 attributs, sponsors & coachs',
+  path: '/client/fc-career',
+  icon: Trophy, // Pense à importer Trophy depuis 'lucide-react'
+  iconColor: 'text-emerald-400',
+  color: 'from-emerald-500/20 via-emerald-500/5',
+  players: 'Pro',
+  category: 'Stratégie',
+  isNew: true,
+  isHot: true
+}
+
 
           {filteredGames.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
