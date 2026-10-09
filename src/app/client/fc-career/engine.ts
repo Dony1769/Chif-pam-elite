@@ -22,6 +22,7 @@ import {
 import { MatchContext, simulateFullMatch, getFixture } from './match';
 import { rollEvent } from './events';
 
+
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 
 // ---------------------------------------------------------------
