@@ -31,7 +31,6 @@ import { Shield, Play, Plus, Mail, Lock, Check, TrendingUp, Dumbbell, HeartPulse
 
 type Tab = 'attributs' | 'messages' | 'carriere';
 
-
 const CATEGORY_ORDER: AttributeCategory[] = [
   'Attaque',
   'Technique & Passes',
