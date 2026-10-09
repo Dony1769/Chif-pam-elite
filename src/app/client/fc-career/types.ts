@@ -6,6 +6,7 @@ export type AttributeCategory =
   | 'Défense'
   | 'Gardien';
 
+
 export interface AttributeDefinition {
   id: string;
   name: string;
