@@ -6,6 +6,7 @@ import type { AgentAccess, PlayerReputation } from './types';
 export const WEEKS_PER_SEASON = 38;
 export const START_AGE = 12;
 
+
 export const BALANCE = {
   weeklyTrainingPoints: 1, // points d'attributs gagnés chaque semaine
   moodBonusThreshold: 60, // moral minimum pour le bonus
