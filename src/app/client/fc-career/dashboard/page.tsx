@@ -41,6 +41,7 @@ const CATEGORY_ORDER: AttributeCategory[] = [
   'Gardien',
 ];
 
+
 const SENDER_LABEL: Record<string, string> = {
   coach: 'Coach',
   agent: 'Agent',
