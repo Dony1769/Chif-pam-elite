@@ -347,7 +347,7 @@ function getPhysicalModifier(
   const isAerial =
     name.includes("detente") ||
     name.includes("tete") ||
-    name.includes("jeu aerien");
+    name.includes("jeuaerien")
 
   if (isSpeed) {
     if (heightCm >= 195) modifier -= 2;
@@ -441,42 +441,44 @@ function generateInitialAttributes(
 }
 
 function generatePotential(
-  attributes: PlayerAttributes,
-  age: number,
+attributes: PlayerAttributes,
+age: number,
+position: PlayerPosition,
 ): PlayerPotential {
-  const attributePotentials: PlayerAttributes = {};
+const attributePotentials: PlayerAttributes = {};
 
-  const ageAdjustment = clamp((16 - age) * 1.5, -3, 4);
+const ageAdjustment = clamp((16 - age) * 1.5, -3, 4);
 
-  for (const attribute of ALL_51_ATTRIBUTES) {
-    const current = attributes[attribute.id] ?? 35;
-    const ceiling = randomInt(
-      clamp(72 + ageAdjustment, 65, 88),
-      clamp(96 + ageAdjustment, 85, 99),
-    );
+for (const attribute of ALL_51_ATTRIBUTES) {
+const current = attributes[attribute.id] ?? 35;
 
-    attributePotentials[attribute.id] = Math.max(
-      current,
-      Math.min(99, ceiling),
-    );
-  }
+const developmentCeiling = randomInt(
+clamp(72 + ageAdjustment, 65, 88),
+clamp(96 + ageAdjustment, 85, 99),
+);
 
-  const values = Object.values(attributePotentials);
-  const overallPotential = Math.round(
-    values.reduce((sum, value) => sum + value, 0) /
-      Math.max(values.length, 1),
-  );
+attributePotentials[attribute.id] = Math.max(
+current,
+Math.min(99, developmentCeiling),
+);
+}
 
-  return {
-    overallPotential: clamp(overallPotential, 45, 96),
-    attributePotentials,
-    developmentRate: clamp(
-      randomInt(75, 115) / 100 + Math.max(0, 16 - age) * 0.015,
-      0.75,
-      1.2,
-    ),
-    consistency: randomInt(65, 95),
-  };
+const overallPotential = calculatePositionRating(
+position,
+attributePotentials,
+);
+
+return {
+overallPotential,
+attributePotentials,
+developmentRate: clamp(
+randomInt(75, 115) / 100 +
+Math.max(0, 16 - age) * 0.015,
+0.75,
+1.2,
+),
+consistency: randomInt(65, 95),
+};
 }
 
 export function createInitialPlayer(
@@ -516,7 +518,11 @@ export function createInitialPlayer(
     weightKg,
   );
 
-  const potential = generatePotential(attributes, age);
+  const potential = generatePotential(
+attributes,
+age,
+primaryPosition,
+);
 
   const academyNames: Record<AcademyLevel, string> = {
     local: "Académie de quartier",
