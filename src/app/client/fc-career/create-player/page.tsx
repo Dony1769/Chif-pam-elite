@@ -98,7 +98,20 @@ return;
 }
 
 try {
-const base = createInitialPlayer();
+
+const base = createInitialPlayer({
+  playerName: fullName,
+  age,
+  heightCm,
+  weightKg,
+  preferredFoot,
+  primaryPosition,
+  secondaryPositions:
+    secondaryPosition === primaryPosition ? [] : [secondaryPosition],
+  archetype,
+  academyLevel,
+});
+
 const player: PlayerCareerState = {
 ...base,
 playerName: fullName,
