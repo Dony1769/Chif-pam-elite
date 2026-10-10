@@ -134,52 +134,81 @@ const playerPosition = player.physicalProfile.primaryPosition;
 const compatiblePositions = POSITION_GROUPS[playerPosition];
 
 const playerScore = getPlayerSelectionScore(player);
-const seed = "${player.clubId ?? player.clubName}-${player.season}-${player.week}";
+const injured = player.injuryWeeks > 0;
+
+// Le club et la saison déterminent l'identité de l'effectif.
+// La semaine permet de faire évoluer les conditions de concurrence.
+const clubSeed = `${player.clubId ?? player.clubName}-${player.season}`;
+const weeklySeed = `${clubSeed}-${player.week}`;
 
 const rivals: TeamRival[] = Array.from({ length: 7 }, (_, index) => {
-const rivalPosition =
-compatiblePositions[
-seededValue(
-"${seed}-position-${index}",
+const rivalId = `rival-${index + 1}`;
+
+const positionIndex = seededValue(
+`${clubSeed}-${rivalId}-position`,
 0,
 compatiblePositions.length - 1,
-)
-];
+);
+
+const rivalPosition = compatiblePositions[positionIndex];
 
 const minimumRating = clamp(playerScore - 14, 25, 76);
 const maximumRating = clamp(playerScore + 12, 45, 88);
 
+const ratingMin = Math.min(minimumRating, maximumRating);
+const ratingMax = Math.max(minimumRating, maximumRating);
+
+// La note générale reste stable pour éviter un effectif entièrement
+// différent chaque semaine.
 const baseRating = seededValue(
-  `${seed}-rating-${index}`,
-  Math.min(minimumRating, maximumRating),
-  Math.max(minimumRating, maximumRating),
+`${clubSeed}-${rivalId}-rating`,
+ratingMin,
+ratingMax,
 );
 
-const rivalForm = seededValue(`${seed}-form-${index}`, 35, 75);
-const rivalFatigue = seededValue(`${seed}-fatigue-${index}`, 5, 65);
-const rivalTrust = seededValue(`${seed}-trust-${index}`, 30, 75);
+// Forme, fatigue et confiance peuvent évoluer au fil de la saison.
+const rivalForm = seededValue(
+`${weeklySeed}-${rivalId}-form`,
+35,
+75,
+);
+
+const rivalFatigue = seededValue(
+`${weeklySeed}-${rivalId}-fatigue`,
+5,
+65,
+);
+
+const rivalTrust = seededValue(
+`${weeklySeed}-${rivalId}-trust`,
+30,
+75,
+);
 
 const selectionScore = calculateSelectionScore(
-  baseRating,
-  rivalForm,
-  rivalFatigue,
-  rivalTrust,
+baseRating,
+rivalForm,
+rivalFatigue,
+rivalTrust,
+);
+
+const nameIndex = seededValue(
+`${clubSeed}-${rivalId}-name`,
+0,
+RIVAL_NAMES.length - 1,
 );
 
 return {
-  id: `rival-${index + 1}`,
-  name: RIVAL_NAMES[
-    seededValue(`${seed}-name-${index}`, 0, RIVAL_NAMES.length - 1)
-  ],
-  position: rivalPosition,
-  overallRating: baseRating,
-  form: rivalForm,
-  fatigue: rivalFatigue,
-  coachTrust: rivalTrust,
-  status: "hors_groupe",
-  selectionScore,
+id: rivalId,
+name: RIVAL_NAMES[nameIndex],
+position: rivalPosition,
+overallRating: baseRating,
+form: rivalForm,
+fatigue: rivalFatigue,
+coachTrust: rivalTrust,
+status: "hors_groupe",
+selectionScore,
 };
-
 });
 
 const ranked = [
@@ -193,11 +222,28 @@ id: rival.id,
 selectionScore: rival.selectionScore,
 isPlayer: false,
 })),
-].sort((a, b) => b.selectionScore - a.selectionScore);
+].sort((a, b) => {
+if (b.selectionScore !== a.selectionScore) {
+return b.selectionScore - a.selectionScore;
+}
 
-const rank = ranked.findIndex((item) => item.isPlayer) + 1;
+// En cas d'égalité, le joueur est prioritaire uniquement s'il est
+// disponible. Un joueur blessé ne doit pas gagner une égalité.
+if (a.isPlayer !== b.isPlayer) {
+if (injured) return a.isPlayer ? 1 : -1;
+return a.isPlayer ? -1 : 1;
+}
+
+return a.id.localeCompare(b.id);
+});
+
 const totalPlayers = ranked.length;
-const injured = player.injuryWeeks > 0;
+
+const playerRank = ranked.findIndex((item) => item.isPlayer) + 1;
+
+// Une blessure exclut le joueur de la sélection, même si son score
+// théorique le placerait parmi les meilleurs.
+const rank = injured ? totalPlayers : playerRank;
 
 const status = getStatus(rank, totalPlayers, injured);
 
@@ -206,10 +252,9 @@ const rivalRank =
 ranked.findIndex((item) => item.id === rival.id) + 1;
 
 return {
-  ...rival,
-  status: getStatus(rivalRank, totalPlayers, false),
+...rival,
+status: getStatus(rivalRank, totalPlayers, false),
 };
-
 });
 
 const chanceOfStarting = injured
