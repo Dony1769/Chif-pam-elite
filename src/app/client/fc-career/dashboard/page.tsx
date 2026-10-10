@@ -66,15 +66,6 @@ icon: typeof Home;
 { id: "carriere", label: "Carrière", icon: Trophy },
 ];
 
-const CATEGORY_COLORS: Record<string, string> = {
-"Attaque": "text-rose-400",
-"Technique & Passes": "text-cyan-400",
-"Physique & Moteur": "text-orange-400",
-"Mental & Tactique": "text-violet-400",
-"Défense": "text-emerald-400",
-"Gardien": "text-yellow-400",
-};
-
 function getRatingColor(rating: number): string {
 if (rating >= 75) return "text-emerald-400";
 if (rating >= 60) return "text-cyan-400";
@@ -119,6 +110,10 @@ if (potential >= 60) return "Progression possible";
 return "Potentiel à développer";
 }
 
+function clamp(value: number, min: number, max: number): number {
+return Math.max(min, Math.min(max, value));
+}
+
 function ProgressBar({
 value,
 color = "bg-emerald-400",
@@ -126,7 +121,7 @@ color = "bg-emerald-400",
 value: number;
 color?: string;
 }) {
-const safeValue = Math.max(0, Math.min(100, value));
+const safeValue = clamp(value, 0, 100);
 
 return (
 <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
@@ -204,11 +199,13 @@ player.attributes,
 
 const roleEvaluation = useMemo(() => {
 if (!player) return null;
+
 return evaluatePlayerRole(player.attributes, player.coach);
 }, [player]);
 
 const unreadCount = useMemo(() => {
 if (!player) return 0;
+
 return player.inbox.filter((message) => !message.read).length;
 }, [player]);
 
@@ -232,11 +229,13 @@ return;
 }
 
 const updated = trainWeek(player, selectedFocus);
+
 setPlayer(updated);
 notify(updated.lastTrainingNote ?? "Séance terminée.");
 }, [player, selectedFocus, notify]);
 
-const handleUpgrade = useCallback((attributeId: string) => {
+const handleUpgrade = useCallback(
+(attributeId: string) => {
 if (!player) return;
 
 if (player.skillPointsAvailable <= 0) {
@@ -245,12 +244,15 @@ return;
 }
 
 const currentValue = player.attributes[attributeId] ?? 1;
-const potential = player.potential.attributePotentials[attributeId] ?? 99;
+const potential =
+player.potential.attributePotentials[attributeId] ?? 99;
+
 const cap = getAttributeCap(
 attributeId,
 player.heightCm,
 player.weightKg,
 );
+
 const maximum = Math.min(potential, cap);
 
 if (currentValue >= maximum) {
@@ -268,15 +270,45 @@ skillPointsAvailable: player.skillPointsAvailable - 1,
 });
 
 notify("Attribut amélioré de 1 point.");
-}, [player, notify]);
+},
+[player, notify],
+);
 
 const handleNextWeek = useCallback(() => {
 if (!player) return;
 
+if (!player.trainedThisWeek) {
+notify(
+"Effectue ton entraînement ou choisis le repos avant de passer à la semaine suivante.",
+);
+setActiveTab("entrainement");
+return;
+}
+
 const nextWeek = player.week >= 52 ? 1 : player.week + 1;
-const nextSeason = player.week >= 52
-? player.season + 1
-: player.season;
+const nextSeason =
+player.week >= 52 ? player.season + 1 : player.season;
+
+const currentAcademy = player.academy;
+const trainingSessions =
+currentAcademy?.trainingSessionsCompleted ?? 0;
+
+const evaluationScore = currentAcademy
+? clamp(
+Math.round(
+positionRating * 0.65 +
+player.coach.relation * 0.15 +
+player.form * 0.1 +
+Math.min(trainingSessions, 10),
+),
+0,
+100,
+)
+: 0;
+
+const promotionEligible = currentAcademy
+? evaluationScore >= 75 && trainingSessions >= 10
+: false;
 
 const nextPlayer: PlayerCareerState = {
 ...player,
@@ -284,16 +316,16 @@ season: nextSeason,
 week: nextWeek,
 trainedThisWeek: false,
 fatigue: Math.max(0, player.fatigue - 15),
-form: Math.max(0, Math.min(100, player.form + 2)),
+form: clamp(player.form + 2, 0, 100),
 injuryWeeks: Math.max(0, player.injuryWeeks - 1),
 skillPointsAvailable: player.skillPointsAvailable + 1,
-lastTrainingNote: "Nouvelle semaine. Tu disposes d’un point de progression.",
-academy: player.academy
+lastTrainingNote:
+"Nouvelle semaine. Tu disposes d’un point de progression.",
+academy: currentAcademy
 ? {
-...player.academy,
-promotionEligible:
-player.academy.evaluationScore >= 75 &&
-player.academy.trainingSessionsCompleted >= 10,
+...currentAcademy,
+evaluationScore,
+promotionEligible,
 }
 : null,
 inbox: [
@@ -303,7 +335,9 @@ from: "systeme",
 season: nextSeason,
 week: nextWeek,
 title: "Nouvelle semaine",
-body: "Une nouvelle semaine commence. Prépare ton entraînement et continue de progresser.",
+body: promotionEligible
+? "Ton évaluation atteint le seuil requis et tu as terminé suffisamment de séances. Ton dossier est admissible à la promotion. La décision de promotion sera gérée par le système de carrière."
+: "Une nouvelle semaine commence. Ta fatigue diminue et tu reçois un point de progression. Continue à t’entraîner pour améliorer ton évaluation.",
 read: false,
 },
 ...player.inbox,
@@ -312,10 +346,14 @@ read: false,
 
 setPlayer(nextPlayer);
 setActiveTab("accueil");
-notify(`Semaine ${nextWeek} : ta progression continue.`);
-}, [player, notify]);
 
-const handleMarkMessageRead = useCallback((messageId: string) => {
+notify(
+`Semaine ${nextWeek} : tu reçois 1 point de progression.`,
+);
+}, [player, positionRating, notify]);
+
+const handleMarkMessageRead = useCallback(
+(messageId: string) => {
 if (!player) return;
 
 setPlayer({
@@ -328,7 +366,9 @@ message.id === messageId
 });
 
 setSelectedMessageId(messageId);
-}, [player]);
+},
+[player],
+);
 
 const handleResetCareer = useCallback(() => {
 const confirmed = window.confirm(
@@ -340,6 +380,7 @@ if (!confirmed) return;
 clearAllSaves();
 
 const freshPlayer = createInitialPlayer();
+
 setPlayer(freshPlayer);
 setActiveTab("accueil");
 setSelectedMessageId(null);
@@ -351,13 +392,16 @@ return (
 <main className="flex min-h-screen items-center justify-center bg-[#080e17] text-white">
 <div className="text-center">
 <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-<p className="text-sm text-slate-400">Chargement de ta carrière...</p>
+<p className="text-sm text-slate-400">
+Chargement de ta carrière...
+</p>
 </div>
 </main>
 );
 }
 
 const playerName = player.playerName || "Nouveau joueur";
+
 const selectedMessage = player.inbox.find(
 (message) => message.id === selectedMessageId,
 );
@@ -408,7 +452,11 @@ aria-label="Ouvrir les messages"
 
 <div className="mx-auto max-w-6xl px-4 py-5">
 {notice && (
-<div className="fixed left-1/2 top-20 z-50 w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-xl border border-emerald-400/30 bg-[#13271f] px-4 py-3 text-sm text-emerald-200 shadow-2xl">
+<div
+role="status"
+aria-live="polite"
+className="fixed left-1/2 top-20 z-50 w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-xl border border-emerald-400/30 bg-[#13271f] px-4 py-3 text-sm text-emerald-200 shadow-2xl"
+>
 {notice}
 </div>
 )}
@@ -584,7 +632,7 @@ Pied {player.physicalProfile.preferredFoot}
 </div>
 <div>
 <div className="mb-2 flex justify-between text-xs">
-<span className="text-slate-400">Niveau de confiance</span>
+<span className="text-slate-400">Niveau au poste</span>
 <span className="font-bold">{positionRating}/100</span>
 </div>
 <ProgressBar value={positionRating} color="bg-cyan-400" />
@@ -615,6 +663,14 @@ const value = player.attributes[attribute.id] ?? 1;
 const potential =
 player.potential.attributePotentials[attribute.id] ?? 99;
 
+const cap = getAttributeCap(
+attribute.id,
+player.heightCm,
+player.weightKg,
+);
+
+const maximum = Math.min(potential, cap);
+
 return (
 <div key={attribute.id}>
 <div className="mb-2 flex items-center justify-between gap-3">
@@ -627,7 +683,7 @@ return (
 </div>
 <ProgressBar value={value} />
 <div className="mt-1 text-right text-[10px] text-slate-500">
-Potentiel : {potential}
+Maximum actuel : {maximum}
 </div>
 </div>
 );
@@ -643,7 +699,10 @@ Potentiel : {potential}
 Passer à la semaine suivante
 </div>
 <p className="mt-1 text-sm text-slate-400">
-Termine ta semaine pour récupérer et continuer ta progression.
+Termine ta séance ou choisis le repos avant de valider la semaine.
+</p>
+<p className="mt-1 text-xs text-slate-500">
+Récompense : 1 point de progression par semaine.
 </p>
 </div>
 <button
@@ -679,8 +738,9 @@ Points disponibles
 </section>
 
 <div className="flex gap-2 overflow-x-auto pb-2">
-{Array.from(new Set(ALL_51_ATTRIBUTES.map((attribute) => attribute.category))).map(
-(category) => (
+{Array.from(
+new Set(ALL_51_ATTRIBUTES.map((attribute) => attribute.category)),
+).map((category) => (
 <button
 key={category}
 onClick={() => setSelectedCategory(category)}
@@ -692,20 +752,22 @@ selectedCategory === category
 >
 {category}
 </button>
-),
-)}
+))}
 </div>
 
 <section className="grid gap-3 sm:grid-cols-2">
 {groupedAttributes.map((attribute) => {
 const value = player.attributes[attribute.id] ?? 1;
+
 const potential =
 player.potential.attributePotentials[attribute.id] ?? 99;
+
 const cap = getAttributeCap(
 attribute.id,
 player.heightCm,
 player.weightKg,
 );
+
 const maximum = Math.min(potential, cap);
 const reachedLimit = value >= maximum;
 
@@ -730,9 +792,9 @@ className="rounded-2xl border border-white/10 bg-[#111b29] p-4"
 <ProgressBar value={value} />
 </div>
 
-<div className="mt-3 flex items-center justify-between gap-2">
-<span className="text-[10px] text-slate-500">
-Potentiel : {potential} · Limite : {cap}
+<div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+<span className="text-[10px] leading-5 text-slate-500">
+Potentiel : {potential} · Limite physique : {cap} · Maximum actuel : {maximum}
 </span>
 <button
 onClick={() => handleUpgrade(attribute.id)}
@@ -773,7 +835,8 @@ return (
 <button
 key={focus}
 onClick={() => setSelectedFocus(focus)}
-className={`rounded-2xl border p-4 text-left transition ${
+disabled={player.trainedThisWeek}
+className={`rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
 selected
 ? "border-emerald-400 bg-emerald-400/10"
 : "border-white/10 bg-white/[0.02] hover:bg-white/5"
@@ -781,7 +844,11 @@ selected
 >
 <div className="flex items-center justify-between gap-2">
 <span className="font-black">{training.label}</span>
-{selected && <span className="text-xs text-emerald-300">Sélectionné</span>}
+{selected && (
+<span className="text-xs text-emerald-300">
+Sélectionné
+</span>
+)}
 </div>
 <p className="mt-2 text-sm leading-5 text-slate-400">
 {training.description}
@@ -917,8 +984,8 @@ color="bg-cyan-400"
 
 <div className="mt-5 rounded-xl bg-white/5 p-4 text-sm leading-6 text-slate-300">
 {player.academy?.promotionEligible
-? "Ton dossier remplit les critères de progression actuellement définis. Le système de promotion sera développé dans une prochaine étape."
-: "Sois régulier à l’entraînement et développe tes attributs. Le système de sélection et de promotion sera enrichi au fil du développement."}
+? "Ton évaluation atteint le seuil requis et tu as terminé suffisamment de séances. Ton dossier est admissible à la promotion. Le changement réel d’équipe sera ajouté à l’étape dédiée à la promotion."
+: "Améliore ton niveau, entretiens ta relation avec le coach et termine au moins 10 séances. Une évaluation de 75/100 est nécessaire pour être admissible à la promotion."}
 </div>
 </section>
 </div>
@@ -1099,7 +1166,9 @@ return (
 key={item.id}
 onClick={() => setActiveTab(item.id)}
 className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 transition ${
-active ? "text-emerald-300" : "text-slate-500 hover:text-slate-300"
+active
+? "text-emerald-300"
+: "text-slate-500 hover:text-slate-300"
 }`}
 >
 <div className="relative">
@@ -1121,4 +1190,4 @@ active ? "text-emerald-300" : "text-slate-500 hover:text-slate-300"
 </nav>
 </main>
 );
-}
+  }
