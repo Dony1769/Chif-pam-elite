@@ -12,6 +12,7 @@ export const ALL_51_ATTRIBUTES: AttributeDefinition[] = [
   { id: 'coup_franc', name: 'Coups francs', category: 'Attaque', description: 'Précision sur balle arrêtée' },
   { id: 'tete_offensive', name: 'Tête offensive', category: 'Attaque', description: 'Précision des coups de tête' },
 
+  
   // TECHNIQUE & PASSES (10)
   { id: 'dribble', name: 'Dribbles', category: 'Technique & Passes', description: 'Maniement du ballon à vitesse' },
   { id: 'controle', name: 'Contrôle de balle', category: 'Technique & Passes', description: 'Qualité première touche' },
