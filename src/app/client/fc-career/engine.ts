@@ -372,74 +372,212 @@ function getPhysicalModifier(
 }
 
 function generateInitialAttributes(
-  position: PlayerPosition,
-  archetype: PlayerArchetype,
-  age: number,
-  heightCm: number,
-  weightKg: number,
+position: PlayerPosition,
+archetype: PlayerArchetype,
+age: number,
+heightCm: number,
+weightKg: number,
 ): PlayerAttributes {
-  const attributes: PlayerAttributes = {};
-  const positionKeywords = ATTRIBUTE_KEYWORDS[position] ?? [];
-  const archetypeKeywords = ARCHETYPE_KEYWORDS[archetype];
+const attributes: PlayerAttributes = {};
 
-  const ageModifier = clamp((age - 15) * 1.2, -3, 4);
+const positionBoosts: Record<PlayerPosition, Record<string, number>> = {
+GB: {
+gb_reflexes: 18,
+gb_plongeon: 16,
+gb_positionnement: 15,
+gb_jeu_main: 12,
+gb_sorties: 10,
+gb_degagement: 8,
+reactivite: 8,
+concentration: 4,
+},
+DD: {
+vitesse: 10,
+acceleration: 9,
+endurance: 8,
+centres: 6,
+tackle_debout: 9,
+interceptions: 8,
+marquage: 7,
+placement_defensif: 7,
+},
+DG: {
+vitesse: 10,
+acceleration: 9,
+endurance: 8,
+centres: 6,
+tackle_debout: 9,
+interceptions: 8,
+marquage: 7,
+placement_defensif: 7,
+},
+DC: {
+tackle_debout: 12,
+tackle_glisse: 9,
+interceptions: 10,
+marquage: 11,
+placement_defensif: 11,
+jeu_de_tete_def: 10,
+blocage: 8,
+force: 7,
+},
+MDC: {
+interceptions: 10,
+tackle_debout: 8,
+placement_defensif: 9,
+passes_courtes: 7,
+passes_longues: 6,
+lecture_jeu: 8,
+endurance: 7,
+discipline: 6,
+},
+MC: {
+passes_courtes: 10,
+passes_longues: 7,
+lecture_jeu: 7,
+controle: 7,
+dribble: 5,
+endurance: 7,
+vista: 6,
+},
+MOC: {
+vista: 10,
+passes_courtes: 8,
+finesse_passe: 8,
+controle: 8,
+dribble: 8,
+gestes_techniques: 6,
+finition: 5,
+},
+AD: {
+vitesse: 10,
+acceleration: 10,
+dribble: 10,
+gestes_techniques: 7,
+finition: 6,
+centres: 7,
+controle: 7,
+agilite: 8,
+},
+AG: {
+vitesse: 10,
+acceleration: 10,
+dribble: 10,
+gestes_techniques: 7,
+finition: 6,
+centres: 7,
+controle: 7,
+agilite: 8,
+},
+BU: {
+finition: 12,
+placement_offensif: 10,
+puissance_tir: 8,
+tirs_lointains: 5,
+tete_offensive: 7,
+controle: 7,
+calme: 6,
+reprise_volee: 5,
+},
+};
 
-  for (const attribute of ALL_51_ATTRIBUTES) {
-    const searchable = normalize(`${attribute.id} ${attribute.name}`);
+const archetypeBoosts: Record<PlayerArchetype, Record<string, number>> = {
+technicien: {
+dribble: 7,
+controle: 8,
+passes_courtes: 6,
+passes_longues: 5,
+gestes_techniques: 7,
+conduite_balle: 7,
+},
+sprinteur: {
+vitesse: 10,
+acceleration: 10,
+agilite: 7,
+endurance: 4,
+},
+physique: {
+force: 9,
+equilibre: 6,
+endurance: 5,
+detente: 5,
+protection_balle: 6,
+},
+createur: {
+vista: 9,
+passes_courtes: 7,
+passes_longues: 7,
+finesse_passe: 8,
+lecture_jeu: 6,
+},
+finisseur: {
+finition: 10,
+placement_offensif: 8,
+puissance_tir: 7,
+reprise_volee: 6,
+calme: 5,
+},
+defenseur: {
+tackle_debout: 9,
+tackle_glisse: 7,
+interceptions: 8,
+marquage: 8,
+placement_defensif: 8,
+},
+gardien: {
+gb_reflexes: 10,
+gb_plongeon: 9,
+gb_positionnement: 9,
+gb_jeu_main: 7,
+gb_sorties: 6,
+},
+polyvalent: {
+endurance: 4,
+controle: 3,
+passes_courtes: 3,
+lecture_jeu: 2,
+discipline: 2,
+},
+};
 
-    let min = 27 + ageModifier;
-    let max = 55 + ageModifier;
+const ageModifier = clamp((age - 15) * 1.2, -3, 4);
+const positionProfile = positionBoosts[position];
+const archetypeProfile = archetypeBoosts[archetype];
 
-    const isPositionRelevant = positionKeywords.some((keyword) =>
-      searchable.includes(normalize(keyword)),
-    );
+for (const attribute of ALL_51_ATTRIBUTES) {
+const id = attribute.id;
+const category = attribute.category;
 
-    const isArchetypeRelevant = archetypeKeywords.some((keyword) =>
-      searchable.includes(normalize(keyword)),
-    );
+let base = randomInt(27, 43) + ageModifier;
 
-    if (isPositionRelevant) {
-      min += 7;
-      max += 8;
-    }
+base += positionProfile[id] ?? 0;
+base += archetypeProfile[id] ?? 0;
 
-    if (isArchetypeRelevant) {
-      min += 4;
-      max += 7;
-    }
-
-    if (isPositionRelevant && isArchetypeRelevant) {
-      max += 2;
-    }
-
-    if (attribute.category === "Gardien" && position !== "GB") {
-      min = 10 + Math.max(0, age - 15);
-      max = 28 + Math.max(0, age - 15);
-    }
-
-    if (attribute.category !== "Gardien" && position === "GB") {
-      min = 22 + ageModifier;
-      max = 48 + ageModifier;
-    }
-
-    const physicalModifier = getPhysicalModifier(
-      `${attribute.id} ${attribute.name}`,
-      heightCm,
-      weightKg,
-    );
-
-    min += physicalModifier;
-    max += physicalModifier;
-
-    const lower = clamp(Math.round(min), 5, 75);
-    const upper = clamp(Math.round(max), lower, 85);
-
-    attributes[attribute.id] = randomInt(lower, upper);
-  }
-
-  return attributes;
+// Les gardiens de champ ne possèdent pas encore les réflexes
+// spécialisés d'un gardien confirmé.
+if (category === "Gardien" && position !== "GB") {
+base = randomInt(10, 24) + Math.max(0, age - 15);
 }
 
+// Un gardien conserve des aptitudes de joueur de champ,
+// mais celles-ci sont moins développées au départ.
+if (category !== "Gardien" && position === "GB") {
+base = randomInt(22, 36) + ageModifier;
+}
+
+const physicalModifier = getPhysicalModifier(
+`${attribute.id} ${attribute.name}`,
+heightCm,
+weightKg,
+);
+
+base += physicalModifier;
+
+attributes[id] = clamp(Math.round(base), 5, 78);
+}
+
+return attributes;
+  }
 function generatePotential(
 attributes: PlayerAttributes,
 age: number,
