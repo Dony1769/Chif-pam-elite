@@ -931,94 +931,208 @@ archetypeAttributeIds[archetype] ?? [];
 const weighted = eligible.map((attribute) => {
 const positionWeight =
 positionWeights[attribute.id] ?? 0;
+export function trainWeek(
+player: PlayerCareerState,
+focus: TrainingFocus
+): PlayerCareerState {
+if (player.trainedThisWeek) {
+return {
+...player,
+lastTrainingNote: "Tu as déjà effectué ta séance cette semaine.",
+};
+}
 
-const archetypeBonus =
-preferredIds.includes(attribute.id) ? 2 : 0;
+const training = TRAINING_FOCUS[focus];
+const attributes = { ...player.attributes };
+const isRest = focus === "repos";
+
+if (isRest) {
+const recovered = Math.min(player.fatigue, 30);
 
 return {
-id: attribute.id,
-weight: 1 + positionWeight * 0.2 + archetypeBonus,
+  ...player,
+  fatigue: Math.max(0, player.fatigue - 30),
+  trainedThisWeek: true,
+  lastTrainingNote:
+    recovered > 0
+      ? `Repos effectué : ${recovered} points de fatigue récupérés.`
+      : "Repos effectué. Tu es déjà en pleine récupération.",
 };
+
+}
+
+const eligible = ALL_51_ATTRIBUTES.filter((attribute) => {
+if (!training.categories.includes(attribute.category)) {
+return false;
+}
+
+const current = attributes[attribute.id] ?? 1;
+const potential =
+  player.potential.attributePotentials[attribute.id] ?? 99;
+const physicalCap = getAttributeCap(
+  attribute.id,
+  player.heightCm,
+  player.weightKg
+);
+
+return current < Math.min(potential, physicalCap);
+
 });
 
+const fatigue = player.fatigue;
+let note = "";
+
+if (eligible.length === 0) {
+note =
+"Séance terminée. Les attributs ciblés ont atteint leurs limites actuelles.";
+} else if (fatigue >= 90) {
+note =
+"Tu es trop fatigué pour progresser efficacement. Prévois une récupération.";
+} else {
+const position = player.physicalProfile.primaryPosition;
+const positionWeights = POSITION_WEIGHTS[position] ?? {};
+
+const archetypeAttributeIds: Record<string, string[]> = {
+  technicien: [
+    "dribble",
+    "controle",
+    "conduite_balle",
+    "gestes_techniques",
+    "passes_courtes",
+  ],
+  sprinteur: [
+    "acceleration",
+    "vitesse",
+    "agilite",
+    "reactivite",
+  ],
+  physique: [
+    "force",
+    "endurance",
+    "agressivite",
+    "equilibre",
+    "detente",
+  ],
+  createur: [
+    "vista",
+    "passes_courtes",
+    "passes_longues",
+    "finesse_passe",
+    "controle",
+  ],
+  finisseur: [
+    "finition",
+    "placement_offensif",
+    "puissance_tir",
+    "reprise_volee",
+    "calme",
+  ],
+  defenseur: [
+    "marquage",
+    "interceptions",
+    "tackle_debout",
+    "tackle_glisse",
+    "placement_defensif",
+  ],
+  gardien: [
+    "gb_reflexes",
+    "gb_positionnement",
+    "gb_plongeon",
+    "gb_jeu_main",
+    "gb_sorties",
+  ],
+  polyvalent: [],
+};
+
+const preferredIds =
+  archetypeAttributeIds[player.physicalProfile.archetype] ?? [];
+
+const weighted = eligible.map((attribute) => ({
+  id: attribute.id,
+  weight:
+    1 +
+    (positionWeights[attribute.id] ?? 0) * 0.2 +
+    (preferredIds.includes(attribute.id) ? 2 : 0),
+}));
+
 const totalWeight = weighted.reduce(
-(sum, item) => sum + item.weight,
-0
+  (sum, item) => sum + item.weight,
+  0
 );
 
 let roll = Math.random() * totalWeight;
 let selectedId = weighted[weighted.length - 1].id;
 
 for (const item of weighted) {
-roll -= item.weight;
+  roll -= item.weight;
 
-if (roll <= 0) {
-selectedId = item.id;
-break;
-}
+  if (roll <= 0) {
+    selectedId = item.id;
+    break;
+  }
 }
 
 const current = attributes[selectedId] ?? 1;
 const potential =
-player.potential.attributePotentials[selectedId] ?? 99;
-
+  player.potential.attributePotentials[selectedId] ?? 99;
 const physicalCap = getAttributeCap(
-selectedId,
-player.heightCm,
-player.weightKg
+  selectedId,
+  player.heightCm,
+  player.weightKg
 );
 
-// Les jeunes joueurs et ceux ayant un meilleur potentiel
-// de développement ont davantage de chances de gagner 2 points.
 const age = player.age;
-const developmentRate =
-player.potential.developmentRate ?? 1;
+const developmentRate = player.potential.developmentRate ?? 1;
 
 const ageBonus =
-age <= 17 ? 0.25 :
-age <= 21 ? 0.15 :
-age <= 25 ? 0.05 :
-age <= 29 ? -0.1 :
--0.2;
+  age <= 17
+    ? 0.25
+    : age <= 21
+      ? 0.15
+      : age <= 25
+        ? 0.05
+        : age <= 29
+          ? -0.1
+          : -0.2;
 
-const fatiguePenalty = Math.max(
-0,
-(fatigue - 30) / 100
-);
+const fatiguePenalty = Math.max(0, (fatigue - 30) / 100);
 
 const extraPointChance = Math.max(
-0.05,
-Math.min(
-0.85,
-0.25 +
-(developmentRate - 1) * 0.35 +
-ageBonus -
-fatiguePenalty
-)
+  0.05,
+  Math.min(
+    0.85,
+    0.25 +
+      (developmentRate - 1) * 0.35 +
+      ageBonus -
+      fatiguePenalty
+  )
 );
 
 const gain =
-fatigue >= 75
-? 1
-: Math.random() < extraPointChance
-? 2
-: 1;
+  fatigue >= 75
+    ? 1
+    : Math.random() < extraPointChance
+      ? 2
+      : 1;
 
 const newValue = Math.min(
-current + gain,
-potential,
-physicalCap
+  current + gain,
+  potential,
+  physicalCap
 );
 
 attributes[selectedId] = newValue;
 
 const selectedAttribute = ALL_51_ATTRIBUTES.find(
-(attribute) => attribute.id === selectedId
+  (attribute) => attribute.id === selectedId
 );
 
 note =
-`Séance terminée : ${selectedAttribute?.name ?? selectedId} ` +
-`progresse de ${newValue - current} point${newValue - current > 1 ? "s" : ""}.`;
+  `Séance terminée : ${selectedAttribute?.name ?? selectedId} ` +
+  `progresse de ${newValue - current} point${
+    newValue - current > 1 ? "s" : ""
+  }.`;
+
 }
 
 const newFatigue = Math.max(
@@ -1038,13 +1152,12 @@ return {
 ...player,
 attributes,
 fatigue: newFatigue,
-skillPointsAvailable: player.skillPointsAvailable + 1,
+skillPointsAvailable: player.skillPointsAvailable,
 trainedThisWeek: true,
 lastTrainingNote: note,
 academy,
 };
 }
-
 
 export function rollParticipation(
   player: PlayerCareerState,
