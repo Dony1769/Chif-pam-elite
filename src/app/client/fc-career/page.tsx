@@ -15,7 +15,7 @@ export default function FcCareerAuthPage() {
     if (pin.trim() === '1769') {
       // Enregistrement de la session d'accès
       sessionStorage.setItem('fc_career_unlocked', 'true');
-      router.push('/client/fc-career/dashboard');
+      router.push('/client/fc-career/create-player');
     } else {
       setError(true);
       setPin('');
