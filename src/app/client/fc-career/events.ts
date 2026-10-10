@@ -38,6 +38,7 @@ interface EventDef {
   resolve: (p: PlayerCareerState, choiceId: string) => { player: PlayerCareerState; text: string };
 }
 
+
 const EVENT_DEFS: EventDef[] = [
   {
     id: 'video_virale',
