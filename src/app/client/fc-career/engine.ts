@@ -347,7 +347,7 @@ function getPhysicalModifier(
   const isAerial =
     name.includes("detente") ||
     name.includes("tete") ||
-    name.includes("jeuaerien")
+    name.includes("jeuaerien");
 
   if (isSpeed) {
     if (heightCm >= 195) modifier -= 2;
