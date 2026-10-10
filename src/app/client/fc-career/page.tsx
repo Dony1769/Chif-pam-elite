@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Lock, ShieldCheck, ArrowRight, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+
 export default function FcCareerAuthPage() {
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
