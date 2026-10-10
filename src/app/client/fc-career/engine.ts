@@ -52,16 +52,115 @@ const ATTRIBUTE_KEYWORDS: Record<PlayerPosition, string[]> = {
 };
 
 const POSITION_WEIGHTS: Record<PlayerPosition, Record<string, number>> = {
-  GB: { gardien: 3, reflex: 3, plonge: 2, prise: 2, sortie: 1.5, placement: 1.5 },
-  DD: { vitesse: 2, acceleration: 1.5, centre: 1.5, tacle: 2, interception: 2, endurance: 1.5 },
-  DG: { vitesse: 2, acceleration: 1.5, centre: 1.5, tacle: 2, interception: 2, endurance: 1.5 },
-  DC: { tacle: 2.5, interception: 2.5, marquage: 2, placement: 2, force: 1.5, tete: 1.5 },
-  MDC: { interception: 2.5, tacle: 2, placement: 2, passe: 1.5, endurance: 1.5, vision: 1 },
-  MC: { passe: 2.5, vision: 2, controle: 1.5, endurance: 1.5, dribble: 1.5, placement: 1 },
-  MOC: { vision: 2.5, passe: 2, dribble: 2, controle: 2, tir: 1.5, finition: 1 },
-  AD: { vitesse: 2.5, acceleration: 2, dribble: 2.5, finition: 1.5, tir: 1.5, centre: 1 },
-  AG: { vitesse: 2.5, acceleration: 2, dribble: 2.5, finition: 1.5, tir: 1.5, centre: 1 },
-  BU: { finition: 3, tir: 2.5, placement: 2, puissance: 1.5, tete: 1.5, sangfroid: 1.5 },
+GB: {
+gb_reflexes: 3,
+gb_plongeon: 2.5,
+gb_positionnement: 2.5,
+gb_jeu_main: 2,
+gb_sorties: 1.5,
+gb_degagement: 1,
+reactivite: 1.5,
+concentration: 1,
+calme: 0.5,
+},
+DD: {
+vitesse: 2,
+acceleration: 1.5,
+endurance: 1.5,
+centres: 1.5,
+tackle_debout: 2,
+interceptions: 2,
+marquage: 1.5,
+placement_defensif: 1.5,
+passes_courtes: 1,
+},
+DG: {
+vitesse: 2,
+acceleration: 1.5,
+endurance: 1.5,
+centres: 1.5,
+tackle_debout: 2,
+interceptions: 2,
+marquage: 1.5,
+placement_defensif: 1.5,
+passes_courtes: 1,
+},
+DC: {
+tackle_debout: 2.5,
+tackle_glisse: 1.5,
+interceptions: 2.5,
+marquage: 2.5,
+placement_defensif: 2.5,
+jeu_de_tete_def: 2,
+blocage: 1.5,
+force: 1.5,
+detente: 1,
+calme: 1,
+},
+MDC: {
+interceptions: 2.5,
+tackle_debout: 2,
+placement_defensif: 2,
+passes_courtes: 1.5,
+passes_longues: 1.5,
+lecture_jeu: 2,
+endurance: 1.5,
+discipline: 1.5,
+controle: 1,
+},
+MC: {
+passes_courtes: 2.5,
+passes_longues: 2,
+lecture_jeu: 2,
+controle: 1.5,
+dribble: 1.5,
+endurance: 1.5,
+vista: 1.5,
+placement_defensif: 1,
+finition: 0.5,
+},
+MOC: {
+vista: 2.5,
+passes_courtes: 2,
+finesse_passe: 2,
+controle: 2,
+dribble: 2,
+gestes_techniques: 1.5,
+finition: 1.5,
+tirs_lointains: 1,
+calme: 1,
+},
+AD: {
+vitesse: 2.5,
+acceleration: 2.5,
+dribble: 2.5,
+gestes_techniques: 1.5,
+finition: 1.5,
+centres: 1.5,
+controle: 1.5,
+agilite: 1.5,
+},
+AG: {
+vitesse: 2.5,
+acceleration: 2.5,
+dribble: 2.5,
+gestes_techniques: 1.5,
+finition: 1.5,
+centres: 1.5,
+controle: 1.5,
+agilite: 1.5,
+},
+BU: {
+finition: 3,
+placement_offensif: 2.5,
+puissance_tir: 2,
+tirs_lointains: 1.5,
+tete_offensive: 1.5,
+controle: 1.5,
+calme: 1.5,
+reprise_volee: 1,
+acceleration: 1,
+},
 };
 
 const ARCHETYPE_KEYWORDS: Record<PlayerArchetype, string[]> = {
@@ -134,25 +233,26 @@ export function getAttributeCap(
 }
 
 export function calculatePositionRating(
-  position: string,
-  attributes: PlayerAttributes,
+position: string,
+attributes: PlayerAttributes,
 ): number {
-  const validPosition = position as PlayerPosition;
-  const weights = POSITION_WEIGHTS[validPosition];
+const weights = POSITION_WEIGHTS[position as PlayerPosition];
 
-  if (!weights) return 45;
+if (!weights) return 45;
 
-  let total = 0;
-  let totalWeight = 0;
+let total = 0;
+let totalWeight = 0;
 
-  for (const [keyword, weight] of Object.entries(weights)) {
-    total += getAttributeValue(attributes, [keyword]) * weight;
-    totalWeight += weight;
-  }
+for (const [attributeId, weight] of Object.entries(weights)) {
+const value = attributes[attributeId] ?? 30;
 
-  if (totalWeight === 0) return 45;
+total += clamp(value, 1, 99) * weight;
+totalWeight += weight;
+}
 
-  return Math.round(clamp(total / totalWeight, 1, 99));
+if (totalWeight === 0) return 45;
+
+return Math.round(clamp(total / totalWeight, 1, 99));
 }
 
 export function evaluatePlayerRole(
