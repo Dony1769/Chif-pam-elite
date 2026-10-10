@@ -28,6 +28,7 @@ export interface SponsorContract {
   failed: boolean;
 }
 
+
 export interface CoachProfile {
   id: string;
   name: string;
