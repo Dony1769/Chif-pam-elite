@@ -73,7 +73,11 @@ hash = Math.imul(hash, 16777619);
 return hash >>> 0;
 }
 
-function seededValue(seed: string, min: number, max: number): number {
+function seededValue(
+seed: string,
+min: number,
+max: number,
+): number {
 const hash = stableHash(seed);
 return min + (hash % (max - min + 1));
 }
@@ -92,17 +96,25 @@ Math.max(0, fatigue - 35) * 0.22 +
 );
 }
 
-function getPlayerSelectionScore(player: PlayerCareerState): number {
+function getPlayerSelectionScore(
+player: PlayerCareerState,
+): number {
 const rating = calculatePositionRating(
 player.physicalProfile.primaryPosition,
 player.attributes,
 );
 
 const formBonus = (player.form - 50) * 0.18;
-const fatiguePenalty = Math.max(0, player.fatigue - 35) * 0.22;
-const coachBonus = (player.coach.relation - 50) * 0.12;
-const injuryPenalty = player.injuryWeeks > 0 ? 100 : 0;
-const trainingBonus = player.trainedThisWeek ? 2 : -2;
+const fatiguePenalty =
+Math.max(0, player.fatigue - 35) * 0.22;
+const coachBonus =
+(player.coach.relation - 50) * 0.12;
+
+const injuryPenalty =
+player.injuryWeeks > 0 ? 100 : 0;
+
+const trainingBonus =
+player.trainedThisWeek ? 2 : -2;
 
 return Math.round(
 rating +
@@ -122,26 +134,52 @@ injured: boolean,
 if (injured) return "hors_groupe";
 if (rank === 1) return "titulaire";
 if (rank <= 3) return "concurrent";
-if (rank <= Math.ceil(totalPlayers * 0.65)) return "remplacant";
+
+if (rank <= Math.ceil(totalPlayers * 0.65)) {
+return "remplacant";
+}
 
 return "hors_groupe";
+}
+
+function getRivalNames(clubSeed: string): string[] {
+return [...RIVAL_NAMES]
+.sort((a, b) => {
+const hashA = stableHash(`${clubSeed}-${a}`);
+const hashB = stableHash(`${clubSeed}-${b}`);
+
+if (hashA !== hashB) {
+return hashA - hashB;
+}
+
+return a.localeCompare(b);
+})
+.slice(0, 7);
 }
 
 export function evaluateCompetition(
 player: PlayerCareerState,
 ): CompetitionEvaluation {
-const playerPosition = player.physicalProfile.primaryPosition;
-const compatiblePositions = POSITION_GROUPS[playerPosition];
+const playerPosition =
+player.physicalProfile.primaryPosition;
+
+const compatiblePositions =
+POSITION_GROUPS[playerPosition];
 
 const playerScore = getPlayerSelectionScore(player);
 const injured = player.injuryWeeks > 0;
 
-// Le club et la saison déterminent l'identité de l'effectif.
-// La semaine permet de faire évoluer les conditions de concurrence.
-const clubSeed = `${player.clubId ?? player.clubName}-${player.season}`;
-const weeklySeed = `${clubSeed}-${player.week}`;
+const clubSeed =
+`${player.clubId ?? player.clubName}-${player.season}`;
 
-const rivals: TeamRival[] = Array.from({ length: 7 }, (_, index) => {
+const weeklySeed =
+`${clubSeed}-${player.week}`;
+
+const rivalNames = getRivalNames(clubSeed);
+
+const rivals: TeamRival[] = Array.from(
+{ length: 7 },
+(_, index) => {
 const rivalId = `rival-${index + 1}`;
 
 const positionIndex = seededValue(
@@ -150,68 +188,93 @@ const positionIndex = seededValue(
 compatiblePositions.length - 1,
 );
 
-const rivalPosition = compatiblePositions[positionIndex];
+const rivalPosition =
+compatiblePositions[positionIndex];
 
-const minimumRating = clamp(playerScore - 14, 25, 76);
-const maximumRating = clamp(playerScore + 12, 45, 88);
+const minimumRating = clamp(
+playerScore - 14,
+25,
+76,
+);
 
-const ratingMin = Math.min(minimumRating, maximumRating);
-const ratingMax = Math.max(minimumRating, maximumRating);
+const maximumRating = clamp(
+playerScore + 12,
+45,
+88,
+);
 
-// La note générale reste stable pour éviter un effectif entièrement
-// différent chaque semaine.
-const baseRating = seededValue(
+const ratingMin = Math.min(
+minimumRating,
+maximumRating,
+);
+
+const ratingMax = Math.max(
+minimumRating,
+maximumRating,
+);
+
+const overallRating = seededValue(
 `${clubSeed}-${rivalId}-rating`,
 ratingMin,
 ratingMax,
 );
 
-// Forme, fatigue et confiance peuvent évoluer au fil de la saison.
-const rivalForm = seededValue(
+const form = seededValue(
 `${weeklySeed}-${rivalId}-form`,
 35,
 75,
 );
 
-const rivalFatigue = seededValue(
+const fatigue = seededValue(
 `${weeklySeed}-${rivalId}-fatigue`,
 5,
 65,
 );
 
-const rivalTrust = seededValue(
+const coachTrust = seededValue(
 `${weeklySeed}-${rivalId}-trust`,
 30,
 75,
 );
 
 const selectionScore = calculateSelectionScore(
-baseRating,
-rivalForm,
-rivalFatigue,
-rivalTrust,
-);
-
-const nameIndex = seededValue(
-`${clubSeed}-${rivalId}-name`,
-0,
-RIVAL_NAMES.length - 1,
+overallRating,
+form,
+fatigue,
+coachTrust,
 );
 
 return {
 id: rivalId,
-name: RIVAL_NAMES[nameIndex],
+name: rivalNames[index],
 position: rivalPosition,
-overallRating: baseRating,
-form: rivalForm,
-fatigue: rivalFatigue,
-coachTrust: rivalTrust,
+overallRating,
+form,
+fatigue,
+coachTrust,
 status: "hors_groupe",
 selectionScore,
 };
+},
+);
+
+const rankedRivals = [...rivals].sort((a, b) => {
+if (b.selectionScore !== a.selectionScore) {
+return b.selectionScore - a.selectionScore;
+}
+
+return a.id.localeCompare(b.id);
 });
 
-const ranked = [
+const totalPlayers = rivals.length + 1;
+
+const ranked = injured
+? rankedRivals.map((rival) => ({
+id: rival.id,
+selectionScore: rival.selectionScore,
+isPlayer: false,
+}))
+: [
 {
 id: "player",
 selectionScore: playerScore,
@@ -227,25 +290,24 @@ if (b.selectionScore !== a.selectionScore) {
 return b.selectionScore - a.selectionScore;
 }
 
-// En cas d'égalité, le joueur est prioritaire uniquement s'il est
-// disponible. Un joueur blessé ne doit pas gagner une égalité.
 if (a.isPlayer !== b.isPlayer) {
-if (injured) return a.isPlayer ? 1 : -1;
 return a.isPlayer ? -1 : 1;
 }
 
 return a.id.localeCompare(b.id);
 });
 
-const totalPlayers = ranked.length;
+const actualPlayerRank = injured
+? totalPlayers
+: ranked.findIndex((item) => item.isPlayer) + 1;
 
-const playerRank = ranked.findIndex((item) => item.isPlayer) + 1;
+const rank = actualPlayerRank;
 
-// Une blessure exclut le joueur de la sélection, même si son score
-// théorique le placerait parmi les meilleurs.
-const rank = injured ? totalPlayers : playerRank;
-
-const status = getStatus(rank, totalPlayers, injured);
+const status = getStatus(
+rank,
+totalPlayers,
+injured,
+);
 
 const updatedRivals = rivals.map((rival) => {
 const rivalRank =
@@ -253,14 +315,21 @@ ranked.findIndex((item) => item.id === rival.id) + 1;
 
 return {
 ...rival,
-status: getStatus(rivalRank, totalPlayers, false),
+status: getStatus(
+rivalRank,
+totalPlayers,
+false,
+),
 };
 });
 
 const chanceOfStarting = injured
 ? 0
 : clamp(
-Math.round(100 - (rank - 1) * (100 / totalPlayers)),
+Math.round(
+100 -
+(rank - 1) * (100 / totalPlayers),
+),
 5,
 95,
 );
