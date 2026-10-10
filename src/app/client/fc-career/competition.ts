@@ -1,0 +1,233 @@
+"use client";
+
+import type { PlayerCareerState, PlayerPosition } from "./types";
+import { calculatePositionRating } from "./engine";
+
+export type CompetitionStatus =
+| "titulaire"
+| "concurrent"
+| "remplacant"
+| "hors_groupe";
+
+export interface TeamRival {
+id: string;
+name: string;
+position: PlayerPosition;
+overallRating: number;
+form: number;
+fatigue: number;
+coachTrust: number;
+status: CompetitionStatus;
+selectionScore: number;
+}
+
+export interface CompetitionEvaluation {
+playerScore: number;
+rank: number;
+totalPlayers: number;
+status: CompetitionStatus;
+chanceOfStarting: number;
+rivals: TeamRival[];
+explanation: string;
+}
+
+const POSITION_GROUPS: Record<PlayerPosition, PlayerPosition[]> = {
+GB: ["GB"],
+DD: ["DD", "DG"],
+DC: ["DC", "MDC"],
+DG: ["DG", "DD"],
+MDC: ["MDC", "MC"],
+MC: ["MC", "MOC", "MDC"],
+MOC: ["MOC", "MC", "AD", "AG"],
+AD: ["AD", "AG", "BU"],
+AG: ["AG", "AD", "BU"],
+BU: ["BU", "AD", "AG"],
+};
+
+const RIVAL_NAMES = [
+"Nathan Pierre",
+"Samuel Joseph",
+"David Charles",
+"Enzo Michel",
+"Kenny Louis",
+"Mathis Jean",
+"Junior Augustin",
+"Wilson François",
+"Mikaël Paul",
+"Andy Laurent",
+"Stevens Dorval",
+"Chris Emmanuel",
+];
+
+const clamp = (value: number, min: number, max: number) =>
+Math.max(min, Math.min(max, value));
+
+function stableHash(value: string): number {
+let hash = 2166136261;
+
+for (let i = 0; i < value.length; i++) {
+hash ^= value.charCodeAt(i);
+hash = Math.imul(hash, 16777619);
+}
+
+return hash >>> 0;
+}
+
+function seededValue(seed: string, min: number, max: number): number {
+const hash = stableHash(seed);
+return min + (hash % (max - min + 1));
+}
+
+function getPlayerSelectionScore(player: PlayerCareerState): number {
+const rating = calculatePositionRating(
+player.physicalProfile.primaryPosition,
+player.attributes,
+);
+
+const formBonus = (player.form - 50) * 0.18;
+const fatiguePenalty = Math.max(0, player.fatigue - 35) * 0.22;
+const coachBonus = (player.coach.relation - 50) * 0.12;
+const injuryPenalty = player.injuryWeeks > 0 ? 100 : 0;
+const trainingBonus = player.trainedThisWeek ? 2 : -2;
+
+return Math.round(
+rating +
+formBonus -
+fatiguePenalty +
+coachBonus +
+trainingBonus -
+injuryPenalty,
+);
+}
+
+function getStatus(
+rank: number,
+totalPlayers: number,
+injured: boolean,
+): CompetitionStatus {
+if (injured) return "hors_groupe";
+if (rank === 1) return "titulaire";
+if (rank <= 3) return "concurrent";
+if (rank <= Math.ceil(totalPlayers * 0.65)) return "remplacant";
+
+return "hors_groupe";
+}
+
+export function evaluateCompetition(
+player: PlayerCareerState,
+): CompetitionEvaluation {
+const playerPosition = player.physicalProfile.primaryPosition;
+const compatiblePositions = POSITION_GROUPS[playerPosition];
+
+const playerScore = getPlayerSelectionScore(player);
+const seed = `${player.clubId ?? player.clubName}-${player.season}-${player.week}`;
+
+const rivals: TeamRival[] = Array.from({ length: 7 }, (_, index) => {
+const rivalPosition =
+compatiblePositions[
+seededValue(`${seed}-position-${index}`, 0, compatiblePositions.length - 1)
+];
+
+const baseRating = seededValue(
+`${seed}-rating-${index}`,
+Math.max(25, playerScore - 14),
+Math.min(88, playerScore + 12),
+);
+
+const rivalForm = seededValue(`${seed}-form-${index}`, 35, 75);
+const rivalFatigue = seededValue(`${seed}-fatigue-${index}`, 5, 65);
+const rivalTrust = seededValue(`${seed}-trust-${index}`, 30, 75);
+
+const selectionScore = Math.round(
+baseRating +
+(rivalForm - 50) * 0.18 -
+Math.max(0, rivalFatigue - 35) * 0.22 +
+(rivalTrust - 50) * 0.12,
+);
+
+return {
+id: `rival-${index + 1}`,
+name: RIVAL_NAMES[
+seededValue(`${seed}-name-${index}`, 0, RIVAL_NAMES.length - 1)
+],
+position: rivalPosition,
+overallRating: calculatePositionRating(
+rivalPosition,
+player.attributes,
+) === 0
+? baseRating
+: clamp(baseRating, 20, 95),
+form: rivalForm,
+fatigue: rivalFatigue,
+coachTrust: rivalTrust,
+status: "hors_groupe",
+selectionScore,
+};
+});
+
+const ranked = [
+{
+id: "player",
+selectionScore: playerScore,
+isPlayer: true,
+},
+...rivals.map((rival) => ({
+id: rival.id,
+selectionScore: rival.selectionScore,
+isPlayer: false,
+})),
+].sort((a, b) => b.selectionScore - a.selectionScore);
+
+const rank = ranked.findIndex((item) => item.isPlayer) + 1;
+const totalPlayers = ranked.length;
+const injured = player.injuryWeeks > 0;
+
+const status = getStatus(rank, totalPlayers, injured);
+
+const updatedRivals = rivals.map((rival) => {
+const rivalRank =
+ranked.findIndex((item) => item.id === rival.id) + 1;
+
+return {
+...rival,
+status: getStatus(rivalRank, totalPlayers, false),
+};
+});
+
+const chanceOfStarting = injured
+? 0
+: clamp(
+Math.round(100 - (rank - 1) * (100 / totalPlayers)),
+5,
+95,
+);
+
+let explanation: string;
+
+if (injured) {
+explanation =
+"Tu es indisponible à cause de ta blessure. La priorité est de récupérer avant de retrouver la compétition.";
+} else if (rank === 1) {
+explanation =
+"Tu es actuellement en tête de la concurrence à ton poste. Continue à maintenir ton niveau et ta condition physique.";
+} else if (rank <= 3) {
+explanation =
+"Tu es proche d'une place dans le onze. Une meilleure forme, moins de fatigue et de bonnes séances peuvent faire la différence.";
+} else if (rank <= 5) {
+explanation =
+"Tu es dans la rotation, mais plusieurs joueurs te devancent. Tu dois progresser pour gagner la confiance du coach.";
+} else {
+explanation =
+"Tu es en retrait dans la concurrence actuelle. Travaille tes attributs prioritaires et veille à ta forme physique.";
+}
+
+return {
+playerScore,
+rank,
+totalPlayers,
+status,
+chanceOfStarting,
+rivals: updatedRivals,
+explanation,
+};
+}
