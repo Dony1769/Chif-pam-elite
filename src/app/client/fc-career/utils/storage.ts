@@ -4,11 +4,9 @@ const STORAGE_KEY = 'fc_career_save';
 
 export function saveGame(player: PlayerCareerState): boolean {
   try {
-    const json = JSON.stringify(player);
-    localStorage.setItem(STORAGE_KEY, json);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(player));
     return true;
-  } catch (err) {
-    console.error('Save failed:', err);
+  } catch {
     return false;
   }
 }
@@ -16,26 +14,14 @@ export function saveGame(player: PlayerCareerState): boolean {
 export function loadGame(): PlayerCareerState | null {
   try {
     const json = localStorage.getItem(STORAGE_KEY);
-    if (!json) return null;
-    return JSON.parse(json) as PlayerCareerState;
-  } catch (err) {
-    console.error('Load failed:', err);
-    return null;
-  }
-}
-
-export function hasSave(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY) !== null;
+    return json ? JSON.parse(json) : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 export function clearAllSaves(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
-  } catch (err) {
-    console.error('Clear failed:', err);
-  }
+  } catch {}
 }
