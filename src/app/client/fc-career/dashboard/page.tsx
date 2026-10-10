@@ -33,6 +33,9 @@ TRAINING_FOCUS,
 trainWeek,
 } from "../engine";
 
+import { evaluateCompetition } from "../competition";
+import type { CompetitionStatus } from "../competition";
+
 import { ALL_51_ATTRIBUTES } from "../constants";
 import type { PlayerCareerState, TrainingFocus } from "../types";
 
@@ -44,6 +47,7 @@ saveGame,
 
 type DashboardTab =
 | "accueil"
+| "equipe"
 | "attributs"
 | "entrainement"
 | "academie"
@@ -58,6 +62,7 @@ label: string;
 icon: typeof Home;
 }[] = [
 { id: "accueil", label: "Accueil", icon: Home },
+{ id: "equipe", label: "Équipe", icon: Users },
 { id: "attributs", label: "Attributs", icon: Activity },
 { id: "entrainement", label: "Entraînement", icon: Dumbbell },
 { id: "academie", label: "Académie", icon: GraduationCap },
@@ -109,6 +114,47 @@ if (potential >= 60) return "Progression possible";
 return "Potentiel à développer";
 }
 
+function getCompetitionStatusLabel(status: CompetitionStatus): string {
+const labels: Record<CompetitionStatus, string> = {
+titulaire: "Titulaire",
+concurrent: "Concurrent direct",
+remplacant: "Remplaçant",
+hors_groupe: "Hors groupe",
+};
+
+return labels[status];
+}
+
+function getCompetitionStatusStyle(status: CompetitionStatus): string {
+const styles: Record<CompetitionStatus, string> = {
+titulaire:
+"border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+concurrent:
+"border-amber-400/30 bg-amber-400/10 text-amber-300",
+remplacant:
+"border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+hors_groupe:
+"border-red-400/30 bg-red-400/10 text-red-300",
+};
+
+return styles[status];
+}
+
+function getCompetitionStatusDescription(status: CompetitionStatus): string {
+const descriptions: Record<CompetitionStatus, string> = {
+titulaire:
+"Tu occupes actuellement la première place dans le classement de concurrence simulé. Maintiens ton niveau pour conserver ta place.",
+concurrent:
+"Tu es proche du onze. Une bonne séance, une meilleure forme et une relation solide avec le coach peuvent te faire gagner une place.",
+remplacant:
+"Tu es dans la rotation. Continue à progresser pour te rapprocher des titulaires.",
+hors_groupe:
+"Tu dois améliorer ton niveau et ta condition pour remonter dans la hiérarchie.",
+};
+
+return descriptions[status];
+}
+
 function clamp(value: number, min: number, max: number): number {
 return Math.max(min, Math.min(max, value));
 }
@@ -128,9 +174,18 @@ title: "Discussion avec l’entraîneur",
 body:
 "Après l’entraînement, ton entraîneur te demande de venir discuter. Il estime que tu as du potentiel, mais il veut voir davantage de sérieux et de régularité. Comment réagis-tu ?",
 choices: [
-{ id: "accept", label: "Accepter les critiques et travailler davantage" },
-{ id: "explain", label: "Expliquer calmement ton point de vue" },
-{ id: "challenge", label: "Lui demander de te faire confiance" },
+{
+id: "accept",
+label: "Accepter les critiques et travailler davantage",
+},
+{
+id: "explain",
+label: "Expliquer calmement ton point de vue",
+},
+{
+id: "challenge",
+label: "Lui demander de te faire confiance",
+},
 ],
 };
 }
@@ -143,9 +198,18 @@ title: "La concurrence s’intensifie",
 body:
 "Un joueur de ton poste vient de réaliser plusieurs bons entraînements. L’entraîneur envisage de lui donner davantage de temps de jeu. Tu dois choisir comment réagir à cette concurrence.",
 choices: [
-{ id: "work", label: "Montrer ton sérieux et redoubler d’efforts" },
-{ id: "teamwork", label: "Aider ton coéquipier et renforcer l’esprit d’équipe" },
-{ id: "pressure", label: "Demander immédiatement une occasion de jouer" },
+{
+id: "work",
+label: "Montrer ton sérieux et redoubler d’efforts",
+},
+{
+id: "teamwork",
+label: "Aider ton coéquipier et renforcer l’esprit d’équipe",
+},
+{
+id: "pressure",
+label: "Demander immédiatement une occasion de jouer",
+},
 ],
 };
 }
@@ -157,9 +221,18 @@ title: "Une occasion de te distinguer",
 body:
 "L’académie prépare une évaluation des jeunes joueurs. Les entraîneurs remarqueront aussi bien les performances que l’attitude, la discipline et l’implication dans le groupe. Quelle est ta priorité ?",
 choices: [
-{ id: "discipline", label: "Faire preuve d’une discipline exemplaire" },
-{ id: "ambition", label: "Montrer ton ambition et prendre des initiatives" },
-{ id: "balance", label: "Garder ton calme et miser sur la régularité" },
+{
+id: "discipline",
+label: "Faire preuve d’une discipline exemplaire",
+},
+{
+id: "ambition",
+label: "Montrer ton ambition et prendre des initiatives",
+},
+{
+id: "balance",
+label: "Garder ton calme et miser sur la régularité",
+},
 ],
 };
 }
@@ -214,7 +287,9 @@ const [activeTab, setActiveTab] = useState<DashboardTab>("accueil");
 const [selectedFocus, setSelectedFocus] =
 useState<TrainingFocus>("technique");
 const [selectedCategory, setSelectedCategory] = useState("Attaque");
-const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+const [selectedMessageId, setSelectedMessageId] = useState<string | null>(
+null,
+);
 const [ready, setReady] = useState(false);
 const [notice, setNotice] = useState("");
 
@@ -252,6 +327,20 @@ if (!player) return null;
 
 return evaluatePlayerRole(player.attributes, player.coach);
 }, [player]);
+
+const competitionEvaluation = useMemo(() => {
+if (!player) return null;
+
+return evaluateCompetition(player);
+}, [player]);
+
+const rankedRivals = useMemo(() => {
+if (!competitionEvaluation) return [];
+
+return [...competitionEvaluation.rivals].sort(
+(a, b) => b.selectionScore - a.selectionScore,
+);
+}, [competitionEvaluation]);
 
 const unreadCount = useMemo(() => {
 if (!player) return 0;
@@ -457,7 +546,9 @@ const handleNextWeek = useCallback(() => {
 if (!player) return;
 
 if (player.pendingEvent) {
-notify("Résous l’événement en cours avant de passer à la semaine suivante.");
+notify(
+"Résous l’événement en cours avant de passer à la semaine suivante.",
+);
 setActiveTab("accueil");
 return;
 }
@@ -703,6 +794,7 @@ Saison {player.season} · Semaine {player.week}
 </p>
 <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
 {activeTab === "accueil" && "Ton parcours commence"}
+{activeTab === "equipe" && "La concurrence dans ton équipe"}
 {activeTab === "attributs" && "Tes attributs"}
 {activeTab === "entrainement" && "Centre d’entraînement"}
 {activeTab === "academie" && "Ton académie"}
@@ -877,6 +969,13 @@ Pied {player.physicalProfile.preferredFoot}
 ? "Ton niveau peut te permettre de viser une place importante dans l’équipe."
 : "Continue de progresser à l’entraînement pour gagner la confiance du coach."}
 </div>
+<button
+onClick={() => setActiveTab("equipe")}
+className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold transition hover:bg-white/10"
+>
+Voir ta place dans l’équipe
+<ChevronRight size={17} className="text-emerald-300" />
+</button>
 </div>
 </div>
 </section>
@@ -947,6 +1046,241 @@ className="shrink-0 rounded-xl bg-white px-4 py-3 text-sm font-black text-black 
 >
 Semaine suivante →
 </button>
+</div>
+</section>
+</div>
+)}
+
+{activeTab === "equipe" && competitionEvaluation && (
+<div className="space-y-5">
+<section className="overflow-hidden rounded-3xl border border-emerald-400/20 bg-gradient-to-br from-[#143629] via-[#10231f] to-[#101724] p-5 sm:p-7">
+<div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+<div className="max-w-xl">
+<div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+<Users size={13} />
+Hiérarchie de l’équipe
+</div>
+<h2 className="mt-3 text-2xl font-black sm:text-3xl">
+Gagne ta place dans le onze
+</h2>
+<p className="mt-3 text-sm leading-6 text-slate-300">
+Ton classement dépend de ton niveau au poste, de ta forme,
+de ta fatigue, de ta relation avec le coach et de ta séance
+hebdomadaire. Les résultats évoluent avec ta carrière.
+</p>
+</div>
+
+<div className="flex h-36 w-36 shrink-0 flex-col items-center justify-center self-center rounded-full border-8 border-emerald-400/20 bg-black/20">
+<div className="text-4xl font-black text-emerald-300">
+{competitionEvaluation.rank}
+<span className="text-lg text-slate-500">
+/{competitionEvaluation.totalPlayers}
+</span>
+</div>
+<div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+Classement
+</div>
+</div>
+</div>
+</section>
+
+<section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+<StatCard
+label="Statut actuel"
+value={getCompetitionStatusLabel(competitionEvaluation.status)}
+detail="Dans la hiérarchie"
+icon={Award}
+/>
+<StatCard
+label="Note de sélection"
+value={competitionEvaluation.playerScore}
+detail="Niveau estimé pour le coach"
+icon={Target}
+/>
+<StatCard
+label="Chance de débuter"
+value={`${competitionEvaluation.chanceOfStarting}%`}
+detail="Estimation de sélection"
+icon={TrendingUp}
+/>
+<StatCard
+label="Concurrents"
+value={competitionEvaluation.rivals.length}
+detail="Joueurs simulés"
+icon={Users}
+/>
+</section>
+
+<section className="rounded-2xl border border-white/10 bg-[#111b29] p-5">
+<div className="flex flex-wrap items-start justify-between gap-3">
+<div>
+<h3 className="text-lg font-black">Ton statut dans l’équipe</h3>
+<p className="mt-1 text-sm text-slate-400">
+Poste : {getPositionLabel(player.physicalProfile.primaryPosition)}
+</p>
+</div>
+<span
+className={`rounded-full border px-3 py-1.5 text-xs font-black ${getCompetitionStatusStyle(competitionEvaluation.status)}`}
+>
+{getCompetitionStatusLabel(competitionEvaluation.status)}
+</span>
+</div>
+
+<p className="mt-4 text-sm leading-6 text-slate-300">
+{player.injuryWeeks > 0
+? `Tu es blessé pour encore ${player.injuryWeeks} semaine(s). Tu ne peux pas être sélectionné tant que tu n’es pas rétabli.`
+: competitionEvaluation.explanation}
+</p>
+
+<div className="mt-5">
+<div className="mb-2 flex items-center justify-between text-xs">
+<span className="text-slate-400">Estimation de sélection</span>
+<span className="font-bold">
+{competitionEvaluation.chanceOfStarting}%
+</span>
+</div>
+<ProgressBar
+value={competitionEvaluation.chanceOfStarting}
+color={
+competitionEvaluation.chanceOfStarting >= 70
+? "bg-emerald-400"
+: competitionEvaluation.chanceOfStarting >= 40
+? "bg-amber-400"
+: "bg-red-400"
+}
+/>
+</div>
+
+<div className="mt-5 rounded-xl bg-white/5 p-4 text-sm leading-6 text-slate-300">
+{getCompetitionStatusDescription(competitionEvaluation.status)}
+</div>
+
+<div className="mt-4 grid gap-3 sm:grid-cols-2">
+<div className="rounded-xl border border-white/10 bg-black/10 p-4">
+<div className="text-xs text-slate-500">Forme actuelle</div>
+<div className="mt-2 text-xl font-black">
+{player.form}
+<span className="text-sm text-slate-500">/100</span>
+</div>
+<div className="mt-3">
+<ProgressBar
+value={player.form}
+color="bg-cyan-400"
+/>
+</div>
+</div>
+<div className="rounded-xl border border-white/10 bg-black/10 p-4">
+<div className="text-xs text-slate-500">Fatigue actuelle</div>
+<div className="mt-2 text-xl font-black">
+{player.fatigue}
+<span className="text-sm text-slate-500">/100</span>
+</div>
+<div className="mt-3">
+<ProgressBar
+value={player.fatigue}
+color={player.fatigue >= 70 ? "bg-red-400" : "bg-amber-400"}
+/>
+</div>
+</div>
+</div>
+
+<div className="mt-4 flex flex-col gap-2 sm:flex-row">
+<button
+onClick={() => setActiveTab("entrainement")}
+className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-black transition hover:bg-emerald-300"
+>
+<Dumbbell size={17} />
+Préparer ma séance
+</button>
+<button
+onClick={() => setActiveTab("attributs")}
+className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold transition hover:bg-white/10"
+>
+<TrendingUp size={17} />
+Améliorer mes attributs
+</button>
+</div>
+</section>
+
+<section className="rounded-2xl border border-white/10 bg-[#111b29] p-5">
+<div className="mb-4">
+<h3 className="text-lg font-black">Les joueurs qui te concurrencent</h3>
+<p className="mt-1 text-sm leading-5 text-slate-400">
+Classement simulé des joueurs de l’équipe. Leur niveau,
+leur forme et leur fatigue influencent leur score.
+</p>
+</div>
+
+<div className="space-y-3">
+<div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-4">
+<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400 text-sm font-black text-black">
+{competitionEvaluation.rank}
+</div>
+<div className="min-w-0 flex-1">
+<div className="truncate font-black">{playerName} (toi)</div>
+<div className="mt-1 text-xs text-slate-400">
+{getPositionLabel(player.physicalProfile.primaryPosition)}
+{" · "}Note au poste {positionRating}
+</div>
+</div>
+<div className="text-right">
+<div className="text-xl font-black text-emerald-300">
+{competitionEvaluation.playerScore}
+</div>
+<div className="text-[10px] text-slate-500">Score</div>
+</div>
+</div>
+
+{rankedRivals.map((rival, index) => (
+<div
+key={rival.id}
+className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 p-4"
+>
+<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-sm font-black text-slate-300">
+{index + 1 + (index >= competitionEvaluation.rank - 1 ? 1 : 0)}
+</div>
+<div className="min-w-0 flex-1">
+<div className="truncate font-bold">{rival.name}</div>
+<div className="mt-1 text-xs text-slate-400">
+{getPositionLabel(rival.position)}
+{" · "}Forme {rival.form}
+{" · "}Fatigue {rival.fatigue}
+</div>
+<span
+className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${getCompetitionStatusStyle(rival.status)}`}
+>
+{getCompetitionStatusLabel(rival.status)}
+</span>
+</div>
+<div className="text-right">
+<div className={`text-xl font-black ${getRatingColor(rival.overallRating)}`}>
+{rival.overallRating}
+</div>
+<div className="text-[10px] text-slate-500">Note</div>
+<div className="mt-1 text-xs text-slate-400">
+Score {rival.selectionScore}
+</div>
+</div>
+</div>
+))}
+</div>
+</section>
+
+<section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5">
+<div className="flex items-start gap-3">
+<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
+<Sparkles size={21} />
+</div>
+<div>
+<h3 className="font-black">Comment gagner des places ?</h3>
+<ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+<li>• Entraîne-toi chaque semaine pour améliorer ton niveau.</li>
+<li>• Choisis le repos si ta fatigue est trop élevée.</li>
+<li>• Entretiens une bonne relation avec ton entraîneur.</li>
+<li>• Améliore les attributs qui comptent pour ton poste.</li>
+<li>• Récupère complètement avant de chercher une sélection si tu es blessé.</li>
+</ul>
+</div>
 </div>
 </section>
 </div>
@@ -1444,4 +1778,4 @@ active
 </nav>
 </main>
 );
-}
+  }
