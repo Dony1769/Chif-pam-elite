@@ -78,6 +78,20 @@ const hash = stableHash(seed);
 return min + (hash % (max - min + 1));
 }
 
+function calculateSelectionScore(
+rating: number,
+form: number,
+fatigue: number,
+coachTrust: number,
+): number {
+return Math.round(
+rating +
+(form - 50) * 0.18 -
+Math.max(0, fatigue - 35) * 0.22 +
+(coachTrust - 50) * 0.12,
+);
+}
+
 function getPlayerSelectionScore(player: PlayerCareerState): number {
 const rating = calculatePositionRating(
 player.physicalProfile.primaryPosition,
@@ -120,49 +134,52 @@ const playerPosition = player.physicalProfile.primaryPosition;
 const compatiblePositions = POSITION_GROUPS[playerPosition];
 
 const playerScore = getPlayerSelectionScore(player);
-const seed = `${player.clubId ?? player.clubName}-${player.season}-${player.week}`;
+const seed = "${player.clubId ?? player.clubName}-${player.season}-${player.week}";
 
 const rivals: TeamRival[] = Array.from({ length: 7 }, (_, index) => {
 const rivalPosition =
 compatiblePositions[
-seededValue(`${seed}-position-${index}`, 0, compatiblePositions.length - 1)
+seededValue(
+"${seed}-position-${index}",
+0,
+compatiblePositions.length - 1,
+)
 ];
 
+const minimumRating = clamp(playerScore - 14, 25, 76);
+const maximumRating = clamp(playerScore + 12, 45, 88);
+
 const baseRating = seededValue(
-`${seed}-rating-${index}`,
-Math.max(25, playerScore - 14),
-Math.min(88, playerScore + 12),
+  `${seed}-rating-${index}`,
+  Math.min(minimumRating, maximumRating),
+  Math.max(minimumRating, maximumRating),
 );
 
 const rivalForm = seededValue(`${seed}-form-${index}`, 35, 75);
 const rivalFatigue = seededValue(`${seed}-fatigue-${index}`, 5, 65);
 const rivalTrust = seededValue(`${seed}-trust-${index}`, 30, 75);
 
-const selectionScore = Math.round(
-baseRating +
-(rivalForm - 50) * 0.18 -
-Math.max(0, rivalFatigue - 35) * 0.22 +
-(rivalTrust - 50) * 0.12,
+const selectionScore = calculateSelectionScore(
+  baseRating,
+  rivalForm,
+  rivalFatigue,
+  rivalTrust,
 );
 
 return {
-id: `rival-${index + 1}`,
-name: RIVAL_NAMES[
-seededValue(`${seed}-name-${index}`, 0, RIVAL_NAMES.length - 1)
-],
-position: rivalPosition,
-overallRating: calculatePositionRating(
-rivalPosition,
-player.attributes,
-) === 0
-? baseRating
-: clamp(baseRating, 20, 95),
-form: rivalForm,
-fatigue: rivalFatigue,
-coachTrust: rivalTrust,
-status: "hors_groupe",
-selectionScore,
+  id: `rival-${index + 1}`,
+  name: RIVAL_NAMES[
+    seededValue(`${seed}-name-${index}`, 0, RIVAL_NAMES.length - 1)
+  ],
+  position: rivalPosition,
+  overallRating: baseRating,
+  form: rivalForm,
+  fatigue: rivalFatigue,
+  coachTrust: rivalTrust,
+  status: "hors_groupe",
+  selectionScore,
 };
+
 });
 
 const ranked = [
@@ -189,9 +206,10 @@ const rivalRank =
 ranked.findIndex((item) => item.id === rival.id) + 1;
 
 return {
-...rival,
-status: getStatus(rivalRank, totalPlayers, false),
+  ...rival,
+  status: getStatus(rivalRank, totalPlayers, false),
 };
+
 });
 
 const chanceOfStarting = injured
@@ -206,19 +224,19 @@ let explanation: string;
 
 if (injured) {
 explanation =
-"Tu es indisponible à cause de ta blessure. La priorité est de récupérer avant de retrouver la compétition.";
+"Tu es indisponible à cause de ta blessure. Récupère avant de retrouver la compétition.";
 } else if (rank === 1) {
 explanation =
-"Tu es actuellement en tête de la concurrence à ton poste. Continue à maintenir ton niveau et ta condition physique.";
+"Tu es en tête de la concurrence. Maintiens ton niveau et ta condition physique pour conserver ta place.";
 } else if (rank <= 3) {
 explanation =
-"Tu es proche d'une place dans le onze. Une meilleure forme, moins de fatigue et de bonnes séances peuvent faire la différence.";
+"Tu es proche du onze titulaire. La forme, la fatigue, l'entraînement et la confiance du coach peuvent faire la différence.";
 } else if (rank <= 5) {
 explanation =
-"Tu es dans la rotation, mais plusieurs joueurs te devancent. Tu dois progresser pour gagner la confiance du coach.";
+"Tu es dans la rotation, mais plusieurs joueurs te devancent. Améliore tes performances pour gagner des places.";
 } else {
 explanation =
-"Tu es en retrait dans la concurrence actuelle. Travaille tes attributs prioritaires et veille à ta forme physique.";
+"Tu es en retrait dans la concurrence. Travaille tes attributs prioritaires et surveille ta condition physique.";
 }
 
 return {
