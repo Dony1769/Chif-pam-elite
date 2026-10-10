@@ -15,6 +15,7 @@ description: string;
 
 export type PlayerAttributes = Record<string, number>;
 
+
 export type CareerStage =
 | 'academie'
 | 'jeunes'
