@@ -28,7 +28,6 @@ export function useGameSave(
   const [error, setError] = useState<string | null>(null);
   const [hasSavedGame, setHasSavedGame] = useState(false);
   const [saveInfo, setSaveInfo] = useState<{ timestamp: number; playerName: string; age: number; season: number } | null>(null);
-
   const lastSaveRef = useRef<number>(0);
   const playerRef = useRef<PlayerCareerState | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
