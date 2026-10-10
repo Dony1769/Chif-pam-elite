@@ -3,13 +3,9 @@ import type {
   PlayerAttributes,
   CoachProfile,
   PlayerCareerState,
-  GameMessage,
-  MessageSender,
-  Participation,
   TrainingFocus,
   AttributeCategory,
-  SeasonStats,
-  WeekReport,
+  Participation,
 } from './types';
 
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, v));
@@ -97,92 +93,6 @@ export function evaluatePlayerRole(
 }
 
 // ---------------------------------------------------------------
-// OVR EFFECTIF
-// ---------------------------------------------------------------
-export function getEffectiveOvr(player: PlayerCareerState): number {
-  const role = evaluatePlayerRole(player.attributes, player.coach);
-  return role.overallRating - Math.max(0, player.fatigue - 60) * 0.2 + (player.form - 50) * 0.1;
-}
-
-// ---------------------------------------------------------------
-// ÉTAT INITIAL
-// ---------------------------------------------------------------
-const EMPTY_SEASON: SeasonStats = {
-  matches: 0,
-  wins: 0,
-  draws: 0,
-  losses: 0,
-  goals: 0,
-  assists: 0,
-  ratingSum: 0,
-  ratedMatches: 0,
-};
-
-export function createInitialPlayer(): PlayerCareerState {
-  const initialAttrs: Record<string, number> = {};
-  ALL_51_ATTRIBUTES.forEach((attr) => {
-    initialAttrs[attr.id] = 50;
-  });
-
-  return {
-    isUnlocked: true,
-    playerName: 'Guillaume (Dony)',
-    age: 12,
-    season: 1,
-    week: 1,
-    heightCm: 185,
-    weightKg: 88,
-    skillPointsAvailable: 15,
-    attributes: initialAttrs,
-    assignedPosition: 'Évaluation...',
-    isStarter: false,
-    clubName: 'FC Quartier',
-    teamStrength: 50,
-    coach: {
-      id: 'c1',
-      name: 'Coach Rossi',
-      preferredFormation: '4-3-3',
-      tacticalStyle: 'Gegenpressing',
-      patienceRating: 7,
-      strictness: 58,
-      relation: 50,
-    },
-    activeSponsors: [],
-    matchHistoryCount: 0,
-    form: 50,
-    fatigue: 10,
-    injuryWeeks: 0,
-    trainedThisWeek: false,
-    lastTrainingNote: null,
-    reputation: { niveau: 5, image: 50, moral: 60, followers: 0 },
-    seasonStats: { ...EMPTY_SEASON },
-    careerStats: { matches: 0, goals: 0, assists: 0 },
-    pendingEvent: null,
-    lastWeek: null,
-    inbox: [
-      {
-        id: 'init-1',
-        from: 'famille',
-        season: 1,
-        week: 1,
-        title: 'Premier jour au club',
-        body: "Tes parents t'ont accompagné à l'entraînement. « Donne tout, on est fiers de toi. »",
-        read: false,
-      },
-      {
-        id: 'init-0',
-        from: 'coach',
-        season: 1,
-        week: 1,
-        title: 'Bienvenue au club',
-        body: 'Coach Rossi : « Si tu montes la Finition sans le Calme ni le Placement, tu ne seras pas aligné en Buteur. Travaille tout ton profil. »',
-        read: false,
-      },
-    ],
-  };
-}
-
-// ---------------------------------------------------------------
 // ENTRAÎNEMENT
 // ---------------------------------------------------------------
 export const TRAINING_FOCUS: Record<
@@ -224,12 +134,8 @@ export const TRAINING_FOCUS: Record<
 export function trainWeek(player: PlayerCareerState, focus: TrainingFocus): PlayerCareerState {
   if (player.trainedThisWeek || player.injuryWeeks > 0) return player;
 
-  let points = player.skillPointsAvailable + 1;
-  let note = 'Tu as bien récupéré cette semaine.';
-
-  if (focus !== 'repos') {
-    note = `Séance ${TRAINING_FOCUS[focus].label.toLowerCase()} terminée : +1 point à répartir.`;
-  }
+  const points = player.skillPointsAvailable + 1;
+  const note = focus === 'repos' ? 'Tu as bien récupéré.' : `Séance ${TRAINING_FOCUS[focus].label.toLowerCase()} : +1 pt.`;
 
   return {
     ...player,
@@ -253,8 +159,74 @@ export function rollParticipation(player: PlayerCareerState): Participation {
   const relationOk = player.coach.relation >= 30;
 
   if (role.isStarter && relationOk) return 'titulaire';
-
   const baseChance = 0.25 + player.coach.patienceRating * 0.05;
   const chance = relationOk ? baseChance : baseChance * 0.4;
   return Math.random() < chance ? 'remplacant' : 'tribune';
+}
+
+// ---------------------------------------------------------------
+// ÉTAT INITIAL
+// ---------------------------------------------------------------
+export function createInitialPlayer(): PlayerCareerState {
+  const initialAttrs: Record<string, number> = {};
+  ALL_51_ATTRIBUTES.forEach((attr) => {
+    initialAttrs[attr.id] = 50;
+  });
+
+  return {
+    isUnlocked: true,
+    playerName: 'Guillaume (Dony)',
+    age: 12,
+    season: 1,
+    week: 1,
+    heightCm: 185,
+    weightKg: 88,
+    skillPointsAvailable: 15,
+    attributes: initialAttrs,
+    assignedPosition: 'Évaluation...',
+    isStarter: false,
+    clubName: 'FC Quartier',
+    teamStrength: 50,
+    coach: {
+      id: 'c1',
+      name: 'Coach Rossi',
+      preferredFormation: '4-3-3',
+      tacticalStyle: 'Gegenpressing',
+      patienceRating: 7,
+      strictness: 58,
+      relation: 50,
+    },
+    activeSponsors: [],
+    matchHistoryCount: 0,
+    form: 50,
+    fatigue: 10,
+    injuryWeeks: 0,
+    trainedThisWeek: false,
+    lastTrainingNote: null,
+    reputation: { niveau: 5, image: 50, moral: 60, followers: 0 },
+    seasonStats: { matches: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, ratingSum: 0, ratedMatches: 0 },
+    careerStats: { matches: 0, goals: 0, assists: 0 },
+    pendingEvent: null,
+    lastWeek: null,
+    inbox: [
+      {
+        id: 'init-1',
+        from: 'famille',
+        season: 1,
+        week: 1,
+        title: 'Premier jour au club',
+        body: "Tes parents t'ont accompagné. « Donne tout. »",
+        read: false,
+      },
+      {
+        id: 'init-0',
+        from: 'coach',
+        season: 1,
+        week: 1,
+        title: 'Bienvenue',
+        body: 'Coach Rossi : « Travaille ton profil complet. »',
+        read: false,
+      },
+    ],
+  };
 }
