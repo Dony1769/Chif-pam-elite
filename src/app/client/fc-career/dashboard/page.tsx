@@ -24,7 +24,6 @@ Users,
 Zap,
 } from "lucide-react";
 
-
 import {
 calculatePositionRating,
 createInitialPlayer,
@@ -35,10 +34,7 @@ trainWeek,
 } from "../engine";
 
 import { ALL_51_ATTRIBUTES } from "../constants";
-import type {
-PlayerCareerState,
-TrainingFocus,
-} from "../types";
+import type { PlayerCareerState, TrainingFocus } from "../types";
 
 import {
 clearAllSaves,
@@ -53,6 +49,8 @@ type DashboardTab =
 | "academie"
 | "messages"
 | "carriere";
+
+type WeeklyEvent = NonNullable<PlayerCareerState["pendingEvent"]>;
 
 const NAV_ITEMS: {
 id: DashboardTab;
@@ -113,6 +111,57 @@ return "Potentiel à développer";
 
 function clamp(value: number, min: number, max: number): number {
 return Math.max(min, Math.min(max, value));
+}
+
+function createWeeklyEvent(
+season: number,
+week: number,
+): WeeklyEvent {
+const eventType = Math.floor(Math.random() * 3);
+const suffix = `${season}-${week}`;
+
+if (eventType === 0) {
+return {
+id: `coach-feedback-${suffix}`,
+from: "coach",
+title: "Discussion avec l’entraîneur",
+body:
+"Après l’entraînement, ton entraîneur te demande de venir discuter. Il estime que tu as du potentiel, mais il veut voir davantage de sérieux et de régularité. Comment réagis-tu ?",
+choices: [
+{ id: "accept", label: "Accepter les critiques et travailler davantage" },
+{ id: "explain", label: "Expliquer calmement ton point de vue" },
+{ id: "challenge", label: "Lui demander de te faire confiance" },
+],
+};
+}
+
+if (eventType === 1) {
+return {
+id: `teammate-challenge-${suffix}`,
+from: "coach",
+title: "La concurrence s’intensifie",
+body:
+"Un joueur de ton poste vient de réaliser plusieurs bons entraînements. L’entraîneur envisage de lui donner davantage de temps de jeu. Tu dois choisir comment réagir à cette concurrence.",
+choices: [
+{ id: "work", label: "Montrer ton sérieux et redoubler d’efforts" },
+{ id: "teamwork", label: "Aider ton coéquipier et renforcer l’esprit d’équipe" },
+{ id: "pressure", label: "Demander immédiatement une occasion de jouer" },
+],
+};
+}
+
+return {
+id: `academy-opportunity-${suffix}`,
+from: "coach",
+title: "Une occasion de te distinguer",
+body:
+"L’académie prépare une évaluation des jeunes joueurs. Les entraîneurs remarqueront aussi bien les performances que l’attitude, la discipline et l’implication dans le groupe. Quelle est ta priorité ?",
+choices: [
+{ id: "discipline", label: "Faire preuve d’une discipline exemplaire" },
+{ id: "ambition", label: "Montrer ton ambition et prendre des initiatives" },
+{ id: "balance", label: "Garder ton calme et miser sur la régularité" },
+],
+};
 }
 
 function ProgressBar({
@@ -224,6 +273,12 @@ window.setTimeout(() => setNotice(""), 2800);
 const handleTraining = useCallback(() => {
 if (!player) return;
 
+if (player.pendingEvent) {
+notify("Réponds d’abord à l’événement en cours.");
+setActiveTab("accueil");
+return;
+}
+
 if (player.trainedThisWeek) {
 notify("Tu as déjà effectué ta séance cette semaine.");
 return;
@@ -238,6 +293,12 @@ notify(updated.lastTrainingNote ?? "Séance terminée.");
 const handleUpgrade = useCallback(
 (attributeId: string) => {
 if (!player) return;
+
+if (player.pendingEvent) {
+notify("Réponds d’abord à l’événement en cours.");
+setActiveTab("accueil");
+return;
+}
 
 if (player.skillPointsAvailable <= 0) {
 notify("Tu n’as pas assez de points de progression.");
@@ -275,8 +336,131 @@ notify("Attribut amélioré de 1 point.");
 [player, notify],
 );
 
+const handleEventChoice = useCallback(
+(choiceId: string) => {
+if (!player?.pendingEvent) return;
+
+const event = player.pendingEvent;
+const eventId = event.id;
+
+let relationChange = 0;
+let moralChange = 0;
+let formChange = 0;
+let imageChange = 0;
+let followersChange = 0;
+let fatigueChange = 0;
+let result = "";
+
+if (eventId.startsWith("coach-feedback-")) {
+if (choiceId === "accept") {
+relationChange = 8;
+moralChange = 4;
+formChange = 2;
+result =
+"Tu acceptes les remarques du coach. Il apprécie ton attitude et ta volonté de progresser.";
+} else if (choiceId === "explain") {
+relationChange = 3;
+moralChange = 2;
+result =
+"Tu expliques ton point de vue calmement. Le coach respecte ton honnêteté, mais attend des résultats.";
+} else {
+relationChange = -5;
+moralChange = 5;
+formChange = 1;
+result =
+"Tu réclames davantage de confiance. Tu affiches ton ambition, mais le coach attend maintenant des preuves sur le terrain.";
+}
+} else if (eventId.startsWith("teammate-challenge-")) {
+if (choiceId === "work") {
+relationChange = 5;
+moralChange = 3;
+fatigueChange = 5;
+result =
+"Tu choisis le travail. Le coach remarque ton engagement, même si cette période demande davantage d’énergie.";
+} else if (choiceId === "teamwork") {
+relationChange = 4;
+moralChange = 5;
+imageChange = 2;
+result =
+"Tu aides ton coéquipier. Ton attitude renforce l’esprit d’équipe et améliore ton image au sein de l’académie.";
+} else {
+relationChange = -3;
+moralChange = 2;
+formChange = 2;
+result =
+"Tu demandes une occasion de jouer. Le coach comprend ton ambition, mais veut que tu confirmes ton niveau à l’entraînement.";
+}
+} else if (eventId.startsWith("academy-opportunity-")) {
+if (choiceId === "discipline") {
+relationChange = 5;
+moralChange = 3;
+imageChange = 3;
+result =
+"Ta discipline est remarquée. Tu renforces la confiance du coach et ton image dans l’académie.";
+} else if (choiceId === "ambition") {
+relationChange = 2;
+moralChange = 5;
+imageChange = 2;
+followersChange = 5;
+result =
+"Tu prends des initiatives. Ton ambition est remarquée et ta réputation progresse légèrement.";
+} else {
+relationChange = 3;
+moralChange = 4;
+formChange = 2;
+result =
+"Tu restes concentré sur tes objectifs. Ta régularité rassure le coach et renforce ta confiance.";
+}
+} else {
+result = "Tu as pris ta décision. La carrière continue.";
+}
+
+const updatedPlayer: PlayerCareerState = {
+...player,
+coach: {
+...player.coach,
+relation: clamp(player.coach.relation + relationChange, 0, 100),
+},
+reputation: {
+...player.reputation,
+moral: clamp(player.reputation.moral + moralChange, 0, 100),
+image: clamp(player.reputation.image + imageChange, 0, 100),
+followers: Math.max(
+0,
+player.reputation.followers + followersChange,
+),
+},
+form: clamp(player.form + formChange, 0, 100),
+fatigue: clamp(player.fatigue + fatigueChange, 0, 100),
+pendingEvent: null,
+inbox: [
+{
+id: `event-result-${event.id}-${choiceId}`,
+from: event.from,
+season: player.season,
+week: player.week,
+title: `Décision : ${event.title}`,
+body: `${result}\n\nConséquences : relation coach ${relationChange >= 0 ? "+" : ""}${relationChange}, moral ${moralChange >= 0 ? "+" : ""}${moralChange}${formChange ? `, forme ${formChange > 0 ? "+" : ""}${formChange}` : ""}${fatigueChange ? `, fatigue ${fatigueChange > 0 ? "+" : ""}${fatigueChange}` : ""}${imageChange ? `, image ${imageChange > 0 ? "+" : ""}${imageChange}` : ""}${followersChange ? `, abonnés ${followersChange > 0 ? "+" : ""}${followersChange}` : ""}.`,
+read: false,
+},
+...player.inbox,
+],
+};
+
+setPlayer(updatedPlayer);
+notify(result);
+},
+[player, notify],
+);
+
 const handleNextWeek = useCallback(() => {
 if (!player) return;
+
+if (player.pendingEvent) {
+notify("Résous l’événement en cours avant de passer à la semaine suivante.");
+setActiveTab("accueil");
+return;
+}
 
 if (!player.trainedThisWeek) {
 notify(
@@ -345,11 +529,19 @@ read: false,
 ],
 };
 
+// Un événement apparaît toutes les trois semaines.
+// Un événement déjà en attente n'est jamais remplacé.
+if (!nextPlayer.pendingEvent && nextWeek % 3 === 0) {
+nextPlayer.pendingEvent = createWeeklyEvent(nextSeason, nextWeek);
+}
+
 setPlayer(nextPlayer);
 setActiveTab("accueil");
 
 notify(
-`Semaine ${nextWeek} : tu reçois 1 point de progression.`,
+nextPlayer.pendingEvent
+? `Semaine ${nextWeek} : un événement demande ta décision.`
+: `Semaine ${nextWeek} : tu reçois 1 point de progression.`,
 );
 }, [player, positionRating, notify]);
 
@@ -460,6 +652,48 @@ className="fixed left-1/2 top-20 z-50 w-[calc(100%-32px)] max-w-sm -translate-x-
 >
 {notice}
 </div>
+)}
+
+{player.pendingEvent && (
+<section className="mb-6 overflow-hidden rounded-2xl border border-amber-400/30 bg-gradient-to-br from-[#302719] to-[#171b25] p-5 shadow-xl">
+<div className="flex items-start gap-3">
+<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
+<Sparkles size={23} />
+</div>
+<div className="min-w-0 flex-1">
+<div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">
+Événement de carrière · Décision requise
+</div>
+<h2 className="mt-2 text-xl font-black">
+{player.pendingEvent.title}
+</h2>
+<p className="mt-3 text-sm leading-6 text-slate-300">
+{player.pendingEvent.body}
+</p>
+</div>
+</div>
+
+<div className="mt-5 space-y-2">
+{player.pendingEvent.choices.map((choice) => (
+<button
+key={choice.id}
+onClick={() => handleEventChoice(choice.id)}
+className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-left text-sm font-bold transition hover:border-amber-300/50 hover:bg-amber-400/10"
+>
+<span>{choice.label}</span>
+<ChevronRight
+size={17}
+className="shrink-0 text-amber-300"
+/>
+</button>
+))}
+</div>
+
+<p className="mt-4 text-xs leading-5 text-slate-500">
+Ta décision aura un effet sur ton parcours. Tu dois répondre à
+cet événement avant de continuer.
+</p>
+</section>
 )}
 
 <div className="mb-5 flex items-center justify-between gap-3">
@@ -708,7 +942,8 @@ Récompense : 1 point de progression par semaine.
 </div>
 <button
 onClick={handleNextWeek}
-className="shrink-0 rounded-xl bg-white px-4 py-3 text-sm font-black text-black transition hover:bg-slate-200"
+disabled={Boolean(player.pendingEvent)}
+className="shrink-0 rounded-xl bg-white px-4 py-3 text-sm font-black text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
 >
 Semaine suivante →
 </button>
@@ -759,7 +994,6 @@ selectedCategory === category
 <section className="grid gap-3 sm:grid-cols-2">
 {groupedAttributes.map((attribute) => {
 const value = player.attributes[attribute.id] ?? 1;
-
 const potential =
 player.potential.attributePotentials[attribute.id] ?? 99;
 
@@ -799,7 +1033,11 @@ Potentiel : {potential} · Limite physique : {cap} · Maximum actuel : {maximum}
 </span>
 <button
 onClick={() => handleUpgrade(attribute.id)}
-disabled={reachedLimit || player.skillPointsAvailable <= 0}
+disabled={
+reachedLimit ||
+player.skillPointsAvailable <= 0 ||
+Boolean(player.pendingEvent)
+}
 className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-500"
 >
 {reachedLimit ? "Maximum" : "+1"}
@@ -836,7 +1074,7 @@ return (
 <button
 key={focus}
 onClick={() => setSelectedFocus(focus)}
-disabled={player.trainedThisWeek}
+disabled={player.trainedThisWeek || Boolean(player.pendingEvent)}
 className={`rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
 selected
 ? "border-emerald-400 bg-emerald-400/10"
@@ -879,7 +1117,22 @@ Le repos favorise la récupération.
 </p>
 </div>
 
-{player.trainedThisWeek ? (
+{player.pendingEvent ? (
+<div className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4">
+<div className="font-bold text-amber-300">
+Événement en attente
+</div>
+<p className="mt-1 text-sm text-slate-400">
+Réponds à l’événement affiché en haut de l’écran avant de reprendre l’entraînement.
+</p>
+<button
+onClick={() => setActiveTab("accueil")}
+className="mt-4 w-full rounded-xl bg-amber-400 px-4 py-3 font-black text-black"
+>
+Voir l’événement
+</button>
+</div>
+) : player.trainedThisWeek ? (
 <div className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-4">
 <div className="font-bold text-emerald-300">
 Séance de cette semaine terminée
@@ -1191,4 +1444,4 @@ active
 </nav>
 </main>
 );
-  }
+}
