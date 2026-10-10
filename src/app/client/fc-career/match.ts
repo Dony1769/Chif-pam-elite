@@ -41,6 +41,7 @@ export const OPPONENTS = [
   'Gladiators FC', 'Phénix Club', 'Titans Est', "Aigles d'Or",
 ] as const;
 
+
 const TEAMMATES = [
   'Lopes', 'Diallo', 'Kessler', 'Moreau', 'Benali', 'Tanaka', 'Silva', 'Novak', 'Mbaye', 'Rossi',
 ] as const;
