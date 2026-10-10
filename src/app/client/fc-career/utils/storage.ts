@@ -2,6 +2,7 @@ import type { PlayerCareerState } from '../types';
 
 const STORAGE_KEY = 'fc_career_save';
 
+
 export function saveGame(player: PlayerCareerState): boolean {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(player));
