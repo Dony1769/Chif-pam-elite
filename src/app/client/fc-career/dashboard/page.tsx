@@ -11,6 +11,7 @@ import { Shield, Plus, TrendingUp, Dumbbell, Download, Trash2 } from 'lucide-rea
 
 type Tab = 'attributs' | 'messages' | 'carriere';
 
+
 const CATEGORY_ORDER: AttributeCategory[] = [
   'Attaque',
   'Technique & Passes',
