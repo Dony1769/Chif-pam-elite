@@ -11,7 +11,6 @@ export interface AttributeDefinition {
   name: string;
   category: AttributeCategory;
   description: string;
-  baseCapFormula?: (heightCm: number, weightKg: number) => number;
 }
 
 export type PlayerAttributes = Record<string, number>;
@@ -28,34 +27,24 @@ export interface SponsorContract {
   failed: boolean;
 }
 
-
 export interface CoachProfile {
   id: string;
   name: string;
   preferredFormation: '4-3-3' | '4-2-3-1' | '3-5-2' | '4-4-2';
   tacticalStyle: 'Possession' | 'Contre-attaque' | 'Gegenpressing' | 'Bus';
-  patienceRating: number; // 1-10 : plus c'est haut, plus il donne de minutes aux remplaçants
-  strictness: number; // Exigence de note globale pour la titularisation
-  relation: number; // 0-100 : relation joueur/coach (< 30 = perte de place)
+  patienceRating: number;
+  strictness: number;
+  relation: number;
 }
 
 export interface PlayerReputation {
-  niveau: number; // 0-100 : réputation sportive
-  image: number; // 0-100 : comportement, discipline, scandales
-  moral: number; // 0-100
-  followers: number; // abonnés réseaux sociaux
+  niveau: number;
+  image: number;
+  moral: number;
+  followers: number;
 }
 
-export type AgentAccess = 'none' | 'parents' | 'direct';
-
-export type MessageSender =
-  | 'coach'
-  | 'agent'
-  | 'club'
-  | 'sponsor'
-  | 'presse'
-  | 'famille'
-  | 'systeme';
+export type MessageSender = 'coach' | 'agent' | 'club' | 'sponsor' | 'presse' | 'famille' | 'systeme';
 
 export interface GameMessage {
   id: string;
@@ -71,9 +60,6 @@ export type Participation = 'titulaire' | 'remplacant' | 'tribune';
 
 export type TrainingFocus = 'technique' | 'physique' | 'mental' | 'tactique' | 'repos';
 
-// ---------------------------------------------------------------
-// MATCH
-// ---------------------------------------------------------------
 export interface Fixture {
   week: number;
   opponentName: string;
@@ -81,39 +67,28 @@ export interface Fixture {
   home: boolean;
 }
 
-export type MatchEventType =
-  | 'coup_envoi'
-  | 'entree'
-  | 'occasion'
-  | 'moment'
-  | 'but'
-  | 'but_encaisse'
-  | 'carton'
-  | 'mi_temps'
-  | 'fin';
-
 export interface MatchEvent {
   minute: number;
-  type: MatchEventType;
+  type: 'coup_envoi' | 'entree' | 'occasion' | 'moment' | 'but' | 'but_encaisse' | 'carton' | 'mi_temps' | 'fin';
   text: string;
 }
 
 export interface MomentEffect {
   text: string;
-  altText?: string; // texte utilisé si le but n'a finalement pas lieu (chanceGoal)
-  rating: number; // impact sur la note du match
+  altText?: string;
+  rating: number;
   ourGoal?: boolean;
   theirGoal?: boolean;
   playerGoal?: boolean;
   playerAssist?: boolean;
   card?: boolean;
-  chanceGoal?: number; // probabilité que le but ait réellement lieu
+  chanceGoal?: number;
 }
 
 export interface MomentOption {
   id: string;
   label: string;
-  p: number; // probabilité de réussite
+  p: number;
   success: MomentEffect;
   fail: MomentEffect;
 }
@@ -130,14 +105,14 @@ export interface MatchState {
   participation: Participation;
   position: string;
   minute: number;
-  enterMinute: number; // 0 = titulaire, 55-70 = remplaçant, 999 = tribune
+  enterMinute: number;
   sentOffMinute: number | null;
   goalsFor: number;
   goalsAgainst: number;
   playerGoals: number;
   playerAssists: number;
   yellowCards: number;
-  rating: number; // note en cours, échelle sur 10
+  rating: number;
   momentsCount: number;
   lastMomentMinute: number;
   events: MatchEvent[];
@@ -153,7 +128,7 @@ export interface MatchResult {
   goalsAgainst: number;
   playerGoals: number;
   playerAssists: number;
-  rating: number | null; // null si tribune
+  rating: number | null;
   minutesPlayed: number;
   sentOff: boolean;
   events: MatchEvent[];
@@ -175,7 +150,7 @@ export interface WeekReport {
 }
 
 export interface SeasonStats {
-  matches: number; // matchs joués par le joueur
+  matches: number;
   wins: number;
   draws: number;
   losses: number;
@@ -185,46 +160,38 @@ export interface SeasonStats {
   ratedMatches: number;
 }
 
-// ---------------------------------------------------------------
-// ÉVÉNEMENTS DE VIE
-// ---------------------------------------------------------------
-export interface EventChoice {
-  id: string;
-  label: string;
-}
-
 export interface GameEvent {
   id: string;
   from: MessageSender;
   title: string;
   body: string;
-  choices: EventChoice[];
+  choices: Array<{ id: string; label: string }>;
 }
 
 export interface PlayerCareerState {
   isUnlocked: boolean;
   playerName: string;
-  age: number; // Début à 12 (U12)
+  age: number;
   season: number;
-  week: number; // 1 à 38
+  week: number;
   heightCm: number;
   weightKg: number;
   skillPointsAvailable: number;
   attributes: PlayerAttributes;
-  assignedPosition: string; // 'BU', 'MOC', 'DC'
+  assignedPosition: string;
   isStarter: boolean;
   clubName: string;
-  teamStrength: number; // niveau de ton équipe (30-90)
+  teamStrength: number;
   coach: CoachProfile;
   activeSponsors: SponsorContract[];
   matchHistoryCount: number;
-  form: number; // 0-100
-  fatigue: number; // 0-100
-  injuryWeeks: number; // semaines de blessure restantes
+  form: number;
+  fatigue: number;
+  injuryWeeks: number;
   trainedThisWeek: boolean;
   lastTrainingNote: string | null;
   reputation: PlayerReputation;
-  inbox: GameMessage[]; // le plus récent en premier
+  inbox: GameMessage[];
   seasonStats: SeasonStats;
   careerStats: { matches: number; goals: number; assists: number };
   pendingEvent: GameEvent | null;
