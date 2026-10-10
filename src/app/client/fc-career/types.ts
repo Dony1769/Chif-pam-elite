@@ -60,78 +60,15 @@ export type Participation = 'titulaire' | 'remplacant' | 'tribune';
 
 export type TrainingFocus = 'technique' | 'physique' | 'mental' | 'tactique' | 'repos';
 
-export interface Fixture {
-  week: number;
-  opponentName: string;
-  opponentStrength: number;
-  home: boolean;
-}
-
-export interface MatchEvent {
-  minute: number;
-  type: 'coup_envoi' | 'entree' | 'occasion' | 'moment' | 'but' | 'but_encaisse' | 'carton' | 'mi_temps' | 'fin';
-  text: string;
-}
-
-export interface MomentEffect {
-  text: string;
-  altText?: string;
-  rating: number;
-  ourGoal?: boolean;
-  theirGoal?: boolean;
-  playerGoal?: boolean;
-  playerAssist?: boolean;
-  card?: boolean;
-  chanceGoal?: number;
-}
-
-export interface MomentOption {
-  id: string;
-  label: string;
-  p: number;
-  success: MomentEffect;
-  fail: MomentEffect;
-}
-
-export interface KeyMoment {
-  minute: number;
-  title: string;
-  prompt: string;
-  options: MomentOption[];
-}
-
-export interface MatchState {
-  fixture: Fixture;
-  participation: Participation;
-  position: string;
-  minute: number;
-  enterMinute: number;
-  sentOffMinute: number | null;
-  goalsFor: number;
-  goalsAgainst: number;
-  playerGoals: number;
-  playerAssists: number;
-  yellowCards: number;
-  rating: number;
-  momentsCount: number;
-  lastMomentMinute: number;
-  events: MatchEvent[];
-  pendingMoment: KeyMoment | null;
-  finished: boolean;
-}
-
-export interface MatchResult {
-  fixture: Fixture;
-  participation: Participation;
-  position: string;
-  goalsFor: number;
-  goalsAgainst: number;
-  playerGoals: number;
-  playerAssists: number;
-  rating: number | null;
-  minutesPlayed: number;
-  sentOff: boolean;
-  events: MatchEvent[];
+export interface SeasonStats {
+  matches: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals: number;
+  assists: number;
+  ratingSum: number;
+  ratedMatches: number;
 }
 
 export interface WeekReport {
@@ -147,17 +84,6 @@ export interface WeekReport {
   playerAssists: number;
   reputationDelta: number;
   newInjuryWeeks: number;
-}
-
-export interface SeasonStats {
-  matches: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  goals: number;
-  assists: number;
-  ratingSum: number;
-  ratedMatches: number;
 }
 
 export interface GameEvent {
