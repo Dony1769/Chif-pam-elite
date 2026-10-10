@@ -337,9 +337,13 @@ return evaluateCompetition(player);
 const rankedRivals = useMemo(() => {
 if (!competitionEvaluation) return [];
 
-return [...competitionEvaluation.rivals].sort(
-(a, b) => b.selectionScore - a.selectionScore,
-);
+return [...competitionEvaluation.rivals].sort((a, b) => {
+if (b.selectionScore !== a.selectionScore) {
+return b.selectionScore - a.selectionScore;
+}
+
+return a.id.localeCompare(b.id);
+});
 }, [competitionEvaluation]);
 
 const unreadCount = useMemo(() => {
@@ -430,7 +434,6 @@ const handleEventChoice = useCallback(
 if (!player?.pendingEvent) return;
 
 const event = player.pendingEvent;
-const eventId = event.id;
 
 let relationChange = 0;
 let moralChange = 0;
@@ -440,7 +443,7 @@ let followersChange = 0;
 let fatigueChange = 0;
 let result = "";
 
-if (eventId.startsWith("coach-feedback-")) {
+if (event.id.startsWith("coach-feedback-")) {
 if (choiceId === "accept") {
 relationChange = 8;
 moralChange = 4;
@@ -459,7 +462,7 @@ formChange = 1;
 result =
 "Tu réclames davantage de confiance. Tu affiches ton ambition, mais le coach attend maintenant des preuves sur le terrain.";
 }
-} else if (eventId.startsWith("teammate-challenge-")) {
+} else if (event.id.startsWith("teammate-challenge-")) {
 if (choiceId === "work") {
 relationChange = 5;
 moralChange = 3;
@@ -479,7 +482,7 @@ formChange = 2;
 result =
 "Tu demandes une occasion de jouer. Le coach comprend ton ambition, mais veut que tu confirmes ton niveau à l’entraînement.";
 }
-} else if (eventId.startsWith("academy-opportunity-")) {
+} else if (event.id.startsWith("academy-opportunity-")) {
 if (choiceId === "discipline") {
 relationChange = 5;
 moralChange = 3;
@@ -620,8 +623,6 @@ read: false,
 ],
 };
 
-// Un événement apparaît toutes les trois semaines.
-// Un événement déjà en attente n'est jamais remplacé.
 if (!nextPlayer.pendingEvent && nextWeek % 3 === 0) {
 nextPlayer.pendingEvent = createWeeklyEvent(nextSeason, nextWeek);
 }
@@ -685,6 +686,7 @@ Chargement de ta carrière...
 }
 
 const playerName = player.playerName || "Nouveau joueur";
+const isInjured = player.injuryWeeks > 0;
 
 const selectedMessage = player.inbox.find(
 (message) => message.id === selectedMessageId,
@@ -1072,13 +1074,15 @@ hebdomadaire. Les résultats évoluent avec ta carrière.
 
 <div className="flex h-36 w-36 shrink-0 flex-col items-center justify-center self-center rounded-full border-8 border-emerald-400/20 bg-black/20">
 <div className="text-4xl font-black text-emerald-300">
-{competitionEvaluation.rank}
+{isInjured ? "—" : competitionEvaluation.rank}
+{!isInjured && (
 <span className="text-lg text-slate-500">
 /{competitionEvaluation.totalPlayers}
 </span>
+)}
 </div>
 <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-Classement
+{isInjured ? "Indisponible" : "Classement"}
 </div>
 </div>
 </div>
@@ -1087,7 +1091,9 @@ Classement
 <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
 <StatCard
 label="Statut actuel"
-value={getCompetitionStatusLabel(competitionEvaluation.status)}
+value={getCompetitionStatusLabel(
+isInjured ? "hors_groupe" : competitionEvaluation.status,
+)}
 detail="Dans la hiérarchie"
 icon={Award}
 />
@@ -1099,7 +1105,7 @@ icon={Target}
 />
 <StatCard
 label="Chance de débuter"
-value={`${competitionEvaluation.chanceOfStarting}%`}
+value={`${isInjured ? 0 : competitionEvaluation.chanceOfStarting}%`}
 detail="Estimation de sélection"
 icon={TrendingUp}
 />
@@ -1120,14 +1126,18 @@ Poste : {getPositionLabel(player.physicalProfile.primaryPosition)}
 </p>
 </div>
 <span
-className={`rounded-full border px-3 py-1.5 text-xs font-black ${getCompetitionStatusStyle(competitionEvaluation.status)}`}
+className={`rounded-full border px-3 py-1.5 text-xs font-black ${getCompetitionStatusStyle(
+isInjured ? "hors_groupe" : competitionEvaluation.status,
+)}`}
 >
-{getCompetitionStatusLabel(competitionEvaluation.status)}
+{getCompetitionStatusLabel(
+isInjured ? "hors_groupe" : competitionEvaluation.status,
+)}
 </span>
 </div>
 
 <p className="mt-4 text-sm leading-6 text-slate-300">
-{player.injuryWeeks > 0
+{isInjured
 ? `Tu es blessé pour encore ${player.injuryWeeks} semaine(s). Tu ne peux pas être sélectionné tant que tu n’es pas rétabli.`
 : competitionEvaluation.explanation}
 </p>
@@ -1136,15 +1146,15 @@ className={`rounded-full border px-3 py-1.5 text-xs font-black ${getCompetitionS
 <div className="mb-2 flex items-center justify-between text-xs">
 <span className="text-slate-400">Estimation de sélection</span>
 <span className="font-bold">
-{competitionEvaluation.chanceOfStarting}%
+{isInjured ? 0 : competitionEvaluation.chanceOfStarting}%
 </span>
 </div>
 <ProgressBar
-value={competitionEvaluation.chanceOfStarting}
+value={isInjured ? 0 : competitionEvaluation.chanceOfStarting}
 color={
-competitionEvaluation.chanceOfStarting >= 70
+!isInjured && competitionEvaluation.chanceOfStarting >= 70
 ? "bg-emerald-400"
-: competitionEvaluation.chanceOfStarting >= 40
+: !isInjured && competitionEvaluation.chanceOfStarting >= 40
 ? "bg-amber-400"
 : "bg-red-400"
 }
@@ -1152,7 +1162,9 @@ competitionEvaluation.chanceOfStarting >= 70
 </div>
 
 <div className="mt-5 rounded-xl bg-white/5 p-4 text-sm leading-6 text-slate-300">
-{getCompetitionStatusDescription(competitionEvaluation.status)}
+{isInjured
+? "La priorité est de récupérer. Ton classement sportif sera de nouveau pertinent lorsque tu seras disponible."
+: getCompetitionStatusDescription(competitionEvaluation.status)}
 </div>
 
 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1163,10 +1175,7 @@ competitionEvaluation.chanceOfStarting >= 70
 <span className="text-sm text-slate-500">/100</span>
 </div>
 <div className="mt-3">
-<ProgressBar
-value={player.form}
-color="bg-cyan-400"
-/>
+<ProgressBar value={player.form} color="bg-cyan-400" />
 </div>
 </div>
 <div className="rounded-xl border border-white/10 bg-black/10 p-4">
@@ -1212,6 +1221,7 @@ leur forme et leur fatigue influencent leur score.
 </div>
 
 <div className="space-y-3">
+{!isInjured && (
 <div className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-4">
 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400 text-sm font-black text-black">
 {competitionEvaluation.rank}
@@ -1230,14 +1240,29 @@ leur forme et leur fatigue influencent leur score.
 <div className="text-[10px] text-slate-500">Score</div>
 </div>
 </div>
+)}
 
-{rankedRivals.map((rival, index) => (
+{isInjured && (
+<div className="rounded-xl border border-red-400/20 bg-red-400/5 p-4 text-sm leading-6 text-red-200">
+Tu es temporairement retiré de la sélection à cause de ta
+blessure. Les concurrents ci-dessous sont classés entre eux
+pendant ton indisponibilité.
+</div>
+)}
+
+{rankedRivals.map((rival, index) => {
+const rivalRank = isInjured
+? index + 1
+: index + 1 +
+(index >= competitionEvaluation.rank - 1 ? 1 : 0);
+
+return (
 <div
 key={rival.id}
 className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/10 p-4"
 >
 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-sm font-black text-slate-300">
-{index + 1 + (index >= competitionEvaluation.rank - 1 ? 1 : 0)}
+{rivalRank}
 </div>
 <div className="min-w-0 flex-1">
 <div className="truncate font-bold">{rival.name}</div>
@@ -1262,7 +1287,8 @@ Score {rival.selectionScore}
 </div>
 </div>
 </div>
-))}
+);
+})}
 </div>
 </section>
 
