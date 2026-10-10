@@ -17,6 +17,7 @@ import {
 } from '../engine';
 import { getFixture, simulateFullMatch } from '../match';
 import { resolveEvent } from '../events';
+import { useGameSave } from '../utils/useGameSave';
 import { getAgeStage, getCategoryLabel, getUnlockStatuses, WEEKS_PER_SEASON, BALANCE } from '../rules';
 import {
   PlayerCareerState,
@@ -27,7 +28,7 @@ import {
   TrainingFocus,
 } from '../types';
 import MatchView from '../components/MatchView';
-import { Shield, Play, Plus, Mail, Lock, Check, TrendingUp, Dumbbell, HeartPulse, Zap } from 'lucide-react';
+import { Shield, Play, Plus, Mail, Lock, Check, TrendingUp, Dumbbell, HeartPulse, Zap, Download, Trash2, RotateCcw } from 'lucide-react';
 
 type Tab = 'attributs' | 'messages' | 'carriere';
 
@@ -82,10 +83,13 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 
 export default function CareerDashboardPage() {
   const router = useRouter();
-  const [player, setPlayer] = useState<PlayerCareerState>(createInitialPlayer);
+  const initialPlayer = createInitialPlayer();
+  const { player: gamePlayer, loading, error, saveNow, resetGame, hasSavedGame, saveInfo } = useGameSave(initialPlayer, 30000);
+
   const [tab, setTab] = useState<Tab>('attributs');
   const [openMessageId, setOpenMessageId] = useState<string | null>(null);
   const [matchSetup, setMatchSetup] = useState<{ fixture: Fixture; participation: Participation } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Vérification de la sécurité PIN
   useEffect(() => {
@@ -94,6 +98,34 @@ export default function CareerDashboardPage() {
       router.push('/client/fc-career');
     }
   }, [router]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020617]">
+        <div className="text-center text-white">
+          <p className="text-sm font-bold">Chargement de votre partie...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!gamePlayer) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#020617]">
+        <div className="text-center text-white">
+          <p className="text-sm font-bold text-rose-300">Erreur : impossible de charger le jeu</p>
+        </div>
+      </div>
+    );
+  }
+
+  // État local du joueur (lecture depuis gamePlayer)
+  const [player, setPlayer] = useState<PlayerCareerState>(gamePlayer);
+
+  // Synchroniser player avec gamePlayer au chargement
+  useEffect(() => {
+    setPlayer(gamePlayer);
+  }, [gamePlayer]);
 
   const role = evaluatePlayerRole(player.attributes, player.coach);
   const stage = getAgeStage(player.age);
@@ -108,20 +140,24 @@ export default function CareerDashboardPage() {
   const lw = player.lastWeek;
 
   // ----- Actions -----
+  const updatePlayer = (update: PlayerCareerState) => {
+    setPlayer(update);
+  };
+
   const upgradeAttribute = (attrId: string) => {
     if (player.skillPointsAvailable <= 0) return;
     const currentVal = player.attributes[attrId] || 50;
     const maxCap = getAttributeCap(attrId, player.heightCm, player.weightKg);
     if (currentVal >= maxCap) return;
-    setPlayer((prev) => ({
-      ...prev,
-      skillPointsAvailable: prev.skillPointsAvailable - 1,
-      attributes: { ...prev.attributes, [attrId]: currentVal + 1 },
-    }));
+    updatePlayer({
+      ...player,
+      skillPointsAvailable: player.skillPointsAvailable - 1,
+      attributes: { ...player.attributes, [attrId]: currentVal + 1 },
+    });
   };
 
-  const train = (focus: TrainingFocus) => setPlayer(trainWeek(player, focus));
-  const rehab = () => setPlayer(restWeek(player));
+  const train = (focus: TrainingFocus) => updatePlayer(trainWeek(player, focus));
+  const rehab = () => updatePlayer(restWeek(player));
 
   const playLive = () => {
     setMatchSetup({ fixture, participation: rollParticipation(player) });
@@ -130,22 +166,24 @@ export default function CareerDashboardPage() {
   const quickSim = () => {
     const participation = rollParticipation(player);
     const result = simulateFullMatch(buildMatchContext(player), fixture, participation);
-    setPlayer(completeMatch(player, result));
+    const updated = completeMatch(player, result);
+    updatePlayer(updated);
   };
 
   const finishLiveMatch = (result: MatchResult) => {
-    setPlayer(completeMatch(player, result));
+    const updated = completeMatch(player, result);
+    updatePlayer(updated);
     setMatchSetup(null);
   };
 
-  const chooseEvent = (choiceId: string) => setPlayer(resolveEvent(player, choiceId));
+  const chooseEvent = (choiceId: string) => updatePlayer(resolveEvent(player, choiceId));
 
   const openMessage = (id: string) => {
     setOpenMessageId((cur) => (cur === id ? null : id));
-    setPlayer((prev) => ({
-      ...prev,
-      inbox: prev.inbox.map((m) => (m.id === id ? { ...m, read: true } : m)),
-    }));
+    updatePlayer({
+      ...player,
+      inbox: player.inbox.map((m) => (m.id === id ? { ...m, read: true } : m)),
+    });
   };
 
   return (
@@ -154,16 +192,21 @@ export default function CareerDashboardPage() {
       <header className="relative overflow-hidden border-b border-white/10 bg-gradient-to-br from-emerald-950 via-slate-900 to-[#020617] px-4 pb-6 pt-6">
         <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
         <div className="relative mx-auto max-w-5xl">
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-            {getCategoryLabel(player.age)} - Saison {player.season} - Journée {player.week}/{WEEKS_PER_SEASON}
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                {getCategoryLabel(player.age)} - Saison {player.season} - Journée {player.week}/{WEEKS_PER_SEASON}
+              </p>
+            </div>
+            {error && <p className="text-[10px] font-bold text-rose-300">{error}</p>}
+          </div>
 
           <div className="mt-3 flex items-center gap-4">
             <div className="flex h-24 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border border-emerald-400/40 bg-gradient-to-b from-emerald-400/20 to-slate-900 shadow-lg">
               <span className="text-4xl font-black leading-none text-emerald-300">{role.overallRating}</span>
               <span className="mt-1 text-xs font-black tracking-widest text-white">{role.assignedPosition}</span>
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="truncate text-2xl font-black uppercase italic">{player.playerName}</h1>
               <p className="text-xs text-slate-400">
                 {player.age} ans | {player.heightCm} cm | {player.weightKg} kg
@@ -186,6 +229,13 @@ export default function CareerDashboardPage() {
                 </span>
               </div>
             </div>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="ml-4 rounded-2xl border border-white/10 bg-slate-950/80 p-3 hover:border-white/20"
+              title="Paramètres"
+            >
+              ⚙️
+            </button>
           </div>
 
           <div className="mt-4 grid grid-cols-4 gap-2">
@@ -197,6 +247,43 @@ export default function CareerDashboardPage() {
         </div>
       </header>
 
+      {/* ---------- PARAMÈTRES ---------- */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            className="border-b border-white/10 bg-slate-900/80 px-4 py-4"
+          >
+            <div className="mx-auto max-w-5xl space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Sauvegarde</p>
+                {saveInfo && (
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Dernière sauvegarde : {new Date(saveInfo.timestamp).toLocaleTimeString('fr-FR')}
+                  </p>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={saveNow}
+                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-[10px] font-bold text-slate-300 hover:border-emerald-500/50"
+                  >
+                    <Download size={12} /> Sauvegarder maintenant
+                  </button>
+                  <button
+                    onClick={resetGame}
+                    className="flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[10px] font-bold text-rose-300 hover:border-rose-500/60"
+                  >
+                    <Trash2 size={12} /> Réinitialiser
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="mx-auto mt-6 grid max-w-5xl grid-cols-1 gap-6 px-4 lg:grid-cols-3">
         {/* ---------- COLONNE GAUCHE ---------- */}
         <section className="space-y-6">
@@ -206,7 +293,6 @@ export default function CareerDashboardPage() {
               <Zap size={16} /> Cette semaine
             </h2>
 
-            {/* Résultat du dernier match */}
             {lw && !player.trainedThisWeek && (
               <div className="mb-4 rounded-2xl border border-white/5 bg-slate-950/60 p-3">
                 <p className="text-[10px] font-bold uppercase text-slate-400">
