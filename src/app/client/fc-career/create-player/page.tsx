@@ -106,7 +106,6 @@ age,
 heightCm,
 weightKg,
 careerStage: "academie",
-position: primaryPosition,
 physicalProfile: {
 ...base.physicalProfile,
 heightCm,
