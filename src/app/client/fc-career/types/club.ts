@@ -12,6 +12,7 @@ export type CompetitionId =
   | "coupe-la-ligue"
   | "amical";
 
+
 export interface ClubColors {
   primary: string; // hex
   secondary: string;
