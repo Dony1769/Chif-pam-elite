@@ -1,176 +1,225 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Dices, Timer, Trophy, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { 
+  Dices, Loader2, ShieldCheck, Zap, Users, Lock, AlertTriangle
+} from 'lucide-react';
+import { LOTTERY_MOMENTS } from '@/lib/constants/lottery';
+import { AdminLotteryService } from '@/services/admin/lottery';
+import { useAppFeedback } from '@/components/ui/AppFeedbackProvider';
+
+type Tirage = {
+  id: string;
+  moment: string;
+  chiffre_gagnant: string;
+  multiplicateur: number;
+  status: string;
+};
+
+type MiseAmount = {
+  montant: number;
+};
 
 export default function AdminLoterie() {
-  const [currentTirage, setCurrentTirage] = useState<any>(null);
-  const [multiplicateur, setMultiplicateur] = useState(5);
+  const { confirm, notify } = useAppFeedback();
+  const [currentTirage, setCurrentTirage] = useState<Tirage | null>(null);
+  const [multiplicateur, setMultiplicateur] = useState(10);
   const [loading, setLoading] = useState(true);
-  const [isClosing, setIsClosing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [stats, setStats] = useState({ totalMises: 0, totalMontant: 0 });
 
-  useEffect(() => { fetchActiveSession(); }, []);
+  // Sécurité pour éviter les boucles de mise à jour
+  const isActionInProgress = useRef(false);
 
-  const fetchActiveSession = async () => {
-    const { data } = await supabase.from('tirages').select('*').eq('status', 'ouvert').maybeSingle();
-    setCurrentTirage(data);
-    setLoading(false);
-  };
+  // RÉCUPÉRATION : On cherche s'il y a DEJA une session ouverte par erreur
+  const fetchAdminData = useCallback(async () => {
+    if (isActionInProgress.current) return;
 
-  const preparerTirage = async (moment: string) => {
-    if (currentTirage) return alert("Une session est déjà en cours !");
-    
-    // 1. Génération du chiffre gagnant (00-99)
-    const gagnant = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-    
-    // 2. Génération de 9 chiffres perdants uniques
-    const faux = new Set<string>();
-    while(faux.size < 9) {
-      const n = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-      if (n !== gagnant) faux.add(n);
-    }
-
-    // 3. Mélange (Shuffle) pour le Rideau de Fumée
-    const tous = [gagnant, ...Array.from(faux)].sort(() => Math.random() - 0.5);
-
-    const { data, error } = await supabase.from('tirages').insert([{
-      moment,
-      chiffre_gagnant: gagnant,
-      chiffres_visibles: tous,
-      multiplicateur: multiplicateur,
-      status: 'ouvert'
-    }]).select().single();
-
-    if (!error) {
-      setCurrentTirage(data);
-    } else {
-      alert("Erreur lors de la création du tirage");
-    }
-  };
-
-  // --- VERSION OPTIMISÉE AVEC APPEL RPC ---
-  const cloreTirage = async () => {
-    if (!currentTirage || !confirm("Voulez-vous clôturer et payer les gagnants via le moteur SQL ?")) return;
-    
-    setIsClosing(true);
     try {
-      // 1. Appel de la fonction SQL intelligente (Gère le status 'ferme' + les gains)
-      // On ferme d'abord le tirage
-      await supabase.from('tirages').update({ status: 'ferme' }).eq('id', currentTirage.id);
+      const { data: tirage, error } = await supabase
+        .from('tirages')
+        .select('*')
+        .eq('status', 'ouvert')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      // 2. On déclenche la distribution massive des gains
-      const { error: rpcError } = await supabase.rpc('distribuer_gains', { 
-        p_tirage_id: currentTirage.id, 
-        p_chiffre_gagnant: currentTirage.chiffre_gagnant 
-      });
+      if (error) throw error;
+      
+      setCurrentTirage(tirage);
 
-      if (rpcError) throw rpcError;
-
-      alert("Succès : Le tirage est clos et les comptes clients ont été crédités.");
-      setCurrentTirage(null);
+      if (tirage) {
+        setMultiplicateur(tirage.multiplicateur);
+        const { data: mises } = await supabase
+          .from('mises')
+          .select('montant')
+          .eq('tirage_id', tirage.id)
+          .returns<MiseAmount[]>();
+        
+        if (mises) {
+          const total = mises.reduce((sum, m) => sum + Number(m.montant), 0);
+          setStats({ totalMises: mises.length, totalMontant: total });
+        }
+      }
     } catch (err) {
-      console.error(err);
-      alert("Erreur critique lors de la distribution.");
+      console.error("Erreur sync:", err);
     } finally {
-      setIsClosing(false);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAdminData();
+    // On écoute les changements mais on ne déclenche RIEN automatiquement
+    const channel = supabase.channel('admin-control')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mises' }, () => fetchAdminData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchAdminData]);
+
+  // ACTION 1 : OUVRIR (Seulement sur clic)
+  const ouvrirSession = async (moment: string) => {
+    // Si currentTirage existe, c'est qu'une session est déjà ouverte dans la DB
+    if (currentTirage) {
+      notify("Une session est déjà ouverte dans la base de données. Fermez-la d'abord.", 'warning');
+      return;
+    }
+
+    setIsProcessing(true);
+    isActionInProgress.current = true;
+
+    try {
+      const result = await AdminLotteryService.openSession(moment, Number(multiplicateur));
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      
+      // Mise à jour immédiate de l'interface après le clic réussi
+      await fetchAdminData();
+      notify(result.message, 'success');
+    } catch (err: unknown) {
+      notify("Erreur lors de l'ouverture : " + (err instanceof Error ? err.message : 'Erreur inconnue'), 'danger');
+    } finally {
+      setIsProcessing(false);
+      isActionInProgress.current = false;
     }
   };
 
-  if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-emerald-500" /></div>;
+  // ACTION 2 : CLÔTURER (Seulement sur clic)
+  const cloturerEtPayer = async () => {
+    if (!currentTirage || isProcessing) return;
+    if (!(await confirm(`Voulez-vous fermer la session et valider le ${currentTirage.chiffre_gagnant} ?`))) return;
+
+    setIsProcessing(true);
+    isActionInProgress.current = true;
+
+    try {
+      const result = await AdminLotteryService.closeSession(currentTirage.id);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      // 3. Reset TOTAL
+      setCurrentTirage(null);
+      setStats({ totalMises: 0, totalMontant: 0 });
+      notify(result.message, 'success');
+      
+    } catch (err: unknown) {
+      notify("Erreur lors de la clôture : " + (err instanceof Error ? err.message : 'Erreur inconnue'), 'danger');
+    } finally {
+      setIsProcessing(false);
+      isActionInProgress.current = false;
+    }
+  };
+
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="p-8 space-y-8 max-w-5xl mx-auto animate-in fade-in duration-500">
-      <div className="flex items-center justify-between mb-10">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="text-emerald-500" size={32} />
-          <h1 className="text-2xl font-black italic uppercase tracking-tighter">Contrôle <span className="text-emerald-500">Loterie</span></h1>
-        </div>
-        {currentTirage && (
-           <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Session Live</span>
-           </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <div className="bg-slate-900/50 p-8 rounded-[3rem] border border-white/5 space-y-6 shadow-2xl">
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
-              <AlertCircle size={14} /> Paramètres de session
-            </p>
-            <div className="flex items-center justify-between bg-slate-950 p-5 rounded-2xl border border-white/5">
-              <span className="text-sm font-bold uppercase text-slate-400">Gain Multiplié par</span>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-black text-emerald-500">x</span>
-                <input 
-                  type="number" 
-                  value={multiplicateur} 
-                  onChange={(e) => setMultiplicateur(Number(e.target.value))}
-                  className="bg-transparent border-b border-emerald-500/30 w-12 text-center text-2xl font-black outline-none focus:border-emerald-500 transition-all"
-                />
-              </div>
-            </div>
-            
-            {!currentTirage ? (
-              <div className="grid grid-cols-3 gap-3 pt-4">
-                {['Matin', 'Midi', 'Soir'].map(m => (
-                  <button key={m} onClick={() => preparerTirage(m)} className="bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 p-5 rounded-3xl transition-all group flex flex-col items-center">
-                     <Timer className="mb-2 opacity-50 group-hover:opacity-100" size={24} />
-                     <span className="text-[9px] font-black uppercase tracking-tighter">{m}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <button 
-                disabled={isClosing}
-                onClick={cloreTirage} 
-                className="w-full py-6 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-4xl uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-rose-900/20 transition-all active:scale-95 flex items-center justify-center gap-3"
-              >
-                {isClosing ? <Loader2 className="animate-spin" size={18} /> : <Trophy size={18} />}
-                {isClosing ? 'Calcul des gains...' : `Clôturer & Payer (${currentTirage.moment})`}
-              </button>
-            )}
+    <div className="min-h-screen bg-[#020617] text-white p-6 font-black italic uppercase">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        {/* HEADER */}
+        <div className="flex justify-between items-center bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/5">
+          <div className="flex items-center gap-4">
+            <ShieldCheck className="text-emerald-500" size={40} />
+            <h1 className="text-2xl tracking-tighter">Panel de Contrôle</h1>
+          </div>
+          
+          <div className="flex items-center gap-4 bg-black/40 p-3 rounded-2xl border border-white/10">
+            <span className="text-[10px] text-slate-500">Multiplicateur :</span>
+            <input 
+              type="number" 
+              value={multiplicateur} 
+              disabled={!!currentTirage}
+              onChange={(e) => setMultiplicateur(Number(e.target.value))}
+              className="bg-transparent text-emerald-500 text-xl w-12 outline-none font-bold"
+            />
           </div>
         </div>
 
-        <div className="bg-slate-900/30 p-8 rounded-[3rem] border border-white/5 backdrop-blur-sm relative overflow-hidden">
-           {currentTirage ? (
-             <div className="text-center space-y-8 relative z-10">
-                <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">Le Rideau de Fumée est actif</p>
-                <div className="space-y-2">
-                  <p className="text-[8px] font-black uppercase text-slate-500">Chiffre Gagnant Masqué</p>
-                  <div className="text-8xl font-black text-white italic drop-shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                    {currentTirage.chiffre_gagnant}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* GAUCHE : SESSIONS */}
+          <div className="bg-slate-900/40 p-6 rounded-4xl border border-white/5 space-y-4">
+            <h3 className="text-xs text-slate-500 flex items-center gap-2"><Zap size={14}/> Actions Manuelles</h3>
+            {LOTTERY_MOMENTS.map((m) => (
+              <button
+                key={m}
+                disabled={!!currentTirage || isProcessing}
+                onClick={() => ouvrirSession(m)}
+                className={`w-full py-5 rounded-2xl border transition-all ${
+                  currentTirage?.moment === m 
+                  ? 'bg-emerald-500 text-black border-emerald-400' 
+                  : 'bg-slate-950 border-white/5 hover:border-emerald-500/50 disabled:opacity-20'
+                }`}
+              >
+                Ouvrir {m}
+              </button>
+            ))}
+          </div>
+
+          {/* DROITE : AFFICHAGE & CLÔTURE */}
+          <div className="lg:col-span-2">
+            <div className="bg-slate-900 p-10 rounded-[3rem] border border-white/5 min-h-100 flex flex-col items-center justify-center relative">
+              {currentTirage ? (
+                <div className="text-center space-y-8 w-full">
+                  <div className="bg-amber-500/10 text-amber-500 px-6 py-2 rounded-full border border-amber-500/20 inline-flex items-center gap-2">
+                    <Lock size={16} /> <span>Session {currentTirage.moment} Active</span>
                   </div>
-                </div>
-                
-                <div className="grid grid-cols-5 gap-2 pt-6">
-                  {currentTirage.chiffres_visibles.map((c: string, i: number) => (
-                    <div key={i} className={`h-12 rounded-xl flex items-center justify-center font-black text-xs border transition-all ${
-                      c === currentTirage.chiffre_gagnant 
-                      ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
-                      : 'border-white/5 bg-slate-950/50 text-slate-600'
-                    }`}>
-                      {c}
+                  
+                  <div>
+                    <p className="text-emerald-500 text-xs tracking-widest mb-2">Chiffre Gagnant pour ce tirage</p>
+                    <h2 className="text-[12rem] leading-none">{currentTirage.chiffre_gagnant}</h2>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 w-full max-w-md mx-auto mb-8">
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-slate-500">Mises</p>
+                      <p className="text-2xl">{stats.totalMises}</p>
                     </div>
-                  ))}
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[10px] text-slate-500">Total</p>
+                      <p className="text-2xl">{stats.totalMontant} HTG</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={cloturerEtPayer}
+                    disabled={isProcessing}
+                    className="w-full max-w-sm py-6 bg-emerald-500 text-black rounded-2xl font-black hover:bg-white transition-colors flex items-center justify-center gap-3"
+                  >
+                    {isProcessing ? <Loader2 className="animate-spin" /> : <ShieldCheck />}
+                    VALIDER ET FERMER LA SESSION
+                  </button>
                 </div>
-                <p className="text-[9px] font-bold text-slate-500 uppercase italic">Les clients voient ces 10 chiffres mélangés</p>
-             </div>
-           ) : (
-             <div className="h-full flex flex-col items-center justify-center text-slate-700 space-y-6 py-20">
-                <div className="p-8 bg-slate-900/50 rounded-full border border-white/5">
-                  <Dices size={64} className="opacity-10" />
+              ) : (
+                <div className="text-center opacity-30">
+                  <Dices size={80} className="mx-auto mb-4" />
+                  <p className="text-sm">Système en attente d'une commande admin.</p>
                 </div>
-                <p className="text-[10px] uppercase font-black tracking-[0.3em]">En attente de lancement</p>
-             </div>
-           )}
-           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[80px] rounded-full"></div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

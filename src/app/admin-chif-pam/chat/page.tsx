@@ -1,116 +1,416 @@
-"use client";
+'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Send, Search, User as UserIcon } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react'
+import { Loader2, MessageSquare, Paperclip, Send, Image as ImageIcon, Zap, ExternalLink, User } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { ChatService } from '@/services/chat'
+import { PRESET_RESPONSES, PresetResponse } from '@/services/chatBot'
+import { type ChatMessage, parseMessageContent } from '@/types/chat'
 
-const ADMIN_ID = '9e141172-93db-4df4-a72b-47b89211b46e';
+// Structure enrichie pour inclure les détails du profil utilisateur
+interface AdminConversationWithProfile {
+  client_id: string
+  last_message_content: string | null
+  last_message_created_at: string | null
+  admin_unread_count: number
+  username?: string | null
+  phone?: string | null
+}
 
-export default function AdminChat() {
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
+export default function AdminChatPage() {
+  const router = useRouter()
+  const [conversations, setConversations] = useState<AdminConversationWithProfile[]>([])
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [loading, setLoading] = useState(false)
+  const [composerText, setComposerText] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [showPresets, setShowPresets] = useState(false)
+  const bottomRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    fetchConversations();
-    // Realtime global pour les notifications de nouveaux clients
-    const channel = supabase.channel('admin-inbox')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchConversations())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+  // 1. Chargement des conversations et enrichissement avec la table profiles
+  const refreshConversations = async () => {
+    try {
+      const rawConversations = await ChatService.fetchAdminConversations(supabase)
 
-  useEffect(() => {
-    if (selectedUser) fetchMessages(selectedUser);
-  }, [selectedUser]);
+      if (!rawConversations || rawConversations.length === 0) {
+        setConversations([])
+        return
+      }
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+      // Extraction des IDs clients uniques
+      const clientIds = rawConversations.map((c) => c.client_id)
 
-  const fetchConversations = async () => {
-    const { data } = await supabase.from('profiles').select('*').order('last_active', { ascending: false });
-    setProfiles(data || []);
-  };
+      // Récupération des pseudos depuis la table 'profiles'
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username, phone')
+        .in('id', clientIds)
 
-  const fetchMessages = async (userId: string) => {
-    const { data } = await supabase.from('messages')
-      .select('*')
-      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-      .order('created_at', { ascending: true });
-    setMessages(data || []);
-  };
+      // Fusion des données de profil avec la liste des conversations
+      const enrichedConversations: AdminConversationWithProfile[] = rawConversations.map((conv) => {
+        const profile = profiles?.find((p) => p.id === conv.client_id)
+        return {
+          ...conv,
+          username: profile?.username || null,
+          phone: profile?.phone || null,
+        }
+      })
 
-  const sendResponse = async () => {
-    if (!newMessage.trim() || !selectedUser) return;
-    const { error } = await supabase.from('messages').insert([{
-      content: newMessage,
-      sender_id: ADMIN_ID,
-      receiver_id: selectedUser,
-      is_admin: true
-    }]);
-    if (!error) {
-      setMessages([...messages, { content: newMessage, is_admin: true, created_at: new Date().toISOString() }]);
-      setNewMessage('');
+      setConversations(enrichedConversations)
+
+      return enrichedConversations
+    } catch (error) {
+      console.error('Erreur lors du chargement des conversations admin:', error)
     }
-  };
+  }
+
+  // Chargement initial des conversations
+  useEffect(() => {
+    let isMounted = true
+
+    const initConversations = async () => {
+      const convs = await refreshConversations()
+      if (isMounted && convs && convs.length > 0 && !selectedClientId) {
+        // Sélectionne le premier client uniquement au tout premier chargement
+        setSelectedClientId(convs[0].client_id)
+      }
+    }
+
+    void initConversations()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // 2. Chargement des messages pour le client sélectionné et abonnement Realtime
+  useEffect(() => {
+    if (!selectedClientId) {
+      setMessages([])
+      return
+    }
+
+    let isMounted = true
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    const loadMessages = async () => {
+      setLoading(true)
+      try {
+        const data = await ChatService.fetchMessagesForClient(supabase, selectedClientId)
+        if (!isMounted) return
+        setMessages(data)
+
+        // Marquer comme lu pour ce client précis
+        await ChatService.markConversationReadByAdmin(supabase, selectedClientId)
+        await refreshConversations()
+      } catch (error) {
+        console.error('Erreur lors du chargement des messages client:', error)
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadMessages()
+
+    // Écoute en temps réel ciblée exclusivement sur le client sélectionné
+    channel = ChatService.subscribeToClientMessages(supabase, selectedClientId, (msg) => {
+      if (!isMounted) return
+      setMessages((prev) => [...prev, msg])
+
+      void ChatService.markConversationReadByAdmin(supabase, selectedClientId).catch((error) => {
+        console.error('Erreur lors du marquage comme lu:', error)
+      })
+      
+      void refreshConversations()
+    })
+
+    return () => {
+      isMounted = false
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [selectedClientId])
+
+  // Scroll automatique au bas du fil de discussion
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, loading])
+
+  // 3. Envoi de message texte / action (Ciblé uniquement sur selectedClientId)
+  const handleSendText = async (customContent?: string) => {
+    if (!selectedClientId || isSending) return
+    const contentToSend = customContent || composerText.trim()
+    if (!contentToSend) return
+
+    setIsSending(true)
+    if (!customContent) setComposerText('')
+
+    try {
+      // Envoi du message à un unique client destinataire
+      const sentMessage = await ChatService.sendTextMessage(supabase, selectedClientId, contentToSend, true)
+      if (sentMessage) {
+        setMessages((prev) => [...prev, sentMessage])
+        await refreshConversations()
+      }
+    } catch (error) {
+      console.error('Erreur lors de l’envoi du message:', error)
+      if (!customContent) setComposerText(contentToSend)
+    } finally {
+      setIsSending(false)
+      setShowPresets(false)
+    }
+  }
+
+  // Envoi de réponse rapide préconçue
+  const handleSendPreset = (preset: PresetResponse) => {
+    const actionPayload = JSON.stringify({
+      type: 'action',
+      text: preset.messageText,
+      actionLabel: preset.actionLabel,
+      actionUrl: preset.actionUrl,
+    })
+    void handleSendText(actionPayload)
+  }
+
+  // Upload d'image
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!selectedClientId || !file || isSending) return
+
+    setIsSending(true)
+
+    try {
+      const sentMessage = await ChatService.uploadImageAndSend(supabase, selectedClientId, file, true)
+      if (sentMessage) {
+        setMessages((prev) => [...prev, sentMessage])
+        await refreshConversations()
+      }
+    } catch (error) {
+      console.error('Erreur lors du téléversement du fichier:', error)
+    } finally {
+      setIsSending(false)
+      event.target.value = ''
+    }
+  }
+
+  const selectedConversation = conversations.find((item) => item.client_id === selectedClientId) ?? null
+
+  // Fonction utilitaire pour le nom d'affichage
+  const getDisplayName = (conv: AdminConversationWithProfile | null) => {
+    if (!conv) return 'Sélectionnez une conversation'
+    if (conv.username) return `@${conv.username}`
+    if (conv.phone) return `+${conv.phone}`
+    return `Client (${conv.client_id.substring(0, 8)}...)`
+  }
 
   return (
-    <div className="flex h-[80vh] gap-4 p-4">
-      {/* Liste des conversations */}
-      <div className="w-1/3 bg-slate-900/50 rounded-[2.5rem] border border-white/5 overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-white/5 font-black uppercase text-[10px] tracking-widest text-slate-500">Messages Clients</div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {profiles.map(p => (
-            <button key={p.id} onClick={() => setSelectedUser(p.id)} className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-all ${selectedUser === p.id ? 'bg-emerald-500 text-slate-950' : 'hover:bg-white/5'}`}>
-              <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-black text-[10px]">{p.phone.slice(-2)}</div>
-              <div className="text-left">
-                <p className="text-xs font-bold">+{p.phone}</p>
-                <p className={`text-[8px] uppercase font-black ${selectedUser === p.id ? 'text-slate-900' : 'text-emerald-500'}`}>Actif</p>
-              </div>
-            </button>
-          ))}
+    <div className="flex h-full min-h-screen flex-col bg-[#020617] text-slate-100 md:flex-row">
+      {/* Barre latérale des conversations */}
+      <aside className="w-full border-b border-white/10 bg-slate-950/80 md:w-[320px] md:border-b-0 md:border-r">
+        <div className="border-b border-white/10 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <MessageSquare size={16} />
+            Conversations
+          </div>
         </div>
-      </div>
 
-      {/* Zone de Chat */}
-      <div className="flex-1 bg-slate-900/30 rounded-[3.5rem] border border-white/5 flex flex-col overflow-hidden relative">
-        {selectedUser ? (
+        <div className="max-h-[calc(100vh-80px)] overflow-y-auto">
+          {conversations.length === 0 ? (
+            <div className="p-4 text-sm text-slate-400">Aucune conversation disponible.</div>
+          ) : (
+            conversations.map((conversation) => {
+              const isActive = conversation.client_id === selectedClientId
+              const displayName = getDisplayName(conversation)
+
+              return (
+                <button
+                  key={conversation.client_id}
+                  type="button"
+                  onClick={() => setSelectedClientId(conversation.client_id)}
+                  className={`w-full border-b border-white/5 p-3 text-left transition ${
+                    isActive ? 'bg-emerald-500/10' : 'bg-transparent hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-semibold text-slate-100">
+                      {displayName}
+                    </span>
+                    {conversation.admin_unread_count > 0 && (
+                      <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                        {conversation.admin_unread_count}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 truncate text-sm text-slate-400">
+                    {conversation.last_message_content || 'Aucun message'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {conversation.last_message_created_at
+                      ? new Date(conversation.last_message_created_at).toLocaleString('fr-FR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          day: '2-digit',
+                          month: 'short',
+                        })
+                      : ''}
+                  </p>
+                </button>
+              )
+            })
+          )}
+        </div>
+      </aside>
+
+      {/* Zone principale de chat */}
+      <main className="flex min-h-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/70 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+              <User size={20} />
+            </div>
+            <div>
+              <h1 className="text-base font-semibold text-white">
+                {getDisplayName(selectedConversation)}
+              </h1>
+              <p className="text-xs text-slate-400">
+                {selectedConversation ? `ID: ${selectedConversation.client_id}` : 'Choisissez un client dans la liste'}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {selectedClientId ? (
           <>
-            <div className="flex-1 overflow-y-auto p-8 space-y-4">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.is_admin ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] p-4 rounded-3xl text-xs ${
-                    m.is_admin 
-                    ? 'bg-emerald-500 text-slate-950 font-bold rounded-tr-none' 
-                    : 'bg-slate-800 text-white rounded-tl-none border border-white/5'
-                  }`}>
-                    {m.content}
+            <section className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%)] p-4">
+              {loading ? (
+                <div className="flex h-full items-center justify-center gap-3 text-slate-400">
+                  <Loader2 className="animate-spin text-emerald-500" size={24} />
+                  Chargement des messages...
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
+                  Aucun message pour cette conversation.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {messages.map((msg) => {
+                    const parsed = parseMessageContent(msg.content)
+                    const isAdmin = msg.is_admin_message
+
+                    return (
+                      <div key={msg.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-2xl px-3 py-2 shadow ${isAdmin ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-100'}`}>
+                          {parsed.type === 'image' ? (
+                            <img src={parsed.url} alt="Pièce jointe" className="max-h-72 rounded-xl object-cover" />
+                          ) : parsed.type === 'action' ? (
+                            <div className="space-y-2">
+                              <p className="whitespace-pre-wrap break-words text-sm">{parsed.text}</p>
+                              <button
+                                type="button"
+                                onClick={() => router.push(parsed.actionUrl)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-950/80 px-3 py-1.5 text-xs font-bold text-emerald-400 transition hover:bg-black"
+                              >
+                                <span>{parsed.actionLabel}</span>
+                                <ExternalLink size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words text-sm">{parsed.text}</p>
+                          )}
+                          <div className={`mt-1 text-[10px] ${isAdmin ? 'text-slate-800/70' : 'text-slate-400'}`}>
+                            {new Date(msg.created_at).toLocaleTimeString('fr-FR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={bottomRef} />
+                </div>
+              )}
+            </section>
+
+            <footer className="relative border-t border-white/10 bg-slate-950/80 p-3">
+              {/* Menu des réponses rapides */}
+              {showPresets && (
+                <div className="absolute bottom-full left-3 right-3 mb-2 rounded-2xl border border-white/10 bg-slate-900/95 p-3 shadow-xl backdrop-blur-xl">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    ⚡ Réponses automatiques & Liens
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {PRESET_RESPONSES.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleSendPreset(preset)}
+                        className="flex flex-col items-start rounded-xl border border-white/5 bg-slate-950/60 p-2 text-left transition hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                      >
+                        <span className="text-xs font-bold text-white">{preset.title}</span>
+                        <span className="text-[10px] text-slate-400">{preset.actionLabel} ({preset.actionUrl})</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
-              <div ref={scrollRef} />
-            </div>
-            <div className="p-6 bg-slate-950 flex gap-3">
-              <input 
-                value={newMessage} 
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendResponse()}
-                placeholder="Répondre au client..."
-                className="flex-1 bg-slate-900 border border-white/10 rounded-2xl px-6 py-4 text-xs outline-none focus:border-emerald-500 transition-all"
-              />
-              <button onClick={sendResponse} className="p-4 bg-emerald-500 text-slate-950 rounded-2xl active:scale-95 transition-all">
-                <Send size={20} />
-              </button>
-            </div>
+              )}
+
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPresets((prev) => !prev)}
+                  className={`rounded-lg p-2 transition ${showPresets ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-400 hover:text-white'}`}
+                  title="Réponses préconçues"
+                >
+                  <Zap size={18} />
+                </button>
+
+                <input
+                  value={composerText}
+                  onChange={(event) => setComposerText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void handleSendText()
+                    }
+                  }}
+                  placeholder="Écrire un message..."
+                  className="flex-1 bg-transparent text-sm text-white outline-none"
+                />
+                <label className="cursor-pointer rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-white">
+                  <Paperclip size={18} />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void handleSendText()}
+                  disabled={isSending || !composerText.trim()}
+                  className="rounded-lg bg-emerald-500 p-2 text-slate-950 transition disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSending ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+                </button>
+              </div>
+            </footer>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-600 italic">
-            <UserIcon size={48} className="opacity-10 mb-4" />
-            <p className="text-[10px] font-black uppercase tracking-widest">Sélectionnez une conversation pour répondre</p>
+          <div className="flex flex-1 items-center justify-center p-6 text-center text-slate-400">
+            <div className="max-w-sm space-y-3">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400">
+                <ImageIcon size={28} />
+              </div>
+              <h2 className="text-lg font-semibold text-slate-200">Centre de messagerie</h2>
+              <p className="text-sm leading-relaxed">
+                Sélectionnez une conversation dans la barre latérale pour afficher le fil et répondre au client.
+              </p>
+            </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
-  );
+  )
 }
