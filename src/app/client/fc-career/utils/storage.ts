@@ -84,6 +84,16 @@ export function deleteSave(): void {
   window.localStorage.removeItem(KEY);
 }
 
+/** Alias sémantique : efface la sauvegarde (toutes les données du jeu). */
+export function clearAllSaves(): void {
+  deleteSave();
+}
+
+/** Alias sémantique utilisé par les pages dashboard/create-player. */
+export function loadGame(): FullSave | null {
+  return loadSave();
+}
+
 /** Export JSON pour backup manuel (téléchargement dans Settings). */
 export function exportSaveJson(save: FullSave): string {
   return JSON.stringify(save, null, 2);
