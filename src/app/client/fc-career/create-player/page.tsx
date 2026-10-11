@@ -146,6 +146,7 @@ export default function CreatePlayerPage() {
           createdAt: nowIso,
           lastPlayedAt: nowIso,
           pinHash: existing?.meta.pinHash ?? null,
+          pinHash: existing?.pinHash ?? null,
           phase: "hub" as GamePhase,
           season: null as SeasonState | null,
           clubId,
