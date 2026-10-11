@@ -81,6 +81,16 @@ export function tryImproveAttribute(
   return { value: current, improved: false };
 }
 
+/** Applique un patch d'attributs en préservant l'immuabilité de l'AttributeMap. */
+export function withAttributes(
+  attributes: AttributeMap,
+  patch: Record<string, number>,
+): AttributeMap {
+  const out: AttributeMap = { ...attributes };
+  for (const [key, value] of Object.entries(patch)) {
+    out[key] = value;
+  }
+  return out;
 /** Recalcule un AttributeMap complet après mutation (helper immuabilité). */
 export function withAttributes(
   attributes: AttributeMap,

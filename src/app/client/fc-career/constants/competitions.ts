@@ -2,6 +2,7 @@
  * FC CAREER — Compétitions françaises : Ligue 1, Ligue 2, Coupes
  */
 
+import type { CompetitionId, Division } from "../types/club";
 import type { CompetitionId } from "../types/club";
 
 export interface CompetitionDef {
@@ -93,6 +94,7 @@ export function getCompetition(id: CompetitionId): CompetitionDef {
 }
 
 /** Compétitions jouables selon la division du club utilisateur. */
+export function getCompetitionsForDivision(division: Division): CompetitionId[] {
 export function getCompetitionsForDivision(division: "Ligue 1" | "Ligue 2" | "National"): CompetitionId[] {
   const league: CompetitionId =
     division === "Ligue 1" ? "ligue1" : division === "Ligue 2" ? "ligue2" : "national";
