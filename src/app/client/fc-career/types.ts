@@ -60,61 +60,6 @@ export type {
   UIState,
 } from "./types/ui";
 
-/* ------------------------------------------------------------------ */
-/* Types de plus haut niveau (pages dashboard / create-player)        */
-/* ------------------------------------------------------------------ */
-
-import type { Player, Morphology } from "./types/player";
-import type { PositionId, PlayingStyleId } from "./constants/positions";
-import type { Wallet } from "./types/economy";
-import type { GameSave, SeasonState, MatchDay } from "./types/game";
-import type { SimulatedMatch } from "./types/match";
-
-/** Académie : niveau du centre de formation dont est issu le joueur. */
-export type AcademyLevel = "amateur" | "regional" | "national" | "prestige";
-
-/** Alias pratique du poste (même domaine que PositionId). */
-export type PlayerPosition = PositionId;
-
-/** Préférence de pied (aligné sur Player.foot). */
-export type PreferredFoot = Player["foot"];
-
-/** Focus d'entraînement = type de séance (engine/progression). */
-export type TrainingFocus =
-  | "shooting"
-  | "passing"
-  | "dribbling"
-  | "physical"
-  | "tactical"
-  | "recovery"
-  | "match-prep";
-
-/** État complet de la carrière persisté (ce que lit/écrit storage.ts). */
-export interface PlayerCareerState {
-  meta: GameSave;
-  player: Player | null;
-  wallet: Wallet | null;
-  /** Dernier match simulé (pour PostMatchScreen). */
-  lastMatch?: SimulatedMatch | null;
-  /** Match en cours de simulation live. */
-  currentFixture?: MatchDay | null;
-}
-
-/** Données saisies à l'étape de création du joueur. */
-export interface CreatePlayerDraft {
-  firstName: string;
-  lastName: string;
-  age: number;
-  position: PlayerPosition;
-  secondaryPositions: PlayerPosition[];
-  style: PlayingStyleId;
-  morphology: Morphology;
-  heightCm: number;
-  weightKg: number;
-  foot: PreferredFoot;
-  academy: AcademyLevel;
-  preferredClubId: string;
-}
 
 /* ------------------------------------------------------------------ */
 /* Helpers de persistance (utilisés par dashboard / create-player)     */
