@@ -20,7 +20,7 @@ import {
   Trophy,
   UserRound,
 } from "lucide-react";
-import type { PlayerCareerState, TrainingFocus } from "../types";
+import type { CareerRuntimeState } from "../types";
 import { toCareerState, toFullSave } from "../types";
 
 import {
@@ -33,10 +33,90 @@ import { getClub, getClubsByDivision } from "../constants/clubs";
 import { createSeason, advanceSeason, nextUserFixture, computeStandings } from "../engine/season-manager";
 import { simulateMatch } from "../engine/match-engine";
 import { TRAINING_SESSIONS, runTrainingSession, applyRest, endOfWeek } from "../engine/progression";
+import type { TrainingType } from "../engine/progression";
 import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engine/economic-engine";
 import { formatMoneyCompact, formatDate, formatRating } from "../utils/formatters";
-import type { SimulatedMatch } from "../types/match";
-import type { Player } from "../types/player";
+import type { SimulatedMatch, MatchEvent } from "../types/match";
+import type { Player, SeasonStatLine } from "../types/player";
+
+/** Ligne de stats vierge pour une saison donnée. */
+function emptyStatLine(
+  seasonYear: number,
+  clubId: string,
+  competitionId: string,
+): SeasonStatLine {
+  return {
+    seasonYear,
+    clubId,
+    competitionId,
+    matches: 0,
+    starts: 0,
+    minutes: 0,
+    goals: 0,
+    assists: 0,
+    yellowCards: 0,
+    redCards: 0,
+    averageRating: 0,
+    overallAtSeasonEnd: 0,
+  };
+}
+
+/** Description lisible d'un événement de match. */
+function describeEvent(ev: MatchEvent): string {
+  switch (ev.type) {
+    case "goal":
+      return `⚽ BUT — ${ev.scorer}`;
+    case "chance":
+      return `🎀 Occasion — ${ev.description}`;
+    case "card":
+      return ev.color === "red"
+        ? `🟥 Carton rouge — ${ev.player}`
+        : `🟨 Carton jaune — ${ev.player}`;
+    case "sub":
+      return `🔁 Changement — ${ev.in} remplace ${ev.out}`;
+    case "var":
+      return `📺 VAR — ${ev.outcome}`;
+    default:
+      return "Événement de match";
+  }
+}
+
+/** Jauge compacte (forme / fatigue / moral). */
+function Meter({ label, value, invert = false }: { label: string; value: number; invert?: boolean }) {
+  const pct = Math.max(0, Math.min(100, value));
+  const good = invert ? pct <= 40 : pct >= 60;
+  const bad = invert ? pct >= 75 : pct <= 30;
+  const color = good ? "bg-emerald-400" : bad ? "bg-rose-400" : "bg-amber-400";
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-14 text-left opacity-60">{label}</span>
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
+        <span className={`block h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </span>
+      <span className="w-7 text-right font-semibold">{Math.round(pct)}</span>
+    </div>
+  );
+}
+
+/** Paire clé/valeur (fiche club). */
+function Info({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <>
+      <dt className="opacity-60">{k}</dt>
+      <dd className="text-right font-semibold">{v}</dd>
+    </>
+  );
+}
+
+/** Statistique encadrée (profil). */
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+      <div className="text-base font-black">{value}</div>
+      <div className="text-[11px] uppercase tracking-wide opacity-50">{label}</div>
+    </div>
+  );
+}
 
 type DashboardTab =
   | "accueil"
@@ -57,7 +137,7 @@ const TABS: { id: DashboardTab; label: string; icon: React.ReactNode }[] = [
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [career, setCareer] = useState<PlayerCareerState | null>(null);
+  const [career, setCareer] = useState<CareerRuntimeState | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<DashboardTab>("accueil");
   const [lastMatch, setLastMatch] = useState<SimulatedMatch | null>(null);
@@ -74,7 +154,7 @@ export default function DashboardPage() {
     setLoaded(true);
   }, [router]);
 
-  const persist = useCallback((next: PlayerCareerState) => {
+  const persist = useCallback((next: CareerRuntimeState) => {
     setCareer(next);
     saveGame(toFullSave(next));
   }, []);
@@ -104,7 +184,7 @@ export default function DashboardPage() {
 
   /* ---------------- Actions ---------------- */
 
-  function doTraining(focus: TrainingFocus) {
+  function doTraining(focus: TrainingType) {
     if (!career || !player) return;
     const session = TRAINING_SESSIONS.find((s) => s.id === focus);
     if (!session) return;

@@ -1,4 +1,13 @@
 /**
+ * FC CAREER — Barre d'index du moteur.
+ *
+ * Le moteur historique (51 attributs FR, progression hebdomadaire) vit dans
+ * `./engine/legacy-career`. Le nouveau moteur (génération de joueur, matchs,
+ * saison, progression, économie, transferts) vit dans `./engine/*`.
+ *
+ * Ce fichier ne contient AUCUNE logique : il ré-exporte uniquement, afin
+ * d'éviter les imports circulaires et les erreurs "Module not found" chez
+ * Vercel/Turbopack.
  * FC CAREER — Moteur "académie" (implémentation legacy)
  *
  * ⚠️ Ce moteur historique (51 attributs FR, progression hebdomadaire) est
@@ -9,6 +18,45 @@
 
 export * from "./engine/legacy-career";
 
+export {
+  generatePlayer,
+  createRng,
+  groupSummary,
+  clamp,
+  type GenerationInput,
+} from "./engine/player-generator";
+
+export {
+  simulateMatch,
+  predictRating,
+  selectionChance,
+} from "./engine/match-engine";
+
+export {
+  createSeason,
+  advanceSeason,
+  nextUserFixture,
+  computeStandings,
+  generateRoundRobin,
+} from "./engine/season-manager";
+
+export {
+  runTrainingSession,
+  applyRest,
+  endOfWeek,
+  recommendedSessions,
+  TRAINING_SESSIONS,
+  type TrainingType,
+  type SessionResult,
+} from "./engine/progression";
+
+export {
+  computeOverall,
+  computePotential,
+  attributeCap,
+  tryImproveAttribute,
+  withAttributes,
+} from "./engine/attribute-calculator";
 const clamp = (value: number, min = 1, max = 99): number =>
 Math.max(min, Math.min(max, value));
 
@@ -1032,15 +1080,23 @@ return Math.random() < 0.78
 : "remplacant";
 }
 
-if (
-effectiveRating >= player.coach.strictness - 15
-) {
-return Math.random() < 0.68
-? "remplacant"
-: "tribune";
-}
+export {
+  emptyWallet,
+  processWeeklyPayroll,
+  computeMatchBonuses,
+  refreshMarketValue,
+  applySigningBonus,
+  spend,
+  sponsorPayout,
+  TAX_RATE,
+} from "./engine/economic-engine";
 
-return Math.random() < 0.25
-? "remplacant"
-: "tribune";
-                       }
+export {
+  generateOffers,
+  acceptOffer,
+  counterOffer,
+  isClubInterested,
+  suggestSalary,
+  isTransferWindowOpen,
+  requestRaise,
+} from "./engine/transfer-system";

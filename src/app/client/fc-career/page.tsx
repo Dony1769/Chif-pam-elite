@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, ShieldCheck, ArrowRight, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { checkAccessCode, markSessionUnlocked } from '../utils/session';
 
 
 export default function FcCareerAuthPage() {
@@ -13,9 +14,9 @@ export default function FcCareerAuthPage() {
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.trim() === '1769') {
-      // Enregistrement de la session d'accès
-      sessionStorage.setItem('fc_career_unlocked', 'true');
+    if (checkAccessCode(pin)) {
+      // Marqueur de session (sessionStorage) : lu par FcCareerGuard.
+      markSessionUnlocked();
       router.push('/client/fc-career/create-player');
     } else {
       setError(true);
