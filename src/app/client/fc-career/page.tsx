@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, ShieldCheck, ArrowRight, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { checkAccessCode, markSessionUnlocked } from '../utils/session';
+import { checkAccessCode, markSessionUnlocked } from './utils/session';
 
 
 export default function FcCareerAuthPage() {

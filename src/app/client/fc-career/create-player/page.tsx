@@ -25,6 +25,7 @@ import { markSessionUnlocked } from "../utils/session";
 import type { AcademyLevel } from "../types";
 import type { GamePhase, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
+import type { FootChoice } from "../types/player";
 import { PLAYING_STYLES } from "../constants/positions";
 import { STARTING_CLUB_IDS, getClub } from "../constants/clubs";
 import type { Morphology, Player } from "../types/player";
@@ -144,6 +145,7 @@ export default function CreatePlayerPage() {
           version: 1,
           createdAt: nowIso,
           lastPlayedAt: nowIso,
+          pinHash: existing?.meta.pinHash ?? null,
           pinHash: existing?.pinHash ?? null,
           phase: "hub" as GamePhase,
           season: null as SeasonState | null,
@@ -285,7 +287,7 @@ export default function CreatePlayerPage() {
                       <button
                         key={id}
                         type="button"
-                        onClick={() => setPosition(id as PlayerPosition)}
+                        onClick={() => setPosition(id as PositionId)}
                         className={`fc-chip ${position === id ? "fc-chip-active" : ""}`}
                       >
                         {id}
@@ -319,7 +321,7 @@ export default function CreatePlayerPage() {
 
           <Field icon={<Footprints size={16} />} label="Pied fort">
             <div className="flex gap-2">
-              {(["left", "right", "both"] as PreferredFoot[]).map((f) => (
+              {(["left", "right", "both"] as FootChoice[]).map((f) => (
                 <button
                   key={f}
                   type="button"

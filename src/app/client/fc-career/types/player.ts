@@ -53,6 +53,8 @@ export interface ProgressionPoint {
   fatigue: number;
 }
 
+export type FootChoice = "left" | "right" | "both";
+
 export interface Player {
   id: string;
   firstName: string;
@@ -60,7 +62,7 @@ export interface Player {
   birthDate: string; // ISO
   age: number;
   nationality: string; // code ISO 3166-1 alpha-2 ("FR")
-  foot: "left" | "right" | "both";
+  foot: FootChoice;
   position: PositionId;
   secondaryPositions: PositionId[];
   style: PlayingStyleId;
