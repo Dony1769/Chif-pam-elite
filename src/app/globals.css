@@ -1,8 +1,94 @@
 @import "tailwindcss";
 
+/* -----------------------------------------------------------
+   CHIFPAM ELITE ENTERPRISE DESIGN TOKENS
+----------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand palette (emerald/cyan/slate/black) */
+  --emerald-1: #b9f9e8;
+  --emerald-2: #86f3d7;
+  --emerald-3: #6ee7c8;
+  --emerald-4: #2dcda4;
+  --cyan-1: #9ae7ff;
+  --cyan-2: #62d6ff;
+  --cyan-3: #2ac0f8;
+  --slate-0: #05070b;
+  --slate-1: #090d14;
+  --slate-2: #0f1622;
+  --slate-3: #162131;
+  --slate-4: #233148;
+
+  /* Neutrals */
+  --fg-1: #f5f8ff;
+  --fg-2: #c4cfdf;
+  --fg-3: #95a1b6;
+  --fg-4: #6f7c93;
+
+  /* Semantic */
+  --success: var(--emerald-3);
+  --danger: #f43f5e;
+  --warning: #f59e0b;
+  --info: var(--cyan-2);
+
+  /* Surfaces and borders */
+  --surface-0: rgba(8, 12, 19, 0.94);
+  --surface-1: rgba(13, 19, 30, 0.82);
+  --surface-2: rgba(18, 26, 39, 0.72);
+  --surface-3: rgba(255, 255, 255, 0.05);
+  --surface-glass: rgba(20, 28, 43, 0.58);
+  --surface-glass-strong: rgba(15, 22, 34, 0.76);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --border-accent: rgba(110, 231, 200, 0.34);
+
+  /* Accent aliases (backward compatibility) */
+  --accent: var(--emerald-3);
+  --accent-contrast: #051713;
+  --accent-border: var(--border-accent);
+  --accent-ring: rgba(110, 231, 200, 0.24);
+  --accent-glow: rgba(110, 231, 200, 0.26);
+
+  /* Premium gradients */
+  --grad-brand: linear-gradient(135deg, #75f2d2 0%, #5ed8f8 48%, #84f7e0 100%);
+  --grad-premium: linear-gradient(135deg, rgba(117, 242, 210, 0.22), rgba(94, 216, 248, 0.18));
+  --grad-hero: radial-gradient(1150px 620px at 0% -20%, rgba(110, 231, 200, 0.2), transparent 58%),
+    radial-gradient(980px 640px at 100% -22%, rgba(42, 192, 248, 0.18), transparent 62%),
+    linear-gradient(150deg, var(--slate-1), var(--slate-0));
+
+  /* Radius scale */
+  --radius-xs: 10px;
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-pill: 999px;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* Shadows */
+  --shadow-1: 0 10px 24px rgba(2, 8, 20, 0.35);
+  --shadow-2: 0 18px 44px rgba(2, 8, 20, 0.46);
+  --shadow-3: 0 28px 80px rgba(2, 8, 20, 0.62);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 34px rgba(2, 8, 20, 0.46);
+
+  /* Animation curves */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --background: var(--slate-0);
+  --foreground: var(--fg-1);
+  --font-geist-sans: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+  --font-geist-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 }
 
 @theme inline {
@@ -14,13 +100,256 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--slate-0);
+    --foreground: var(--fg-1);
   }
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(110, 231, 200, 0.42) transparent;
+}
+
+html,
 body {
-  background: var(--background);
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--grad-hero);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "Avenir Next", "SF Pro Text", "Space Grotesk", sans-serif;
+  letter-spacing: -0.01em;
+  overflow-x: hidden;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* -----------------------------------------------------------
+   CORE DESIGN SYSTEM UTILITIES
+----------------------------------------------------------- */
+@layer utilities {
+  .glass {
+    background: var(--surface-glass);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(16px) saturate(120%);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glass-strong {
+    background: var(--surface-glass-strong);
+    border: 1px solid var(--border-strong);
+    backdrop-filter: blur(22px) saturate(125%);
+    box-shadow: var(--shadow-2);
+  }
+
+  .gradient-premium {
+    background-image: var(--grad-premium);
+  }
+
+  .gradient-brand-text {
+    background-image: var(--grad-brand);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .focus-ring {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+
+  .swipe-container {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .swipe-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .swipe-card {
+    scroll-snap-align: center;
+    flex-shrink: 0;
+  }
+}
+
+/* -----------------------------------------------------------
+   DESIGN SYSTEM LAYOUT CLASSES
+----------------------------------------------------------- */
+.ds-page {
+  min-height: 100vh;
+  color: var(--fg-1);
+}
+
+.ds-container {
+  width: min(1180px, 100% - 2rem);
+  margin-inline: auto;
+}
+
+.ds-surface {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-1);
+}
+
+.ds-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ds-eyebrow {
+  font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.ds-grid {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.ds-stack-sm {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ds-stack-md {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.ds-stack-lg {
+  display: grid;
+  gap: var(--space-7);
+}
+
+/* -----------------------------------------------------------
+   ANIMATIONS / LOADERS / SKELETONS
+----------------------------------------------------------- */
+.ds-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 12%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.02) 88%
+  );
+  background-size: 220% 100%;
+  animation: ds-shimmer 1.2s linear infinite;
+}
+
+.ds-focus {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.page-fade-in,
+.ds-fade-up {
+  animation: ds-fade-up 340ms var(--ease-standard) both;
+}
+
+.logo-animate {
+  animation: ds-soft-pulse 2.4s infinite;
+}
+
+.ds-float-in {
+  animation: ds-float-in 360ms var(--ease-spring) both;
+}
+
+.ds-scale-in {
+  animation: ds-scale-in 220ms var(--ease-spring) both;
+}
+
+.ds-toast-in {
+  animation: ds-toast-in 260ms var(--ease-spring) both;
+}
+
+@keyframes ds-shimmer {
+  from {
+    background-position: -220% 0;
+  }
+  to {
+    background-position: 220% 0;
+  }
+}
+
+@keyframes ds-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes ds-float-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes ds-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ds-toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes ds-soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 200, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(110, 231, 200, 0);
+  }
+}
+
+/* -----------------------------------------------------------
+   SCROLLBAR
+----------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(110, 231, 200, 0.58), rgba(42, 192, 248, 0.42));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(110, 231, 200, 0.82), rgba(42, 192, 248, 0.62));
 }

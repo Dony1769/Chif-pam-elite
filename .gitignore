@@ -60,3 +60,132 @@ next-env.d.ts
 .idea
 .vscode/*
 !.vscode/settings.json
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Directory for instrumented libs
+lib-cov
+
+# Coverage
+coverage
+*.lcov
+.nyc_output
+
+# Grunt
+.grunt
+
+# Bower
+bower_components
+
+# node-waf
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional caches
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+
+# npm pack output
+*.tgz
+
+# Yarn
+.yarn-integrity
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# dotenv
+.env
+.env.*
+!.env.example
+*.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+
+# Secrets and local credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*token*
+*secret*
+*credential*
+service-account*.json
+credentials*.json
+
+# Build outputs
+.next
+out
+.nuxt
+dist
+.turbo/
+.cache/
+supabase/.temp/
+.supabase/
+playwright-report/
+test-results/
+.svelte-kit/
+**/.vitepress/dist
+**/.vitepress/cache
+.docusaurus
+.serverless/
+.fusebox/
+.dynamodb/
+.firebase/
+
+# TernJS
+.tern-port
+
+# VSCode test
+.vscode-test
+
+# Vite logs
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Next.js project specifics
+/build
+.DS_Store
+next-env.d.ts
+
+# Vercel
+.vercel
+
+.vscode/mcp.json

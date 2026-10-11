@@ -91,4 +91,10 @@ export function withAttributes(
     out[key] = value;
   }
   return out;
+/** Recalcule un AttributeMap complet après mutation (helper immuabilité). */
+export function withAttributes(
+  attributes: AttributeMap,
+  patch: Partial<AttributeMap>,
+): AttributeMap {
+  return { ...attributes, ...patch };
 }

@@ -1,69 +1,311 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { History, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { 
+  ArrowUpCircle, ArrowDownCircle, 
+  Clock, Loader2, ChevronLeft, 
+  AlertCircle, Wallet, History, RefreshCw
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-export default function TransactionHistory() {
-  const [history, setHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+// ==========================================
+// 1. TYPES TYPESCRIPT STRICTS
+// ==========================================
+export type TransactionType = 'deposit' | 'depot' | 'withdrawal' | 'retrait';
+export type TransactionStatus = 'pending' | 'approved' | 'rejected';
 
-  useEffect(() => { fetchHistory(); }, []);
+export interface Transaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  type: TransactionType;
+  status: TransactionStatus;
+  created_at: string;
+  admin_note?: string | null;
+}
 
-  const fetchHistory = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    // On récupère les transactions ET les mises pour un historique complet
-    const { data: trans } = await supabase.from('transactions')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+// ==========================================
+// 2. PETITS COMPOSANTS ET UTILS MÉMOÏSÉS
+// ==========================================
 
-    setHistory(trans || []);
-    setLoading(false);
-  };
+/**
+ * Logo SVG vectoriel stylisé mémoïsé
+ */
+const LogoTiny = React.memo(() => (
+  <svg viewBox="0 0 100 100" className="w-6 h-6 drop-shadow-[0_0_5px_rgba(16,185,129,0.4)]" fill="none" aria-hidden="true">
+    <path d="M75 35.5C71.5 28.5 64.2 24 56 24C41.6 24 30 35.6 30 50C30 64.4 41.6 76 56 76C66.5 76 75.5 69.8 79.5 61" stroke="#10B981" strokeWidth="12" strokeLinecap="round" />
+    <path d="M55 45L76 24M76 24H58M76 24V42" stroke="#10B981" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+));
+LogoTiny.displayName = 'LogoTiny';
+
+/**
+ * Fonction d'aide pour identifier si une transaction est un dépôt
+ */
+const isDeposit = (type: TransactionType): boolean => {
+  return type === 'deposit' || type === 'depot';
+};
+
+// ==========================================
+// 3. COMPOSANT PRINCIPAL
+// ==========================================
+export default function ClientHistory() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const router = useRouter();
+
+  /**
+   * Récupère l'historique des transactions depuis la table Supabase
+   */
+  const fetchHistory = useCallback(async () => {
+    try {
+      setErrorMessage(null);
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        setErrorMessage("Veuillez vous connecter pour consulter votre historique.");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, user_id, amount, type, status, created_at, admin_note')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        throw error;
+      }
+
+      setTransactions((data as Transaction[]) || []);
+    } catch (error: unknown) {
+      console.error("Erreur historique:", error);
+      setErrorMessage("Impossible de charger votre historique. Veuillez réessayer.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Mise en place du listener Realtime pour mettre à jour la liste en direct
+   */
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const setupSubscription = async () => {
+      await fetchHistory();
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Écoute les changements SQL sur la table transactions pour cet utilisateur
+      channel = supabase.channel(`history-user-${user.id}`)
+        .on(
+          'postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'transactions',
+            filter: `user_id=eq.${user.id}`
+          }, 
+          () => {
+            fetchHistory();
+          }
+        )
+        .subscribe();
+    };
+
+    setupSubscription();
+
+    // Nettoyage du canal websocket à la destruction du composant
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [fetchHistory]);
+
+  /**
+   * Formateur de date mémoïsé
+   */
+  const formatDate = useCallback((dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
+    }
+  }, []);
+
+  // Écran de chargement principal
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center space-y-4">
+        <LogoTiny />
+        <Loader2 className="animate-spin text-emerald-500" size={32} />
+        <p className="text-xs text-slate-400 font-medium">Chargement de votre historique...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 space-y-6 pb-32 animate-in fade-in duration-700">
-      <div className="flex items-center gap-3">
-        <History className="text-emerald-500" />
-        <h1 className="text-xl font-black italic uppercase">Historique <span className="text-emerald-500 text-xs">Finance</span></h1>
-      </div>
+    <div className="min-h-screen bg-[#020617] text-white font-sans pb-24 selection:bg-emerald-500/30">
+      
+      {/* HEADER FIXE */}
+      <header className="sticky top-0 z-30 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
+        <button 
+          onClick={() => router.back()} 
+          className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center active:scale-90 transition-all hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          aria-label="Retour"
+        >
+          <ChevronLeft size={20} className="text-emerald-500" />
+        </button>
 
-      <div className="space-y-3">
-        {history.length === 0 ? (
-          <p className="text-center py-20 text-slate-600 text-xs font-bold uppercase tracking-widest">Aucune transaction</p>
-        ) : (
-          history.map((t) => (
-            <div key={t.id} className="bg-slate-900/50 p-5 rounded-3xl border border-white/5 flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl ${t.type === 'depot' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                  {t.type === 'depot' ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest">{t.type}</p>
-                  <p className="text-[9px] text-slate-500">{new Date(t.created_at).toLocaleDateString('fr-FR')}</p>
-                </div>
-              </div>
+        <h1 className="text-lg font-black italic uppercase tracking-tighter">
+          Transactions
+        </h1>
 
-              <div className="text-right">
-                <p className="font-black italic text-sm">{t.amount} HTG</p>
-                <div className="flex items-center justify-end gap-1 mt-1">
-                  {t.status === 'en_attente' && <Clock size={10} className="text-amber-500" />}
-                  {t.status === 'approuve' && <CheckCircle2 size={10} className="text-emerald-500" />}
-                  {t.status === 'rejete' && <XCircle size={10} className="text-rose-500" />}
-                  <span className={`text-[8px] font-bold uppercase ${
-                    t.status === 'en_attente' ? 'text-amber-500' : 
-                    t.status === 'approuve' ? 'text-emerald-500' : 'text-rose-500'
-                  }`}>
-                    {t.status}
-                  </span>
-                </div>
-              </div>
+        <div className="w-10 h-10 flex items-center justify-center">
+          <LogoTiny />
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto p-4 space-y-6">
+        
+        {/* CARTE RÉSUMÉ D'INFORMATION */}
+        <section className="bg-gradient-to-br from-slate-900 to-slate-950 p-6 rounded-[2rem] border border-white/5 shadow-lg flex items-center gap-4">
+          <div className="p-3 bg-emerald-500/10 rounded-full border border-emerald-500/20 shrink-0">
+            <Wallet className="text-emerald-500" size={24} aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+              Activités Récentes
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Suivez vos dépôts et retraits en temps réel.
+            </p>
+          </div>
+        </section>
+
+        {/* ALERTE D'ERREUR */}
+        {errorMessage && (
+          <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} className="text-rose-500 shrink-0" />
+              <p className="text-xs text-rose-300 font-medium">{errorMessage}</p>
             </div>
-          ))
+            <button 
+              onClick={fetchHistory}
+              className="p-1.5 bg-rose-500/20 rounded-lg hover:bg-rose-500/30 transition-colors"
+              aria-label="Réessayer"
+            >
+              <RefreshCw size={14} className="text-rose-300" />
+            </button>
+          </div>
         )}
-      </div>
+
+        {/* LISTE DES TRANSACTIONS */}
+        <section className="space-y-3" aria-label="Liste de transactions">
+          {transactions.length === 0 && !errorMessage ? (
+            <div className="text-center py-12 opacity-40 flex flex-col items-center justify-center">
+              <History size={44} className="mb-3 text-slate-400" />
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Aucune transaction trouvée
+              </p>
+            </div>
+          ) : (
+            <AnimatePresence>
+              {transactions.map((t, index) => {
+                const deposit = isDeposit(t.type);
+
+                return (
+                  <motion.article
+                    key={t.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ delay: Math.min(index * 0.04, 0.4) }}
+                    className="bg-[#0f172a]/60 p-5 rounded-[1.5rem] border border-white/5 space-y-3 hover:bg-[#0f172a] transition-colors"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-center gap-3.5">
+                        <div className={`p-3 rounded-2xl shrink-0 ${
+                          deposit
+                            ? 'bg-emerald-500/10 text-emerald-500'
+                            : 'bg-blue-500/10 text-blue-500'
+                        }`}>
+                          {deposit ? (
+                            <ArrowUpCircle size={20} aria-hidden="true" />
+                          ) : (
+                            <ArrowDownCircle size={20} aria-hidden="true" />
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-sm font-black italic uppercase tracking-wider text-white">
+                            {deposit ? 'Dépôt' : 'Retrait'}
+                          </p>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wide mt-0.5">
+                            {formatDate(t.created_at)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <p className={`text-base sm:text-lg font-black italic tracking-tighter ${
+                          deposit ? 'text-white' : 'text-slate-300'
+                        }`}>
+                          {deposit ? '+' : '-'}
+                          {t.amount.toLocaleString('fr-FR')} 
+                          <span className="text-[10px] text-emerald-500 font-normal"> HTG</span>
+                        </p>
+
+                        <div className="flex items-center justify-end gap-1.5 mt-1">
+                          {t.status === 'pending' && (
+                            <Clock size={10} className="text-amber-500 animate-pulse" aria-hidden="true" />
+                          )}
+                          <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border ${
+                            t.status === 'approved'
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                              : t.status === 'rejected'
+                              ? 'bg-rose-500/10 border-rose-500/20 text-rose-500'
+                              : 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+                          }`}>
+                            {t.status === 'approved'
+                              ? 'Validé'
+                              : t.status === 'rejected'
+                              ? 'Refusé'
+                              : 'En attente'
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Motif de refus affiché si disponible */}
+                    {t.status === 'rejected' && t.admin_note && (
+                      <div className="bg-rose-500/5 p-3 rounded-xl border border-rose-500/10 flex items-start gap-2 mt-2">
+                        <AlertCircle size={12} className="text-rose-500 shrink-0 mt-0.5" />
+                        <p className="text-[9px] text-rose-300/80 font-bold leading-relaxed uppercase">
+                          Motif : {t.admin_note}
+                        </p>
+                      </div>
+                    )}
+                  </motion.article>
+                );
+              })}
+            </AnimatePresence>
+          )}
+        </section>
+      </main>
     </div>
   );
 }
