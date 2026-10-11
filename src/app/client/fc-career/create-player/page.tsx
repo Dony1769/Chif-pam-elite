@@ -19,15 +19,20 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { createInitialPlayer } from "../engine";
+import { generatePlayer, emptyWallet, suggestSalary } from "../engine";
 import { loadGame, saveGame } from "../utils/storage";
-import type { AcademyLevel, PlayerPosition, PreferredFoot, PlayerCareerState } from "../types";
-import type { PlayingStyleId } from "../constants/positions";
+import { markSessionUnlocked } from "../utils/session";
+import type { AcademyLevel } from "../types";
+import type { GamePhase, SeasonState } from "../types/game";
+import type { PositionId, PlayingStyleId } from "../constants/positions";
 import { PLAYING_STYLES } from "../constants/positions";
 import { STARTING_CLUB_IDS, getClub } from "../constants/clubs";
-import type { Morphology } from "../types/player";
+import type { Morphology, Player } from "../types/player";
+import type { Wallet } from "../types/economy";
 
-const POSITION_GROUPS: Record<string, string[]> = {
+type FootChoice = "left" | "right" | "both";
+
+const POSITION_GROUPS: Record<string, PositionId[]> = {
   Gardien: ["GK"],
   Défense: ["RB", "RCB", "LCB", "LB"],
   Milieu: ["CDM", "CM", "CAM"],
@@ -43,11 +48,34 @@ const MORPHOLOGIES: { value: Morphology; label: string; hint: string }[] = [
 ];
 
 const ACADEMIES: { value: AcademyLevel; label: string; hint: string }[] = [
-  { value: "amateur", label: "Club amateur", hint: "Départ plus dur, gros potentiel brut" },
+  { value: "local", label: "Club amateur", hint: "Départ plus dur, gros potentiel brut" },
   { value: "regional", label: "Centre régional", hint: "+1 aux attributs" },
   { value: "national", label: "Académie nationale (INF)", hint: "+3 aux attributs" },
-  { value: "prestige", label: "Académie de prestige", hint: "+5 aux attributs" },
+  { value: "elite", label: "Académie de prestige", hint: "+5 aux attributs" },
 ];
+
+/** Bonus d'attributs selon la formation choisie à la création. */
+const ACADEMY_BONUS: Record<AcademyLevel, number> = {
+  local: -2,
+  regional: 1,
+  national: 3,
+  elite: 5,
+};
+
+function applyAcademyBonus(player: Player, academy: AcademyLevel): Player {
+  const bonus = ACADEMY_BONUS[academy];
+  if (!bonus) return player;
+  const attributes = { ...player.attributes };
+  for (const key of Object.keys(attributes)) {
+    attributes[key] = Math.max(1, Math.min(99, attributes[key] + bonus));
+  }
+  return {
+    ...player,
+    attributes,
+    overall: Math.max(1, Math.min(99, player.overall + bonus)),
+    potential: Math.max(1, Math.min(99, player.potential + bonus)),
+  };
+}
 
 export default function CreatePlayerPage() {
   const router = useRouter();
@@ -61,9 +89,9 @@ export default function CreatePlayerPage() {
   const [morphology, setMorphology] = useState<Morphology>("normal");
 
   // Étape 2 — footballe
-  const [position, setPosition] = useState<PlayerPosition>("CM");
+  const [position, setPosition] = useState<PositionId>("CM");
   const [style, setStyle] = useState<PlayingStyleId>("complete");
-  const [foot, setFoot] = useState<PreferredFoot>("right");
+  const [foot, setFoot] = useState<FootChoice>("right");
   const [academy, setAcademy] = useState<AcademyLevel>("regional");
   const [clubId, setClubId] = useState<string>(STARTING_CLUB_IDS[0]);
 
@@ -75,39 +103,60 @@ export default function CreatePlayerPage() {
   function handleGenerate() {
     setError(null);
     try {
-      const player = createInitialPlayer({
+      let player = generatePlayer({
         firstName,
         lastName,
         age,
         position,
+        secondaryPositions: [],
         style,
         morphology,
         heightCm,
         weightKg,
-        foot,
-        academy,
-        clubId,
+        nationality: "FR",
       });
 
-      const existing = loadGame();
-      const state: PlayerCareerState = {
-        meta:
-          existing?.meta ?? {
-            version: 1,
-            createdAt: new Date().toISOString(),
-            lastPlayedAt: new Date().toISOString(),
-            pinHash: null,
-            phase: "hub",
-            season: null,
-            clubId,
-          },
-        player,
-        wallet: existing?.wallet ?? null,
-      };
-      state.meta.phase = "hub";
-      state.meta.clubId = clubId;
+      // Pied choisi par l'utilisateur (le générateur aléatoire est ignoré ici).
+      player = { ...player, foot };
+      // Bonus de formation selon l'académie sélectionnée.
+      player = applyAcademyBonus(player, academy);
 
-      saveGame({ meta: state.meta, player: state.player, wallet: state.wallet });
+      // Contrat dans le club de départ.
+      const club = getClub(clubId);
+      const wage = club
+        ? Math.round(suggestSalary(club.division, player.overall))
+        : 300;
+      player = {
+        ...player,
+        contract: {
+          ...player.contract,
+          clubId,
+          salaryPerWeek: wage,
+          isProfessional: club ? club.division !== "Amateur" : false,
+          releaseClause: Math.round(player.marketValue * 1.8),
+        },
+      };
+
+      const existing = loadGame();
+      const nowIso = new Date().toISOString();
+      const meta =
+        existing?.meta ?? {
+          version: 1,
+          createdAt: nowIso,
+          lastPlayedAt: nowIso,
+          pinHash: existing?.pinHash ?? null,
+          phase: "hub" as GamePhase,
+          season: null as SeasonState | null,
+          clubId,
+        };
+      meta.phase = "hub";
+      meta.clubId = clubId;
+      meta.lastPlayedAt = nowIso;
+
+      const wallet: Wallet | null = existing?.wallet ?? emptyWallet();
+
+      saveGame({ meta, player, wallet });
+      markSessionUnlocked();
       router.push("/client/fc-career/dashboard");
     } catch (e) {
       setError((e as Error).message || "Impossible de générer le joueur.");
