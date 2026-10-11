@@ -1,59 +1,13 @@
 /**
- * FC CAREER — Barre d'index du moteur (ré-exports)
- * Permet `import { createInitialPlayer } from "../engine"` dans les pages.
+ * FC CAREER — Moteur "académie" (implémentation legacy)
+ *
+ * ⚠️ Ce moteur historique (51 attributs FR, progression hebdomadaire) est
+ * désormais ré-exporté depuis `./engine/legacy-career` afin que `./engine.ts`
+ * reste une simple barre d'index du nouveau moteur (player-generator,
+ * match-engine, season-manager, progression, economie, transferts).
  */
 
-export {
-  createRng,
-  generatePlayer,
-  clamp,
-  groupSummary,
-} from "./engine/player-generator";
-export type { GenerationInput } from "./engine/player-generator";
-
-export {
-  computeOverall,
-  computePotential,
-  attributeCap,
-  tryImproveAttribute,
-  withAttributes,
-} from "./engine/attribute-calculator";
-
-export { predictRating, simulateMatch, selectionChance } from "./engine/match-engine";
-
-export {
-  TRAINING_SESSIONS,
-  runTrainingSession,
-  applyRest,
-  endOfWeek,
-  recommendedSessions,
-} from "./engine/progression";
-export type { TrainingType, TrainingSessionDef, SessionResult } from "./engine/progression";
-
-export {
-  generateRoundRobin,
-  createSeason,
-  advanceSeason,
-  nextUserFixture,
-  computeStandings,
-} from "./engine/season-manager";
-
-export * from "./engine/transfer-system";
-export * from "./engine/economic-engine";
-
-import { ALL_51_ATTRIBUTES } from "./constants";
-import type {
-AcademyLevel,
-PlayerAttributes,
-PlayerCareerState,
-PlayerPosition,
-PlayerArchetype,
-PlayerPotential,
-TrainingFocus,
-AttributeCategory,
-Participation,
-PreferredFoot,
-} from "./types";
+export * from "./engine/legacy-career";
 
 const clamp = (value: number, min = 1, max = 99): number =>
 Math.max(min, Math.min(max, value));

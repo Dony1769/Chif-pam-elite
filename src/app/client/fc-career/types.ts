@@ -66,27 +66,39 @@ export type {
 /* ------------------------------------------------------------------ */
 
 import type { FullSave } from "./utils/storage";
-import type { SeasonState as _SeasonState } from "./types/game";
+import type { GameSave, MatchDay, SeasonState } from "./types/game";
+import type { Player } from "./types/player";
+import type { Wallet } from "./types/economy";
+import type { SimulatedMatch } from "./types/match";
+
+/**
+ * État de carrière manipulé par les pages (hub).
+ * C'est la vue "runtime" de la sauvegarde : meta (versionnée) + joueur + wallet.
+ */
+export interface CareerRuntimeState {
+  meta: GameSave;
+  player: Player | null;
+  wallet: Wallet | null;
+  /** Dernier match simulé (non persisté, perdu au rechargement). */
+  lastMatch?: SimulatedMatch | null;
+}
 
 /** Convertit une sauvegarde storage.ts -> état de carrière des pages. */
-export function toCareerState(save: FullSave | null): PlayerCareerState | null {
+export function toCareerState(save: FullSave | null): CareerRuntimeState | null {
   if (!save) return null;
   return { meta: save.meta, player: save.player, wallet: save.wallet };
 }
 
 /** Convertit un état de carrière -> sauvegarde storage.ts. */
-export function toFullSave(state: PlayerCareerState): FullSave {
+export function toFullSave(state: CareerRuntimeState): FullSave {
   return { meta: state.meta, player: state.player, wallet: state.wallet };
 }
 
 /** Saison en cours (raccourci typé). */
-export type CareerSeason = _SeasonState;
+export type CareerSeason = SeasonState;
 
 /** Alias de journée pour les composants calendrier. */
 export type CareerFixture = MatchDay;
-
-// Evite l'avertissement d'import inutilisé si SeasonState n'est pas ré-exporté ailleurs.
-export type { _SeasonState as SeasonSnapshot };
 export type AttributeCategory =
 | 'Attaque'
 | 'Technique & Passes'
