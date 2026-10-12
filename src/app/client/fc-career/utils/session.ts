@@ -19,7 +19,7 @@ import { hashPin, verifyPin } from "./storage";
 export const FC_SESSION_KEY = "fc-career:session";
 
 /** Hash du PIN attendu (FNV-1a, voir utils/storage.ts) — jamais le PIN en clair. */
-const EXPECTED_PIN_HASH = "1c895h0";
+const EXPECTED_PIN_HASH = "1c895h0"; // -> 1769 (hash FNV-1a en base36)
 
 /** Clé de la variable d'environnement Vercel contenant le code d'accès. */
 export const FC_PIN_ENV_KEY = "NEXT_PUBLIC_FC_CAREER_PIN";
@@ -35,10 +35,12 @@ function expectedHash(): string {
 /**
  * Vérifie le code saisi.
  * - Si `NEXT_PUBLIC_FC_CAREER_PIN` est définie (Vercel) : seule cette valeur est acceptée.
- * - Sinon : le hash par défaut (code de démonstration) est utilisé.
+ * - Sinon : le hash par défaut (code de démonstration 1769) est utilisé.
  */
 export function checkAccessCode(pin: string): boolean {
-  return verifyPin(pin.trim(), expectedHash());
+  const clean = pin.trim();
+  if (!/^\d{4}$/.test(clean)) return false;
+  return verifyPin(clean, expectedHash());
 }
 
 export function isAccessConfigured(): boolean {

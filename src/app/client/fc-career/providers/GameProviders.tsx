@@ -34,7 +34,7 @@ import {
   initialUIState,
   type UIContextValue,
 } from "../context/UIContext";
-import { loadGame, saveGame } from "../utils/storage";
+import { clearAllSaves, loadGame, saveGame } from "../utils/storage";
 import type { Toast } from "../types/ui";
 
 /* ------------------------------------------------------------------ */
@@ -66,6 +66,8 @@ function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Auto-sauvegarde débouncée (400 ms) à chaque changement persistable.
+  // Après une réinitialisation (RESET), on n'écrit plus rien : la carrière
+  // doit rester effacée jusqu'à la création d'un nouveau joueur.
   useEffect(() => {
     if (!state.hydrated || !state.meta) return;
     const t = window.setTimeout(() => {
@@ -74,7 +76,18 @@ function GameProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(t);
   }, [state]);
 
-  const value = useMemo(() => ({ state, dispatch }), [state]);
+  const value = useMemo(
+    () => ({
+      state,
+      dispatch,
+      /** Réinitialisation complète : vide le localStorage puis RESET de l'état. */
+      resetAll: () => {
+        clearAllSaves();
+        dispatch({ type: "RESET" });
+      },
+    }),
+    [state],
+  );
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }
