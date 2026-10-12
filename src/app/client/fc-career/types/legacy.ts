@@ -1,116 +1,18 @@
 /**
- * FC CAREER — Barre d'index des types (ré-exports)
- * Permet `import type { ... } from "../types"` dans les pages.
+ * FC CAREER — Types legacy (ancien moteur FR hebdomadaire).
+ *
+ * Ces types ne sont utilisés QUE par engine/legacy-career.ts.
+ * Le nouveau moteur (engine/*) utilise ./game, ./player, ./club,
+ * ./match, ./economy et ./ui.
  */
-
-export type * from "./types/game";
-export type * from "./types/player";
-export type * from "./types/club";
-export type * from "./types/match";
-export type * from "./types/economy";
-export type * from "./types/ui";
-
-// Ré-exports nommés pour compatibilité stricte TS.
-export type { GamePhase, MatchDay, SeasonState, GameSave } from "./types/game";
-
-export type {
-  AttributeGroup,
-  AttributeMap,
-  Morphology,
-  Contract,
-  SeasonStatLine,
-  ProgressionPoint,
-  Player,
-  MatchRating,
-} from "./types/player";
-
-export type {
-  Division,
-  CompetitionId,
-  ClubColors,
-  AcademyInfo,
-  Club,
-  LeagueStandingRow,
-  League,
-} from "./types/club";
-
-export type {
-  MatchEvent,
-  TeamStats,
-  SimulatedMatch,
-  LineupSlot,
-  Lineup,
-  SimulationOptions,
-} from "./types/match";
-
-export type {
-  SponsorDeal,
-  WeeklyEconomySummary,
-  Wallet,
-  SalaryOffer,
-  TransferProposal,
-} from "./types/economy";
-
-export type {
-  ToastKind,
-  Toast,
-  ModalId,
-  RouteView,
-  MotionContextValue,
-  UIState,
-} from "./types/ui";
-
-
-/* ------------------------------------------------------------------ */
-/* Helpers de persistance (utilisés par dashboard / create-player)     */
-/* ------------------------------------------------------------------ */
-
-import type { FullSave } from "./utils/storage";
-import type { GameSave, MatchDay, SeasonState } from "./types/game";
-import type { Player } from "./types/player";
-import type { Wallet } from "./types/economy";
-import type { SimulatedMatch } from "./types/match";
-
-/**
- * État de carrière manipulé par les pages (hub).
- * C'est la vue "runtime" de la sauvegarde : meta (versionnée) + joueur + wallet.
- */
-export interface CareerRuntimeState {
-  meta: GameSave;
-  player: Player | null;
-  wallet: Wallet | null;
-  /** Dernier match simulé (non persisté, perdu au rechargement). */
-  lastMatch?: SimulatedMatch | null;
-}
-
-/** Convertit une sauvegarde storage.ts -> état de carrière des pages. */
-export function toCareerState(save: FullSave | null): CareerRuntimeState | null {
-  if (!save) return null;
-  return { meta: save.meta, player: save.player, wallet: save.wallet };
-}
-
-/** Convertit un état de carrière -> sauvegarde storage.ts. */
-export function toFullSave(state: CareerRuntimeState): FullSave {
-  return { meta: state.meta, player: state.player, wallet: state.wallet };
-}
-
-/** Saison en cours (raccourci typé). */
-export type CareerSeason = SeasonState;
-
-/** Alias de journée pour les composants calendrier. */
-export type CareerFixture = MatchDay;
-
-/* ------------------------------------------------------------------ */
-/* Types legacy (ancien moteur FR — voir engine/legacy-career.ts)      */
-/* ------------------------------------------------------------------ */
 
 export type AttributeCategory =
-  | 'Attaque'
-  | 'Technique & Passes'
-  | 'Physique & Moteur'
-  | 'Mental & Tactique'
-  | 'Défense'
-  | 'Gardien';
+| 'Attaque'
+| 'Technique & Passes'
+| 'Physique & Moteur'
+| 'Mental & Tactique'
+| 'Défense'
+| 'Gardien';
 
 export interface AttributeDefinition {
   id: string;
@@ -120,14 +22,6 @@ export interface AttributeDefinition {
 }
 
 export type PlayerAttributes = Record<string, number>;
-
-
-export type CareerStage =
-| 'academie'
-| 'jeunes'
-| 'reserve'
-| 'professionnel'
-| 'retraite';
 
 export type PreferredFoot = 'droit' | 'gauche' | 'ambidextre';
 
@@ -159,6 +53,33 @@ export type AcademyLevel =
 | 'national'
 | 'elite';
 
+export interface PlayerPotential {
+overallPotential: number;
+attributePotentials: PlayerAttributes;
+developmentRate: number;
+consistency: number;
+}
+
+export type Participation = 'titulaire' | 'remplacant' | 'tribune';
+
+export type TrainingFocus =
+| 'technique'
+| 'physique'
+| 'mental'
+| 'tactique'
+| 'repos';
+
+/* ------------------------------------------------------------------ */
+/* État complet de la carrière legacy                                  */
+/* ------------------------------------------------------------------ */
+
+export type CareerStage =
+| 'academie'
+| 'jeunes'
+| 'reserve'
+| 'professionnel'
+| 'retraite';
+
 export interface PlayerPhysicalProfile {
 heightCm: number;
 weightKg: number;
@@ -166,13 +87,6 @@ preferredFoot: PreferredFoot;
 primaryPosition: PlayerPosition;
 secondaryPositions: PlayerPosition[];
 archetype: PlayerArchetype;
-}
-
-export interface PlayerPotential {
-overallPotential: number;
-attributePotentials: PlayerAttributes;
-developmentRate: number;
-consistency: number;
 }
 
 export interface AcademyProfile {
@@ -234,15 +148,6 @@ title: string;
 body: string;
 read: boolean;
 }
-
-export type Participation = 'titulaire' | 'remplacant' | 'tribune';
-
-export type TrainingFocus =
-| 'technique'
-| 'physique'
-| 'mental'
-| 'tactique'
-| 'repos';
 
 export interface SeasonStats {
 matches: number;

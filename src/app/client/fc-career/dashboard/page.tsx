@@ -21,8 +21,8 @@ import {
   UserRound,
   ArrowLeftRight,
 } from "lucide-react";
-import type { CareerRuntimeState } from "../types";
-import { toCareerState, toFullSave } from "../types";
+import type { CareerRuntimeState } from "../types/career";
+import { toCareerState, toFullSave } from "../types/career";
 
 import {
   clearAllSaves,

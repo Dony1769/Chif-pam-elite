@@ -8,7 +8,7 @@
  * Le nouveau moteur est séparé dans les autres modules de ./engine.
  */
 
-import { ALL_51_ATTRIBUTES } from "../constants";
+import { ALL_51_ATTRIBUTES } from "../constants/attributes-legacy";
 
 import type {
   AcademyLevel,
@@ -21,7 +21,7 @@ import type {
   AttributeCategory,
   PlayerPotential,
   Participation,
-} from "../types";
+} from "../types/legacy";
 
 const clamp = (value: number, min = 1, max = 99): number =>
   Math.max(min, Math.min(max, value));
