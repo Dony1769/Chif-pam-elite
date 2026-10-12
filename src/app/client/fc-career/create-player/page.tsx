@@ -25,13 +25,10 @@ import { markSessionUnlocked } from "../utils/session";
 import type { AcademyLevel } from "../types";
 import type { GamePhase, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
-import type { FootChoice } from "../types/player";
 import { PLAYING_STYLES } from "../constants/positions";
 import { STARTING_CLUB_IDS, getClub } from "../constants/clubs";
-import type { Morphology, Player } from "../types/player";
+import type { FootChoice, Morphology, Player } from "../types/player";
 import type { Wallet } from "../types/economy";
-
-type FootChoice = "left" | "right" | "both";
 
 const POSITION_GROUPS: Record<string, PositionId[]> = {
   Gardien: ["GK"],
@@ -146,7 +143,6 @@ export default function CreatePlayerPage() {
           createdAt: nowIso,
           lastPlayedAt: nowIso,
           pinHash: existing?.meta.pinHash ?? null,
-          pinHash: existing?.pinHash ?? null,
           phase: "hub" as GamePhase,
           season: null as SeasonState | null,
           clubId,
