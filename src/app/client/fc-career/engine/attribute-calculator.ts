@@ -1,7 +1,6 @@
 /**
  * FC CAREER — Calcul des attributs & système de potentiel
  */
-
 import { ATTRIBUTES_BY_GROUP } from "../constants/attributes";
 import type { PositionFamily, PlayingStyleId } from "../constants/positions";
 import { getStyle } from "../constants/positions";
