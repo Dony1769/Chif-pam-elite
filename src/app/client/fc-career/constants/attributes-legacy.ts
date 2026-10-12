@@ -1,4 +1,4 @@
-import type { AttributeDefinition } from './types';
+import type { AttributeDefinition } from "../types/legacy";
 
 export const ALL_51_ATTRIBUTES: AttributeDefinition[] = [
   // ATTAQUE (9)

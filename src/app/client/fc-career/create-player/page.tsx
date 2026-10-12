@@ -19,10 +19,12 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { generatePlayer, emptyWallet, suggestSalary } from "../engine";
+import { generatePlayer } from "../engine/player-generator";
+import { emptyWallet } from "../engine/economic-engine";
+import { suggestSalary } from "../engine/transfer-system";
 import { loadGame, saveGame } from "../utils/storage";
 import { markSessionUnlocked } from "../utils/session";
-import type { AcademyLevel } from "../types";
+import type { AcademyLevel } from "../types/legacy";
 import type { GamePhase, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
 import { PLAYING_STYLES } from "../constants/positions";
