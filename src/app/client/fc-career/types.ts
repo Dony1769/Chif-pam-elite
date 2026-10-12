@@ -99,19 +99,24 @@ export type CareerSeason = SeasonState;
 
 /** Alias de journée pour les composants calendrier. */
 export type CareerFixture = MatchDay;
+
+/* ------------------------------------------------------------------ */
+/* Types legacy (ancien moteur FR — voir engine/legacy-career.ts)      */
+/* ------------------------------------------------------------------ */
+
 export type AttributeCategory =
-| 'Attaque'
-| 'Technique & Passes'
-| 'Physique & Moteur'
-| 'Mental & Tactique'
-| 'Défense'
-| 'Gardien';
+  | 'Attaque'
+  | 'Technique & Passes'
+  | 'Physique & Moteur'
+  | 'Mental & Tactique'
+  | 'Défense'
+  | 'Gardien';
 
 export interface AttributeDefinition {
-id: string;
-name: string;
-category: AttributeCategory;
-description: string;
+  id: string;
+  name: string;
+  category: AttributeCategory;
+  description: string;
 }
 
 export type PlayerAttributes = Record<string, number>;
