@@ -19,6 +19,7 @@ import {
   Trash2,
   Trophy,
   UserRound,
+  ArrowLeftRight,
 } from "lucide-react";
 import type { CareerRuntimeState } from "../types";
 import { toCareerState, toFullSave } from "../types";
@@ -38,6 +39,7 @@ import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engin
 import { formatMoneyCompact, formatDate, formatRating } from "../utils/formatters";
 import type { SimulatedMatch, MatchEvent } from "../types/match";
 import type { Player, SeasonStatLine } from "../types/player";
+import MarketView from "../components/Market/MarketView";
 
 /** Ligne de stats vierge pour une saison donnée. */
 function emptyStatLine(
@@ -123,6 +125,7 @@ type DashboardTab =
   | "saison"
   | "match"
   | "entrainement"
+  | "marche"
   | "club"
   | "profil";
 
@@ -131,6 +134,7 @@ const TABS: { id: DashboardTab; label: string; icon: React.ReactNode }[] = [
   { id: "saison", label: "Saison", icon: <CalendarDays size={16} /> },
   { id: "match", label: "Match", icon: <Trophy size={16} /> },
   { id: "entrainement", label: "Entraînement", icon: <Dumbbell size={16} /> },
+  { id: "marche", label: "Marche", icon: <ArrowLeftRight size={16} /> },
   { id: "club", label: "Club", icon: <Shirt size={16} /> },
   { id: "profil", label: "Profil", icon: <UserRound size={16} /> },
 ];
@@ -350,6 +354,9 @@ export default function DashboardPage() {
               <button className="fc-btn-secondary" onClick={() => setTab("entrainement")}>
                 <Dumbbell size={16} /> S&apos;entraîner
               </button>
+              <button className="fc-btn-secondary" onClick={() => setTab("marche")}>
+                <ArrowLeftRight size={16} /> Marché
+              </button>
               <button className="fc-btn-secondary" onClick={doRest}>
                 <Activity size={16} /> Repos
               </button>
@@ -440,6 +447,8 @@ export default function DashboardPage() {
           </button>
         </section>
       )}
+
+      {tab === "marche" && <MarketView />}
 
       {tab === "club" && (
         <section className="fc-card">
