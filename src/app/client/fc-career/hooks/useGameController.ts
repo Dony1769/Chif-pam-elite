@@ -17,13 +17,17 @@ import { useCallback, useMemo } from "react";
 import { useGameContext } from "../context/GameContext";
 import { useUIContext } from "../context/UIContext";
 import type { Player, SeasonStatLine } from "../types/player";
-import type { SimulatedMatch, MatchDay } from "../types/match";
+import type { SimulatedMatch } from "../types/match";
+import type { MatchDay } from "../types/game";
+import type { SalaryOffer } from "../types/economy";
 import { TRAINING_SESSIONS, runTrainingSession, applyRest, endOfWeek, type TrainingType } from "../engine/progression";
 import { createSeason, advanceSeason, nextUserFixture, playMatchday } from "../engine/season-manager";
 import { simulateMatch } from "../engine/match-engine";
 import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engine/economic-engine";
+import { isTransferWindowOpen } from "../engine/transfer-system";
 import { getClub, getClubsByDivision } from "../constants/clubs";
 import { formatRating } from "../utils/formatters";
+import { useTransfers } from "./useTransfers";
 
 /** Ligne de stats vierge pour une saison donnée. */
 function emptyStatLine(seasonYear: number, clubId: string, competitionId: string): SeasonStatLine {
@@ -61,11 +65,23 @@ export interface GameController {
   playNextMatch: () => PlayMatchOutcome | null;
   /** Avance la saison d'une journée sans impliquer le joueur (matchs IA uniquement). */
   skipMatchday: () => string | null;
+  /* ---------- Transferts (Phase 3.12) ---------- */
+  /** Le mercato est-il ouvert ? */
+  transferWindowOpen: boolean;
+  /** Offres entrantes valides pour la journée courante. */
+  transferOffers: SalaryOffer[];
+  /** Force la régénération des offres. */
+  refreshOffers: () => SalaryOffer[];
+  /** Accepte une offre (contrat + prime à la signature). */
+  acceptTransfer: (offer: SalaryOffer) => { ok: boolean; message: string };
+  /** Envoie une contre-offre (salaire/bonus améliorés). */
+  negotiateOffer: (offer: SalaryOffer) => SalaryOffer;
 }
 
 export function useGameController(): GameController {
   const { state, dispatch } = useGameContext();
   const { notify } = useUIContext();
+  const transfers = useTransfers();
 
   const { player, season, wallet } = state;
   const club = player ? getClub(player.contract.clubId) ?? null : null;
@@ -189,7 +205,19 @@ export function useGameController(): GameController {
   }, [club, season, dispatch]);
 
   return useMemo(
-    () => ({ ensureSeason, upcomingFixture, train, rest, playNextMatch, skipMatchday }),
-    [ensureSeason, upcomingFixture, train, rest, playNextMatch, skipMatchday],
+    () => ({
+      ensureSeason,
+      upcomingFixture,
+      train,
+      rest,
+      playNextMatch,
+      skipMatchday,
+      transferWindowOpen: transfers.windowOpen,
+      transferOffers: transfers.offers,
+      refreshOffers: transfers.refreshOffers,
+      acceptTransfer: transfers.acceptTransfer,
+      negotiateOffer: transfers.negotiate,
+    }),
+    [ensureSeason, upcomingFixture, train, rest, playNextMatch, skipMatchday, transfers],
   );
 }
