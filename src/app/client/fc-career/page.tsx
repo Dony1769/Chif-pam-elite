@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Lock, ArrowRight, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { checkAccessCode, markSessionUnlocked } from './utils/session';
@@ -10,7 +9,6 @@ import { loadGame } from './utils/storage';
 export default function FcCareerAuthPage() {
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
-  const router = useRouter();
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,9 +16,12 @@ export default function FcCareerAuthPage() {
       // Marqueur de session (sessionStorage) : lu par FcCareerGuard.
       markSessionUnlocked();
       // Carrière déjà créée -> reprise directe au hub ; sinon création du joueur.
+      // On passe par window.location pour un chargement complet : le layout
+      // parent (/client) et le guard sont ainsi ré-évalués avec la session
+      // fraîchement déverrouillée (pas de redirection fantôme vers /connexion).
       const save = loadGame();
       const next = save?.player ? '/client/fc-career/dashboard' : '/client/fc-career/create-player';
-      router.push(next);
+      window.location.assign(next);
     } else {
       setError(true);
       setPin('');
