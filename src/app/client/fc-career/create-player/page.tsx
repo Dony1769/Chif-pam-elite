@@ -22,10 +22,10 @@ import {
 import { generatePlayer } from "../engine/player-generator";
 import { emptyWallet } from "../engine/economic-engine";
 import { suggestSalary } from "../engine/transfer-system";
-import { loadGame, saveGame } from "../utils/storage";
+import { saveGame } from "../utils/storage";
 import { markSessionUnlocked } from "../utils/session";
 import type { AcademyLevel } from "../types/legacy";
-import type { GamePhase, SeasonState } from "../types/game";
+import type { GamePhase, GameSave, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
 import { PLAYING_STYLES } from "../constants/positions";
 import { STARTING_CLUB_IDS, getClub } from "../constants/clubs";
@@ -137,23 +137,18 @@ export default function CreatePlayerPage() {
         },
       };
 
-      const existing = loadGame();
       const nowIso = new Date().toISOString();
-      const meta =
-        existing?.meta ?? {
-          version: 1,
-          createdAt: nowIso,
-          lastPlayedAt: nowIso,
-          pinHash: existing?.meta.pinHash ?? null,
-          phase: "hub" as GamePhase,
-          season: null as SeasonState | null,
-          clubId,
-        };
-      meta.phase = "hub";
-      meta.clubId = clubId;
-      meta.lastPlayedAt = nowIso;
+      const meta: GameSave = {
+        version: 1,
+        createdAt: nowIso,
+        lastPlayedAt: nowIso,
+        pinHash: null,
+        phase: "hub" as GamePhase,
+        season: null as SeasonState | null,
+        clubId,
+      };
 
-      const wallet: Wallet | null = existing?.wallet ?? emptyWallet();
+      const wallet: Wallet = emptyWallet();
 
       saveGame({ meta, player, wallet });
       markSessionUnlocked();

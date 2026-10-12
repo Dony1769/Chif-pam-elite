@@ -6,7 +6,7 @@
  * Onglets : accueil, saison, match, entraînement, club, profil.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -146,9 +146,14 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<DashboardTab>("accueil");
   const [lastMatch, setLastMatch] = useState<SimulatedMatch | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Anti double-sauvegarde : la persistance est débouncée (400 ms dans
+  // useGameState) ; si on réinitialise juste après une action, cette
+  // sauvegarde retardée pourrait réécrire la carrière effacée.
+  const resettingRef = useRef(false);
 
   // Chargement de la sauvegarde
   useEffect(() => {
+    if (resettingRef.current) return;
     const save = loadGame();
     if (!save || !save.player) {
       router.replace("/client/fc-career/create-player");
@@ -159,6 +164,7 @@ export default function DashboardPage() {
   }, [router]);
 
   const persist = useCallback((next: CareerRuntimeState) => {
+    if (resettingRef.current) return;
     setCareer(next);
     saveGame(toFullSave(next));
   }, []);
@@ -171,7 +177,10 @@ export default function DashboardPage() {
     if (!career || !player || !club) return;
     if (career.meta.season) return;
     const clubsInDivision = getClubsByDivision(club.division);
-    const season = createSeason(clubsInDivision, new Date().getFullYear() + 1, club);
+    // Saison alignée sur la date de création de la carrière (sinon : année courante).
+    const createdYear = new Date(career.meta.createdAt).getFullYear();
+    const seasonYear = Number.isFinite(createdYear) ? createdYear + 1 : new Date().getFullYear() + 1;
+    const season = createSeason(clubsInDivision, seasonYear, club);
     persist({ ...career, meta: { ...career.meta, season } });
   }, [career, player, club, persist]);
 

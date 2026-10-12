@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, ShieldCheck, ArrowRight, Trophy } from 'lucide-react';
+import { Lock, ArrowRight, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { checkAccessCode, markSessionUnlocked } from './utils/session';
-
+import { loadGame } from './utils/storage';
 
 export default function FcCareerAuthPage() {
   const [pin, setPin] = useState<string>('');
@@ -17,7 +17,10 @@ export default function FcCareerAuthPage() {
     if (checkAccessCode(pin)) {
       // Marqueur de session (sessionStorage) : lu par FcCareerGuard.
       markSessionUnlocked();
-      router.push('/client/fc-career/create-player');
+      // Carrière déjà créée -> reprise directe au hub ; sinon création du joueur.
+      const save = loadGame();
+      const next = save?.player ? '/client/fc-career/dashboard' : '/client/fc-career/create-player';
+      router.push(next);
     } else {
       setError(true);
       setPin('');
@@ -43,9 +46,11 @@ export default function FcCareerAuthPage() {
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
             <input
               type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={4}
               value={pin}
-              onChange={(e) => { setError(false); setPin(e.target.value); }}
+              onChange={(e) => { setError(false); setPin(e.target.value.replace(/\D/g, '')); }}
               placeholder="Code PIN (ex: 1769)"
               className="w-full rounded-2xl border border-white/10 bg-slate-950/80 py-3.5 pl-12 pr-4 text-center text-lg font-black tracking-widest text-emerald-400 outline-none focus:border-emerald-500/50"
             />
