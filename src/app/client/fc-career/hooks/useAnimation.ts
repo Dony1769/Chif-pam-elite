@@ -28,7 +28,7 @@ export function useAnimation(): AnimationTriggers {
   const animatedNumber = useCallback((from: number, to: number, durationMs = 600) => {
     targetRef.current = { from, to };
     if (cancelRef.current) cancelRef.current();
-    cancelRef.current = animateValue(from, to, durationMs, numericEasings.easeOut, setValue);
+    cancelRef.current = animateValue(from, to, durationMs, numericEasings.easeOutCubic, setValue);
     return value;
   }, [value]);
 
