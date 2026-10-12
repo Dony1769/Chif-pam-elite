@@ -4,6 +4,11 @@
 
 import type { MatchRating } from "./player";
 
+// Re-export de MatchDay (défini dans types/game.ts) pour compatibilité :
+// le type est historiquement importé depuis "types/match" par plusieurs modules
+// (useGameController, season-manager, etc.). Le vrai export reste game.ts.
+export type { MatchDay } from "./game";
+
 export type MatchEvent =
   | { id: string; minute: number; type: "goal"; scorer: string; clubId: string; assist?: string }
   | { id: string; minute: number; type: "chance"; clubId: string; description: string }
