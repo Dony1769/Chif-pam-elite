@@ -50,15 +50,17 @@ function GameProvider({ children }: { children: ReactNode }) {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     const save = loadGame();
+    const meta = save?.meta ?? null;
     dispatch({
       type: "HYDRATE",
       payload: {
         ...initialGameState,
         hydrated: true,
         locked: false, // le PIN est déjà géré par FcCareerGuard
-        meta: save?.meta ?? null,
+        meta,
         player: save?.player ?? null,
         wallet: save?.wallet ?? null,
+        season: meta?.season ?? null,
       },
     });
   }, []);

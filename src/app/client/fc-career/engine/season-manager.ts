@@ -5,6 +5,7 @@
 import type { SeasonState, MatchDay } from "../types/game";
 import type { Club, CompetitionId, LeagueStandingRow } from "../types/club";
 import { getCompetitionsForDivision } from "../constants/competitions";
+import { getClub } from "../constants/clubs";
 
 const DAY_MS = 7 * 24 * 3600 * 1000; // une journée de jeu = 1 semaine
 
@@ -135,3 +136,76 @@ export function computeStandings(season: SeasonState, clubs: Club[]): LeagueStan
   });
   return rows;
 }
+
+/* ------------------------------------------------------------------ */
+/* Simulateur de journées — moteur déterministe (seedé)                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Génère un résultat plausible pour une rencontre entre deux clubs.
+ * Basé sur la force (réputation + prestige) avec avantage domicile.
+ */
+export function simulateFixtureResult(
+  home: Club,
+  away: Club,
+  rng: () => number,
+): { homeScore: number; awayScore: number } {
+  const strength = (c: Club) => c.reputation * 0.7 + c.prestige * 0.3;
+  const diff = strength(home) + 6 - strength(away);
+  const lambdaHome = Math.max(0.25, 1.35 + diff / 45);
+  const lambdaAway = Math.max(0.2, 1.1 - diff / 45);
+  const poisson = (lambda: number) => {
+    let L = Math.exp(-lambda);
+    let k = 0;
+    let p = 1;
+    do {
+      k++;
+      p *= rng();
+    } while (p > L && k < 12);
+    return k - 1;
+  };
+  return { homeScore: poisson(lambdaHome), awayScore: poisson(lambdaAway) };
+}
+
+/**
+ * Simule toutes les rencontres d'une journée du calendrier et applique
+ * les résultats à la saison. Déterministe via `seed` (rejouable).
+ * Retourne aussi les matchs du club utilisateur pour mise à jour des stats.
+ */
+export function playMatchday(
+  season: SeasonState,
+  userClubId: string,
+  seed = Date.now(),
+): { season: SeasonState; userFixtures: MatchDay[] } {
+  // rng mulberry32 inline (léger, pas dépendant du moteur match complet)
+  let a = seed >>> 0;
+  const rng = () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const dayNumbers = [...new Set(season.fixtures.filter((f) => !f.played).map((f) => f.dayNumber))];
+  if (dayNumbers.length === 0) return { season, userFixtures: [] };
+  const currentDay = Math.min(...dayNumbers);
+
+  const todays = season.fixtures.filter((f) => f.dayNumber === currentDay && !f.played);
+  const results: { dayId: string; homeScore: number; awayScore: number }[] = [];
+  for (const f of todays) {
+    const home = getClub(f.homeClubId);
+    const away = getClub(f.awayClubId);
+    if (!home || !away) continue;
+    const r = simulateFixtureResult(home, away, rng);
+    results.push({ dayId: f.id, ...r });
+  }
+
+  const next = advanceSeason(season, results);
+  const playedIds = new Set(results.map((r) => r.dayId));
+  const userFixtures = next.fixtures.filter(
+    (f) => playedIds.has(f.id) && (f.homeClubId === userClubId || f.awayClubId === userClubId),
+  );
+  return { season: next, userFixtures };
+}
+

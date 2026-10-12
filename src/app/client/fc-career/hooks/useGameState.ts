@@ -34,15 +34,17 @@ export function useGameState(): UseGameStateResult {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     const save = loadGame();
+    const meta = save?.meta ?? null;
     dispatch({
       type: "HYDRATE",
       payload: {
         ...initialGameState,
         hydrated: true,
         locked: false, // le garde de session (FcCareerGuard) gère déjà le PIN
-        meta: save?.meta ?? null,
+        meta,
         player: save?.player ?? null,
         wallet: save?.wallet ?? null,
+        season: meta?.season ?? null,
       },
     });
   }, []);
@@ -67,15 +69,17 @@ export function useGameState(): UseGameStateResult {
 
   const reload = useCallback(() => {
     const save = loadGame();
+    const meta = save?.meta ?? null;
     dispatch({
       type: "HYDRATE",
       payload: {
         ...initialGameState,
         hydrated: true,
         locked: false,
-        meta: save?.meta ?? null,
+        meta,
         player: save?.player ?? null,
         wallet: save?.wallet ?? null,
+        season: meta?.season ?? null,
       },
     });
   }, []);
