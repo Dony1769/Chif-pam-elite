@@ -12,6 +12,7 @@ import {
   advanceSeason,
   nextUserFixture,
   computeStandings,
+  playMatchday,
 } from "../engine/season-manager";
 import { getClubsByDivision } from "../constants/clubs";
 
@@ -23,6 +24,12 @@ export interface SeasonMethods {
     season: SeasonState,
     results: { dayId: string; homeScore: number; awayScore: number }[],
   ) => SeasonState;
+  /** Simule toute la prochaine journée (matchs IA inclus) — déterministe via seed. */
+  playDay: (
+    season: SeasonState,
+    userClubId: string,
+    seed?: number,
+  ) => { season: SeasonState; userFixtures: MatchDay[] };
   /** Prochaine journée du joueur. */
   upcoming: (season: SeasonState, userClubId: string) => MatchDay | undefined;
   /** Classement actualisé de la division. */
@@ -44,6 +51,12 @@ export function useSeason(): SeasonMethods {
     [],
   );
 
+  const playDay = useCallback(
+    (season: SeasonState, userClubId: string, seed?: number) =>
+      playMatchday(season, userClubId, seed),
+    [],
+  );
+
   const upcoming = useCallback(
     (season: SeasonState, userClubId: string) => nextUserFixture(season, userClubId),
     [],
@@ -62,7 +75,7 @@ export function useSeason(): SeasonMethods {
   }, []);
 
   return useMemo(
-    () => ({ newSeason, advance, upcoming, standings, daysRemaining }),
-    [newSeason, advance, upcoming, standings, daysRemaining],
+    () => ({ newSeason, advance, playDay, upcoming, standings, daysRemaining }),
+    [newSeason, advance, playDay, upcoming, standings, daysRemaining],
   );
 }

@@ -5,7 +5,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { GameSave, GamePhase } from "../types/game";
+import type { GameSave, GamePhase, SeasonState } from "../types/game";
 import type { Player } from "../types/player";
 import type { Wallet } from "../types/economy";
 import type { SimulatedMatch } from "../types/match";
@@ -16,6 +16,8 @@ export interface GameState {
   meta: GameSave | null;
   player: Player | null;
   wallet: Wallet | null;
+  /** Saison en cours (calendrier, résultats) — persistée dans meta.season. */
+  season: SeasonState | null;
   lastMatch: SimulatedMatch | null;
 }
 
@@ -25,6 +27,7 @@ export type GameAction =
   | { type: "LOCK" }
   | { type: "SET_PLAYER"; payload: Player }
   | { type: "SET_WALLET"; payload: Wallet }
+  | { type: "SET_SEASON"; payload: SeasonState }
   | { type: "SET_PHASE"; payload: GamePhase }
   | { type: "SET_LAST_MATCH"; payload: SimulatedMatch }
   | { type: "RESET" };
@@ -35,6 +38,7 @@ export const initialGameState: GameState = {
   meta: null,
   player: null,
   wallet: null,
+  season: null,
   lastMatch: null,
 };
 
@@ -50,6 +54,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, player: action.payload };
     case "SET_WALLET":
       return { ...state, wallet: action.payload };
+    case "SET_SEASON":
+      // La saison est persistée dans meta.season (sauvegarde versionnée).
+      return state.meta
+        ? { ...state, season: action.payload, meta: { ...state.meta, season: action.payload } }
+        : { ...state, season: action.payload };
     case "SET_PHASE":
       return state.meta ? { ...state, meta: { ...state.meta, phase: action.payload } } : state;
     case "SET_LAST_MATCH":
