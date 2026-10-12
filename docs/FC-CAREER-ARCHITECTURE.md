@@ -2,6 +2,7 @@
 
 ## 📐 STRUCTURE DOSSIERS NOUVELLE
 
+
 ```
 src/app/client/fc-career/
 ├── types/
