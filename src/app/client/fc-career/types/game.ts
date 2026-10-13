@@ -12,6 +12,7 @@ import type { AwardsState } from "./awards";
 import type { InternationalState } from "./international";
 import type { PhoneState } from "./phone";
 import type { WorldState } from "./world";
+import type { FansVestiaireState } from "./fans";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -88,6 +89,9 @@ export interface GameSave {
 
   // Étape 15 — Monde Vivant & Adaptation Culturelle
   worldState: WorldState | null;
+
+  // Étape 16 — Fans, Vestiaire & Capitanat
+  fansState: FansVestiaireState | null;
 }
 
 /** Clés / constantes globales du jeu. */
