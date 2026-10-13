@@ -1,19 +1,16 @@
-/**
- * FC CAREER — Layout de la zone protégée.
- * Les pages filles (dashboard, create-player…) passent par le garde de
- * session. L'écran du code est dans `./pin/` et n'est PAS protégé.
- *
- * GameProviders enveloppe toute la zone : état global (GameContext),
- * contexte joueur et UI (toasts/modales) accessibles aux pages filles.
- */
-
+import type { Metadata } from "next";
 import FcCareerGuard from "./components/FcCareerGuard";
-import GameProviders from "./providers/GameProviders";
+import "./fc-career.css";
+
+export const metadata: Metadata = {
+  title: "FC Career - Ma carriere",
+  description: "Construisez votre carriere de footballeur.",
+};
 
 export default function FcCareerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <GameProviders>
+    <div className="fcl-fonts">
       <FcCareerGuard>{children}</FcCareerGuard>
-    </GameProviders>
+    </div>
   );
 }

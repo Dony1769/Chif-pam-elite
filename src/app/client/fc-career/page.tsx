@@ -21,7 +21,8 @@ export default function FcCareerAuthPage() {
       // fraîchement déverrouillée (pas de redirection fantôme vers /connexion).
       // Nouvelle expérience FC Career (hub, entraînement, saison, match, club).
       // L'ancienne version reste accessible sur /client/fc-career/dashboard.
-      const next = '/client/fc-career/carriere';
+      const save = loadGame();
+      const next = save?.player ? '/client/fc-career/dashboard' : '/client/fc-career/create-player';
       window.location.assign(next);
     } else {
       setError(true);

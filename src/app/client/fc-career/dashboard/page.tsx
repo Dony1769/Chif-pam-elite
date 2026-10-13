@@ -3,33 +3,33 @@
 /**
  * FC CAREER — Dashboard (hub principal)
  * Route: /client/fc-career/dashboard
- * Onglets : accueil, saison, match, entraînement, club, profil.
+ * Design unifie (style carriere).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
+  ArrowRight,
   CalendarDays,
   Dumbbell,
-  Home,
-  Shirt,
+  Flag,
+  Moon,
+  Play,
+  Shield,
   Sparkles,
-  Trash2,
+  Target,
   Trophy,
-  UserRound,
-  ArrowLeftRight,
+  Wallet,
+  X,
+  Zap,
+  ChevronRight,
 } from "lucide-react";
+import { Shell, Crest, PageTitle, StatCard } from "../lib/components";
+import { Button, Link } from "../lib/ui";
 import type { CareerRuntimeState } from "../types/career";
 import { toCareerState, toFullSave } from "../types/career";
-
-import {
-  clearAllSaves,
-  loadGame,
-  saveGame,
-} from "../utils/storage";
-
+import { loadGame, saveGame } from "../utils/storage";
 import { getClub, getClubsByDivision } from "../constants/clubs";
 import { createSeason, advanceSeason, nextUserFixture, computeStandings } from "../engine/season-manager";
 import { simulateMatch } from "../engine/match-engine";
@@ -39,121 +39,36 @@ import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engin
 import { formatMoneyCompact, formatDate, formatRating } from "../utils/formatters";
 import type { SimulatedMatch, MatchEvent } from "../types/match";
 import type { Player, SeasonStatLine } from "../types/player";
-import MarketView from "../components/Market/MarketView";
+import { DIVISION_INFO } from "../types/club";
 
-/** Ligne de stats vierge pour une saison donnée. */
-function emptyStatLine(
-  seasonYear: number,
-  clubId: string,
-  competitionId: string,
-): SeasonStatLine {
-  return {
-    seasonYear,
-    clubId,
-    competitionId,
-    matches: 0,
-    starts: 0,
-    minutes: 0,
-    goals: 0,
-    assists: 0,
-    yellowCards: 0,
-    redCards: 0,
-    averageRating: 0,
-    overallAtSeasonEnd: 0,
-  };
+function emptyStatLine(seasonYear: number, clubId: string, competitionId: string): SeasonStatLine {
+  return { seasonYear, clubId, competitionId, matches: 0, starts: 0, minutes: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0, averageRating: 0, overallAtSeasonEnd: 0 };
 }
 
-/** Description lisible d'un événement de match. */
-function describeEvent(ev: MatchEvent): string {
-  switch (ev.type) {
-    case "goal":
-      return `⚽ BUT — ${ev.scorer}`;
-    case "chance":
-      return `🎀 Occasion — ${ev.description}`;
-    case "card":
-      return ev.color === "red"
-        ? `🟥 Carton rouge — ${ev.player}`
-        : `🟨 Carton jaune — ${ev.player}`;
-    case "sub":
-      return `🔁 Changement — ${ev.in} remplace ${ev.out}`;
-    case "var":
-      return `📺 VAR — ${ev.outcome}`;
-    default:
-      return "Événement de match";
-  }
-}
-
-/** Jauge compacte (forme / fatigue / moral). */
 function Meter({ label, value, invert = false }: { label: string; value: number; invert?: boolean }) {
   const pct = Math.max(0, Math.min(100, value));
   const good = invert ? pct <= 40 : pct >= 60;
   const bad = invert ? pct >= 75 : pct <= 30;
-  const color = good ? "bg-emerald-400" : bad ? "bg-rose-400" : "bg-amber-400";
+  const color = good ? "var(--primary)" : bad ? "var(--coral)" : "oklch(.8 .15 80)";
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-14 text-left opacity-60">{label}</span>
-      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
-        <span className={`block h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10 }}>
+      <span style={{ width: 50, opacity: .6 }}>{label}</span>
+      <span style={{ height: 4, width: 60, overflow: 'hidden', borderRadius: 3, background: 'var(--secondary)' }}>
+        <span style={{ display: 'block', height: '100%', borderRadius: 3, background: color, width: `${pct}%`, transition: 'width .6s var(--motion)' }} />
       </span>
-      <span className="w-7 text-right font-semibold">{Math.round(pct)}</span>
+      <span style={{ width: 24, textAlign: 'right', fontWeight: 600 }}>{Math.round(pct)}</span>
     </div>
   );
 }
-
-/** Paire clé/valeur (fiche club). */
-function Info({ k, v }: { k: string; v: React.ReactNode }) {
-  return (
-    <>
-      <dt className="opacity-60">{k}</dt>
-      <dd className="text-right font-semibold">{v}</dd>
-    </>
-  );
-}
-
-/** Statistique encadrée (profil). */
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-2">
-      <div className="text-base font-black">{value}</div>
-      <div className="text-[11px] uppercase tracking-wide opacity-50">{label}</div>
-    </div>
-  );
-}
-
-type DashboardTab =
-  | "accueil"
-  | "saison"
-  | "match"
-  | "entrainement"
-  | "marche"
-  | "club"
-  | "profil";
-
-const TABS: { id: DashboardTab; label: string; icon: React.ReactNode }[] = [
-  { id: "accueil", label: "Accueil", icon: <Home size={16} /> },
-  { id: "saison", label: "Saison", icon: <CalendarDays size={16} /> },
-  { id: "match", label: "Match", icon: <Trophy size={16} /> },
-  { id: "entrainement", label: "Entraînement", icon: <Dumbbell size={16} /> },
-  { id: "marche", label: "Marche", icon: <ArrowLeftRight size={16} /> },
-  { id: "club", label: "Club", icon: <Shirt size={16} /> },
-  { id: "profil", label: "Profil", icon: <UserRound size={16} /> },
-];
 
 export default function DashboardPage() {
   const router = useRouter();
   const [career, setCareer] = useState<CareerRuntimeState | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<DashboardTab>("accueil");
   const [lastMatch, setLastMatch] = useState<SimulatedMatch | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // Anti double-sauvegarde : la persistance est débouncée (400 ms dans
-  // useGameState) ; si on réinitialise juste après une action, cette
-  // sauvegarde retardée pourrait réécrire la carrière effacée.
-  const resettingRef = useRef(false);
 
-  // Chargement de la sauvegarde
   useEffect(() => {
-    if (resettingRef.current) return;
     const save = loadGame();
     if (!save || !save.player) {
       router.replace("/client/fc-career/create-player");
@@ -164,7 +79,6 @@ export default function DashboardPage() {
   }, [router]);
 
   const persist = useCallback((next: CareerRuntimeState) => {
-    if (resettingRef.current) return;
     setCareer(next);
     saveGame(toFullSave(next));
   }, []);
@@ -172,12 +86,10 @@ export default function DashboardPage() {
   const player = career?.player ?? null;
   const club = player ? getClub(player.contract.clubId) ?? null : null;
 
-  // Création automatique de la saison si absente
   useEffect(() => {
     if (!career || !player || !club) return;
     if (career.meta.season) return;
     const clubsInDivision = getClubsByDivision(club.division);
-    // Saison alignée sur la date de création de la carrière (sinon : année courante).
     const createdYear = new Date(career.meta.createdAt).getFullYear();
     const seasonYear = Number.isFinite(createdYear) ? createdYear + 1 : new Date().getFullYear() + 1;
     const season = createSeason(clubsInDivision, seasonYear, club);
@@ -192,28 +104,13 @@ export default function DashboardPage() {
 
   function flash(msg: string) {
     setNotice(msg);
-    window.setTimeout(() => setNotice(null), 2600);
-  }
-
-  /* ---------------- Actions ---------------- */
-
-  function doTraining(focus: TrainingType) {
-    if (!career || !player) return;
-    const session = TRAINING_SESSIONS.find((s) => s.id === focus);
-    if (!session) return;
-    const { player: updated, result } = runTrainingSession(player, session);
-    persist({ ...career, player: updated });
-    flash(
-      result.improved.length > 0
-        ? `+${result.improved.length} attribut(s) amélioré(s) ! Overall ${result.overallAfter}`
-        : "Séance terminée — progression minimale (fatigue ou plafond).",
-    );
+    window.setTimeout(() => setNotice(null), 4000);
   }
 
   function doRest() {
     if (!career || !player) return;
     persist({ ...career, player: applyRest(player) });
-    flash("Repos : fatigue -25.");
+    flash("Repos complet - condition physique restauree.");
   }
 
   function playNextMatch() {
@@ -221,33 +118,25 @@ export default function DashboardPage() {
     const home = getClub(nextFixture.homeClubId)!;
     const away = getClub(nextFixture.awayClubId)!;
     const sim = simulateMatch(home, away, player);
-
-    // Mise à jour des stats saison du joueur
     const line = { ...(player.seasonStats[0] ?? emptyStatLine(season.seasonYear, club.id, nextFixture.competitionId)) };
     line.matches += 1;
     if (sim.userPlayed) line.starts += 1;
     line.minutes += sim.userMinutes;
     line.goals += sim.userRating.goals;
     line.assists += sim.userRating.assists;
-    line.averageRating =
-      (line.averageRating * (line.matches - 1) + sim.userRating.rating) / line.matches;
-
+    line.averageRating = (line.averageRating * (line.matches - 1) + sim.userRating.rating) / line.matches;
     const updatedPlayer: Player = {
       ...player,
       seasonStats: [line, ...player.seasonStats.slice(1)],
       fatigue: Math.min(100, player.fatigue + 22),
       form: Math.max(0, Math.min(100, player.form + (sim.userRating.rating >= 7 ? 4 : sim.userRating.rating <= 5 ? -3 : 0))),
     };
-
     const advanced = advanceSeason(season, [
       { dayId: nextFixture.id, homeScore: sim.homeScore, awayScore: sim.awayScore },
     ]);
-
-    // Paie hebdomadaire
     const wallet = career.wallet ?? emptyWallet();
     const bonuses = computeMatchBonuses(updatedPlayer, sim);
     const payroll = processWeeklyPayroll(wallet, updatedPlayer, advanced.currentDay, bonuses, [], updatedPlayer.seasonStats[0]?.minutes ?? 0, 200);
-
     persist({
       ...career,
       player: endOfWeek(updatedPlayer),
@@ -256,253 +145,228 @@ export default function DashboardPage() {
       lastMatch: sim,
     });
     setLastMatch(sim);
-    setTab("match");
   }
-
-  function resetCareer() {
-    if (!window.confirm("Effacer toute la carrière ? Cette action est irréversible.")) return;
-    clearAllSaves();
-    router.replace("/client/fc-career/create-player");
-  }
-
-  /* ---------------- Rendu ---------------- */
 
   if (!loaded || !player || !club || !career) {
     return (
-      <main className="flex min-h-screen items-center justify-center opacity-60">
-        <Sparkles className="animate-pulse" />
-        <span className="ml-2 text-sm">Chargement de la carrière…</span>
-      </main>
+      <Shell>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)', opacity: .6, gap: 8 }}>
+          <Sparkles className="animate-pulse" size={16} />
+          <span style={{ fontSize: 12 }}>Chargement de la carriere...</span>
+        </div>
+      </Shell>
     );
   }
 
   const standings = season ? computeStandings(season, getClubsByDivision(club.division)) : [];
   const myRow = standings.find((r) => r.clubId === club.id);
+  const divisionName = DIVISION_INFO[club.division]?.name ?? club.division;
+  const seasonStats = player.seasonStats[0];
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-4 px-4 py-6">
-      {/* Barre d'onglets */}
-      <nav className="fc-tabbar">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`fc-tab ${tab === t.id ? "fc-tab-active" : ""}`}
-          >
-            {t.icon}
-            <span className="hidden sm:inline">{t.label}</span>
-          </button>
-        ))}
-      </nav>
-
-      {notice && <div className="fc-toast">{notice}</div>}
-
-      {/* Fiche joueur résumé */}
-      <section className="fc-card flex items-center gap-4">
-        <div
-          className="grid h-14 w-14 place-items-center rounded-full text-lg font-black"
-          style={{ background: club.colors.primary, color: club.colors.accent }}
-        >
-          {player.overall}
-        </div>
-        <div className="flex-1">
-          <h2 className="text-lg font-bold leading-tight">
-            {player.firstName} {player.lastName}
-          </h2>
-          <p className="text-xs opacity-60">
-            {player.position} · {club.name} · Pot. {player.potential}
-          </p>
-        </div>
-        <div className="flex flex-col gap-1 text-right text-xs">
-          <Meter label="Forme" value={player.form} />
-          <Meter label="Fatigue" value={player.fatigue} invert />
-          <Meter label="Moral" value={player.morale} />
-        </div>
-      </section>
-
-      {tab === "accueil" && (
-        <section className="grid gap-4 sm:grid-cols-2">
-          <div className="fc-card">
-            <h3 className="fc-card-title">Prochain match</h3>
-            {nextFixture ? (
-              <Link href="#match" onClick={() => setTab("match")} className="block">
-                <p className="font-semibold">
-                  {getClub(nextFixture.homeClubId)?.shortName} vs{" "}
-                  {getClub(nextFixture.awayClubId)?.shortName}
-                </p>
-                <p className="text-xs opacity-60">
-                  J{nextFixture.dayNumber} · {formatDate(nextFixture.date)}
-                </p>
-              </Link>
-            ) : (
-              <p className="text-sm opacity-60">
-                {season?.isOver ? "Saison terminée !" : "Aucun match programmé."}
-              </p>
-            )}
-          </div>
-
-          <div className="fc-card">
-            <h3 className="fc-card-title">Classement ({club.division})</h3>
-            {myRow ? (
-              <p className="text-sm">
-                <span className="text-xl font-black">{myRow.position}ᵉ</span> · {myRow.points} pts ·{" "}
-                {myRow.won}V {myRow.drawn}N {myRow.lost}D
-              </p>
-            ) : (
-              <p className="text-sm opacity-60">En attente de la première journée.</p>
-            )}
-          </div>
-
-          <div className="fc-card sm:col-span-2">
-            <h3 className="fc-card-title">Actions rapides</h3>
-            <div className="flex flex-wrap gap-2">
-              <button className="fc-btn-primary" onClick={playNextMatch} disabled={!nextFixture}>
-                <Trophy size={16} /> Jouer le match
-              </button>
-              <button className="fc-btn-secondary" onClick={() => setTab("entrainement")}>
-                <Dumbbell size={16} /> S&apos;entraîner
-              </button>
-              <button className="fc-btn-secondary" onClick={() => setTab("marche")}>
-                <ArrowLeftRight size={16} /> Marché
-              </button>
-              <button className="fc-btn-secondary" onClick={doRest}>
-                <Activity size={16} /> Repos
-              </button>
-              <button className="fc-btn-danger" onClick={resetCareer}>
-                <Trash2 size={16} /> Réinitialiser
-              </button>
+    <Shell>
+      <PageTitle
+        eyebrow={`SAISON ${season?.seasonYear ?? ''} / ${divisionName}`}
+        title={`A vous de jouer, ${player.firstName}.`}
+        subtitle="Chaque jour compte. Chaque decision construit votre legende."
+        action={
+          <div className="today">
+            <CalendarDays />
+            <div>
+              <strong>{season ? formatDate(new Date().toISOString()) : ''}</strong>
+              <span>Journee {season?.currentDay ?? 0}</span>
             </div>
           </div>
-        </section>
-      )}
+        }
+      />
 
-      {tab === "saison" && season && (
-        <section className="fc-card">
-          <h3 className="fc-card-title">Calendrier — Saison {season.seasonYear}</h3>
-          <ul className="flex flex-col gap-1">
-            {season.fixtures
-              .filter((f) => f.homeClubId === club.id || f.awayClubId === club.id)
-              .slice(0, 12)
-              .map((f) => (
-                <li key={f.id} className="fc-list-row">
-                  <span className="w-8 text-xs opacity-50">J{f.dayNumber}</span>
-                  <span className="flex-1 text-sm">
-                    {getClub(f.homeClubId)?.shortName} vs {getClub(f.awayClubId)?.shortName}
-                  </span>
-                  <span className="text-xs opacity-60">{formatDate(f.date)}</span>
-                  <span className="w-14 text-right text-sm font-bold">
-                    {f.played ? `${f.homeScore}-${f.awayScore}` : "—"}
-                  </span>
-                </li>
-              ))}
-          </ul>
-        </section>
-      )}
-
-      {tab === "match" && (
-        <section className="fc-card">
-          <h3 className="fc-card-title">Centre de match</h3>
-          {lastMatch ? (
-            <div className="flex flex-col gap-2 text-sm">
-              <p className="text-2xl font-black">
-                {getClub(lastMatch.homeClubId)?.shortName} {lastMatch.homeScore} – {lastMatch.awayScore}{" "}
-                {getClub(lastMatch.awayClubId)?.shortName}
-              </p>
-              <p>
-                Ta note : <strong className="text-emerald-400">{formatRating(lastMatch.userRating.rating)}</strong>{" "}
-                · {lastMatch.userRating.goals} but(s), {lastMatch.userRating.assists} passe(s) déc. ·{" "}
-                {lastMatch.userMinutes} min
-              </p>
-              <ul className="mt-2 flex flex-col gap-1">
-                {lastMatch.events.slice(-8).map((ev, i) => (
-                  <li key={i} className="fc-list-row text-xs">
-                    <span className="w-10 opacity-50">{ev.minute}&apos;</span>
-                    <span>{describeEvent(ev)}</span>
-                  </li>
-                ))}
-              </ul>
+      <div className="dashboard-grid">
+        {/* Carte joueur */}
+        <section className="player-card">
+          <div className="player-image" style={{ height: 200, background: `linear-gradient(135deg, ${club.colors.primary}44, ${club.colors.accent}22)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="player-position">{player.position}</span>
+            <div className="overall"><strong>{player.overall}</strong><span>GENERAL</span></div>
+            <div className="player-identity">
+              <span>LE PROCHAIN CHAPITRE</span>
+              <h2>{player.firstName} {player.lastName}</h2>
+              <p>{player.age} ans <i /> {player.position} <i /> {club.shortName}</p>
             </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm opacity-60">
-                {nextFixture
-                  ? `Prochain match : ${getClub(nextFixture.homeClubId)?.name} vs ${
-                      getClub(nextFixture.awayClubId)?.name
-                    } (J${nextFixture.dayNumber}).`
-                  : "Plus de match cette saison."}
-              </p>
-              <button className="fc-btn-primary self-start" onClick={playNextMatch} disabled={!nextFixture}>
-                <Trophy size={16} /> Simuler le match
-              </button>
+          </div>
+          <div className="player-info">
+            <div className="club-line">
+              <Crest name={club.shortName} clubId={club.id} small />
+              <div>
+                <strong>{club.name}</strong>
+                <span>{divisionName}</span>
+              </div>
+              <span className="status-tag">ESPOIR</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 16 }}>
+              <Meter label="Forme" value={player.form} />
+              <Meter label="Fatigue" value={player.fatigue} invert />
+              <Meter label="Moral" value={player.morale} />
+            </div>
+            <div className="player-details">
+              <span>Potentiel<strong>{player.potential}<Sparkles /></strong></span>
+              <span>Pied fort<strong>{player.foot === 'left' ? 'Gauche' : player.foot === 'right' ? 'Droit' : 'Les deux'}</strong></span>
+              <span>Valeur<strong>{formatMoneyCompact(player.marketValue)}</strong></span>
+            </div>
+            <Button asChild variant="outline" className="full-width">
+              <Link to="/joueur">Voir mon profil<ArrowRight /></Link>
+            </Button>
+          </div>
+        </section>
+
+        {/* Colonne centrale */}
+        <div className="center-column">
+          <div className="section-heading">
+            <h2>Votre prochain defi</h2>
+            <span className="live-label"><span />{nextFixture ? 'PROCHAIN MATCH' : 'PAS DE MATCH'}</span>
+          </div>
+          {nextFixture && (
+            <section className="match-card" style={{ background: 'var(--card)', height: 'auto', minHeight: 250 }}>
+              <div className="match-card-content" style={{ position: 'relative' }}>
+                <div className="competition"><Trophy />{divisionName}<span>J{nextFixture.dayNumber}</span></div>
+                <div className="versus">
+                  <div>
+                    <Crest name={getClub(nextFixture.homeClubId)?.shortName ?? ''} clubId={nextFixture.homeClubId} />
+                    <strong>{getClub(nextFixture.homeClubId)?.shortName ?? '?'}</strong>
+                    <span>{nextFixture.homeClubId === club.id ? 'DOMICILE' : 'EXTERIEUR'}</span>
+                  </div>
+                  <span className="vs-label">VS</span>
+                  <div>
+                    <Crest name={getClub(nextFixture.awayClubId)?.shortName ?? ''} clubId={nextFixture.awayClubId} />
+                    <strong>{getClub(nextFixture.awayClubId)?.shortName ?? '?'}</strong>
+                    <span>{nextFixture.awayClubId === club.id ? 'DOMICILE' : 'EXTERIEUR'}</span>
+                  </div>
+                </div>
+                <div className="match-date"><CalendarDays />{formatDate(nextFixture.date)}</div>
+                <Button variant="career" className="full-width" onClick={playNextMatch}>
+                  <Play />Jouer le match<ArrowRight />
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {lastMatch && (
+            <div style={{ marginTop: 16, padding: 16, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 7 }}>
+              <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
+                {getClub(lastMatch.homeClubId)?.shortName} {lastMatch.homeScore} - {lastMatch.awayScore} {getClub(lastMatch.awayClubId)?.shortName}
+              </div>
+              <div style={{ textAlign: 'center', fontSize: 11, marginTop: 8, color: 'var(--muted-foreground)' }}>
+                Note : <strong style={{ color: 'var(--primary)' }}>{formatRating(lastMatch.userRating.rating)}</strong>
+                {' '}&middot; {lastMatch.userRating.goals} but(s), {lastMatch.userRating.assists} passe(s) dec.
+              </div>
             </div>
           )}
-        </section>
-      )}
 
-      {tab === "entrainement" && (
-        <section className="grid gap-3 sm:grid-cols-2">
-          {TRAINING_SESSIONS.map((s) => (
-            <button key={s.id} className="fc-card fc-card-hover text-left" onClick={() => doTraining(s.id)}>
-              <h4 className="font-semibold">{s.label}</h4>
-              <p className="text-xs opacity-60">
-                {s.durationMin} min · fatigue {s.fatigueCost > 0 ? `+${s.fatigueCost}` : s.fatigueCost}
-              </p>
-              <p className="mt-1 text-xs opacity-50">{s.targets.slice(0, 3).join(", ")}</p>
-            </button>
-          ))}
-          <button className="fc-btn-secondary sm:col-span-2" onClick={doRest}>
-            Journée complète de repos (-25 fatigue)
-          </button>
-        </section>
-      )}
+          <div className="section-heading actions-heading">
+            <h2>Faites la difference</h2>
+            <span>UN JOUR, UNE ACTION</span>
+          </div>
+          <div className="quick-actions">
+            <Button asChild variant="action" className="training-action">
+              <Link to="/entrainement">
+                <div className="action-icon"><Dumbbell /></div>
+                <div><strong>S&apos;entrainer</strong><span>Repoussez vos limites</span></div>
+                <ArrowRight />
+              </Link>
+            </Button>
+            <Button variant="action" className="rest-action" onClick={doRest}>
+              <div className="action-icon"><Moon /></div>
+              <div><strong>Recuperer</strong><span>Revenez plus fort</span></div>
+              <ArrowRight />
+            </Button>
+          </div>
 
-      {tab === "marche" && <MarketView />}
+          <div className="coach-note">
+            <span><Sparkles /></span>
+            <p>&laquo; Le talent vous fait commencer.<br /><strong>La regularite vous fait reussir. &raquo;</strong></p>
+            <small>LE MOT DU COACH</small>
+          </div>
+        </div>
 
-      {tab === "club" && (
-        <section className="fc-card">
-          <h3 className="fc-card-title">{club.name}</h3>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <Info k="Ville" v={club.city} />
-            <Info k="Stade" v={`${club.stadium} (${club.capacity.toLocaleString("fr-FR")})`} />
-            <Info k="Division" v={club.division} />
-            <Info k="Entraîneur" v={club.coachName} />
-            <Info k="Budget salarial" v={formatMoneyCompact(club.budget)} />
-            <Info k="Réputation" v={`${club.reputation}/100`} />
-            <Info k="Ton salaire" v={`${formatMoneyCompact(player.contract.salaryPerWeek)}/sem`} />
-            <Info k="Valeur marchande" v={formatMoneyCompact(player.marketValue)} />
-          </dl>
-        </section>
-      )}
+        {/* Colonne droite */}
+        <div className="right-column">
+          <div className="section-heading">
+            <h2>Cette saison</h2>
+            <span className="tiny-tag">{player.position}</span>
+          </div>
+          <div className="season-metrics">
+            <StatCard icon={<Flag />} value={seasonStats?.matches ?? 0} label="Matchs joues" tone="blue" />
+            <StatCard icon={<Target />} value={seasonStats?.goals ?? 0} label="Buts marques" tone="coral" />
+            <StatCard icon={<Zap />} value={seasonStats?.assists ?? 0} label="Passes decisives" tone="yellow" />
+            <StatCard icon={<Activity />} value={seasonStats?.averageRating ? seasonStats.averageRating.toFixed(1) : '-'} label="Note moyenne" tone="ice" />
+          </div>
 
-      {tab === "profil" && (
-        <section className="fc-card">
-          <h3 className="fc-card-title">Profil & statistiques</h3>
-          <p className="text-sm">
-            {player.firstName} {player.lastName} — {player.age} ans · {player.heightCm} cm ·{" "}
-            {player.weightKg} kg · pied {player.foot === "left" ? "gauche" : player.foot === "right" ? "droit" : "les deux"}
+          {myRow && (
+            <div className="season-progress" style={{ marginTop: 20 }}>
+              <div><span>Classement {divisionName}</span><strong>{myRow.position}e / {standings.length}</strong></div>
+              <progress value={standings.length - myRow.position + 1} max={standings.length} />
+              <div className="progress-label"><span>{myRow.points} pts</span><span>{myRow.won}V {myRow.drawn}N {myRow.lost}D</span></div>
+            </div>
+          )}
+
+          <div className="section-heading calendar-heading">
+            <h2>A l&apos;horizon</h2>
+            <Button asChild variant="ghost" size="icon" aria-label="Voir le calendrier">
+              <Link to="/saison"><ArrowRight /></Link>
+            </Button>
+          </div>
+          <div className="upcoming">
+            {season?.fixtures
+              .filter(f => !f.played && (f.homeClubId === club.id || f.awayClubId === club.id))
+              .slice(1, 4)
+              .map(f => {
+                const opponent = f.homeClubId === club.id ? f.awayClubId : f.homeClubId;
+                const oppClub = getClub(opponent);
+                return (
+                  <div className="fixture-row" key={f.id}>
+                    <div className="fixture-date">
+                      <strong>{new Date(f.date).getUTCDate()}</strong>
+                      <span>{new Date(f.date).toLocaleDateString('fr-FR', { month: 'short', timeZone: 'UTC' })}</span>
+                    </div>
+                    <Crest name={oppClub?.shortName ?? '?'} clubId={opponent} small />
+                    <div>
+                      <strong>{oppClub?.shortName ?? '?'}</strong>
+                      <span>J{f.dayNumber} &middot; {f.homeClubId === club.id ? 'Dom' : 'Ext'}</span>
+                    </div>
+                    <ChevronRight />
+                  </div>
+                );
+              })}
+          </div>
+
+          <div className="wallet-box">
+            <Wallet />
+            <div>
+              <span>Votre solde</span>
+              <strong>{formatMoneyCompact(career.wallet?.balance ?? 0)}</strong>
+            </div>
+            <Button asChild variant="ghost" size="icon" aria-label="Voir les finances">
+              <Link to="/club"><ArrowRight /></Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bottom-strip">
+        <div>
+          <span className="strip-icon"><Trophy /></span>
+          <p>
+            <span>VOTRE OBJECTIF DE SAISON</span>
+            <strong>Progresser et s&apos;imposer en {divisionName}</strong>
           </p>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm sm:grid-cols-6">
-            <Stat label="Matchs" value={player.careerTotals.matches} />
-            <Stat label="Buts" value={player.careerTotals.goals} />
-            <Stat label="Passes déc." value={player.careerTotals.assists} />
-            <Stat label="Minutes" value={player.careerTotals.minutes} />
-            <Stat label="Cartons J" value={player.careerTotals.yellowCards} />
-            <Stat label="Note moy." value={player.careerTotals.averageRating.toFixed(2)} />
-          </div>
-          <h4 className="fc-card-title mt-4">Top attributs</h4>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(player.attributes)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 8)
-              .map(([id, val]) => (
-                <span key={id} className="fc-chip">
-                  {id} · {val}
-                </span>
-              ))}
-          </div>
-        </section>
+        </div>
+        <span className="objective-tag">EN COURS <span /></span>
+      </div>
+
+      {notice && (
+        <div className="toast">
+          <Activity />{notice}
+          <Button variant="ghost" size="icon" aria-label="Fermer" onClick={() => setNotice(null)}><X /></Button>
+        </div>
       )}
-    </main>
+    </Shell>
   );
 }

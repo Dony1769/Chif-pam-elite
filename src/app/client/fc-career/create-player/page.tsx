@@ -24,7 +24,7 @@ import { emptyWallet } from "../engine/economic-engine";
 import { suggestSalary } from "../engine/transfer-system";
 import { saveGame } from "../utils/storage";
 import { markSessionUnlocked } from "../utils/session";
-import type { AcademyLevel } from "../types/legacy";
+import type { AcademyLevel } from "../types/player";
 import type { GamePhase, GameSave, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
 import { PLAYING_STYLES } from "../constants/positions";

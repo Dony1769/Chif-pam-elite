@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { cloneElement, isValidElement, useEffect, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from "react";
 
-export const CAREER_BASE = "/client/fc-career/carriere";
+export const CAREER_BASE = "/client/fc-career";
 
 type Variant = "career" | "action" | "ghost" | "outline";
 type Size = "default" | "sm" | "icon";
@@ -26,12 +26,12 @@ export function Button({ variant, size, asChild, className, children, type, ...p
   return <button type={type ?? "button"} className={classes} {...props}>{children}</button>;
 }
 
-/** Lien relatif à la zone carrière : `to="/joueur"` → /client/fc-career/carriere/joueur */
+/** Lien relatif a la zone carriere : `to="/dashboard"` -> /client/fc-career/dashboard */
 export function Link({ to, className, children, ...props }: { to: string; className?: string; children?: ReactNode; "aria-label"?: string; title?: string }) {
-  return <NextLink href={to === "/" ? CAREER_BASE : `${CAREER_BASE}${to}`} className={className} {...props}>{children}</NextLink>;
+  return <NextLink href={to === "/" ? CAREER_BASE + "/dashboard" : `${CAREER_BASE}${to}`} className={className} {...props}>{children}</NextLink>;
 }
 
-/** Chemin courant relatif à la zone carrière ("/", "/joueur", …). */
+/** Chemin courant relatif a la zone carriere ("/", "/dashboard", ...). */
 export function useCareerPath() {
   const pathname = usePathname() ?? CAREER_BASE;
   const rest = pathname.startsWith(CAREER_BASE) ? pathname.slice(CAREER_BASE.length) : pathname;

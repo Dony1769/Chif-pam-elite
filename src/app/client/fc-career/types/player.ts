@@ -55,6 +55,8 @@ export interface ProgressionPoint {
 
 export type FootChoice = "left" | "right" | "both";
 
+export type AcademyLevel = "local" | "regional" | "national" | "elite";
+
 export interface Player {
   id: string;
   firstName: string;
