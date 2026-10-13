@@ -10,6 +10,7 @@ import { toCareerState, toFullSave, type CareerRuntimeState } from "../types/car
 import { getClub } from "../constants/clubs";
 import { ATTRIBUTES_BY_GROUP, ALL_ATTRIBUTES } from "../constants/attributes";
 import { formatMoneyCompact, formatRating } from "../utils/formatters";
+import { STAGE_LABELS } from "../engine/academy";
 import type { AttributeGroup } from "../types/player";
 
 const GROUP_LABELS: Record<string, string> = {
@@ -66,7 +67,7 @@ export default function JoueurPage() {
                 <strong>{club?.name ?? 'Club'}</strong>
                 <span>{club?.division ?? ''}</span>
               </div>
-              <span className="status-tag">ESPOIR</span>
+              <span className="status-tag">{player.academy ? STAGE_LABELS[player.academy.stage].toUpperCase() : 'ESPOIR'}</span>
             </div>
             <div className="player-details">
               <span>Potentiel<strong>{player.potential}<Sparkles /></strong></span>

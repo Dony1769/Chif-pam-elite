@@ -27,7 +27,7 @@ import { emptyWallet } from "../engine/economic-engine";
 import { suggestSalary } from "../engine/transfer-system";
 import { saveGame } from "../utils/storage";
 import { markSessionUnlocked } from "../utils/session";
-import type { AcademyLevel } from "../types/player";
+import type { AcademyLevel, CareerStage } from "../types/player";
 import type { GamePhase, GameSave, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
 import { PLAYING_STYLES } from "../constants/positions";
@@ -36,6 +36,7 @@ import type { Country } from "../types/club";
 import { COUNTRIES, DIVISION_INFO } from "../types/club";
 import type { FootChoice, Morphology, Player } from "../types/player";
 import type { Wallet } from "../types/economy";
+import { initialStageForAge, createAcademyStatus, STAGE_LABELS } from "../engine/academy";
 
 const POSITION_GROUPS: Record<string, PositionId[]> = {
   Gardien: ["GK"],
@@ -98,7 +99,7 @@ export default function CreatePlayerPage() {
   const router = useRouter();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [age, setAge] = useState(18);
+  const [age, setAge] = useState(15);
   const [heightCm, setHeightCm] = useState(178);
   const [weightKg, setWeightKg] = useState(72);
   const [morphology, setMorphology] = useState<Morphology>("normal");
@@ -114,6 +115,7 @@ export default function CreatePlayerPage() {
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<Player | null>(null);
 
+  const TOTAL_STEPS = 4;
   const canProceedStep1 = firstName.trim().length >= 2 && lastName.trim().length >= 2;
 
   function handleGenerate() {
@@ -126,9 +128,16 @@ export default function CreatePlayerPage() {
         });
         player = { ...player, foot };
         player = applyAcademyBonus(player, academy);
+        const stage = initialStageForAge(age);
+        player = {
+          ...player,
+          academyLevel: academy,
+          academy: createAcademyStatus(stage),
+        };
         const club = getClub(clubId);
-        const wage = club ? Math.round(suggestSalary(club.division, player.overall)) : 300;
-        player = { ...player, contract: { ...player.contract, clubId, salaryPerWeek: wage, isProfessional: true, releaseClause: Math.round(player.marketValue * 1.8) } };
+        const isPro = stage === "pro";
+        const wage = isPro && club ? Math.round(suggestSalary(club.division, player.overall)) : stage === "reserve" ? 400 : stage === "u19" ? 100 : 50;
+        player = { ...player, contract: { ...player.contract, clubId, salaryPerWeek: wage, isProfessional: isPro, releaseClause: isPro ? Math.round(player.marketValue * 1.8) : 0 } };
 
         const nowIso = new Date().toISOString();
         const meta: GameSave = { version: 1, createdAt: nowIso, lastPlayedAt: nowIso, pinHash: null, phase: "hub" as GamePhase, season: null as SeasonState | null, clubId };
@@ -187,13 +196,13 @@ export default function CreatePlayerPage() {
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 40 }}
         >
           <button
-            onClick={() => step === 1 ? router.push('/client/fc-career') : setStep(1)}
+            onClick={() => step === 1 ? router.push('/client/fc-career') : setStep(step - 1)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}
           >
-            <ArrowLeft size={16} /> {step === 1 ? 'Retour' : 'Etape 1'}
+            <ArrowLeft size={16} /> {step === 1 ? 'Retour' : `Etape ${step - 1}`}
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {[1, 2].map(s => (
+            {[1, 2, 3, 4].map(s => (
               <motion.div
                 key={s}
                 style={{
@@ -216,10 +225,10 @@ export default function CreatePlayerPage() {
             FC CAREER &middot; CREATION
           </div>
           <h1 style={{ fontFamily: "'Barlow', sans-serif", fontSize: 'clamp(28px, 5vw, 38px)', fontWeight: 600, lineHeight: 1.15 }}>
-            {generating ? 'Generation en cours...' : generated ? 'Votre legende commence.' : step === 1 ? 'Qui etes-vous ?' : 'Quel joueur serez-vous ?'}
+            {generating ? 'Generation en cours...' : generated ? 'Votre legende commence.' : step === 1 ? 'Qui etes-vous ?' : step === 2 ? 'Votre physique.' : step === 3 ? 'Quel joueur serez-vous ?' : 'Ou commence votre histoire ?'}
           </h1>
           <p style={{ color: 'var(--muted-foreground)', fontSize: 11, marginTop: 12, lineHeight: 1.7 }}>
-            {generating ? 'Calcul des attributs, placement en academie...' : generated ? `${generated.firstName} ${generated.lastName} · Overall ${generated.overall} · Potentiel ${generated.potential}` : step === 1 ? 'Chaque detail compte. Votre identite definit votre histoire.' : 'Poste, style, academie. Construisez votre avenir.'}
+            {generating ? 'Calcul des attributs, placement en academie...' : generated ? `${generated.firstName} ${generated.lastName} · ${STAGE_LABELS[initialStageForAge(age)]} · Overall ${generated.overall}` : step === 1 ? 'Chaque detail compte. Votre identite definit votre histoire.' : step === 2 ? 'Taille, poids, morphologie. Le corps forge le joueur.' : step === 3 ? 'Poste, style de jeu, pied fort.' : 'Pays de depart, academie, club.'}
           </p>
         </motion.div>
 
@@ -280,6 +289,7 @@ export default function CreatePlayerPage() {
               <span>Overall <strong style={{ color: 'var(--primary)', fontSize: 20, fontFamily: "'Barlow', sans-serif", display: 'block', marginTop: 4 }}>{generated.overall}</strong></span>
               <span>Potentiel <strong style={{ color: 'var(--foreground)', fontSize: 20, fontFamily: "'Barlow', sans-serif", display: 'block', marginTop: 4 }}>{generated.potential}</strong></span>
               <span>Poste <strong style={{ color: 'var(--foreground)', fontSize: 20, fontFamily: "'Barlow', sans-serif", display: 'block', marginTop: 4 }}>{generated.position}</strong></span>
+              <span>Niveau <strong style={{ color: 'var(--foreground)', fontSize: 14, fontFamily: "'Barlow', sans-serif", display: 'block', marginTop: 4 }}>{STAGE_LABELS[generated.academy.stage]}</strong></span>
             </motion.div>
             <motion.div
               initial={{ width: 0 }}
@@ -301,44 +311,42 @@ export default function CreatePlayerPage() {
         {/* Form steps */}
         {!generating && !generated && (
           <AnimatePresence mode="wait">
-            {step === 1 ? (
+            {step === 1 && (
               <motion.div key="step1" variants={pageVariants} initial="initial" animate="animate" exit="exit">
                 <motion.div variants={stagger} initial="initial" animate="animate" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <FormCard>
                     <FieldLabel icon={<UserRound size={14} />} label="Prenom" />
-                    <input
-                      value={firstName}
-                      onChange={e => setFirstName(e.target.value)}
-                      placeholder="Kylian"
-                      className="fcl-create-input"
-                    />
+                    <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Kylian" className="fcl-create-input" />
                   </FormCard>
                   <FormCard>
                     <FieldLabel icon={<UserRound size={14} />} label="Nom" />
-                    <input
-                      value={lastName}
-                      onChange={e => setLastName(e.target.value)}
-                      placeholder="Lumina"
-                      className="fcl-create-input"
-                    />
+                    <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Lumina" className="fcl-create-input" />
                   </FormCard>
-
                   <FormCard>
                     <FieldLabel icon={<Activity size={14} />} label={`Age au depart : ${age} ans`} />
-                    <input type="range" min={16} max={30} value={age} onChange={e => setAge(Number(e.target.value))} className="fcl-create-range" />
+                    <input type="range" min={14} max={16} value={age} onChange={e => setAge(Number(e.target.value))} className="fcl-create-range" />
+                    <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>Vous commencerez en {STAGE_LABELS[initialStageForAge(age)]}</span>
                   </FormCard>
+                  <motion.button variants={fadeUp} disabled={!canProceedStep1} onClick={() => canProceedStep1 && setStep(2)} className="fcl-create-cta" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+                    Continuer <ArrowRight size={16} />
+                  </motion.button>
+                </motion.div>
+              </motion.div>
+            )}
 
+            {step === 2 && (
+              <motion.div key="step2" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+                <motion.div variants={stagger} initial="initial" animate="animate" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <FormCard>
-                      <FieldLabel icon={<Ruler size={14} />} label={`${heightCm} cm`} />
+                      <FieldLabel icon={<Ruler size={14} />} label={`Taille : ${heightCm} cm`} />
                       <input type="range" min={155} max={205} value={heightCm} onChange={e => setHeightCm(Number(e.target.value))} className="fcl-create-range" />
                     </FormCard>
                     <FormCard>
-                      <FieldLabel icon={<Ruler size={14} />} label={`${weightKg} kg`} />
+                      <FieldLabel icon={<Ruler size={14} />} label={`Poids : ${weightKg} kg`} />
                       <input type="range" min={50} max={100} value={weightKg} onChange={e => setWeightKg(Number(e.target.value))} className="fcl-create-range" />
                     </FormCard>
                   </div>
-
                   <FormCard>
                     <FieldLabel icon={<Footprints size={14} />} label="Morphologie" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
@@ -347,21 +355,28 @@ export default function CreatePlayerPage() {
                       ))}
                     </div>
                   </FormCard>
-
-                  <motion.button
-                    variants={fadeUp}
-                    disabled={!canProceedStep1}
-                    onClick={() => canProceedStep1 && setStep(2)}
-                    className="fcl-create-cta"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
-                  >
-                    Continuer <ArrowRight size={16} />
-                  </motion.button>
+                  <FormCard>
+                    <FieldLabel icon={<Footprints size={14} />} label="Pied fort" />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {(["left", "right", "both"] as FootChoice[]).map(f => (
+                        <motion.button key={f} onClick={() => setFoot(f)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${foot === f ? 'var(--primary)' : 'var(--border)'}`, background: foot === f ? 'color-mix(in oklab, var(--primary) 15%, transparent)' : 'var(--card)', color: foot === f ? 'var(--primary)' : 'var(--foreground)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {f === "left" ? "Gaucher" : f === "right" ? "Droitier" : "Les deux"}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </FormCard>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <motion.button onClick={() => setStep(1)} className="fcl-create-back" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}><ArrowLeft size={16} /></motion.button>
+                    <motion.button onClick={() => setStep(3)} className="fcl-create-cta" style={{ flex: 1 }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+                      Continuer <ArrowRight size={16} />
+                    </motion.button>
+                  </div>
                 </motion.div>
               </motion.div>
-            ) : (
-              <motion.div key="step2" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            )}
+
+            {step === 3 && (
+              <motion.div key="step3" variants={pageVariants} initial="initial" animate="animate" exit="exit">
                 <motion.div variants={stagger} initial="initial" animate="animate" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <FormCard>
                     <FieldLabel icon={<Shield size={14} />} label="Poste principal" />
@@ -370,23 +385,7 @@ export default function CreatePlayerPage() {
                         <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted-foreground)', marginBottom: 6, textTransform: 'uppercase' }}>{group}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {ids.map(id => (
-                            <motion.button
-                              key={id}
-                              onClick={() => setPosition(id as PositionId)}
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              style={{
-                                padding: '8px 14px',
-                                borderRadius: 6,
-                                border: `1px solid ${position === id ? 'var(--primary)' : 'var(--border)'}`,
-                                background: position === id ? 'color-mix(in oklab, var(--primary) 15%, transparent)' : 'var(--card)',
-                                color: position === id ? 'var(--primary)' : 'var(--foreground)',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                fontFamily: "'Barlow', sans-serif",
-                                cursor: 'pointer',
-                              }}
-                            >
+                            <motion.button key={id} onClick={() => setPosition(id as PositionId)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} style={{ padding: '8px 14px', borderRadius: 6, border: `1px solid ${position === id ? 'var(--primary)' : 'var(--border)'}`, background: position === id ? 'color-mix(in oklab, var(--primary) 15%, transparent)' : 'var(--card)', color: position === id ? 'var(--primary)' : 'var(--foreground)', fontSize: 12, fontWeight: 600, fontFamily: "'Barlow', sans-serif", cursor: 'pointer' }}>
                               {id}
                             </motion.button>
                           ))}
@@ -394,7 +393,6 @@ export default function CreatePlayerPage() {
                       </div>
                     ))}
                   </FormCard>
-
                   <FormCard>
                     <FieldLabel icon={<Sparkles size={14} />} label="Style de jeu" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
@@ -403,35 +401,19 @@ export default function CreatePlayerPage() {
                       ))}
                     </div>
                   </FormCard>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <motion.button onClick={() => setStep(2)} className="fcl-create-back" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}><ArrowLeft size={16} /></motion.button>
+                    <motion.button onClick={() => setStep(4)} className="fcl-create-cta" style={{ flex: 1 }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+                      Continuer <ArrowRight size={16} />
+                    </motion.button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
 
-                  <FormCard>
-                    <FieldLabel icon={<Footprints size={14} />} label="Pied fort" />
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {(["left", "right", "both"] as FootChoice[]).map(f => (
-                        <motion.button
-                          key={f}
-                          onClick={() => setFoot(f)}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          style={{
-                            flex: 1,
-                            padding: '10px 12px',
-                            borderRadius: 6,
-                            border: `1px solid ${foot === f ? 'var(--primary)' : 'var(--border)'}`,
-                            background: foot === f ? 'color-mix(in oklab, var(--primary) 15%, transparent)' : 'var(--card)',
-                            color: foot === f ? 'var(--primary)' : 'var(--foreground)',
-                            fontSize: 12,
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                            fontFamily: 'inherit',
-                          }}
-                        >
-                          {f === "left" ? "Gaucher" : f === "right" ? "Droitier" : "Les deux"}
-                        </motion.button>
-                      ))}
-                    </div>
-                  </FormCard>
-
+            {step === 4 && (
+              <motion.div key="step4" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+                <motion.div variants={stagger} initial="initial" animate="animate" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <FormCard>
                     <FieldLabel icon={<Shield size={14} />} label="Formation (academie)" />
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -440,29 +422,32 @@ export default function CreatePlayerPage() {
                       ))}
                     </div>
                   </FormCard>
-
                   <FormCard>
-                    <FieldLabel icon={<Shield size={14} />} label="Pays de depart" />
+                    <FieldLabel icon={<Shield size={14} />} label="Dans quel pays veux-tu commencer ?" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                       {COUNTRIES.map(c => (
                         <OptionButton key={c.id} active={country === c.id} onClick={() => setCountry(c.id)} label={`${c.flag} ${c.name}`} hint={c.inspired} />
                       ))}
                     </div>
                   </FormCard>
-
                   <FormCard>
                     <FieldLabel icon={<Shield size={14} />} label="Club (academie)" />
-                    <select
-                      value={clubId}
-                      onChange={e => setClubId(e.target.value)}
-                      className="fcl-create-input"
-                    >
+                    <select value={clubId} onChange={e => setClubId(e.target.value)} className="fcl-create-input">
                       {startingClubs.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} — {DIVISION_INFO[c.division]?.shortName ?? c.division}
-                        </option>
+                        <option key={c.id} value={c.id}>{c.name} — {DIVISION_INFO[c.division]?.shortName ?? c.division}</option>
                       ))}
                     </select>
+                  </FormCard>
+                  <FormCard>
+                    <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', marginBottom: 4 }}>VOTRE PARCOURS</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)', fontFamily: "'Barlow', sans-serif" }}>
+                        {STAGE_LABELS[initialStageForAge(age)]}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--muted-foreground)', marginTop: 4 }}>
+                        {age <= 16 ? "Vous commencez en academie. Votre performance decidera de votre avenir." : "Vous commencez directement en equipe premiere."}
+                      </div>
+                    </div>
                   </FormCard>
 
                   {error && (
@@ -472,9 +457,7 @@ export default function CreatePlayerPage() {
                   )}
 
                   <div style={{ display: 'flex', gap: 12 }}>
-                    <motion.button onClick={() => setStep(1)} className="fcl-create-back" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-                      <ArrowLeft size={16} />
-                    </motion.button>
+                    <motion.button onClick={() => setStep(3)} className="fcl-create-back" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}><ArrowLeft size={16} /></motion.button>
                     <motion.button onClick={handleGenerate} className="fcl-create-cta" style={{ flex: 1 }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
                       <Zap size={16} /> Generer mon joueur <ArrowRight size={16} />
                     </motion.button>

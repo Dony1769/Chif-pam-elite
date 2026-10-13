@@ -37,6 +37,7 @@ import { TRAINING_SESSIONS, runTrainingSession, applyRest, endOfWeek } from "../
 import type { TrainingType } from "../engine/progression";
 import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engine/economic-engine";
 import { formatMoneyCompact, formatDate, formatRating } from "../utils/formatters";
+import { STAGE_LABELS } from "../engine/academy";
 import type { SimulatedMatch, MatchEvent } from "../types/match";
 import type { Player, SeasonStatLine } from "../types/player";
 import { DIVISION_INFO } from "../types/club";
@@ -168,7 +169,7 @@ export default function DashboardPage() {
       <PageTitle
         eyebrow={`SAISON ${season?.seasonYear ?? ''} / ${divisionName}`}
         title={`A vous de jouer, ${player.firstName}.`}
-        subtitle="Chaque jour compte. Chaque decision construit votre legende."
+        subtitle={`${player.academy ? STAGE_LABELS[player.academy.stage] + ' · ' : ''}Chaque jour compte. Chaque decision construit votre legende.`}
         action={
           <div className="today">
             <CalendarDays />

@@ -57,6 +57,23 @@ export type FootChoice = "left" | "right" | "both";
 
 export type AcademyLevel = "local" | "regional" | "national" | "elite";
 
+/** Parcours académie → pro (Étape 3). */
+export type CareerStage = "u17" | "u19" | "reserve" | "pro";
+
+export interface AcademyStatus {
+  stage: CareerStage;
+  /** Nombre de matchs joués à ce niveau cette saison. */
+  matchesAtLevel: number;
+  /** Note moyenne au niveau actuel. */
+  averageRatingAtLevel: number;
+  /** Appels en équipe première (reserve seulement, max 3/saison). */
+  firstTeamCallUps: number;
+  /** Saisons passées au niveau actuel. */
+  seasonsAtLevel: number;
+  /** Le coach a proposé une promotion. */
+  promotionPending: boolean;
+}
+
 export interface Player {
   id: string;
   firstName: string;
@@ -86,6 +103,10 @@ export interface Player {
   condition: "fit" | "minor-injury" | "injured" | "suspended";
   injuryWeeksLeft: number;
   trainingSessionsThisWeek: number;
+
+  // Académie (Étape 3)
+  academyLevel: AcademyLevel;
+  academy: AcademyStatus;
 
   // Historique
   seasonStats: SeasonStatLine[];

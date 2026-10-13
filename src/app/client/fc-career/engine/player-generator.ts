@@ -6,8 +6,9 @@
 import { ALL_ATTRIBUTES, ATTRIBUTES_BY_GROUP } from "../constants/attributes";
 import { getPosition, getStyle } from "../constants/positions";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
-import type { Morphology, Player, AttributeMap } from "../types/player";
+import type { Morphology, Player, AttributeMap, AcademyLevel } from "../types/player";
 import { computeOverall, computePotential } from "./attribute-calculator";
+import { initialStageForAge, createAcademyStatus } from "./academy";
 import { marketValueMultiplier } from "../constants/scaling";
 
 export interface GenerationInput {
@@ -133,6 +134,8 @@ export function generatePlayer(input: GenerationInput, seed = Date.now()): Playe
     condition: "fit",
     injuryWeeksLeft: 0,
     trainingSessionsThisWeek: 0,
+    academyLevel: "regional" as AcademyLevel,
+    academy: createAcademyStatus(initialStageForAge(input.age)),
     seasonStats: [],
     careerTotals: {
       matches: 0, starts: 0, minutes: 0, goals: 0, assists: 0,
