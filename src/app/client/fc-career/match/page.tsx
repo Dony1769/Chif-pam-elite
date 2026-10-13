@@ -17,6 +17,45 @@ import { formatDate, formatRating } from "../utils/formatters";
 import type { SimulatedMatch } from "../types/match";
 import type { Player, SeasonStatLine } from "../types/player";
 
+/* --- B3: Persistance de l'etat du match --- */
+const MATCH_STATE_KEY = "fc-career:match-state";
+
+interface MatchInProgress {
+  fixtureId: string;
+  startedAt: number;
+  result?: SimulatedMatch;
+}
+
+function saveMatchState(ms: MatchInProgress) {
+  try { localStorage.setItem(MATCH_STATE_KEY, JSON.stringify(ms)); } catch {}
+}
+
+function loadMatchState(): MatchInProgress | null {
+  try {
+    const raw = localStorage.getItem(MATCH_STATE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function clearMatchState() {
+  try { localStorage.removeItem(MATCH_STATE_KEY); } catch {}
+}
+
+/* --- B4: Validation — pas de double match le meme jour --- */
+const MATCH_LOCK_KEY = "fc-career:match-lock";
+
+function getMatchLockDate(): string | null {
+  try { return localStorage.getItem(MATCH_LOCK_KEY); } catch { return null; }
+}
+
+function lockMatchForToday() {
+  try { localStorage.setItem(MATCH_LOCK_KEY, new Date().toDateString()); } catch {}
+}
+
+function isMatchLocked(): boolean {
+  return getMatchLockDate() === new Date().toDateString();
+}
+
 function emptyStatLine(seasonYear: number, clubId: string, competitionId: string): SeasonStatLine {
   return { seasonYear, clubId, competitionId, matches: 0, starts: 0, minutes: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0, averageRating: 0, overallAtSeasonEnd: 0 };
 }
@@ -26,11 +65,21 @@ export default function MatchPage() {
   const [career, setCareer] = useState<CareerRuntimeState | null>(null);
   const [lastMatch, setLastMatch] = useState<SimulatedMatch | null>(null);
   const [simulating, setSimulating] = useState(false);
+  const [matchLocked, setMatchLocked] = useState(false);
 
   useEffect(() => {
     const save = loadGame();
     if (!save?.player) { router.replace("/client/fc-career/create-player"); return; }
-    setCareer(toCareerState(save));
+    const state = toCareerState(save)!;
+    setCareer(state);
+    setMatchLocked(isMatchLocked());
+
+    // B3: Resume match state — if a match was completed while page was closed, apply it
+    const ms = loadMatchState();
+    if (ms?.result) {
+      setLastMatch(ms.result);
+      clearMatchState();
+    }
   }, [router]);
 
   const persist = useCallback((next: CareerRuntimeState) => {
@@ -50,10 +99,21 @@ export default function MatchPage() {
 
   function playMatch() {
     if (!career || !player || !club || !season || !fixture) return;
+    // B4: Block double match same day
+    if (matchLocked) return;
+
     setSimulating(true);
+
+    // B3: Save match in-progress state
+    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now() });
+
     const home = getClub(fixture.homeClubId)!;
     const away = getClub(fixture.awayClubId)!;
     const sim = simulateMatch(home, away, player);
+
+    // B3: Save completed match result
+    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now(), result: sim });
+
     const line = { ...(player.seasonStats[0] ?? emptyStatLine(season.seasonYear, club.id, fixture.competitionId)) };
     line.matches += 1;
     if (sim.userPlayed) line.starts += 1;
@@ -71,6 +131,7 @@ export default function MatchPage() {
     const wallet = career.wallet ?? emptyWallet();
     const bonuses = computeMatchBonuses(updatedPlayer, sim);
     const payroll = processWeeklyPayroll(wallet, updatedPlayer, advanced.currentDay, bonuses, [], updatedPlayer.seasonStats[0]?.minutes ?? 0, 200);
+
     persist({
       ...career,
       player: endOfWeek(updatedPlayer),
@@ -78,6 +139,13 @@ export default function MatchPage() {
       meta: { ...career.meta, season: advanced },
       lastMatch: sim,
     });
+
+    // B3: Clear match state after successful save
+    clearMatchState();
+    // B4: Lock match for today
+    lockMatchForToday();
+    setMatchLocked(true);
+
     setLastMatch(sim);
     setSimulating(false);
   }
@@ -112,8 +180,13 @@ export default function MatchPage() {
               <div style={{ marginTop: 20, fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 <CalendarDays size={12} />{formatDate(fixture.date)}
               </div>
-              <Button variant="career" className="full-width" style={{ marginTop: 24 }} onClick={playMatch} disabled={simulating}>
-                <Play />{simulating ? 'Simulation...' : 'Jouer le match'}<ArrowRight />
+              {matchLocked && !lastMatch && (
+                <p style={{ marginTop: 16, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+                  Vous avez deja joue un match aujourd&apos;hui. Revenez demain.
+                </p>
+              )}
+              <Button variant="career" className="full-width" style={{ marginTop: 24 }} onClick={playMatch} disabled={simulating || matchLocked}>
+                <Play />{simulating ? 'Simulation...' : matchLocked ? 'Match verrouille' : 'Jouer le match'}<ArrowRight />
               </Button>
             </>
           ) : (

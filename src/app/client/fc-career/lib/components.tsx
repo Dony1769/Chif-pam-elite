@@ -6,11 +6,10 @@
  */
 
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Link, useCareerPath } from './ui';
-import { Activity, ArrowRight, Bell, CalendarDays, ChevronRight, Dumbbell, Flag, House, Moon, Plus, Settings, Shield, Sparkles, User, X } from 'lucide-react';
+import { Activity, Bell, CalendarDays, ChevronRight, Dumbbell, Flag, House, Settings, Shield, Sparkles, User } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import { getClub } from '../constants/clubs';
-import { clearAllSaves, loadGame } from '../utils/storage';
+import { loadGame } from '../utils/storage';
 
 const links = [
   { to: '/dashboard', label: "Vue d'ensemble", icon: House },
@@ -38,7 +37,6 @@ export function Crest({ name, clubId, small = false }: { name: string; clubId?: 
 export function Shell({ children }: { children: ReactNode }) {
   const path = useCareerPath();
   const [notifications, setNotifications] = useState(false);
-  const [creation, setCreation] = useState(false);
   const save = typeof window !== 'undefined' ? loadGame() : null;
   const player = save?.player;
   const club = player ? getClub(player.contract.clubId) : null;
@@ -69,9 +67,6 @@ export function Shell({ children }: { children: ReactNode }) {
               <small>{club?.name ?? 'Club'} &middot; Saison {seasonYear}</small>
             </div>
           </div>
-          <Button variant="ghost" className="nav-item" onClick={() => setCreation(true)}>
-            <Plus />Nouvelle carriere
-          </Button>
           <span className="version">FC CAREER <span>v2.0</span></span>
         </div>
       </aside>
@@ -109,38 +104,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <NewCareerDialog open={creation} onClose={() => setCreation(false)} />
     </div>
-  );
-}
-
-function NewCareerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const router = useRouter();
-  const [confirm, setConfirm] = useState(false);
-
-  function handleReset() {
-    if (!confirm) return;
-    clearAllSaves();
-    onClose();
-    router.push('/client/fc-career/create-player');
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={v => { if (!v) { onClose(); setConfirm(false); } }}>
-      <DialogContent>
-        <DialogTitle>Nouvelle carriere</DialogTitle>
-        <DialogDescription>Cela remplacera votre carriere actuelle. Cette action est irreversible.</DialogDescription>
-        <div className="career-form" style={{ marginTop: 15 }}>
-          <label className="confirmation" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--muted-foreground)' }}>
-            <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
-            Je confirme vouloir recommencer une carriere.
-          </label>
-          <Button variant="career" onClick={handleReset} disabled={!confirm} className="full-width" style={{ marginTop: 10 }}>
-            Recommencer depuis zero <ArrowRight />
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
