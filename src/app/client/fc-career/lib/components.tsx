@@ -25,6 +25,7 @@ const links = [
   { to: '/phone', label: 'Téléphone', icon: Phone },
   { to: '/world', label: 'Monde vivant', icon: Earth },
   { to: '/fans', label: 'Fans & vestiaire', icon: Heart },
+  { to: '/immersion', label: 'Immersion', icon: Sparkles },
   { to: '/club', label: 'Club & contrats', icon: Shield },
   { to: '/parametres', label: 'Parametres', icon: Settings },
 ] as const;

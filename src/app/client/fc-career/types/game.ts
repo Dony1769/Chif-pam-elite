@@ -13,6 +13,7 @@ import type { InternationalState } from "./international";
 import type { PhoneState } from "./phone";
 import type { WorldState } from "./world";
 import type { FansVestiaireState } from "./fans";
+import type { ImmersionState } from "./immersion";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -92,6 +93,9 @@ export interface GameSave {
 
   // Étape 16 — Fans, Vestiaire & Capitanat
   fansState: FansVestiaireState | null;
+
+  // Étape 17 — Motion Design & Immersion
+  immersionState: ImmersionState | null;
 }
 
 /** Clés / constantes globales du jeu. */
