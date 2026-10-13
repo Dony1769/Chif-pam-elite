@@ -7,6 +7,7 @@ import type { CompetitionId } from "./club";
 import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from "./coach";
 import type { AgentState, MercatoState } from "./agent";
 import type { LifestyleState, Endorsement, LifeEventOccurrence } from "./lifestyle";
+import type { MentalState, ActiveInjury, SanctionState, PressConference } from "./wellness";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -65,6 +66,12 @@ export interface GameSave {
   lifestyleState: LifestyleState | null;
   endorsements: Endorsement[] | null;
   lifeEvents: LifeEventOccurrence[] | null;
+
+  // Étape 11 — Médias, Blessures, Mental & Sanctions
+  mentalState: MentalState | null;
+  activeInjury: ActiveInjury | null;
+  sanctionState: SanctionState | null;
+  pressConferences: PressConference[] | null;
 }
 
 /** Clés / constantes globales du jeu. */
