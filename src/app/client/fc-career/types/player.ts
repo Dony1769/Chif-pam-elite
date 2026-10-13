@@ -4,6 +4,8 @@
  */
 
 import type { PositionId, PlayingStyleId } from "../constants/positions";
+import type { UnlockedPlayStyle } from "../engine/playstyles";
+import type { PlayerTrait } from "../engine/traits";
 
 /** Les 51 attributs sont groupés en 6 familles (voir constants/attributes.ts). */
 export type AttributeGroup =
@@ -92,6 +94,16 @@ export interface Player {
   attributes: AttributeMap;
   overall: number;
   potential: number; // potentiel max atteignable (potentiel dynamique)
+
+  // Étoiles (Étape 4.2)
+  skillMovesStars: number; // 1-5 gestes techniques
+  weakFootStars: number;  // 1-5 pied faible
+
+  // PlayStyles (Étape 4.3)
+  playStyles: UnlockedPlayStyle[];
+
+  // Traits de personnalité (Étape 4.4)
+  traits: PlayerTrait[];
 
   contract: Contract;
   marketValue: number; // €

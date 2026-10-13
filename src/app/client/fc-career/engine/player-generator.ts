@@ -10,6 +10,8 @@ import type { Morphology, Player, AttributeMap, AcademyLevel } from "../types/pl
 import { computeOverall, computePotential } from "./attribute-calculator";
 import { initialStageForAge, createAcademyStatus } from "./academy";
 import { marketValueMultiplier } from "../constants/scaling";
+import { evaluatePlayStyles } from "./playstyles";
+import { generateTraits } from "./traits";
 
 export interface GenerationInput {
   firstName: string;
@@ -97,6 +99,20 @@ export function generatePlayer(input: GenerationInput, seed = Date.now()): Playe
   const overall = computeOverall(attributes, posDef.family);
   const potential = computePotential(overall, input.age, input.style, rng);
 
+  // Étoiles gestes techniques : basé sur dribble + agility + age
+  const skillBase = ((attributes["dribble"] ?? 50) + (attributes["skillMoves"] ?? 50)) / 2;
+  const skillMovesStars = clamp(Math.round(skillBase / 20), 1, 5) as 1 | 2 | 3 | 4 | 5;
+
+  // Étoiles pied faible : basé sur l'attribut weakFoot
+  const wfBase = attributes["weakFoot"] ?? 50;
+  const weakFootStars = clamp(Math.round(wfBase / 20), 1, 5) as 1 | 2 | 3 | 4 | 5;
+
+  // PlayStyles débloqués selon les attributs
+  const playStyles = evaluatePlayStyles(attributes);
+
+  // Traits de personnalité
+  const traits = generateTraits(rng);
+
   const birthYear = new Date().getFullYear() - input.age;
   const birthDate = new Date(Date.UTC(birthYear, 6, 1)).toISOString();
 
@@ -117,6 +133,10 @@ export function generatePlayer(input: GenerationInput, seed = Date.now()): Playe
     attributes,
     overall,
     potential,
+    skillMovesStars,
+    weakFootStars,
+    playStyles,
+    traits,
     contract: {
       clubId: "",
       salaryPerWeek: 0,

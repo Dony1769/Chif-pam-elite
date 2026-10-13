@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, ArrowRight, Sparkles } from "lucide-react";
+import { Activity, ArrowRight, Sparkles, Star, Zap, Eye } from "lucide-react";
 import { Shell, Crest, PageTitle, StatCard } from "../lib/components";
 import { Button, Link } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
@@ -12,6 +12,8 @@ import { ATTRIBUTES_BY_GROUP, ALL_ATTRIBUTES } from "../constants/attributes";
 import { formatMoneyCompact, formatRating } from "../utils/formatters";
 import { STAGE_LABELS } from "../engine/academy";
 import type { AttributeGroup } from "../types/player";
+import { getPlayStyleDef } from "../engine/playstyles";
+import { getTraitDef } from "../engine/traits";
 
 const GROUP_LABELS: Record<string, string> = {
   technical: "Technique",
@@ -71,6 +73,8 @@ export default function JoueurPage() {
             </div>
             <div className="player-details">
               <span>Potentiel<strong>{player.potential}<Sparkles /></strong></span>
+              <span>Gestes Tech.<strong>{'⭐'.repeat(player.skillMovesStars ?? 1)}</strong></span>
+              <span>Pied faible<strong>{'⭐'.repeat(player.weakFootStars ?? 1)}</strong></span>
               <span>Pied fort<strong>{player.foot === 'left' ? 'Gauche' : player.foot === 'right' ? 'Droit' : 'Les deux'}</strong></span>
               <span>Valeur<strong>{formatMoneyCompact(player.marketValue)}</strong></span>
               <span>Taille<strong>{player.heightCm} cm</strong></span>
@@ -106,6 +110,68 @@ export default function JoueurPage() {
             })}
           </div>
         </section>
+
+        {(player.playStyles?.length ?? 0) > 0 && (
+          <section>
+            <div className="section-heading">
+              <h2>PlayStyles</h2>
+              <span><Zap size={14} /> {player.playStyles.length} ACTIF{player.playStyles.length > 1 ? 'S' : ''}</span>
+            </div>
+            <div className="attribute-list profile-attributes">
+              {player.playStyles.map(ps => {
+                const def = getPlayStyleDef(ps.id);
+                if (!def) return null;
+                return (
+                  <div key={ps.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+                    <span style={{ fontSize: 20 }}>{def.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ color: ps.isPlus ? 'var(--accent)' : 'var(--text)' }}>
+                        {ps.isPlus ? def.labelPlus : def.label}
+                      </strong>
+                      <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>
+                        {ps.isPlus ? def.descriptionPlus : def.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {(player.traits?.length ?? 0) > 0 && (
+          <section>
+            <div className="section-heading">
+              <h2>Personnalité</h2>
+              <span><Eye size={14} /> TRAITS</span>
+            </div>
+            <div className="attribute-list profile-attributes">
+              {player.traits.filter(t => !t.hidden).map(t => {
+                const def = getTraitDef(t.traitId);
+                if (!def) return null;
+                return (
+                  <div key={t.traitId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+                    <span style={{ fontSize: 20 }}>{def.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{
+                        color: def.category === 'positive' ? 'var(--success, #4ade80)' :
+                               def.category === 'negative' ? 'var(--danger, #f87171)' : 'var(--text)',
+                      }}>
+                        {def.label}
+                      </strong>
+                      <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>{def.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {player.traits.some(t => t.hidden) && (
+                <div style={{ padding: '8px 0', opacity: 0.5, fontSize: 12, fontStyle: 'italic' }}>
+                  + {player.traits.filter(t => t.hidden).length} trait{player.traits.filter(t => t.hidden).length > 1 ? 's' : ''} caché{player.traits.filter(t => t.hidden).length > 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </Shell>
   );
