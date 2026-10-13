@@ -140,7 +140,7 @@ export default function CreatePlayerPage() {
         player = { ...player, contract: { ...player.contract, clubId, salaryPerWeek: wage, isProfessional: isPro, releaseClause: isPro ? Math.round(player.marketValue * 1.8) : 0 } };
 
         const nowIso = new Date().toISOString();
-        const meta: GameSave = { version: 1, createdAt: nowIso, lastPlayedAt: nowIso, pinHash: null, phase: "hub" as GamePhase, season: null as SeasonState | null, clubId, coachRelationship: null, squad: null, objectives: null, activeLoan: null, agentState: null, mercatoState: null, lifestyleState: null, endorsements: null, lifeEvents: null, mentalState: null, activeInjury: null, sanctionState: null, pressConferences: null };
+        const meta: GameSave = { version: 1, createdAt: nowIso, lastPlayedAt: nowIso, pinHash: null, phase: "hub" as GamePhase, season: null as SeasonState | null, clubId, coachRelationship: null, squad: null, objectives: null, activeLoan: null, agentState: null, mercatoState: null, lifestyleState: null, endorsements: null, lifeEvents: null, mentalState: null, activeInjury: null, sanctionState: null, pressConferences: null, awardsState: null };
         const wallet: Wallet = emptyWallet();
         saveGame({ meta, player, wallet });
         markSessionUnlocked();

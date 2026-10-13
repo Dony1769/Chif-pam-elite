@@ -8,6 +8,7 @@ import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from 
 import type { AgentState, MercatoState } from "./agent";
 import type { LifestyleState, Endorsement, LifeEventOccurrence } from "./lifestyle";
 import type { MentalState, ActiveInjury, SanctionState, PressConference } from "./wellness";
+import type { AwardsState } from "./awards";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -72,6 +73,9 @@ export interface GameSave {
   activeInjury: ActiveInjury | null;
   sanctionState: SanctionState | null;
   pressConferences: PressConference[] | null;
+
+  // Étape 12 — Récompenses & Trophées
+  awardsState: AwardsState | null;
 }
 
 /** Clés / constantes globales du jeu. */
