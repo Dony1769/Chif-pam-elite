@@ -8,10 +8,19 @@ import type { SalaryOffer, TransferProposal } from "../types/economy";
 import { marketValueMultiplier } from "../constants/scaling";
 import { getClub } from "../constants/clubs";
 
-/** Fourchette de salaire hebdo réaliste selon division + overall. */
+/** Fourchette de salaire hebdo réaliste selon tier de division + overall. */
 export function suggestSalary(division: Club["division"], overall: number): number {
-  const base =
-    division === "Ligue 1" ? 8_000 : division === "Ligue 2" ? 3_500 : division === "National" ? 1_200 : 300;
+  // Import inline pour éviter dépendance circulaire
+  const tier = (() => {
+    const tierMap: Record<string, number> = {
+      "elite-gallia": 1, "premier-albion": 1, "primera-castilla": 1, "bundesliga": 1, "serie-a-azzurria": 1,
+      "gallia-seconde": 2, "albion-championship": 2, "segunda-castilla": 2, "zweite-germania": 2, "serie-b-azzurria": 2,
+      "national-gallia": 3, "albion-league-one": 3,
+      "albion-league-two": 4,
+    };
+    return tierMap[division] ?? 3;
+  })();
+  const base = tier === 1 ? 8_000 : tier === 2 ? 3_500 : tier === 3 ? 1_200 : 300;
   const factor = Math.pow(Math.max(0.4, (overall - 40) / 45), 2);
   return Math.round(base * factor);
 }

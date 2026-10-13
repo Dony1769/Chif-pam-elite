@@ -23,7 +23,7 @@ import type { Player } from "../types/player";
 import { getPosition } from "../constants/positions";
 import { computeOverall } from "../engine/attribute-calculator";
 import { marketValueMultiplier } from "../constants/scaling";
-import { getClub, LIGUE1_CLUBS, LIGUE2_CLUBS } from "../constants/clubs";
+import { getClub, ALL_CLUBS } from "../constants/clubs";
 import {
   generateOffers,
   isTransferWindowOpen,
@@ -105,7 +105,7 @@ export function useTransfers(): UseTransfersResult {
         trueOverall && trueOverall !== p.overall
           ? { ...p, overall: trueOverall, marketValue: trueMarketValue }
           : p;
-      return generateOffers(evaluated, [...LIGUE1_CLUBS, ...LIGUE2_CLUBS], currentDay);
+      return generateOffers(evaluated, ALL_CLUBS, currentDay);
     },
     [currentDay, trueOverall, trueMarketValue],
   );

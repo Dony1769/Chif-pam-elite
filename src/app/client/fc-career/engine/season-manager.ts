@@ -28,7 +28,7 @@ export function generateRoundRobin(clubs: Club[], startISO: string): MatchDay[] 
       fixtures.push({
         id: `md-${dayNumber}-${home}-${away}`,
         dayNumber,
-        competitionId: "ligue1",
+        competitionId: "elite-gallia" as CompetitionId, // replaced at createSeason
         homeClubId: home,
         awayClubId: away,
         date: new Date(startDate + dayNumber * DAY_MS).toISOString(),
@@ -57,7 +57,7 @@ export function createSeason(clubs: Club[], seasonYear: number, userClub: Club):
   const startISO = new Date(Date.UTC(seasonYear - 1, 7, 15)).toISOString(); // mi-août
   const fixtures = generateRoundRobin(clubs, startISO).map((f) => ({
     ...f,
-    competitionId: (userClub.division === "Ligue 2" ? "ligue2" : "ligue1") as CompetitionId,
+    competitionId: userClub.division as CompetitionId,
   }));
 
   return {

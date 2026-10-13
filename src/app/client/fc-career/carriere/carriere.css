@@ -1,3 +1,4 @@
+.fcl-fonts{--fcl-display:'Barlow',system-ui,sans-serif;--fcl-body:'Manrope',system-ui,sans-serif}
 .fcl.app-shell{position:fixed;inset:0;z-index:60;overflow-y:auto;overflow-x:hidden;background:var(--background);color:var(--foreground);font-family:var(--fcl-body),'Manrope',sans-serif;font-size:13px;line-height:1.5;text-align:left}
 .fcl h1,.fcl h2,.fcl h3,.fcl .brand,.fcl .crest strong{font-family:var(--fcl-display),'Barlow',sans-serif}
 .fcl *,.fcl *:before,.fcl *:after{box-sizing:border-box}

@@ -45,10 +45,17 @@ export function marketValueMultiplier(overall: number, age: number, potential: n
   return Math.round(base * youthBonus * upside * oldAgePenalty);
 }
 
-/** Coût de récupération (repos, kiné) en € selon division. */
-export const RECOVERY_COSTS: Record<string, number> = {
-  "Ligue 1": 1200,
-  "Ligue 2": 450,
-  National: 120,
-  Amateur: 0,
+/** Coût de récupération (repos, kiné) en € selon tier de division. */
+import type { Division } from "../types/club";
+import { getDivisionTier } from "../types/club";
+
+const RECOVERY_BY_TIER: Record<number, number> = {
+  1: 1200,
+  2: 450,
+  3: 120,
+  4: 50,
 };
+
+export function getRecoveryCost(division: Division): number {
+  return RECOVERY_BY_TIER[getDivisionTier(division)] ?? 0;
+}

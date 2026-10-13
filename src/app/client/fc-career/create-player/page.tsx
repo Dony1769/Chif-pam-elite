@@ -28,7 +28,9 @@ import type { AcademyLevel } from "../types/legacy";
 import type { GamePhase, GameSave, SeasonState } from "../types/game";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
 import { PLAYING_STYLES } from "../constants/positions";
-import { STARTING_CLUB_IDS, getClub } from "../constants/clubs";
+import { getStartingClubs, getClub } from "../constants/clubs";
+import type { Country } from "../types/club";
+import { COUNTRIES, DIVISION_INFO } from "../types/club";
 import type { FootChoice, Morphology, Player } from "../types/player";
 import type { Wallet } from "../types/economy";
 
@@ -93,7 +95,9 @@ export default function CreatePlayerPage() {
   const [style, setStyle] = useState<PlayingStyleId>("complete");
   const [foot, setFoot] = useState<FootChoice>("right");
   const [academy, setAcademy] = useState<AcademyLevel>("regional");
-  const [clubId, setClubId] = useState<string>(STARTING_CLUB_IDS[0]);
+  const [country, setCountry] = useState<Country>("gallia");
+  const startingClubs = getStartingClubs(country);
+  const [clubId, setClubId] = useState<string>(startingClubs[0]?.id ?? "");
 
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +136,7 @@ export default function CreatePlayerPage() {
           ...player.contract,
           clubId,
           salaryPerWeek: wage,
-          isProfessional: club ? club.division !== "Amateur" : false,
+          isProfessional: true,
           releaseClause: Math.round(player.marketValue * 1.8),
         },
       };
@@ -347,20 +351,37 @@ export default function CreatePlayerPage() {
             </div>
           </Field>
 
-          <Field icon={<Shield size={16} />} label="Club de départ">
+          <Field icon={<Shield size={16} />} label="Pays de départ">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {COUNTRIES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { setCountry(c.id); setClubId(getStartingClubs(c.id)[0]?.id ?? ""); }}
+                  className={`rounded-xl border p-3 text-left transition ${
+                    country === c.id
+                      ? "border-emerald-400 bg-emerald-400/10"
+                      : "border-white/10 bg-white/5 hover:border-white/25"
+                  }`}
+                >
+                  <div className="text-sm font-semibold">{c.flag} {c.name}</div>
+                  <div className="text-xs opacity-60">{c.inspired}</div>
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field icon={<Shield size={16} />} label="Club (académie)">
             <select
               value={clubId}
               onChange={(e) => setClubId(e.target.value)}
               className="fc-input"
             >
-              {STARTING_CLUB_IDS.map((id) => {
-                const c = getClub(id);
-                return c ? (
-                  <option key={id} value={id}>
-                    {c.name} — {c.division}
-                  </option>
-                ) : null;
-              })}
+              {startingClubs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} — {DIVISION_INFO[c.division]?.shortName ?? c.division}
+                </option>
+              ))}
             </select>
           </Field>
 
