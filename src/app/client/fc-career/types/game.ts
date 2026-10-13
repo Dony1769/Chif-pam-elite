@@ -5,6 +5,7 @@
 
 import type { CompetitionId } from "./club";
 import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from "./coach";
+import type { AgentState, MercatoState } from "./agent";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -54,6 +55,10 @@ export interface GameSave {
   squad: SquadState | null;
   objectives: ObjectivesState | null;
   activeLoan: ActiveLoan | null;
+
+  // Étape 9 — Agents & Transferts
+  agentState: AgentState | null;
+  mercatoState: MercatoState | null;
 }
 
 /** Clés / constantes globales du jeu. */
