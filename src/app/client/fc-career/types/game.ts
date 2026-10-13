@@ -11,6 +11,7 @@ import type { MentalState, ActiveInjury, SanctionState, PressConference } from "
 import type { AwardsState } from "./awards";
 import type { InternationalState } from "./international";
 import type { PhoneState } from "./phone";
+import type { WorldState } from "./world";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -84,6 +85,9 @@ export interface GameSave {
 
   // Étape 14 — Téléphone & Relations
   phoneState: PhoneState | null;
+
+  // Étape 15 — Monde Vivant & Adaptation Culturelle
+  worldState: WorldState | null;
 }
 
 /** Clés / constantes globales du jeu. */
