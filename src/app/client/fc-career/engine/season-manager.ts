@@ -103,7 +103,9 @@ export function computeStandings(season: SeasonState, clubs: Club[]): LeagueStan
   for (const c of clubs) {
     table.set(c.id, {
       clubId: c.id, position: 0, played: 0, won: 0, drawn: 0, lost: 0,
-      goalsFor: 0, goalsAgainst: 0, points: 0, form: [],
+      goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0, form: [],
+      homeRecord: { w: 0, d: 0, l: 0 },
+      awayRecord: { w: 0, d: 0, l: 0 },
     });
   }
 
@@ -116,22 +118,27 @@ export function computeStandings(season: SeasonState, clubs: Club[]): LeagueStan
     h.goalsFor += f.homeScore; h.goalsAgainst += f.awayScore;
     a.goalsFor += f.awayScore; a.goalsAgainst += f.homeScore;
     if (f.homeScore > f.awayScore) {
-      h.won++; h.points += 3; h.form.push("W"); a.lost++; a.form.push("L");
+      h.won++; h.points += 3; h.form.push("W"); h.homeRecord.w++;
+      a.lost++; a.form.push("L"); a.awayRecord.l++;
     } else if (f.homeScore < f.awayScore) {
-      a.won++; a.points += 3; a.form.push("W"); h.lost++; h.form.push("L");
+      a.won++; a.points += 3; a.form.push("W"); a.awayRecord.w++;
+      h.lost++; h.form.push("L"); h.homeRecord.l++;
     } else {
-      h.drawn++; a.drawn++; h.points++; a.points++; h.form.push("D"); a.form.push("D");
+      h.drawn++; a.drawn++; h.points++; a.points++;
+      h.form.push("D"); a.form.push("D");
+      h.homeRecord.d++; a.awayRecord.d++;
     }
   }
 
   const rows = [...table.values()].sort(
     (x, y) =>
       y.points - x.points ||
-      y.goalsFor - y.goalsAgainst - (x.goalsFor - x.goalsAgainst) ||
+      (y.goalsFor - y.goalsAgainst) - (x.goalsFor - x.goalsAgainst) ||
       y.goalsFor - x.goalsFor,
   );
   rows.forEach((r, i) => {
     r.position = i + 1;
+    r.goalDifference = r.goalsFor - r.goalsAgainst;
     r.form = r.form.slice(-5);
   });
   return rows;

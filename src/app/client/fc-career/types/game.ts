@@ -53,6 +53,6 @@ export interface GameSave {
 export const GAME_CONSTANTS = {
   CURRENT_SAVE_VERSION: 1,
   STORAGE_KEY: "fc-career:save",
-  MAX_SEASON_DAYS: 34,
+  MAX_SEASON_DAYS: 380,
   WEEKS_BETWEEN_MATCHES: 1,
 } as const;

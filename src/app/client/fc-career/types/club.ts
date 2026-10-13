@@ -102,8 +102,11 @@ export interface LeagueStandingRow {
   lost: number;
   goalsFor: number;
   goalsAgainst: number;
+  goalDifference: number;
   points: number;
   form: ("W" | "D" | "L")[];
+  homeRecord: { w: number; d: number; l: number };
+  awayRecord: { w: number; d: number; l: number };
 }
 
 export interface League {
