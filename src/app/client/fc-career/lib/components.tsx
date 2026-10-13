@@ -18,6 +18,7 @@ const links = [
   { to: '/saison', label: 'Ma saison', icon: CalendarDays },
   { to: '/match', label: 'Centre de match', icon: Flag },
   { to: '/agent', label: 'Agent & transferts', icon: Briefcase },
+  { to: '/lifestyle', label: 'Vie privée', icon: Sparkles },
   { to: '/club', label: 'Club & contrats', icon: Shield },
   { to: '/parametres', label: 'Parametres', icon: Settings },
 ] as const;

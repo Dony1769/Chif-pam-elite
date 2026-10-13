@@ -6,6 +6,7 @@
 import type { CompetitionId } from "./club";
 import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from "./coach";
 import type { AgentState, MercatoState } from "./agent";
+import type { LifestyleState, Endorsement, LifeEventOccurrence } from "./lifestyle";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -59,6 +60,11 @@ export interface GameSave {
   // Étape 9 — Agents & Transferts
   agentState: AgentState | null;
   mercatoState: MercatoState | null;
+
+  // Étape 10 — Économie, Marques & Vie Privée
+  lifestyleState: LifestyleState | null;
+  endorsements: Endorsement[] | null;
+  lifeEvents: LifeEventOccurrence[] | null;
 }
 
 /** Clés / constantes globales du jeu. */
