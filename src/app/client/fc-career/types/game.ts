@@ -4,6 +4,7 @@
  */
 
 import type { CompetitionId } from "./club";
+import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from "./coach";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -47,6 +48,12 @@ export interface GameSave {
   phase: GamePhase;
   season: SeasonState | null;
   clubId: string;
+
+  // Étape 7 — Coach & Concurrence
+  coachRelationship: CoachRelationship | null;
+  squad: SquadState | null;
+  objectives: ObjectivesState | null;
+  activeLoan: ActiveLoan | null;
 }
 
 /** Clés / constantes globales du jeu. */

@@ -125,6 +125,9 @@ export interface Player {
   careerTotals: Omit<SeasonStatLine, "seasonYear" | "clubId" | "competitionId">;
   progressionHistory: ProgressionPoint[];
   achievements: string[]; // ids d'achievements (AchievementsSection)
+
+  // Coach & concurrence (Étape 7)
+  lastThreeMatchRatings: number[]; // 3 dernières notes de match
 }
 
 /** Résultat d'une notation de match (0-10). */
