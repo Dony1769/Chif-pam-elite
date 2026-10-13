@@ -19,8 +19,9 @@ export default function FcCareerAuthPage() {
       // On passe par window.location pour un chargement complet : le layout
       // parent (/client) et le guard sont ainsi ré-évalués avec la session
       // fraîchement déverrouillée (pas de redirection fantôme vers /connexion).
-      const save = loadGame();
-      const next = save?.player ? '/client/fc-career/dashboard' : '/client/fc-career/create-player';
+      // Nouvelle expérience FC Career (hub, entraînement, saison, match, club).
+      // L'ancienne version reste accessible sur /client/fc-career/dashboard.
+      const next = '/client/fc-career/carriere';
       window.location.assign(next);
     } else {
       setError(true);
