@@ -13,6 +13,7 @@ import {
   ArrowRight,
   CalendarDays,
   Dumbbell,
+  FastForward,
   Flag,
   Moon,
   Play,
@@ -242,9 +243,14 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="match-date"><CalendarDays />{formatDate(nextFixture.date)}</div>
-                <Button variant="career" className="full-width" onClick={playNextMatch}>
-                  <Play />Jouer le match<ArrowRight />
-                </Button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button variant="career" className="full-width" asChild>
+                    <Link to="/match"><Play />Jouer le match</Link>
+                  </Button>
+                  <Button variant="outline" className="full-width" onClick={playNextMatch}>
+                    <FastForward />Simuler
+                  </Button>
+                </div>
               </div>
             </section>
           )}
