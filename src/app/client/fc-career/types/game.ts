@@ -15,6 +15,7 @@ import type { WorldState } from "./world";
 import type { FansVestiaireState } from "./fans";
 import type { ImmersionState } from "./immersion";
 import type { JournalState } from "./journal";
+import type { RetirementState } from "./retirement";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -100,6 +101,7 @@ export interface GameSave {
 
   // Étape 18 — Journal de Carrière & Autobiographie
   journalState: JournalState | null;
+  retirementState: RetirementState | null;
 }
 
 /** Clés / constantes globales du jeu. */
