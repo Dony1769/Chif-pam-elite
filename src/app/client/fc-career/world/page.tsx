@@ -20,7 +20,7 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { WorldState, NewsItem } from "../types/world";
+import type { WorldState, NewsItem } from "../types/adaptation";
 import {
   createWorldState,
   advanceWorld,
@@ -31,7 +31,7 @@ import {
   hasComfortBonus,
   getWorldTopScorers,
   getWorldTopRated,
-} from "../engine/world-engine";
+} from "../engine/ai-world";
 
 type Tab = "news" | "players" | "adaptation";
 

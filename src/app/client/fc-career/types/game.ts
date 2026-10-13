@@ -4,18 +4,19 @@
  */
 
 import type { CompetitionId } from "./club";
-import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from "./coach";
+import type { CoachRelationship, SquadState, ObjectivesState, ActiveLoan } from "./relationship";
 import type { AgentState, MercatoState } from "./agent";
 import type { LifestyleState, Endorsement, LifeEventOccurrence } from "./lifestyle";
-import type { MentalState, ActiveInjury, SanctionState, PressConference } from "./wellness";
-import type { AwardsState } from "./awards";
+import type { MentalState, SanctionState } from "./mental";
+import type { ActiveInjury } from "./injury";
+import type { PressConference } from "./media";
+import type { AwardsState } from "./award";
 import type { InternationalState } from "./international";
 import type { PhoneState } from "./phone";
-import type { WorldState } from "./world";
-import type { FansVestiaireState } from "./fans";
-import type { ImmersionState } from "./immersion";
-import type { JournalState } from "./journal";
-import type { RetirementState } from "./retirement";
+import type { WorldState } from "./adaptation";
+import type { FansVestiaireState } from "./relationship";
+import type { ImmersionState } from "./ui";
+import type { JournalState, RetirementState } from "./legacy";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur

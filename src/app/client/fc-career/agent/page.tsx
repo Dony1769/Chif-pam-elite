@@ -50,7 +50,7 @@ import {
   generateExtensionOffer,
   generateContractOffer,
   negotiateContract,
-} from "../engine/agent-engine";
+} from "../engine/agent-system";
 import { createRng } from "../engine/player-generator";
 
 type Tab = "agent" | "contract" | "mercato" | "saga";

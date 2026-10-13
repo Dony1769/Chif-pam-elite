@@ -20,7 +20,7 @@ import type {
   LoanOffer,
   LoanType,
   ActiveLoan,
-} from "../types/coach";
+} from "../types/relationship";
 import { getPosition } from "../constants/positions";
 
 /* ================================================================== */

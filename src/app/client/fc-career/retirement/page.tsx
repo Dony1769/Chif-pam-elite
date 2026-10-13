@@ -21,7 +21,7 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button, Dialog, DialogContent, DialogTitle, DialogDescription } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { RetirementState, PostCareerRole } from "../types/retirement";
+import type { RetirementState, PostCareerRole } from "../types/legacy";
 import {
   createRetirementState,
   canRetireVoluntarily,
@@ -30,7 +30,7 @@ import {
   getAvailablePostCareerOptions,
   choosePostCareer,
   type LegacyInput,
-} from "../engine/retirement-engine";
+} from "../engine/legacy-engine";
 
 type Tab = "overview" | "legacy" | "post-career";
 

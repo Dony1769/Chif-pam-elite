@@ -4,8 +4,8 @@
  */
 
 import type { PositionId, PlayingStyleId } from "../constants/positions";
-import type { UnlockedPlayStyle } from "../engine/playstyles";
-import type { PlayerTrait } from "../engine/traits";
+import type { UnlockedPlayStyle } from "../constants/playstyles";
+import type { PlayerTrait } from "../constants/traits";
 
 /** Les 51 attributs sont groupés en 6 familles (voir constants/attributes.ts). */
 export type AttributeGroup =

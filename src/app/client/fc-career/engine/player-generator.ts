@@ -8,10 +8,10 @@ import { getPosition, getStyle } from "../constants/positions";
 import type { PositionId, PlayingStyleId } from "../constants/positions";
 import type { Morphology, Player, AttributeMap, AcademyLevel } from "../types/player";
 import { computeOverall, computePotential } from "./attribute-calculator";
-import { initialStageForAge, createAcademyStatus } from "./academy";
+import { initialStageForAge, createAcademyStatus } from "./academy-engine";
 import { marketValueMultiplier } from "../constants/scaling";
-import { evaluatePlayStyles } from "./playstyles";
-import { generateTraits } from "./traits";
+import { evaluatePlayStyles } from "../constants/playstyles";
+import { generateTraits } from "../constants/traits";
 
 export interface GenerationInput {
   firstName: string;

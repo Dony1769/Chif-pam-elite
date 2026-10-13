@@ -16,7 +16,7 @@ import type {
   SpeechResult,
   FansVestiaireState,
   LockerRoomRole,
-} from "../types/fans";
+} from "../types/relationship";
 
 /* ------------------------------------------------------------------ */
 /* Fans                                                                */

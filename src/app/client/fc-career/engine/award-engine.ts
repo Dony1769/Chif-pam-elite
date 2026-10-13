@@ -11,7 +11,7 @@ import type {
   LeagueAwardType,
   EuropeanAward,
   LeagueRanking,
-} from "../types/awards";
+} from "../types/award";
 
 /* ------------------------------------------------------------------ */
 /* State                                                               */

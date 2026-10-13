@@ -36,7 +36,7 @@ import type { Country } from "../types/club";
 import { COUNTRIES, DIVISION_INFO } from "../types/club";
 import type { FootChoice, Morphology, Player } from "../types/player";
 import type { Wallet } from "../types/economy";
-import { initialStageForAge, createAcademyStatus, STAGE_LABELS } from "../engine/academy";
+import { initialStageForAge, createAcademyStatus, STAGE_LABELS } from "../engine/academy-engine";
 
 const POSITION_GROUPS: Record<string, PositionId[]> = {
   Gardien: ["GK"],

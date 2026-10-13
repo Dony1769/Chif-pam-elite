@@ -10,7 +10,7 @@ import type {
   TransitionType,
   MicroInteraction,
   MicroInteractionType,
-} from "../types/immersion";
+} from "../types/ui";
 
 /* ------------------------------------------------------------------ */
 /* State                                                               */

@@ -22,7 +22,7 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button, Dialog, DialogContent, DialogTitle, DialogDescription } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { FansVestiaireState, FanAction, ConflictChoice, SpeechType } from "../types/fans";
+import type { FansVestiaireState, FanAction, ConflictChoice, SpeechType } from "../types/relationship";
 import {
   createFansVestiaireState,
   performFanAction,
@@ -36,7 +36,7 @@ import {
   giveSpeech,
   getSpeechOptions,
   doToss,
-} from "../engine/fans-engine";
+} from "../engine/fan-engine";
 
 type Tab = "fans" | "vestiaire" | "captain";
 

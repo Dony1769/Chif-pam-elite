@@ -11,7 +11,7 @@ import type {
   CulturalAdaptation,
   AdaptationPhase,
   CulturalPenalties,
-} from "../types/world";
+} from "../types/adaptation";
 import type { Country } from "../types/club";
 
 /* ------------------------------------------------------------------ */

@@ -17,7 +17,7 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { JournalState, JournalEventType } from "../types/journal";
+import type { JournalState, JournalEventType } from "../types/legacy";
 import {
   createJournalState,
   addJournalEntry,
@@ -28,7 +28,7 @@ import {
   generateCallUpNarrative,
   generateAwardNarrative,
   generateCaptainNarrative,
-} from "../engine/journal-engine";
+} from "../engine/legacy-engine";
 import { getClub } from "../constants/clubs";
 
 type Tab = "journal" | "autobiography";

@@ -22,8 +22,11 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button, Dialog, DialogContent, DialogTitle, DialogDescription } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { MentalState, ActiveInjury, SanctionState, PressConference, PressQuestion, PressQuestionChoice } from "../types/wellness";
-import { INJURIES, getMediaReaction } from "../types/wellness";
+import type { MentalState, SanctionState } from "../types/mental";
+import type { ActiveInjury } from "../types/injury";
+import type { PressConference, PressQuestion, PressQuestionChoice } from "../types/media";
+import { INJURIES } from "../types/injury";
+import { getMediaReaction } from "../types/media";
 import {
   createMentalState,
   createSanctionState,
@@ -32,17 +35,21 @@ import {
   relievePressure,
   pressurePerformancePenalty,
   checkBurnout,
+  applyYellow,
+  applyRed,
+} from "../engine/mental-engine";
+import {
   rollInjury,
   tickInjury,
   isSevereInjury,
   applyPostInjuryReturn,
   tickPostInjuryMatch,
   contactFearPenalties,
-  applyYellow,
-  applyRed,
+} from "../engine/injury-engine";
+import {
   generatePressConference,
   applyPressAnswer,
-} from "../engine/wellness-engine";
+} from "../engine/media-engine";
 import { formatMoneyCompact } from "../utils/formatters";
 
 type Tab = "mental" | "injuries" | "press" | "sanctions";

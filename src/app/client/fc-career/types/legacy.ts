@@ -1,6 +1,11 @@
 /**
- * FC CAREER — Étape 19 : Retraite, Vie Après & Héritage
+ * FC CAREER — Retraite, Vie Après, Héritage & Journal
+ * (Merged from retirement.ts + journal.ts)
  */
+
+/* ================================================================== */
+/* Étape 19 : Retraite, Vie Après & Héritage                           */
+/* ================================================================== */
 
 /* ------------------------------------------------------------------ */
 /* 19.1 — Retraite                                                     */
@@ -88,7 +93,7 @@ export interface LegacyPlayer {
 }
 
 /* ------------------------------------------------------------------ */
-/* State                                                               */
+/* Retirement State                                                    */
 /* ------------------------------------------------------------------ */
 
 export interface RetirementState {
@@ -98,4 +103,68 @@ export interface RetirementState {
   ending: Ending | null;
   postCareer: PostCareerState | null;
   legacyPlayers: LegacyPlayer[];
+}
+
+/* ================================================================== */
+/* Étape 18 : Journal de Carrière & Autobiographie                     */
+/* ================================================================== */
+
+/* ------------------------------------------------------------------ */
+/* 18.1 — Journal Automatique                                          */
+/* ------------------------------------------------------------------ */
+
+export type JournalEventType =
+  | "first-match"
+  | "first-goal"
+  | "first-assist"
+  | "first-title"
+  | "first-callup"
+  | "transfer"
+  | "severe-injury"
+  | "injury-return"
+  | "rivalry"
+  | "individual-award"
+  | "key-moment"
+  | "season-summary"
+  | "academy-start"
+  | "captain-appointed"
+  | "retirement";
+
+export interface JournalEntry {
+  id: string;
+  type: JournalEventType;
+  day: number;
+  seasonYear: number;
+  title: string;
+  narrative: string;
+  emoji: string;
+  playerAge: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* 18.2 — Autobiographie                                               */
+/* ------------------------------------------------------------------ */
+
+export interface AutobiographyChapter {
+  id: string;
+  number: number;
+  title: string;
+  content: string;
+  seasonRange: string; // e.g. "Saison 1-2"
+}
+
+export interface Autobiography {
+  title: string;
+  playerName: string;
+  chapters: AutobiographyChapter[];
+  generatedAt: string; // ISO
+}
+
+/* ------------------------------------------------------------------ */
+/* Journal State                                                       */
+/* ------------------------------------------------------------------ */
+
+export interface JournalState {
+  entries: JournalEntry[];
+  autobiography: Autobiography | null;
 }

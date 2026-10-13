@@ -10,10 +10,10 @@ import { toCareerState, toFullSave, type CareerRuntimeState } from "../types/car
 import { getClub } from "../constants/clubs";
 import { ATTRIBUTES_BY_GROUP, ALL_ATTRIBUTES } from "../constants/attributes";
 import { formatMoneyCompact, formatRating } from "../utils/formatters";
-import { STAGE_LABELS } from "../engine/academy";
+import { STAGE_LABELS } from "../engine/academy-engine";
 import type { AttributeGroup } from "../types/player";
-import { getPlayStyleDef } from "../engine/playstyles";
-import { getTraitDef } from "../engine/traits";
+import { getPlayStyleDef } from "../constants/playstyles";
+import { getTraitDef } from "../constants/traits";
 
 const GROUP_LABELS: Record<string, string> = {
   technical: "Technique",

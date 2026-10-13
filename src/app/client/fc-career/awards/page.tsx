@@ -20,14 +20,14 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { AwardsState, GoldenGlobeCeremony, LeagueAward, LeagueRanking } from "../types/awards";
+import type { AwardsState, GoldenGlobeCeremony, LeagueAward, LeagueRanking } from "../types/award";
 import {
   createAwardsState,
   runGoldenGlobeCeremony,
   generateLeagueRankings,
   checkPlayerOfMonth,
   checkLeagueAwards,
-} from "../engine/awards-engine";
+} from "../engine/award-engine";
 import { getClub } from "../constants/clubs";
 
 type Tab = "rankings" | "golden-globe" | "league-awards" | "european";

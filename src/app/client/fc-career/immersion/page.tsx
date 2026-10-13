@@ -21,7 +21,7 @@ import { Shell, PageTitle, StatCard } from "../lib/components";
 import { Button } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import type { FullSave } from "../utils/storage";
-import type { ImmersionState, ImmersionEventType } from "../types/immersion";
+import type { ImmersionState, ImmersionEventType } from "../types/ui";
 import {
   createImmersionState,
   triggerEvent,

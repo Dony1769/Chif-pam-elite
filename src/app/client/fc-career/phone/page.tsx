@@ -28,7 +28,7 @@ import {
   generateInitialRelationships,
   hasMentorBonus,
   rivalComparison,
-} from "../engine/phone-engine";
+} from "../engine/phone-system";
 
 type Tab = "messages" | "contacts" | "relations";
 
