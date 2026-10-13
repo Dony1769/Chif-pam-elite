@@ -1,9 +1,16 @@
-<!-- BEGIN:nextjs-agent-rules -->
+<!-- LOVABLE:BEGIN -->
+> [!IMPORTANT]
+> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
+> published git history — force pushing, or rebasing/amending/squashing commits
+> that are already pushed — as it rewrites history on Lovable's side and the
+> user will likely lose their project history.
+>
+> Commits you push to the connected branch sync back to Lovable and show up in
+> the editor, so keep the branch in a working state.
+<!-- LOVABLE:END -->
 
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+## Career architecture
+- Use TanStack file routes for the career hub and each major game view; the shared shell and game provider live in the root layout to preserve state across navigation.
+- Keep browser-safe career domain rules in `src/features/career/game.ts` separate from presentation so progression, fixtures and serialization can be tested independently.
+- Persist this single-player career on the device with versioned checksum-validated local storage, as explicitly required by the supplied architecture; do not present it as account authentication.
+- Define visual roles and motion timing in global semantic CSS tokens; use design-system button variants for controls.

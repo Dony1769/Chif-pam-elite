@@ -1,191 +1,32 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-logs
-*.log
-lerna-debug.log*
-
-# diagnostic & build artifacts
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-*.tsbuildinfo
-dist
-out
-
-# env files (can opt-in for committing if needed)
-.env
-.env.*
-!.env.example
-
-# vercel
-.vercel
-
-# typescript
-next-env.d.ts
-
-# editors / caches
-.eslintcache
-.stylelintcache
-.cache
-.parcel-cache
-.temp
-.idea
-.vscode/*
-!.vscode/settings.json
 # Logs
 logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 lerna-debug.log*
-.pnpm-debug.log*
 
-# Diagnostic reports
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Directory for instrumented libs
-lib-cov
-
-# Coverage
-coverage
-*.lcov
-.nyc_output
-
-# Grunt
-.grunt
-
-# Bower
-bower_components
-
-# node-waf
-.lock-wscript
-
-# Compiled binary addons
-build/Release
-
-# Dependency directories
-node_modules/
-jspm_packages/
-web_modules/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Optional caches
-.npm
-.eslintcache
-.stylelintcache
-.node_repl_history
-
-# npm pack output
-*.tgz
-
-# Yarn
-.yarn-integrity
-.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
-
-# dotenv
-.env
-.env.*
-!.env.example
-*.env
-*.env.local
-*.env.development
-*.env.test
-*.env.production
-
-# Secrets and local credentials
-*.key
-*.pem
-*.p12
-*.pfx
-*.crt
-*.cer
-*.der
-*token*
-*secret*
-*credential*
-service-account*.json
-credentials*.json
-
-# Build outputs
-.next
-out
-.nuxt
+node_modules
 dist
-.turbo/
-.cache/
-supabase/.temp/
-.supabase/
-playwright-report/
-test-results/
-.svelte-kit/
-**/.vitepress/dist
-**/.vitepress/cache
-.docusaurus
-.serverless/
-.fusebox/
-.dynamodb/
-.firebase/
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
 
-# TernJS
-.tern-port
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
 
-# VSCode test
-.vscode-test
-
-# Vite logs
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-
-# Next.js project specifics
-/build
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-next-env.d.ts
-
-# Vercel
-.vercel
-
-.vscode/mcp.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
