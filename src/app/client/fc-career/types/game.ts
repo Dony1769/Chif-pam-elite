@@ -9,6 +9,7 @@ import type { AgentState, MercatoState } from "./agent";
 import type { LifestyleState, Endorsement, LifeEventOccurrence } from "./lifestyle";
 import type { MentalState, ActiveInjury, SanctionState, PressConference } from "./wellness";
 import type { AwardsState } from "./awards";
+import type { InternationalState } from "./international";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -76,6 +77,9 @@ export interface GameSave {
 
   // Étape 12 — Récompenses & Trophées
   awardsState: AwardsState | null;
+
+  // Étape 13 — Sélection Nationale
+  internationalState: InternationalState | null;
 }
 
 /** Clés / constantes globales du jeu. */
