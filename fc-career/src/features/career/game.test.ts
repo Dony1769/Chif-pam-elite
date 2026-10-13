@@ -1,0 +1,12 @@
+import { describe, expect, it } from 'vitest';
+import { advance, createCareer, decode, encode, finishMatch, groups, rating, rest, simulate, train } from './game';
+describe('Career domain', () => {
+ it('generates 51 attributes and 48 valid fixtures', () => { const g = createCareer(); expect(Object.values(groups).flat()).toHaveLength(51); expect(Object.keys(g.player.attributes)).toHaveLength(51); expect(g.fixtures).toHaveLength(48); expect(g.fixtures.every(f => f.day <= 380 && f.opponent !== g.player.club)).toBe(true); });
+ it('trains targeted attributes and advances one day', () => { const g = createCareer(); const n = train(g, 'Vitesse'); expect(n.day).toBe(g.day+1); expect(n.player.attributes['Vitesse'] ?? 0).toBeGreaterThan(g.player.attributes['Vitesse'] ?? 0); expect(n.player.fatigue).toBe(g.player.fatigue+20); });
+ it('blocks training for high fatigue and due fixtures', () => { const g = createCareer(); expect(train({ ...g, player: { ...g.player, fatigue: 90 } }, 'Vitesse').day).toBe(g.day); expect(train({ ...g, day: 38 }, 'Vitesse').day).toBe(38); });
+ it('clamps recovery at zero', () => { const g = createCareer(); expect(rest(g).player.fatigue).toBe(0); expect(rest(g).day).toBe(g.day+1); });
+ it('settles a match once and records results', () => { const g = createCareer(); const f = g.fixtures[0]; if (!f) throw new Error('Missing fixture'); const events = simulate(g,f,()=>.8); const n = finishMatch(g,f,events); expect(n.matches).toBe(1); expect(n.fixtures[0]?.score).toBeDefined(); const played = n.fixtures[0]; if (!played) throw new Error('Missing result'); expect(finishMatch(n,played,events).matches).toBe(1); });
+ it('pays salaries and rolls the season', () => { const g = createCareer(); expect(advance({ ...g, day: 29 }).balance).toBe(g.balance+g.salary-75); const n = advance({ ...g, day: 380 }); expect(n.day).toBe(1); expect(n.season).toBe(2); expect(n.player.age).toBe(g.player.age+1); });
+ it('roundtrips and detects tampering', () => { const g = createCareer(); expect(decode(encode(g))).toEqual(g); expect(()=>decode(encode(g).replace('Noah Diallo','Someone else'))).toThrow(); });
+ it('uses position-specific ratings', () => { const g = createCareer({ position: 'GB' }); expect(rating(g)).toBeGreaterThan(0); expect(rating(g)).toBeLessThan(g.player.potential); });
+});
