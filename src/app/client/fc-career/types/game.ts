@@ -10,6 +10,7 @@ import type { LifestyleState, Endorsement, LifeEventOccurrence } from "./lifesty
 import type { MentalState, ActiveInjury, SanctionState, PressConference } from "./wellness";
 import type { AwardsState } from "./awards";
 import type { InternationalState } from "./international";
+import type { PhoneState } from "./phone";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -80,6 +81,9 @@ export interface GameSave {
 
   // Étape 13 — Sélection Nationale
   internationalState: InternationalState | null;
+
+  // Étape 14 — Téléphone & Relations
+  phoneState: PhoneState | null;
 }
 
 /** Clés / constantes globales du jeu. */
