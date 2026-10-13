@@ -14,6 +14,7 @@ import type { PhoneState } from "./phone";
 import type { WorldState } from "./world";
 import type { FansVestiaireState } from "./fans";
 import type { ImmersionState } from "./immersion";
+import type { JournalState } from "./journal";
 
 export type GamePhase =
   | "onboarding" // PIN + création joueur
@@ -96,6 +97,9 @@ export interface GameSave {
 
   // Étape 17 — Motion Design & Immersion
   immersionState: ImmersionState | null;
+
+  // Étape 18 — Journal de Carrière & Autobiographie
+  journalState: JournalState | null;
 }
 
 /** Clés / constantes globales du jeu. */

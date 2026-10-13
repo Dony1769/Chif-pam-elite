@@ -6,7 +6,7 @@
  */
 
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle, Link, useCareerPath } from './ui';
-import { Activity, Bell, Brain, Briefcase, CalendarDays, ChevronRight, Dumbbell, Flag, Globe, Heart, House, Phone, Settings, Shield, Sparkles, Trophy, User, Earth } from 'lucide-react';
+import { Activity, Bell, BookOpen, Brain, Briefcase, CalendarDays, ChevronRight, Dumbbell, Flag, Globe, Heart, House, Phone, Settings, Shield, Sparkles, Trophy, User, Earth } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { getClub } from '../constants/clubs';
 import { loadGame } from '../utils/storage';
@@ -26,6 +26,7 @@ const links = [
   { to: '/world', label: 'Monde vivant', icon: Earth },
   { to: '/fans', label: 'Fans & vestiaire', icon: Heart },
   { to: '/immersion', label: 'Immersion', icon: Sparkles },
+  { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/club', label: 'Club & contrats', icon: Shield },
   { to: '/parametres', label: 'Parametres', icon: Settings },
 ] as const;
