@@ -39,13 +39,10 @@ import type { TrainingType } from "../engine/progression";
 import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engine/economic-engine";
 import { formatMoneyCompact, formatDate, formatRating } from "../utils/formatters";
 import { STAGE_LABELS } from "../engine/academy-engine";
+import { buildPostMatchState, isMatchLocked, lockMatchForToday, clearMatchState } from "../utils/match-result";
 import type { SimulatedMatch, MatchEvent } from "../types/match";
 import type { Player, SeasonStatLine } from "../types/player";
 import { DIVISION_INFO } from "../types/club";
-
-function emptyStatLine(seasonYear: number, clubId: string, competitionId: string): SeasonStatLine {
-  return { seasonYear, clubId, competitionId, matches: 0, starts: 0, minutes: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0, averageRating: 0, overallAtSeasonEnd: 0 };
-}
 
 function Meter({ label, value, invert = false }: { label: string; value: number; invert?: boolean }) {
   const pct = Math.max(0, Math.min(100, value));
@@ -116,36 +113,14 @@ export default function DashboardPage() {
   }
 
   function playNextMatch() {
-    if (!career || !player || !club || !season || !nextFixture) return;
+    if (!career || !player || !club || !season || !nextFixture || isMatchLocked()) return;
     const home = getClub(nextFixture.homeClubId)!;
     const away = getClub(nextFixture.awayClubId)!;
     const sim = simulateMatch(home, away, player);
-    const line = { ...(player.seasonStats[0] ?? emptyStatLine(season.seasonYear, club.id, nextFixture.competitionId)) };
-    line.matches += 1;
-    if (sim.userPlayed) line.starts += 1;
-    line.minutes += sim.userMinutes;
-    line.goals += sim.userRating.goals;
-    line.assists += sim.userRating.assists;
-    line.averageRating = (line.averageRating * (line.matches - 1) + sim.userRating.rating) / line.matches;
-    const updatedPlayer: Player = {
-      ...player,
-      seasonStats: [line, ...player.seasonStats.slice(1)],
-      fatigue: Math.min(100, player.fatigue + 22),
-      form: Math.max(0, Math.min(100, player.form + (sim.userRating.rating >= 7 ? 4 : sim.userRating.rating <= 5 ? -3 : 0))),
-    };
-    const advanced = advanceSeason(season, [
-      { dayId: nextFixture.id, homeScore: sim.homeScore, awayScore: sim.awayScore },
-    ]);
-    const wallet = career.wallet ?? emptyWallet();
-    const bonuses = computeMatchBonuses(updatedPlayer, sim);
-    const payroll = processWeeklyPayroll(wallet, updatedPlayer, advanced.currentDay, bonuses, [], updatedPlayer.seasonStats[0]?.minutes ?? 0, 200);
-    persist({
-      ...career,
-      player: endOfWeek(updatedPlayer),
-      wallet: payroll.wallet,
-      meta: { ...career.meta, season: advanced },
-      lastMatch: sim,
-    });
+    const next = buildPostMatchState({ career, player, clubId: club.id, fixture: nextFixture, sim });
+    persist(next);
+    clearMatchState();
+    lockMatchForToday();
     setLastMatch(sim);
   }
 

@@ -11,7 +11,7 @@ import { Button, Link } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import { toCareerState, toFullSave, type CareerRuntimeState } from "../types/career";
 import { getClub, getClubsByDivision } from "../constants/clubs";
-import { nextUserFixture, advanceSeason } from "../engine/season-manager";
+import { nextUserFixture } from "../engine/season-manager";
 import {
   simulateMatch,
   generateLiveTimeline,
@@ -23,50 +23,24 @@ import {
   type LiveMatchTick,
 } from "../engine/match-engine";
 import { createRng } from "../engine/player-generator";
-import { endOfWeek } from "../engine/progression";
-import { emptyWallet, computeMatchBonuses, processWeeklyPayroll } from "../engine/economic-engine";
 import { DIVISION_INFO } from "../types/club";
 import { formatDate, formatRating } from "../utils/formatters";
+import {
+  buildPostMatchState,
+  isMatchLocked, lockMatchForToday,
+  saveMatchState, loadMatchState, clearMatchState,
+} from "../utils/match-result";
 import type { SimulatedMatch, MatchChoiceMoment, MatchChoice, RitualId, CelebrationId } from "../types/match";
 import { RITUALS, CELEBRATIONS } from "../types/match";
-import type { Player, SeasonStatLine } from "../types/player";
+import type { Player } from "../types/player";
 
-/* --- Persistance --- */
-const MATCH_STATE_KEY = "fc-career:match-state";
 const RITUAL_STATE_KEY = "fc-career:ritual-state";
-
-interface MatchInProgress {
-  fixtureId: string;
-  startedAt: number;
-  result?: SimulatedMatch;
-}
-
-function saveMatchState(ms: MatchInProgress) {
-  try { localStorage.setItem(MATCH_STATE_KEY, JSON.stringify(ms)); } catch {}
-}
-function loadMatchState(): MatchInProgress | null {
-  try { const r = localStorage.getItem(MATCH_STATE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
-function clearMatchState() {
-  try { localStorage.removeItem(MATCH_STATE_KEY); } catch {}
-}
-const MATCH_LOCK_KEY = "fc-career:match-lock";
-function isMatchLocked(): boolean {
-  try { return localStorage.getItem(MATCH_LOCK_KEY) === new Date().toDateString(); } catch { return false; }
-}
-function lockMatchForToday() {
-  try { localStorage.setItem(MATCH_LOCK_KEY, new Date().toDateString()); } catch {}
-}
 
 function loadRitualState() {
   try { const r = localStorage.getItem(RITUAL_STATE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
 }
 function saveRitualState(s: ReturnType<typeof createRitualState>) {
   try { localStorage.setItem(RITUAL_STATE_KEY, JSON.stringify(s)); } catch {}
-}
-
-function emptyStatLine(seasonYear: number, clubId: string, competitionId: string): SeasonStatLine {
-  return { seasonYear, clubId, competitionId, matches: 0, starts: 0, minutes: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0, averageRating: 0, overallAtSeasonEnd: 0 };
 }
 
 type MatchMode = "menu" | "ritual" | "live" | "simulating" | "result";
@@ -133,37 +107,8 @@ export default function MatchPage() {
 
   function applyMatchResult(sim: SimulatedMatch) {
     if (!career || !player || !club || !season || !fixture) return;
-
-    const line = { ...(player.seasonStats[0] ?? emptyStatLine(season.seasonYear, club.id, fixture.competitionId)) };
-    line.matches += 1;
-    if (sim.userPlayed) line.starts += 1;
-    line.minutes += sim.userMinutes;
-    line.goals += sim.userRating.goals;
-    line.assists += sim.userRating.assists;
-    line.averageRating = (line.averageRating * (line.matches - 1) + sim.userRating.rating) / line.matches;
-
-    const lastThree = [...player.lastThreeMatchRatings, sim.userRating.rating].slice(-3);
-
-    const updatedPlayer: Player = {
-      ...player,
-      seasonStats: [line, ...player.seasonStats.slice(1)],
-      fatigue: Math.min(100, player.fatigue + 22),
-      form: Math.max(0, Math.min(100, player.form + (sim.userRating.rating >= 7 ? 4 : sim.userRating.rating <= 5 ? -3 : 0))),
-      lastThreeMatchRatings: lastThree,
-    };
-    const advanced = advanceSeason(season, [{ dayId: fixture.id, homeScore: sim.homeScore, awayScore: sim.awayScore }]);
-    const wallet = career.wallet ?? emptyWallet();
-    const bonuses = computeMatchBonuses(updatedPlayer, sim);
-    const payroll = processWeeklyPayroll(wallet, updatedPlayer, advanced.currentDay, bonuses, [], updatedPlayer.seasonStats[0]?.minutes ?? 0, 200);
-
-    persist({
-      ...career,
-      player: endOfWeek(updatedPlayer),
-      wallet: payroll.wallet,
-      meta: { ...career.meta, season: advanced },
-      lastMatch: sim,
-    });
-
+    const next = buildPostMatchState({ career, player, clubId: club.id, fixture, sim });
+    persist(next);
     clearMatchState();
     lockMatchForToday();
     setMatchLocked(true);
