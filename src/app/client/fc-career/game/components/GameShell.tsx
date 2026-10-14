@@ -27,6 +27,7 @@ const NAV: NavItem[] = [
   { href: `${BASE}/training`,   label: "Entraînement",icon: <IconDumbbell /> },
   { href: `${BASE}/calendar`,   label: "Calendrier",  icon: <IconCalendar /> },
   { href: `${BASE}/coach`,      label: "Coach",       icon: <IconCoach /> },
+  { href: `${BASE}/agent`,      label: "Agent",       icon: <IconAgent /> },
   { href: `${BASE}/career`,     label: "Carrière",    icon: <IconTrophy /> },
   { href: `${BASE}/player`,     label: "Fiche joueur",icon: <IconUser /> },
   { href: `${BASE}/world`,      label: "Monde",       icon: <IconGlobe /> },
@@ -203,3 +204,4 @@ function IconTrophy()   { return <svg viewBox="0 0 20 20" fill="currentColor"><p
 function IconMenu()     { return <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5h16v2H2V5zm0 4h16v2H2V9zm0 4h16v2H2v-2z"/></svg>; }
 function IconSettings() { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8.325 2.317a1 1 0 011.35 0l.823.755c.33.303.78.43 1.22.344l1.1-.214a1 1 0 011.155.676l.37 1.07c.147.425.48.756.9.9l1.07.37a1 1 0 01.676 1.155l-.214 1.1c-.086.44.04.89.344 1.22l.755.823a1 1 0 010 1.35l-.755.823a1.5 1.5 0 00-.344 1.22l.214 1.1a1 1 0 01-.676 1.155l-1.07.37a1.5 1.5 0 00-.9.9l-.37 1.07a1 1 0 01-1.155.676l-1.1-.214a1.5 1.5 0 00-1.22.344l-.823.755a1 1 0 01-1.35 0l-.823-.755a1.5 1.5 0 00-1.22-.344l-1.1.214a1 1 0 01-1.155-.676l-.37-1.07a1.5 1.5 0 00-.9-.9l-1.07-.37a1 1 0 01-.676-1.155l.214-1.1a1.5 1.5 0 00-.344-1.22l-.755-.823a1 1 0 010-1.35l.755-.823a1.5 1.5 0 00.344-1.22l-.214-1.1a1 1 0 01.676-1.155l1.07-.37a1.5 1.5 0 00.9-.9l.37-1.07a1 1 0 011.155-.676l1.1.214a1.5 1.5 0 001.22-.344l.823-.755zM10 13a3 3 0 100-6 3 3 0 000 6z"/></svg>; }
 function IconCoach()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a3 3 0 100 6 3 3 0 000-6zM4 13a6 6 0 1112 0v1H4v-1zm-1 2h14v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1z"/></svg>; }
+function IconAgent()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a3 3 0 100 6 3 3 0 000-6zm0 8a7 7 0 00-7 7h2a5 5 0 015-5 5 5 0 015 5h2a7 7 0 00-7-7z"/><rect x="13" y="8" width="5" height="2" rx="1"/><rect x="14" y="11" width="4" height="2" rx="1"/></svg>; }

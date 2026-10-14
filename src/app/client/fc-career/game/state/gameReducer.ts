@@ -11,6 +11,7 @@ import { clamp } from "../utils/validation";
 import type { SeasonSchedule } from "../domain/season";
 import { applyResultsToSchedule, updateStanding } from "../domain/worldSimulator";
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
+import { createInitialAgentState } from "../domain/agent";
 
 export interface GameState {
   save: GameSaveV1 | null;
@@ -400,6 +401,119 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             trust: newTrust,
             playerRole: newRole,
             seasonObjective: { ...obj, current: newCurrent, completed: newCompleted },
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "HIRE_AGENT": {
+      if (!state.save) return state;
+      const agentState = state.save.agentState ?? createInitialAgentState();
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          agentState: { ...agentState, agent: action.agent },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "FIRE_AGENT": {
+      if (!state.save) return state;
+      const agentState = state.save.agentState ?? createInitialAgentState();
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          agentState: { ...agentState, agent: null },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "ADD_CONTRACT_OFFER": {
+      if (!state.save) return state;
+      const agentState = state.save.agentState ?? createInitialAgentState();
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          agentState: {
+            ...agentState,
+            offers: [...agentState.offers, action.offer],
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "RESPOND_CONTRACT_OFFER": {
+      if (!state.save) return state;
+      const agentState = state.save.agentState ?? createInitialAgentState();
+      const { offerId, accepted } = action;
+      const offer = agentState.offers.find(o => o.id === offerId);
+      if (!offer || offer.status !== "pending") return state;
+
+      const updatedOffers = agentState.offers.map(o =>
+        o.id === offerId ? { ...o, status: accepted ? "accepted" as const : "rejected" as const } : o
+      );
+
+      if (!accepted) {
+        return {
+          ...state,
+          save: {
+            ...state.save,
+            agentState: { ...agentState, offers: updatedOffers },
+          },
+          isDirty: true,
+        };
+      }
+
+      // Acceptation : mettre à jour le contrat du joueur et créer un transfert
+      const newTransfer = {
+        id: `transfer-${offerId}`,
+        season: state.save.career.season,
+        fromClubId: state.save.player.contract.clubId,
+        toClubId: offer.clubId,
+        fee: offer.transferFee,
+        isLoan: offer.isLoan,
+        loanEndSeason: offer.loanEndSeason,
+      };
+
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          player: {
+            ...state.save.player,
+            contract: offer.terms,
+          },
+          agentState: {
+            ...agentState,
+            offers: updatedOffers,
+            transfers: [...agentState.transfers, newTransfer],
+          },
+          wallet: {
+            ...state.save.wallet,
+            weeklyWage: offer.terms.salary,
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "REQUEST_OFFERS": {
+      if (!state.save) return state;
+      const agentState = state.save.agentState ?? createInitialAgentState();
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          agentState: {
+            ...agentState,
+            lastRequestWeek: state.save.career.week,
           },
         },
         isDirty: true,

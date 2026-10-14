@@ -12,6 +12,7 @@ import type { Club, League, Country, Standing } from "../domain/club";
 import type { SeasonSchedule } from "../domain/season";
 import type { MatchResult } from "../domain/match";
 import type { CoachProfile } from "../domain/coach";
+import type { AgentState } from "../domain/agent";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -44,6 +45,8 @@ export interface GameSaveV1 {
   transferHistory: Transfer[];
   /** Profil coach — optionnel pour compatibilité avec les sauvegardes existantes */
   coach?: CoachProfile;
+  /** Agent & contrats — optionnel pour compatibilité avec les sauvegardes existantes */
+  agentState?: AgentState;
 }
 
 /** Type union pour les migrations futures */

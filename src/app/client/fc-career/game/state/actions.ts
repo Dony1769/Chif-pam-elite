@@ -11,6 +11,7 @@ import type { GameSaveV1 } from "../persistence/saveSchema";
 import type { NextSeasonSetup, SeasonSummary } from "../domain/seasonEnd";
 import type { SimulatedMatchResult } from "../domain/worldSimulator";
 import type { CoachProfile, CoachConversation } from "../domain/coach";
+import type { AgentProfile, ContractOffer } from "../domain/agent";
 
 export type GameAction =
   // Initialisation
@@ -43,6 +44,13 @@ export type GameAction =
   | { type: "UPDATE_COACH"; coach: Partial<CoachProfile> }
   | { type: "ADD_COACH_CONVERSATION"; conversation: CoachConversation }
   | { type: "APPLY_MATCH_TRUST_DELTA"; matchRating: number; minutesPlayed: number }
+
+  // Agent & Contrats
+  | { type: "HIRE_AGENT"; agent: AgentProfile }
+  | { type: "FIRE_AGENT" }
+  | { type: "ADD_CONTRACT_OFFER"; offer: ContractOffer }
+  | { type: "RESPOND_CONTRACT_OFFER"; offerId: string; accepted: boolean }
+  | { type: "REQUEST_OFFERS" }
 
   // Erreur
   | { type: "SET_ERROR"; message: string }

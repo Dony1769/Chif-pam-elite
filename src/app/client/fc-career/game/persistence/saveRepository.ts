@@ -8,6 +8,7 @@ import { SAVE_KEY, SAVE_VERSION, type GameSaveV1, type LoadResult } from "./save
 import { migrate } from "./migrations";
 import type { Career } from "../domain/career";
 import { createInitialCoach } from "../domain/coach";
+import { createInitialAgentState } from "../domain/agent";
 
 // ── Lecture ────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,8 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
     },
     // Rétrocompatibilité : créer un coach par défaut si absent
     coach: save.coach ?? createInitialCoach(save.career?.phase ?? "academy", save.career?.season ?? 1),
+    // Rétrocompatibilité : état agent par défaut si absent
+    agentState: save.agentState ?? createInitialAgentState(),
   };
 }
 
