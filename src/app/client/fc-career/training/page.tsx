@@ -95,6 +95,28 @@ export default function TrainingPage() {
       animate="visible"
       style={{ padding: "var(--fc-space-5) var(--fc-space-4)", maxWidth: 680, margin: "0 auto" }}
     >
+      {/* Bannière blessure */}
+      {condition.injury && (
+        <div style={{
+          padding: "var(--fc-space-3) var(--fc-space-4)",
+          borderRadius: "var(--fc-radius-sm)",
+          background: "rgba(255,107,107,0.1)",
+          border: "1px solid var(--fc-coral)",
+          marginBottom: "var(--fc-space-4)",
+          display: "flex", gap: "var(--fc-space-2)", alignItems: "center",
+        }}>
+          <span>🤕</span>
+          <div>
+            <p style={{ fontWeight: 700, color: "var(--fc-coral)", fontSize: "var(--fc-text-sm)", margin: 0 }}>
+              Blessé — {condition.injury.type}
+            </p>
+            <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", margin: 0 }}>
+              Guérison dans ~{condition.injury.daysRemaining} jours · Entraînement limité conseillé
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="fc-page-header">
         <h1 className="fc-page-title">Entraînement</h1>
