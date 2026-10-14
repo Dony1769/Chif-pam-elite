@@ -203,6 +203,13 @@ function DashboardContent() {
         <Button
           variant="secondary"
           fullWidth
+          onClick={() => router.push("/client/fc-career/career")}
+        >
+          🏆 Historique de carrière
+        </Button>
+        <Button
+          variant="secondary"
+          fullWidth
           onClick={() => router.push("/client/fc-career/world")}
         >
           🌍 Voir le classement

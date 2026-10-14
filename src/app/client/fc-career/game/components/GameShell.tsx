@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { href: `${BASE}/dashboard`,  label: "Accueil",     icon: <IconHome /> },
   { href: `${BASE}/training`,   label: "Entraînement",icon: <IconDumbbell /> },
   { href: `${BASE}/calendar`,   label: "Calendrier",  icon: <IconCalendar /> },
+  { href: `${BASE}/career`,     label: "Carrière",    icon: <IconTrophy /> },
   { href: `${BASE}/player`,     label: "Fiche joueur",icon: <IconUser /> },
   { href: `${BASE}/world`,      label: "Monde",       icon: <IconGlobe /> },
 ];
@@ -196,4 +197,5 @@ function IconDumbbell() { return <svg viewBox="0 0 20 20" fill="currentColor"><r
 function IconCalendar() { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H8V2H6zm-2 6h12v8H4V8z"/></svg>; }
 function IconUser()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z"/></svg>; }
 function IconGlobe()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 2c.55 0 1.3.6 1.9 1.8A9.5 9.5 0 0112.5 8h-5a9.5 9.5 0 01.6-2.2C8.7 4.6 9.45 4 10 4zm-4.4 4h8.8a9.5 9.5 0 010 4H5.6a9.5 9.5 0 010-4zm.5 6h7.8c-.6 1.4-1.7 2.6-3.9 2.6S6.7 15.4 6.1 14z"/></svg>; }
+function IconTrophy()   { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M5 2h10v2h1a2 2 0 012 2v1a4 4 0 01-4 4H6a4 4 0 01-4-4V6a2 2 0 012-2h1V2zm0 4H4v1a2 2 0 002 2h.17A4 4 0 015 8V6zm10 0v2a4 4 0 01-.17 1H15a2 2 0 002-2V6h-2zm-5 8a3 3 0 003 3H7a3 3 0 003-3v-1h0v1z"/></svg>; }
 function IconMenu()     { return <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5h16v2H2V5zm0 4h16v2H2V9zm0 4h16v2H2v-2z"/></svg>; }
