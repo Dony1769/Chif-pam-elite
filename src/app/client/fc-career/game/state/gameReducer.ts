@@ -8,6 +8,7 @@ import type { GameAction } from "./actions";
 import type { GameSaveV1 } from "../persistence/saveSchema";
 import { computeOverall, positionFamily } from "../domain/player";
 import { clamp } from "../utils/validation";
+import type { SeasonSchedule } from "../domain/season";
 
 export interface GameState {
   save: GameSaveV1 | null;
@@ -215,6 +216,65 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             week: 1,
             matchday: 1,
           },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "END_SEASON": {
+      if (!state.save) return state;
+      const { setup, summary, paBonus } = action;
+      const save = state.save;
+      const career = save.career;
+
+      // Nouveau calendrier
+      const newSchedules: SeasonSchedule[] = setup.newSchedule
+        ? [...save.world.schedules, setup.newSchedule]
+        : save.world.schedules;
+
+      // Nouveau state académie
+      const newAcademy = setup.newAcademyStage
+        ? {
+            stage: setup.newAcademyStage as NonNullable<typeof career.academy>["stage"],
+            evaluationScore: 50,
+            promotionThreshold: 80,
+            weeksInStage: 0,
+          }
+        : null;
+
+      return {
+        ...state,
+        save: {
+          ...save,
+          player: {
+            ...save.player,
+            age: setup.newAge,
+            paPoints: save.player.paPoints + paBonus,
+            progressionHistory: [
+              ...save.player.progressionHistory,
+              {
+                season: career.season,
+                overall: save.player.overall,
+                potential: save.player.potential,
+                paPoints: save.player.paPoints,
+              },
+            ],
+          },
+          career: {
+            ...career,
+            season: career.season + 1,
+            week: 1,
+            matchday: 1,
+            phase: setup.newPhase,
+            academy: newAcademy,
+            completedMatchIds: [],
+            seasonSummaries: [...career.seasonSummaries, summary],
+          },
+          world: {
+            ...save.world,
+            schedules: newSchedules,
+          },
+          meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
       };

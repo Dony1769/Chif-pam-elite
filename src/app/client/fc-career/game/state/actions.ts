@@ -8,6 +8,7 @@ import type { Career } from "../domain/career";
 import type { Wallet } from "../domain/economy";
 import type { MatchResult } from "../domain/match";
 import type { GameSaveV1 } from "../persistence/saveSchema";
+import type { NextSeasonSetup, SeasonSummary } from "../domain/seasonEnd";
 
 export type GameAction =
   // Initialisation
@@ -27,6 +28,7 @@ export type GameAction =
   // Progression
   | { type: "ADVANCE_WEEK" }
   | { type: "ADVANCE_SEASON" }
+  | { type: "END_SEASON"; setup: NextSeasonSetup; summary: SeasonSummary; paBonus: number }
 
   // Économie
   | { type: "CREDIT_WALLET"; amount: number; reason: string }
