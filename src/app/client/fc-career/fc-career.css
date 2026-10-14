@@ -409,8 +409,15 @@
  }
 
 /* ============================================================
-   LOT D — Design System Additions
+   LOT D/E — Design System Additions & Page Modernization
    ============================================================ */
+
+/* --- Color semantic tokens --- */
+.fcl{
+  --success: oklch(.75 .18 145);
+  --danger:  oklch(.70 .20 25);
+  --warning: oklch(.85 .17 80);
+}
 
 /* --- Generic card (used by awards, immersion, journal, etc.) --- */
 .fcl .card{
@@ -625,6 +632,93 @@
 @keyframes pa-pulse{
   0%, 100% { box-shadow: 0 0 0 0 var(--glow-green); }
   50%       { box-shadow: 0 0 10px 2px var(--glow-green); }
+}
+
+/* ============================================================
+   LOT E — Match page modernization
+   ============================================================ */
+
+/* Match result score — large, tabular */
+.fcl .match-result-score{
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow', sans-serif;
+  font-size: clamp(28px, 5vw, 48px);
+  font-weight: 800;
+  text-align: center;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* Live match minute counter */
+.fcl .match-minute{
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow', sans-serif;
+  color: var(--primary);
+}
+
+/* Progress bar for live time */
+.fcl .match-progress{
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.fcl .match-progress-fill{
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), oklch(.75 .18 145));
+  border-radius: 2px;
+  transition: width .3s ease;
+}
+
+/* Player rating badge */
+.fcl .player-rating{
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fcl .player-rating.great{ background: oklch(.75 .18 145 / .12); color: var(--success); }
+.fcl .player-rating.poor { background: oklch(.70 .20 25 / .12);  color: var(--danger); }
+.fcl .player-rating.ok  { background: rgba(255,255,255,.06); color: var(--foreground); }
+
+/* Choice moment card */
+.fcl .choice-card{
+  background: var(--surface-1);
+  border: 2px solid var(--primary);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+/* Celebration picker */
+.fcl .celebration-card{
+  background: var(--surface-1);
+  border: 2px solid var(--success);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+/* Event log row */
+.fcl .event-row{
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.fcl .event-row.goal{ color: var(--success); font-weight: 600; }
+.fcl .event-row.card{ color: var(--danger); }
+.fcl .event-row.whistle{ color: var(--primary); font-weight: 600; }
+
+/* ============================================================
+   LOT E — Dashboard modernization helpers
+   ============================================================ */
+
+/* Next match card — elevated accent border */
+.fcl .next-match-card{
+  border-color: color-mix(in oklab, var(--primary) 25%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 10%, transparent);
 }
 
 /* Barre de confiance coach */

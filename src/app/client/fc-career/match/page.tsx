@@ -427,8 +427,8 @@ export default function MatchPage() {
           </div>
 
           {/* Progress bar */}
-          <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, marginBottom: 16 }}>
-            <div style={{ height: '100%', background: 'var(--primary)', borderRadius: 2, width: `${Math.min(100, (currentTick.minute / 95) * 100)}%`, transition: 'width .3s ease' }} />
+          <div className="match-progress">
+            <div className="match-progress-fill" style={{ width: `${Math.min(100, (currentTick.minute / 95) * 100)}%` }} />
           </div>
 
           {/* VAR overlay */}
@@ -475,10 +475,7 @@ export default function MatchPage() {
 
           {/* Choice moment */}
           {pendingChoice && !showCelebration && (
-            <div style={{
-              background: 'var(--background)', border: '2px solid var(--primary)', borderRadius: 10,
-              padding: 16, marginBottom: 12,
-            }}>
+            <div className="choice-card">
               <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Zap size={14} style={{ color: 'var(--primary)' }} />{pendingChoice.prompt}
               </p>
@@ -505,11 +502,8 @@ export default function MatchPage() {
 
           {/* Celebration picker */}
           {showCelebration && (
-            <div style={{
-              background: 'var(--background)', border: '2px solid var(--success, #4ade80)', borderRadius: 10,
-              padding: 16, marginBottom: 12,
-            }}>
-              <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--success, #4ade80)', textAlign: 'center' }}>
+            <div className="celebration-card">
+              <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: 'var(--success)', textAlign: 'center' }}>
                 ⚽ BUUUUT ! Choisis ta célébration !
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
@@ -547,18 +541,13 @@ export default function MatchPage() {
       {/* ---- RÉSULTAT ---- */}
       {mode === "result" && lastMatch && (
         <section style={{ marginTop: 0, padding: 24, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <h2 style={{ textAlign: 'center', fontSize: 28, fontWeight: 800, fontFamily: "'Barlow', sans-serif" }}>
+          <h2 className="match-result-score">
             {getClub(lastMatch.homeClubId)?.shortName} {lastMatch.homeScore} — {lastMatch.awayScore} {getClub(lastMatch.awayClubId)?.shortName}
           </h2>
 
           {lastMatch.userPlayed ? (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 20px',
-                background: lastMatch.userRating.rating >= 7 ? 'rgba(74,222,128,.12)' : lastMatch.userRating.rating < 5 ? 'rgba(248,113,113,.12)' : 'rgba(255,255,255,.06)',
-                borderRadius: 20, fontSize: 14, fontWeight: 700,
-                color: lastMatch.userRating.rating >= 7 ? 'var(--success, #4ade80)' : lastMatch.userRating.rating < 5 ? 'var(--danger, #f87171)' : 'inherit',
-              }}>
+              <div className={`player-rating ${lastMatch.userRating.rating >= 7 ? "great" : lastMatch.userRating.rating < 5 ? "poor" : "ok"}`}>
                 <Activity size={16} />Note : {formatRating(lastMatch.userRating.rating)}
                 {lastMatch.manOfTheMatch === `${player!.firstName} ${player!.lastName}` && (
                   <span style={{ fontSize: 10, background: '#fbbf24', color: '#000', padding: '2px 6px', borderRadius: 8, fontWeight: 700 }}>⭐ HOMME DU MATCH</span>
