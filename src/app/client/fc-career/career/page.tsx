@@ -12,6 +12,7 @@ import { selectPlayer, selectCareer, selectIsLoading } from "../game/state/selec
 import { pageFade, stagger, itemFade } from "../game/design/animations";
 import { formatMoney } from "../game/utils/formatters";
 import type { SeasonSummary, CareerPhase } from "../game/domain/career";
+import { formatGameDateShort, seasonLabel } from "../game/utils/dates";
 
 /* ── Phase label ──────────────────────────────────────────────────── */
 
@@ -188,6 +189,9 @@ export default function CareerPage() {
   const history = player.progressionHistory ?? [];
   const summaries: SeasonSummary[] = career.seasonSummaries ?? [];
 
+  /* Stats saison en cours */
+  const currentSeasonStats = player.stats.seasons.find(s => s.season === career.season);
+
   /* Stats cumulées */
   const totalApps    = player.stats.totalAppearances;
   const totalGoals   = player.stats.totalGoals;
@@ -208,7 +212,7 @@ export default function CareerPage() {
       {/* En-tête */}
       <div className="fc-section-header">
         <h1 className="fc-section-title">Carrière</h1>
-        <span className="fc-badge fc-badge--neutral">Saison {career.season}</span>
+        <span className="fc-badge fc-badge--neutral">{formatGameDateShort(career.week, career.season)}</span>
       </div>
 
       {/* Fiche actuelle */}
@@ -262,7 +266,7 @@ export default function CareerPage() {
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>Contrat jusqu&apos;en</p>
               <p style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)" }}>
-                Saison {player.contract.endSeason}
+                {seasonLabel(player.contract.endSeason)}
               </p>
             </div>
           </div>
@@ -310,6 +314,39 @@ export default function CareerPage() {
           </div>
         )}
       </div>
+
+      {/* Stats saison en cours */}
+      {currentSeasonStats && (
+        <div className="fc-card" style={{ padding: "var(--fc-space-4) var(--fc-space-5)" }}>
+          <h2 style={{
+            fontFamily: "var(--fc-font-display)", fontWeight: 700,
+            fontSize: "var(--fc-text-md)", color: "var(--fc-text)",
+            marginBottom: "var(--fc-space-4)",
+          }}>
+            Saison {career.season} en cours
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--fc-space-3)" }}>
+            {[
+              { label: "Matchs",   value: currentSeasonStats.appearances },
+              { label: "Buts",     value: currentSeasonStats.goals },
+              { label: "Passes D", value: currentSeasonStats.assists },
+              { label: "Moyenne",  value: currentSeasonStats.appearances > 0 ? currentSeasonStats.avgRating.toFixed(1) : "—" },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: "center" }}>
+                <p style={{
+                  fontFamily: "var(--fc-font-display)", fontWeight: 900,
+                  fontSize: "1.5rem", color: "var(--fc-emerald)", lineHeight: 1,
+                }}>
+                  {s.value}
+                </p>
+                <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", marginTop: 2 }}>
+                  {s.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Progression OVR */}
       {history.length >= 2 && (

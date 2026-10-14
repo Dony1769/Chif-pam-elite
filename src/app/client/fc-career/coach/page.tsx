@@ -18,6 +18,7 @@ import {
   roleFromTrust,
   type CoachConversation,
 } from "../game/domain/coach";
+import { formatGameDateShort } from "../game/utils/dates";
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
@@ -281,7 +282,7 @@ export default function CoachPage() {
                     marginBottom: "var(--fc-space-2)",
                   }}>
                     <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
-                      Saison {conv.season} · Sem. {conv.week}
+                      Saison {conv.season} · {formatGameDateShort(conv.week, conv.season)}
                     </span>
                     {conv.effect?.trust !== undefined && conv.effect.trust !== 0 && (
                       <span style={{
