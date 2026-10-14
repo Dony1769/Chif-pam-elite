@@ -23,15 +23,21 @@ interface NavItem {
 const BASE = "/client/fc-career";
 
 const NAV: NavItem[] = [
-  { href: `${BASE}/dashboard`,  label: "Accueil",     icon: <IconHome /> },
-  { href: `${BASE}/training`,   label: "Entraînement",icon: <IconDumbbell /> },
-  { href: `${BASE}/calendar`,   label: "Calendrier",  icon: <IconCalendar /> },
-  { href: `${BASE}/coach`,      label: "Coach",       icon: <IconCoach /> },
-  { href: `${BASE}/agent`,      label: "Agent",       icon: <IconAgent /> },
-  { href: `${BASE}/career`,     label: "Carrière",    icon: <IconTrophy /> },
-  { href: `${BASE}/player`,     label: "Fiche joueur",icon: <IconUser /> },
-  { href: `${BASE}/world`,      label: "Monde",       icon: <IconGlobe /> },
-  { href: `${BASE}/settings`,   label: "Paramètres",  icon: <IconSettings /> },
+  { href: `${BASE}/dashboard`,  label: "Accueil",        icon: <IconHome /> },
+  { href: `${BASE}/training`,   label: "Entraînement",   icon: <IconDumbbell /> },
+  { href: `${BASE}/calendar`,   label: "Calendrier",     icon: <IconCalendar /> },
+  { href: `${BASE}/coach`,      label: "Coach",          icon: <IconCoach /> },
+  { href: `${BASE}/agent`,      label: "Agent",          icon: <IconAgent /> },
+  { href: `${BASE}/career`,     label: "Carrière",       icon: <IconTrophy /> },
+  { href: `${BASE}/player`,     label: "Fiche joueur",   icon: <IconUser /> },
+  { href: `${BASE}/world`,      label: "Monde",          icon: <IconGlobe /> },
+  { href: `${BASE}/national`,   label: "Sélection",      icon: <IconFlag /> },
+  { href: `${BASE}/media`,      label: "Médias",         icon: <IconMic /> },
+  { href: `${BASE}/sponsors`,   label: "Sponsors",       icon: <IconStar /> },
+  { href: `${BASE}/fans`,       label: "Fans",           icon: <IconHeart /> },
+  { href: `${BASE}/awards`,     label: "Récompenses",    icon: <IconAward /> },
+  { href: `${BASE}/journal`,    label: "Journal",        icon: <IconBook /> },
+  { href: `${BASE}/settings`,   label: "Paramètres",     icon: <IconSettings /> },
 ];
 
 export function GameShell({ children }: { children: ReactNode }) {
@@ -205,3 +211,9 @@ function IconMenu()     { return <svg width="20" height="20" viewBox="0 0 20 20"
 function IconSettings() { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8.325 2.317a1 1 0 011.35 0l.823.755c.33.303.78.43 1.22.344l1.1-.214a1 1 0 011.155.676l.37 1.07c.147.425.48.756.9.9l1.07.37a1 1 0 01.676 1.155l-.214 1.1c-.086.44.04.89.344 1.22l.755.823a1 1 0 010 1.35l-.755.823a1.5 1.5 0 00-.344 1.22l.214 1.1a1 1 0 01-.676 1.155l-1.07.37a1.5 1.5 0 00-.9.9l-.37 1.07a1 1 0 01-1.155.676l-1.1-.214a1.5 1.5 0 00-1.22.344l-.823.755a1 1 0 01-1.35 0l-.823-.755a1.5 1.5 0 00-1.22-.344l-1.1.214a1 1 0 01-1.155-.676l-.37-1.07a1.5 1.5 0 00-.9-.9l-1.07-.37a1 1 0 01-.676-1.155l.214-1.1a1.5 1.5 0 00-.344-1.22l-.755-.823a1 1 0 010-1.35l.755-.823a1.5 1.5 0 00.344-1.22l-.214-1.1a1 1 0 01.676-1.155l1.07-.37a1.5 1.5 0 00.9-.9l.37-1.07a1 1 0 011.155-.676l1.1.214a1.5 1.5 0 001.22-.344l.823-.755zM10 13a3 3 0 100-6 3 3 0 000 6z"/></svg>; }
 function IconCoach()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a3 3 0 100 6 3 3 0 000-6zM4 13a6 6 0 1112 0v1H4v-1zm-1 2h14v1a1 1 0 01-1 1H4a1 1 0 01-1-1v-1z"/></svg>; }
 function IconAgent()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a3 3 0 100 6 3 3 0 000-6zm0 8a7 7 0 00-7 7h2a5 5 0 015-5 5 5 0 015 5h2a7 7 0 00-7-7z"/><rect x="13" y="8" width="5" height="2" rx="1"/><rect x="14" y="11" width="4" height="2" rx="1"/></svg>; }
+function IconFlag()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 2h1v16H3V2zm1 1v7l9-3.5L4 3z"/></svg>; }
+function IconMic()      { return <svg viewBox="0 0 20 20" fill="currentColor"><rect x="7" y="1" width="6" height="9" rx="3"/><path d="M4 9a6 6 0 0012 0h-2a4 4 0 01-8 0H4zm6 7v2M8 18h4"/></svg>; }
+function IconStar()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.4 6.8H19l-5.5 4 2.1 6.6L10 14.3l-5.6 4.1 2.1-6.6L1 7.8h6.6L10 1z"/></svg>; }
+function IconHeart()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 015.656 5.656L10 18l-6.828-6.828a4 4 0 010-5.656z"/></svg>; }
+function IconAward()    { return <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="8" r="5"/><path d="M7 13l-3 5h12l-3-5"/><circle cx="10" cy="8" r="2" fill="var(--fc-surface-3)"/></svg>; }
+function IconBook()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2h9a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2zm1 3v2h7V5H5zm0 4v2h7V9H5zm0 4v1h4v-1H5z"/></svg>; }

@@ -9,7 +9,7 @@ import type { GameSaveV1 } from "../persistence/saveSchema";
 import { computeOverall, positionFamily } from "../domain/player";
 import { clamp } from "../utils/validation";
 import type { SeasonSchedule } from "../domain/season";
-import { applyResultsToSchedule, updateStanding } from "../domain/worldSimulator";
+import { applyResultsToSchedule, updateStanding, simulateMatchday } from "../domain/worldSimulator";
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
 import { createInitialAgentState } from "../domain/agent";
 import { computeWeeklyCondition } from "../domain/training";
@@ -589,6 +589,43 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const newMatchday = career.matchday + 1;
       const wallet      = save.wallet;
 
+      // ── Simulation monde : avancer les autres clubs ──────────────
+      const currentMatchday = career.matchday;
+      const worldClubs = save.world.clubs ?? [];
+      let newSchedules = save.world.schedules ?? [];
+      let newStandings = { ...(save.world.standings ?? {}) };
+
+      const scheduleIdx = newSchedules.findIndex(s => s.season === career.season);
+      if (scheduleIdx >= 0 && worldClubs.length > 0) {
+        const schedule = newSchedules[scheduleIdx];
+        const seasonSeed = `s${career.season}`;
+        const simResults = simulateMatchday(currentMatchday, schedule, worldClubs as import("../domain/club").Club[], seasonSeed);
+
+        if (simResults.length > 0) {
+          const updatedSchedule = applyResultsToSchedule(schedule, simResults);
+          newSchedules = newSchedules.map((s, i) => i === scheduleIdx ? updatedSchedule : s);
+
+          // Mise à jour des classements par ligue
+          const leagueIds = Array.from(new Set(worldClubs.map((c) => (c as import("../domain/club").Club).leagueId)));
+          for (const leagueId of leagueIds) {
+            const leagueClubIds = worldClubs
+              .filter((c) => (c as import("../domain/club").Club).leagueId === leagueId)
+              .map((c) => (c as import("../domain/club").Club).id);
+            const relevantResults = simResults.filter(r =>
+              leagueClubIds.includes(r.homeClubId) || leagueClubIds.includes(r.awayClubId)
+            );
+            if (relevantResults.length > 0) {
+              const currentRows = newStandings[leagueId] ?? leagueClubIds.map(id => ({
+                clubId: id, position: 0, points: 0,
+                played: 0, won: 0, drawn: 0, lost: 0,
+                goalsFor: 0, goalsAgainst: 0, form: [],
+              }));
+              newStandings[leagueId] = updateStanding(currentRows, relevantResults, save.player.contract.clubId);
+            }
+          }
+        }
+      }
+
       return {
         ...state,
         save: {
@@ -601,7 +638,54 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             totalEarned: wallet.totalEarned + wallet.weeklyWage,
           },
           weekState: { trainingDone: false, trainingIntensity: null, matchPlayed: false },
+          world: {
+            ...save.world,
+            schedules: newSchedules,
+            standings: newStandings,
+          },
           meta: { ...save.meta, savedAt: Date.now() },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "UPDATE_MEDIA": {
+      if (!state.save) return state;
+      const prev = state.save.media ?? { mediaReputation: 40, lastHeadline: null, pressConferences: [] };
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          media: {
+            mediaReputation: Math.max(0, Math.min(100, prev.mediaReputation + action.mediaRepDelta)),
+            lastHeadline: action.conference.answer,
+            pressConferences: [...(prev.pressConferences ?? []), action.conference],
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "SIGN_SPONSOR": {
+      if (!state.save) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          sponsors: [...(state.save.sponsors ?? []), action.contract],
+        },
+        isDirty: true,
+      };
+    }
+
+    case "ADD_JOURNAL_ENTRY": {
+      if (!state.save) return state;
+      const current = state.save.journal ?? [];
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          journal: [...current, action.entry],
         },
         isDirty: true,
       };

@@ -56,6 +56,76 @@ export interface GameSaveV1 {
     trainingIntensity: "light" | "normal" | "intense" | null;
     matchPlayed: boolean;
   };
+  /** Médias & réputation — optionnel pour rétrocompatibilité */
+  media?: {
+    mediaReputation: number;       // 0-100
+    lastHeadline: string | null;
+    pressConferences: PressConference[];
+  };
+  /** Sponsors — optionnel pour rétrocompatibilité */
+  sponsors?: SponsorContract[];
+  /** Sélection nationale — optionnel pour rétrocompatibilité */
+  nationalTeam?: {
+    called: boolean;
+    caps: number;
+    goals: number;
+    lastCallSeason: number | null;
+  };
+  /** Fans & popularité — optionnel pour rétrocompatibilité */
+  fans?: {
+    fanRating: number;   // 0-100
+    followers: number;
+    events: FanEvent[];
+  };
+  /** Récompenses — optionnel pour rétrocompatibilité */
+  awards?: Award[];
+  /** Journal autobiographique — optionnel pour rétrocompatibilité */
+  journal?: JournalEntry[];
+}
+
+export interface PressConference {
+  id: string;
+  season: number;
+  week: number;
+  question: string;
+  answer: string;
+  impact: number; // -10 à +10 sur mediaReputation
+}
+
+export interface SponsorContract {
+  id: string;
+  name: string;
+  logo: string;       // emoji ou lettre
+  weeklyBonus: number;
+  season: number;
+  weeksLeft: number;
+  missionDone: boolean;
+  missionLabel: string;
+}
+
+export interface FanEvent {
+  id: string;
+  season: number;
+  week: number;
+  type: "match_win" | "goal" | "transfer" | "award" | "scandal";
+  label: string;
+  impact: number;
+}
+
+export interface Award {
+  id: string;
+  season: number;
+  label: string;
+  icon: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  season: number;
+  week: number;
+  type: "match" | "training" | "contract" | "transfer" | "award" | "injury" | "milestone";
+  title: string;
+  body: string;
 }
 
 /** Type union pour les migrations futures */

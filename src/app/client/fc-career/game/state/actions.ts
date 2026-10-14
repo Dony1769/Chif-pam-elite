@@ -65,6 +65,15 @@ export type GameAction =
   | { type: "RESPOND_CONTRACT_OFFER"; offerId: string; accepted: boolean }
   | { type: "REQUEST_OFFERS" }
 
+  // Médias & Réputation
+  | { type: "UPDATE_MEDIA"; mediaRepDelta: number; conference: import("../persistence/saveSchema").PressConference }
+
+  // Sponsors
+  | { type: "SIGN_SPONSOR"; contract: import("../persistence/saveSchema").SponsorContract }
+
+  // Journal
+  | { type: "ADD_JOURNAL_ENTRY"; entry: import("../persistence/saveSchema").JournalEntry }
+
   // Erreur
   | { type: "SET_ERROR"; message: string }
   | { type: "CLEAR_ERROR" };

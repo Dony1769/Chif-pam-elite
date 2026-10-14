@@ -114,6 +114,13 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
     agentState: save.agentState ?? createInitialAgentState(),
     // Rétrocompatibilité : état de semaine par défaut si absent
     weekState: save.weekState ?? { trainingDone: false, trainingIntensity: null, matchPlayed: false },
+    // Rétrocompatibilité : systèmes d'immersion (optionnels)
+    media: save.media,
+    sponsors: save.sponsors,
+    nationalTeam: save.nationalTeam,
+    fans: save.fans,
+    awards: save.awards,
+    journal: save.journal,
   };
 }
 
