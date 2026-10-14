@@ -161,7 +161,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
       // Ajouter les résultats de match à l'historique world (20 max)
-      const lastResults = [result, ...state.save.world.lastMatchResults].slice(0, 20);
+      const lastResults = [result, ...(state.save.world.lastMatchResults ?? [])].slice(0, 20);
 
       return {
         ...state,

@@ -215,7 +215,7 @@ export default function CalendarPage() {
                     key={f.id}
                     fixture={f}
                     clubName={clubName}
-                    matchResult={save.world.lastMatchResults.find(r => r.matchId === f.id)}
+                    matchResult={(save.world.lastMatchResults ?? []).find(r => r.matchId === f.id)}
                   />
                 ))
               }

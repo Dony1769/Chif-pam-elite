@@ -918,6 +918,65 @@
   color: var(--fc-text);
 }
 
+/* ── Card (surface légèrement élevée) ─────────────────────────── */
+.fc-card {
+  background: var(--fc-surface-2);
+  border: 1px solid var(--fc-border);
+  border-radius: var(--fc-radius-lg);
+  padding: var(--fc-space-5);
+}
+
+/* ── Section header (titre + badge sur la même ligne) ──────────── */
+.fc-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fc-space-3);
+  margin-bottom: var(--fc-space-5);
+}
+
+.fc-section-title {
+  font-family: var(--fc-font-display);
+  font-size: var(--fc-text-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fc-text);
+  line-height: 1;
+}
+
+/* ── Focus visible (accessibilité clavier) ─────────────────────── */
+.fc-btn:focus-visible,
+.fc-nav-item:focus-visible,
+.fc-input:focus-visible,
+.fc-modal__close:focus-visible {
+  outline: 2px solid var(--fc-emerald);
+  outline-offset: 2px;
+}
+
+/* ── Safe area bottom (notch iOS) ──────────────────────────────── */
+.fc-page {
+  padding-bottom: calc(var(--fc-space-5) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ── Tap highlight suppressed ──────────────────────────────────── */
+.fc-nav-item,
+.fc-btn,
+.fc-pa-row__btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Scrollbar style ───────────────────────────────────────────── */
+.fc-sidebar__nav::-webkit-scrollbar {
+  width: 3px;
+}
+.fc-sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.fc-sidebar__nav::-webkit-scrollbar-thumb {
+  background: var(--fc-border-mid);
+  border-radius: var(--fc-radius-pill);
+}
+
 /* ── Utility ──────────────────────────────────────────────────── */
 .fc-sr-only {
   position: absolute;
