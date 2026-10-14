@@ -13,6 +13,9 @@ import { applyResultsToSchedule, updateStanding, simulateMatchday } from "../dom
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
 import { createInitialAgentState } from "../domain/agent";
 import { computeWeeklyCondition } from "../domain/training";
+import { buildInitialChallenges, activateChallenge, updateChallengeProgress } from "../domain/challenges";
+import { pickInitialRivals, updateRivalsEndOfSeason } from "../domain/rivals";
+import { getAllWorldPlayers } from "../data/worldPlayers";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -233,6 +236,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const save = state.save;
       const career = save.career;
 
+      // Mise à jour des rivaux en fin de saison
+      const allWorldPlayersForRivals = getAllWorldPlayers();
+      const updatedRivals = updateRivalsEndOfSeason(
+        save.rivals ?? [],
+        allWorldPlayersForRivals,
+        save.player.overall,
+        save.player.contract.clubId,
+        save.player.position,
+        career.season,
+      );
+
       // Nouveau calendrier
       const newSchedules: SeasonSchedule[] = setup.newSchedule
         ? [...save.world.schedules, setup.newSchedule]
@@ -280,6 +294,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...save.world,
             schedules: newSchedules,
           },
+          rivals: updatedRivals,
+          weeksUninjured: 0,
           meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
@@ -613,7 +629,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       let newSchedules = save.world.schedules ?? [];
       let newStandings = { ...(save.world.standings ?? {}) };
 
-      const scheduleIdx = newSchedules.findIndex(s => s.season === career.season);
+      // Pendant les saisons académie, simuler quand même le monde avec la saison courante
+      // ou la dernière saison disponible si la saison courante n'a pas encore de calendrier
+      let scheduleIdx = newSchedules.findIndex(s => s.season === career.season);
+      if (scheduleIdx < 0 && newSchedules.length > 0) {
+        // Trouver la saison la plus récente dans les schedules
+        scheduleIdx = newSchedules.reduce((best, s, i) =>
+          s.season > (newSchedules[best]?.season ?? -1) ? i : best, 0);
+      }
       if (scheduleIdx >= 0 && worldClubs.length > 0) {
         const schedule = newSchedules[scheduleIdx];
         const seasonSeed = `s${career.season}`;
@@ -644,6 +667,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
+      // ── Sync challenges weekly ───────────────────────────────────
+      const weeksUninjured = newPlayer.condition.injury ? 0 : (save.weeksUninjured ?? 0) + 1;
+      const updatedChallenges = updateChallengeProgress(
+        save.challenges ?? buildInitialChallenges(),
+        {
+          player: newPlayer,
+          career: { season: career.season, week: newWeek },
+          weeksUninjured,
+          mediaRep: save.media?.mediaReputation,
+          fanRating: save.fans?.fanRating,
+        }
+      );
+
       return {
         ...state,
         save: {
@@ -662,6 +698,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             schedules: newSchedules,
             standings: newStandings,
           },
+          challenges: updatedChallenges,
+          weeksUninjured,
           meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
@@ -762,6 +800,81 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             },
           },
         },
+        isDirty: true,
+      };
+    }
+
+    case "ACTIVATE_CHALLENGE": {
+      if (!state.save) return state;
+      const currentChallenges = state.save.challenges ?? buildInitialChallenges();
+      const updated = activateChallenge(currentChallenges, action.challengeId, state.save.career.season);
+      return {
+        ...state,
+        save: { ...state.save, challenges: updated },
+        isDirty: true,
+      };
+    }
+
+    case "SYNC_CHALLENGES": {
+      if (!state.save) return state;
+      const challenges = state.save.challenges ?? buildInitialChallenges();
+      const player = state.save.player;
+      const career = state.save.career;
+      const currentSeasonStats = player.stats.seasons.find(s => s.season === career.season);
+      const updated = updateChallengeProgress(challenges, {
+        player,
+        career,
+        weeklyGoals: 0,
+        weeklyAssists: 0,
+        weeklyAppearance: false,
+        weeksUninjured: state.save.weeksUninjured ?? 0,
+        mediaRep: state.save.media?.mediaReputation ?? 40,
+        fanRating: state.save.fans?.fanRating ?? 30,
+        caps: state.save.nationalTeam?.caps ?? 0,
+        weeklyRating: currentSeasonStats?.avgRating,
+      });
+      return {
+        ...state,
+        save: { ...state.save, challenges: updated },
+        isDirty: true,
+      };
+    }
+
+    case "INIT_RIVALS": {
+      if (!state.save || (state.save.rivals ?? []).length > 0) return state;
+      const worldPlayers = getAllWorldPlayers();
+      const player = state.save.player;
+      const rivals = pickInitialRivals(
+        worldPlayers,
+        player.position,
+        player.contract.clubId,
+        player.overall,
+        state.save.career.season,
+      );
+      return {
+        ...state,
+        save: { ...state.save, rivals },
+        isDirty: true,
+      };
+    }
+
+    case "SEASON_END_RIVALS": {
+      if (!state.save) return state;
+      const rivals = state.save.rivals ?? [];
+      if (rivals.length === 0) return state;
+      const worldPlayers = getAllWorldPlayers();
+      const player = state.save.player;
+      const updated = updateRivalsEndOfSeason(
+        rivals,
+        worldPlayers,
+        player.overall,
+        player.contract.clubId,
+        player.position,
+        state.save.career.season,
+      );
+      return {
+        ...state,
+        save: { ...state.save, rivals: updated },
         isDirty: true,
       };
     }

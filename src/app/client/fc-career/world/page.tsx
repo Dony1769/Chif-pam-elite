@@ -14,6 +14,8 @@ import { selectPlayer, selectCareer, selectIsLoading } from "../game/state/selec
 import { pageFade, stagger, itemFade } from "../game/design/animations";
 import { COUNTRIES, LEAGUES, CLUBS } from "../game/data/world";
 import type { StandingRow } from "../game/domain/club";
+import { getTopScorers, getTopRated, POSITION_DISPLAY, PERSONALITY_LABELS } from "../game/data/worldPlayers";
+import type { WorldPlayer } from "../game/data/worldPlayers";
 
 /* ── Composant principal ─────────────────────────────────────────── */
 
@@ -25,6 +27,7 @@ export default function WorldPage() {
 
   const [activeCountryId, setActiveCountryId] = useState<string>(COUNTRIES[0].id);
   const [activeTier, setActiveTier]           = useState<1 | 2>(1);
+  const [worldTab, setWorldTab]               = useState<"standings" | "scorers" | "players">("standings");
 
   if (isLoading) return <Spinner />;
 
@@ -145,8 +148,126 @@ export default function WorldPage() {
           </motion.div>
         )}
 
+        {/* ── Onglets vue ligue ───────────────────────────────────── */}
+        {activeLeague && (
+          <motion.div variants={itemFade} style={{ display: "flex", gap: "var(--fc-space-2)", marginBottom: "var(--fc-space-4)" }}>
+            {([
+              { key: "standings", label: "Classement" },
+              { key: "scorers",   label: "Top Buteurs" },
+              { key: "players",   label: "Joueurs" },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setWorldTab(tab.key)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "var(--fc-radius-sm)",
+                  border: `1px solid ${worldTab === tab.key ? "var(--fc-emerald)" : "var(--fc-border)"}`,
+                  background: worldTab === tab.key ? "var(--fc-emerald-10)" : "var(--fc-surface-3)",
+                  color: worldTab === tab.key ? "var(--fc-emerald)" : "var(--fc-text-2)",
+                  fontWeight: worldTab === tab.key ? 700 : 400,
+                  fontSize: "var(--fc-text-xs)",
+                  cursor: "pointer",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+
+        {/* ── Top Buteurs ─────────────────────────────────────────── */}
+        {worldTab === "scorers" && activeLeague && (() => {
+          const season = career?.season ?? 1;
+          const scorers = getTopScorers(activeLeague.id, season, 10);
+          return (
+            <motion.section variants={itemFade} className="fc-panel" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{
+                display: "grid", gridTemplateColumns: "24px 1fr 48px 48px 48px",
+                gap: "var(--fc-space-2)", padding: "var(--fc-space-2) var(--fc-space-4)",
+                background: "var(--fc-surface-2)", borderBottom: "1px solid var(--fc-border)",
+                fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", fontWeight: 700,
+              }}>
+                <span>#</span><span>Joueur</span><span style={{ textAlign: "center" }}>Buts</span><span style={{ textAlign: "center" }}>Pds</span><span style={{ textAlign: "center" }}>Ovr</span>
+              </div>
+              {scorers.length === 0 && (
+                <p style={{ padding: "var(--fc-space-4)", color: "var(--fc-text-3)", textAlign: "center" }}>
+                  Aucune donnée pour la saison {season}.
+                </p>
+              )}
+              {scorers.map((wp, idx) => {
+                const stats = wp.seasonStats.find(s => s.season === season);
+                const club  = CLUBS.find(c => c.id === wp.clubId);
+                return (
+                  <div key={wp.id} style={{
+                    display: "grid", gridTemplateColumns: "24px 1fr 48px 48px 48px",
+                    gap: "var(--fc-space-2)", padding: "var(--fc-space-2) var(--fc-space-4)",
+                    borderBottom: idx < scorers.length - 1 ? "1px solid var(--fc-border)" : "none",
+                    alignItems: "center",
+                  }}>
+                    <span style={{ fontSize: "var(--fc-text-xs)", color: idx < 3 ? "var(--fc-amber)" : "var(--fc-text-3)", fontWeight: 700 }}>{idx + 1}</span>
+                    <div>
+                      <div style={{ fontSize: "var(--fc-text-sm)", color: "var(--fc-text)", fontWeight: 600 }}>
+                        {wp.firstName} {wp.lastName}
+                      </div>
+                      <div style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+                        {POSITION_DISPLAY[wp.position]} · {club?.shortName ?? wp.clubId}
+                      </div>
+                    </div>
+                    <span style={{ textAlign: "center", fontWeight: 700, color: "var(--fc-text)" }}>{stats?.goals ?? 0}</span>
+                    <span style={{ textAlign: "center", color: "var(--fc-text-2)" }}>{stats?.assists ?? 0}</span>
+                    <span style={{ textAlign: "center", color: "var(--fc-text-3)" }}>{wp.overall}</span>
+                  </div>
+                );
+              })}
+            </motion.section>
+          );
+        })()}
+
+        {/* ── Top Joueurs par note ─────────────────────────────────── */}
+        {worldTab === "players" && activeLeague && (() => {
+          const topPlayers = getTopRated(activeLeague.id, 15);
+          return (
+            <motion.section variants={itemFade} style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
+              {topPlayers.map((wp, idx) => {
+                const club = CLUBS.find(c => c.id === wp.clubId);
+                const isInjured = wp.injury !== null;
+                return (
+                  <div key={wp.id} style={{
+                    display: "flex", alignItems: "center", gap: "var(--fc-space-3)",
+                    padding: "var(--fc-space-3) var(--fc-space-4)",
+                    borderRadius: "var(--fc-radius-sm)",
+                    border: "1px solid var(--fc-border)",
+                    background: "var(--fc-surface-2)",
+                    opacity: isInjured ? 0.7 : 1,
+                  }}>
+                    <span style={{ fontFamily: "var(--fc-font-display)", fontWeight: 900, fontSize: "var(--fc-text-md)", color: idx < 3 ? "var(--fc-amber)" : "var(--fc-text-3)", minWidth: 24 }}>
+                      {wp.overall}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: "var(--fc-text-sm)", color: "var(--fc-text)" }}>
+                        {wp.firstName} {wp.lastName}
+                        {isInjured && <span style={{ color: "var(--fc-coral)", marginLeft: 6, fontSize: "var(--fc-text-xs)" }}>🤕</span>}
+                      </div>
+                      <div style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+                        {POSITION_DISPLAY[wp.position]} · {club?.shortName ?? wp.clubId} · {PERSONALITY_LABELS[wp.personality]}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>{wp.age} ans</div>
+                      <div style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 600 }}>
+                        {(wp.marketValue / 1000000).toFixed(1)}M€
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </motion.section>
+          );
+        })()}
+
         {/* ── Tableau de classement ────────────────────────────────── */}
-        <motion.section variants={itemFade} className="fc-panel" style={{ padding: 0, overflow: "hidden" }}>
+        {worldTab === "standings" && <motion.section variants={itemFade} className="fc-panel" style={{ padding: 0, overflow: "hidden" }}>
           {/* En-tête tableau */}
           <div style={{
             display: "grid",
@@ -240,16 +361,16 @@ export default function WorldPage() {
               </div>
             );
           })}
-        </motion.section>
+        </motion.section>}
 
         {/* ── Légende zones ───────────────────────────────────────── */}
-        <motion.div variants={itemFade} style={{
+        {worldTab === "standings" && <motion.div variants={itemFade} style={{
           display: "flex", gap: "var(--fc-space-4)", marginTop: "var(--fc-space-3)",
           fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)",
         }}>
           <span><span style={{ color: "var(--fc-emerald)" }}>●</span> Promotion / Champions</span>
           <span><span style={{ color: "var(--fc-coral)" }}>●</span> Relégation</span>
-        </motion.div>
+        </motion.div>}
 
         {/* ── Clubs du monde (grid de vitrines) ───────────────────── */}
         <motion.section variants={itemFade} style={{ marginTop: "var(--fc-space-6)" }}>

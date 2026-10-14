@@ -13,6 +13,8 @@ import type { SeasonSchedule } from "../domain/season";
 import type { MatchResult } from "../domain/match";
 import type { CoachProfile } from "../domain/coach";
 import type { AgentState } from "../domain/agent";
+import type { CareerChallenge } from "../domain/challenges";
+import type { PlayerRival } from "../domain/rivals";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -81,6 +83,12 @@ export interface GameSaveV1 {
   awards?: Award[];
   /** Journal autobiographique — optionnel pour rétrocompatibilité */
   journal?: JournalEntry[];
+  /** Défis de carrière — optionnel pour rétrocompatibilité */
+  challenges?: CareerChallenge[];
+  /** Rivaux évolutifs — optionnel pour rétrocompatibilité */
+  rivals?: PlayerRival[];
+  /** Semaines consécutives sans blessure — pour les défis endurance */
+  weeksUninjured?: number;
 }
 
 export interface PressConference {

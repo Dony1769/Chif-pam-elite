@@ -81,6 +81,14 @@ export type GameAction =
   // Journal
   | { type: "ADD_JOURNAL_ENTRY"; entry: import("../persistence/saveSchema").JournalEntry }
 
+  // Défis de carrière
+  | { type: "ACTIVATE_CHALLENGE"; challengeId: string }
+  | { type: "SYNC_CHALLENGES" }
+
+  // Rivaux évolutifs
+  | { type: "INIT_RIVALS" }
+  | { type: "SEASON_END_RIVALS" }
+
   // Erreur
   | { type: "SET_ERROR"; message: string }
   | { type: "CLEAR_ERROR" };

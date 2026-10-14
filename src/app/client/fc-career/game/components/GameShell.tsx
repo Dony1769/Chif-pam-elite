@@ -37,7 +37,9 @@ const NAV: NavItem[] = [
   { href: `${BASE}/fans`,       label: "Fans",           icon: <IconHeart /> },
   { href: `${BASE}/awards`,     label: "Récompenses",    icon: <IconAward /> },
   { href: `${BASE}/journal`,    label: "Journal",        icon: <IconBook /> },
-  { href: `${BASE}/settings`,   label: "Paramètres",     icon: <IconSettings /> },
+  { href: `${BASE}/challenges`, label: "Défis",           icon: <IconChallenge /> },
+  { href: `${BASE}/rivals`,    label: "Rivaux",          icon: <IconRival /> },
+  { href: `${BASE}/settings`,  label: "Paramètres",      icon: <IconSettings /> },
 ];
 
 export function GameShell({ children }: { children: ReactNode }) {
@@ -216,4 +218,6 @@ function IconMic()      { return <svg viewBox="0 0 20 20" fill="currentColor"><r
 function IconStar()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.4 6.8H19l-5.5 4 2.1 6.6L10 14.3l-5.6 4.1 2.1-6.6L1 7.8h6.6L10 1z"/></svg>; }
 function IconHeart()    { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 015.656 5.656L10 18l-6.828-6.828a4 4 0 010-5.656z"/></svg>; }
 function IconAward()    { return <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="8" r="5"/><path d="M7 13l-3 5h12l-3-5"/><circle cx="10" cy="8" r="2" fill="var(--fc-surface-3)"/></svg>; }
-function IconBook()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2h9a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2zm1 3v2h7V5H5zm0 4v2h7V9H5zm0 4v1h4v-1H5z"/></svg>; }
+function IconBook()      { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2h9a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2zm1 3v2h7V5H5zm0 4v2h7V9H5zm0 4v1h4v-1H5z"/></svg>; }
+function IconChallenge() { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l1.8 5.5H18l-4.7 3.4 1.8 5.5L10 12l-5.1 3.4 1.8-5.5L2 5.5h6.2L10 1z"/></svg>; }
+function IconRival()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a3 3 0 100 6 3 3 0 000-6zm10 0a3 3 0 100 6 3 3 0 000-6zM2 14a5 5 0 015-5h1l2 3 2-3h1a5 5 0 015 5v2H2v-2z"/></svg>; }
