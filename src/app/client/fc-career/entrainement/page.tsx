@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Dumbbell, Moon, Play, Sparkles, Lock, Zap } from "lucide-react";
+import { ArrowRight, Check, Dumbbell, Moon, Play, Sparkles, Lock, Zap, Star, ChevronUp } from "lucide-react";
 import { Shell, PageTitle } from "../lib/components";
 import { Button } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
@@ -10,7 +10,8 @@ import { toCareerState, toFullSave, type CareerRuntimeState } from "../types/car
 import { NEW_SESSIONS, runTrainingSession, applyRest, canTrainSession } from "../engine/progression";
 import type { TrainingType, WeeklyTrainingLog, CoachTier } from "../engine/progression";
 import { getClub } from "../constants/clubs";
-import { getAttributeDef } from "../constants/attributes";
+import { getAttributeDef, ATTRIBUTES_BY_GROUP, ALL_ATTRIBUTES } from "../constants/attributes";
+import { investPA } from "../engine/attribute-points-engine";
 
 /* --- Persistance de la progression d'entrainement --- */
 const TRAINING_PROGRESS_KEY = "fc-career:training-progress";
@@ -86,6 +87,85 @@ const SESSION_ICONS: Record<string, string> = {
   "active-rest": "🧘",
   "full-rest": "😴",
 };
+
+/* ── Panneau d'investissement PA ──────────────────────────────── */
+function PAInvestPanel({ player, onInvest }: {
+  player: import("../types/player").Player;
+  onInvest: (attrKey: string) => void;
+}) {
+  const [selectedGroup, setSelectedGroup] = useState<string>("technical");
+  const pa = player.attributePoints ?? 0;
+  const cap = Math.round(player.potential * 1.05);
+
+  const groups = Object.keys(ATTRIBUTES_BY_GROUP).filter(g => g !== "goalkeeping" || player.position === "GK");
+
+  const attrsInGroup = (ATTRIBUTES_BY_GROUP as Record<string, { id: string; label: string }[]>)[selectedGroup] ?? [];
+
+  return (
+    <section style={{ marginTop: 32, padding: 20, background: "oklch(.91 .19 112 / .06)", border: "1px solid oklch(.91 .19 112 / .25)", borderRadius: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Star size={16} style={{ color: "var(--primary)" }} />
+            <strong style={{ fontSize: 15, fontFamily: "'Barlow', sans-serif" }}>Investir vos Points d&apos;Attribut</strong>
+            <span className="pa-badge">{pa} PA</span>
+          </div>
+          <p style={{ fontSize: 10, color: "var(--muted-foreground)", marginTop: 4 }}>Chaque PA = +1 dans un attribut (plafond : {cap})</p>
+        </div>
+      </div>
+      {/* Onglets groupe */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {groups.map(g => (
+          <button
+            key={g}
+            onClick={() => setSelectedGroup(g)}
+            style={{
+              padding: "4px 10px", borderRadius: 5, fontSize: 9, fontWeight: 600, cursor: "pointer", border: "1px solid",
+              background: selectedGroup === g ? "var(--primary)" : "transparent",
+              color: selectedGroup === g ? "var(--primary-foreground)" : "var(--muted-foreground)",
+              borderColor: selectedGroup === g ? "var(--primary)" : "var(--border)",
+              transition: "all .15s",
+            }}
+          >{g.toUpperCase()}</button>
+        ))}
+      </div>
+      {/* Casiers défilants */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, maxHeight: 280, overflowY: "auto" }}>
+        {attrsInGroup.map(attr => {
+          const val = Math.round(player.attributes[attr.id] ?? 0);
+          const atCap = val >= cap;
+          const pct = Math.round((val / 99) * 100);
+          return (
+            <button
+              key={attr.id}
+              onClick={() => !atCap && onInvest(attr.id)}
+              disabled={atCap || pa <= 0}
+              style={{
+                display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px",
+                background: "rgba(255,255,255,0.03)", border: `1px solid ${atCap ? "var(--border)" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: 7, cursor: atCap || pa <= 0 ? "not-allowed" : "pointer",
+                opacity: atCap ? 0.45 : 1, textAlign: "left",
+                transition: "background .15s, border-color .15s",
+              }}
+              onMouseEnter={e => { if (!atCap && pa > 0) (e.currentTarget as HTMLButtonElement).style.borderColor = "oklch(.91 .19 112 / .4)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = atCap ? "var(--border)" : "rgba(255,255,255,0.08)"; }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 600 }}>{attr.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Barlow', sans-serif", color: atCap ? "var(--muted-foreground)" : val >= 80 ? "var(--primary)" : "var(--foreground)" }}>
+                  {val}{!atCap && pa > 0 && <ChevronUp size={10} style={{ color: "var(--primary)", display: "inline" }} />}
+                </span>
+              </div>
+              <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, borderRadius: 2, background: atCap ? "var(--muted-foreground)" : "var(--primary)", transition: "width .4s" }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export default function EntrainementPage() {
   const router = useRouter();
@@ -261,9 +341,27 @@ export default function EntrainementPage() {
           </Button>
         </section>
       </div>
+      {/* ── Panneau Investissement PA ── */}
+      {(player.attributePoints ?? 0) > 0 && (
+        <PAInvestPanel
+          player={player}
+          onInvest={(attrKey) => {
+            const result = investPA(player, attrKey, 1);
+            if (!result.ok) {
+              setNotice(result.reason === "max-reached" ? "Attribut déjà au maximum !" : "Pas assez de PA.");
+              return;
+            }
+            const next = { ...career, player: result.player };
+            persist(next);
+            const attrDef = getAttributeDef(attrKey);
+            setNotice(`+1 ${attrDef?.label ?? attrKey} — 1 PA dépensé · ${result.player.attributePoints} PA restants`);
+          }}
+        />
+      )}
+
       {notice && (
-        <div className="toast">
-          <Check />{notice}
+        <div className="toast toast-success" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Check size={14} /><span style={{ flex: 1 }}>{notice}</span>
           <Button variant="ghost" size="icon" aria-label="Fermer" onClick={() => setNotice(null)}>×</Button>
         </div>
       )}
