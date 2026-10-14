@@ -40,6 +40,7 @@ import {
 } from "../game/domain/academySchedule";
 import { createRng, seedFromString } from "../game/utils/random";
 import { decidePlayingTime } from "../game/domain/coach";
+import { generateContractOffer } from "../game/domain/agent";
 
 /* ── Page racine ─────────────────────────────────────────────────── */
 
@@ -195,6 +196,68 @@ function DashboardContent() {
         opponentId,
       });
       dispatch({ type: "MARK_MATCH_PLAYED" });
+
+      // ── Sync universelle : stats joueur & confiance coach ────────
+      dispatch({
+        type: "APPLY_MATCH_RESULT",
+        result: {
+          matchId:          weekFixture.id,
+          season:           career.season,
+          matchday:         weekFixture.matchday,
+          playerClubId:     player.contract.clubId,
+          opponentClubId:   opponentId,
+          competitionId:    weekFixture.competitionId ?? "academy",
+          scoreHome:        isHome ? scoreAcademy : scoreOpp,
+          scoreAway:        isHome ? scoreOpp : scoreAcademy,
+          isHome,
+          playerRating:     matchRating,
+          playerStats: {
+            goals,
+            assists,
+            minutesPlayed,
+            yellowCards:    0,
+            redCards:       0,
+            shotsOnTarget:  goals,
+            shotsOffTarget: 0,
+            saves:          0,
+            tackles:        0,
+            interceptions:  0,
+            foulsCommitted: 0,
+            keyPasses:      assists,
+            dribbles:       0,
+          },
+          events:               [],
+          paEarned:             minutesPlayed > 0 ? Math.floor(matchRating) : 0,
+          objectivesCompleted:  [],
+          lockKey:              `academy-${weekFixture.id}-${career.season}-${career.week}`,
+          completedAt:          Date.now(),
+        } satisfies MatchResult,
+      });
+
+      dispatch({
+        type: "APPLY_MATCH_TRUST_DELTA",
+        matchRating,
+        minutesPlayed,
+        goals,
+        assists,
+      });
+
+      // ── Si un recruteur a remarqué le joueur → créer une offre ───
+      if (postEval.recruiterNoticed && postEval.recruiterClubId) {
+        const recruiterClub = save.world?.clubs?.find((c: { id: string }) => c.id === postEval.recruiterClubId);
+        const offer = generateContractOffer({
+          clubId:           postEval.recruiterClubId,
+          clubName:         recruiterClub?.name ?? postEval.recruiterClubId,
+          playerOverall:    player.overall,
+          playerReputation: player.reputation,
+          season:           career.season,
+          week:             career.week,
+          currentSalary:    player.contract.salary,
+          agentBoostPct:    save.agentState?.agent?.salaryBoostPct ?? 0,
+        });
+        dispatch({ type: "ADD_CONTRACT_OFFER", offer });
+      }
+
       setAcademyEval(postEval);
       setMatchResult(null);
       setSimulating(false);

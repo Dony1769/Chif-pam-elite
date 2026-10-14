@@ -121,7 +121,24 @@ export default function SponsorsPage() {
           <h2 style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)", marginBottom: "var(--fc-space-2)" }}>
             Offres disponibles
           </h2>
-          {AVAILABLE_SPONSORS.filter(s => !activeSponsorNames.has(s.name)).length === 0 ? (
+          {career.phase === "academy" ? (
+            <div style={{
+              padding: "var(--fc-space-5)",
+              borderRadius: "var(--fc-radius)",
+              border: "1px solid var(--fc-border)",
+              background: "var(--fc-surface-2)",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: "2rem", marginBottom: "var(--fc-space-2)" }}>🔒</div>
+              <p style={{ fontWeight: 700, color: "var(--fc-text)", fontSize: "var(--fc-text-sm)", margin: 0 }}>
+                Contrats sponsors verrouillés
+              </p>
+              <p style={{ color: "var(--fc-text-3)", fontSize: "var(--fc-text-xs)", marginTop: "var(--fc-space-1)" }}>
+                Les sponsors se débloquent à partir de l&apos;équipe professionnelle.
+                Concentre-toi sur ton développement en académie.
+              </p>
+            </div>
+          ) : AVAILABLE_SPONSORS.filter(s => !activeSponsorNames.has(s.name)).length === 0 ? (
             <p style={{ fontSize: "var(--fc-text-sm)", color: "var(--fc-text-3)", textAlign: "center", padding: "var(--fc-space-4)" }}>
               Aucune offre disponible pour le moment.
             </p>

@@ -220,19 +220,21 @@ export function createInitialCoach(phase: string, season: number): CoachProfile 
   };
   const base = coaches[phase] ?? coaches.academy;
 
+  const objectiveByPhase: Record<string, CoachObjective> = {
+    academy:      { description: "Disputer 5 matchs en ligue jeunes", type: "appearances", target: 5,  current: 0, completed: false },
+    reserve:      { description: "Marquer 3 buts en réserve",          type: "goals",       target: 3,  current: 0, completed: false },
+    professional: { description: "Maintenir une note ≥ 7.0",           type: "rating",      target: 7,  current: 0, completed: false },
+    elite:        { description: "Marquer 10 buts en championnat",      type: "goals",       target: 10, current: 0, completed: false },
+    legend:       { description: "Disputer 30 matchs cette saison",     type: "appearances", target: 30, current: 0, completed: false },
+  };
+
   return {
     id: `coach-${phase}-s${season}`,
     name: base.name,
     philosophy: base.philosophy,
     trust: 40,
     playerRole: "espoir",
-    seasonObjective: {
-      description: "Disputer au moins 5 matchs",
-      type: "appearances",
-      target: 5,
-      current: 0,
-      completed: false,
-    },
+    seasonObjective: objectiveByPhase[phase] ?? objectiveByPhase.academy,
     conversations: [],
   };
 }
