@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import "../../fc-career/game/design/game.css";
+// CSS chargé via layout.tsx parent
 import { Button }       from "../../fc-career/game/components/Button";
 import { StatBar }      from "../../fc-career/game/components/StatBar";
 import { PlayerCard }   from "../../fc-career/game/components/PlayerCard";

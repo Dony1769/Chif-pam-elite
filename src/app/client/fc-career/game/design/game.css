@@ -1,9 +1,7 @@
 /**
  * FC CAREER — Design System : Layout & Composants
- * Importer après tokens.css
+ * Importer après design-vars.css
  */
-
-@import "./tokens.css";
 
 /* ── Reset ciblé ──────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }

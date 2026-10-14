@@ -1,0 +1,118 @@
+/**
+ * FC CAREER — Design System : Tokens
+ * Palette officielle + surfaces + typographie + motion
+ * Import en premier dans game.css
+ */
+
+:root {
+  /* ── Palette FC Career ─────────────────────────────────────── */
+  --fc-navy:     #101820;   /* fond principal */
+  --fc-graphite: #19252D;   /* panneaux secondaires */
+  --fc-emerald:  #37D99A;   /* actions clés, progression */
+  --fc-offwhite: #F1F4F6;   /* texte principal */
+  --fc-amber:    #F5BD58;   /* objectifs, alertes */
+  --fc-coral:    #F16B73;   /* erreurs, risques */
+
+  /* ── Surfaces (couches superposées) ───────────────────────── */
+  --fc-surface-0: #0C141B;  /* fond absolu (plus sombre que navy) */
+  --fc-surface-1: #101820;  /* fond principal = navy */
+  --fc-surface-2: #19252D;  /* panneaux = graphite */
+  --fc-surface-3: #1F2E38;  /* cartes sur panneaux */
+  --fc-surface-4: #263542;  /* éléments interactifs au repos */
+
+  /* ── Texte ─────────────────────────────────────────────────── */
+  --fc-text:         #F1F4F6;       /* principal */
+  --fc-text-2:       #A8B8C4;       /* secondaire */
+  --fc-text-3:       #5E7282;       /* tertiaire / labels */
+  --fc-text-inverse: #101820;       /* sur fond clair (emerald, amber) */
+
+  /* ── Bordures ──────────────────────────────────────────────── */
+  --fc-border:      rgba(241,244,246,0.08);
+  --fc-border-mid:  rgba(241,244,246,0.14);
+  --fc-border-high: rgba(241,244,246,0.22);
+
+  /* ── Accents sémantiques ────────────────────────────────────── */
+  --fc-success:  #37D99A;   /* = emerald */
+  --fc-warning:  #F5BD58;   /* = amber */
+  --fc-danger:   #F16B73;   /* = coral */
+  --fc-info:     #5BA4CF;   /* bleu froid */
+
+  /* ── Emerald avec opacité (fonds, lueurs) ──────────────────── */
+  --fc-emerald-10:  rgba(55,217,154,0.10);
+  --fc-emerald-20:  rgba(55,217,154,0.20);
+  --fc-emerald-glow: 0 0 20px rgba(55,217,154,0.18);
+
+  /* ── Amber avec opacité ─────────────────────────────────────── */
+  --fc-amber-10: rgba(245,189,88,0.10);
+  --fc-amber-20: rgba(245,189,88,0.20);
+
+  /* ── Coral avec opacité ─────────────────────────────────────── */
+  --fc-coral-10: rgba(241,107,115,0.10);
+  --fc-coral-20: rgba(241,107,115,0.20);
+
+  /* ── Typographie ───────────────────────────────────────────── */
+  --fc-font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --fc-font-body:    'Inter', system-ui, sans-serif;
+
+  /* Échelle de taille */
+  --fc-text-xs:  10px;
+  --fc-text-sm:  12px;
+  --fc-text-base: 14px;
+  --fc-text-md:  16px;
+  --fc-text-lg:  20px;
+  --fc-text-xl:  26px;
+  --fc-text-2xl: 36px;
+  --fc-text-3xl: 52px;
+  --fc-text-4xl: 72px;  /* scores, grandes stats */
+
+  /* ── Espacement ─────────────────────────────────────────────── */
+  --fc-space-1:  4px;
+  --fc-space-2:  8px;
+  --fc-space-3:  12px;
+  --fc-space-4:  16px;
+  --fc-space-5:  24px;
+  --fc-space-6:  32px;
+  --fc-space-7:  48px;
+  --fc-space-8:  64px;
+
+  /* ── Rayons ─────────────────────────────────────────────────── */
+  --fc-radius-sm:  4px;
+  --fc-radius:     8px;
+  --fc-radius-lg:  12px;
+  --fc-radius-xl:  16px;
+  --fc-radius-pill: 999px;
+
+  /* ── Ombres ─────────────────────────────────────────────────── */
+  --fc-shadow-sm:  0 1px 4px rgba(0,0,0,0.4);
+  --fc-shadow:     0 4px 16px rgba(0,0,0,0.5);
+  --fc-shadow-lg:  0 12px 40px rgba(0,0,0,0.6);
+  --fc-shadow-overlay: 0 24px 64px rgba(0,0,0,0.8);
+
+  /* ── Motion ─────────────────────────────────────────────────── */
+  --fc-ease:      cubic-bezier(0.22, 1, 0.36, 1);   /* snap élastique */
+  --fc-ease-in:   cubic-bezier(0.4, 0, 1, 1);
+  --fc-ease-out:  cubic-bezier(0, 0, 0.2, 1);
+  --fc-duration-fast:   150ms;
+  --fc-duration:        280ms;
+  --fc-duration-slow:   450ms;
+
+  /* ── Z-index ────────────────────────────────────────────────── */
+  --fc-z-base:    0;
+  --fc-z-float:   10;
+  --fc-z-sidebar: 30;
+  --fc-z-topbar:  40;
+  --fc-z-modal:   80;
+  --fc-z-toast:   90;
+
+  /* ── Taille de la sidebar ───────────────────────────────────── */
+  --fc-sidebar-w: 224px;
+}
+
+/* Réduction de mouvement obligatoire */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fc-duration-fast: 0ms;
+    --fc-duration:      0ms;
+    --fc-duration-slow: 0ms;
+  }
+}
