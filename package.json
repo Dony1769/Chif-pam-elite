@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest --config jest.config.ts",
+    "test:reducer": "npx tsx src/app/client/fc-career/game/tests/unit/gameReducer.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@capacitor/android": "^8.1.0",
@@ -48,6 +51,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.14",
     "typescript": "^5"
   }
 }
