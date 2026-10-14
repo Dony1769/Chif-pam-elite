@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
@@ -27,8 +28,8 @@ export function Button({ variant, size, asChild, className, children, type, ...p
 }
 
 /** Lien relatif a la zone carriere : `to="/dashboard"` -> /client/fc-career/dashboard */
-export function Link({ to, className, children, ...props }: { to: string; className?: string; children?: ReactNode; "aria-label"?: string; title?: string }) {
-  return <NextLink href={to === "/" ? CAREER_BASE + "/dashboard" : `${CAREER_BASE}${to}`} className={className} {...props}>{children}</NextLink>;
+export function Link({ to, className, style, children, ...props }: { to: string; className?: string; style?: React.CSSProperties; children?: ReactNode; "aria-label"?: string; title?: string }) {
+  return <NextLink href={to === "/" ? CAREER_BASE + "/dashboard" : `${CAREER_BASE}${to}`} className={className} style={style} {...props}>{children}</NextLink>;
 }
 
 /** Chemin courant relatif a la zone carriere ("/", "/dashboard", ...). */

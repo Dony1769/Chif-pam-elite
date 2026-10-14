@@ -408,4 +408,175 @@
 @media(prefers-reduced-motion:reduce){.fcl *,.fcl *:before,.fcl *:after{ animation:none !important; transition:none !important; }
  }
 
+/* ============================================================
+   GLASSMORPHISM — FC Career Design System
+   ============================================================ */
+
+/* Tokens glass dans la racine .fcl */
+.fcl{
+  --glass-bg: oklch(.18 .006 260 / .72);
+  --glass-border: oklch(.45 .012 260 / .35);
+  --glass-shadow: 0 8px 32px oklch(.04 0 0 / .45), inset 0 1px 0 oklch(.8 .01 260 / .08);
+  --glass-blur: blur(18px) saturate(1.4);
+  --glow-green: oklch(.91 .19 112 / .18);
+  --glow-blue: oklch(.73 .13 246 / .16);
+  --glow-coral: oklch(.73 .16 28 / .16);
+}
+
+/* Carte glass de base */
+.fcl .glass-card{
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* Carte glass avec accent vert (actions principales) */
+.fcl .glass-card-accent{
+  background: var(--glass-bg);
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, var(--glass-border));
+  border-radius: 10px;
+  box-shadow: var(--glass-shadow), 0 0 24px var(--glow-green);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* Fond animé living background */
+.fcl .living-bg{
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 60% 45% at 15% 30%, oklch(.25 .04 260 / .6), transparent),
+    radial-gradient(ellipse 50% 55% at 85% 70%, oklch(.2 .03 240 / .5), transparent),
+    oklch(.12 .005 260);
+  animation: living-pulse 12s ease-in-out infinite alternate;
+}
+@keyframes living-pulse{
+  0%  { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100%{ background-position: 0% 50%; }
+}
+
+/* Glow page carrière */
+.fcl .fcl-career::before{
+  content: '';
+  position: fixed;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 500px;
+  background: radial-gradient(ellipse, var(--glow-green) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* System cards (grille dashboard) */
+.fcl .system-card{
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 14px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  transition: border-color .2s, box-shadow .2s, transform .2s var(--motion);
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.fcl .system-card:hover{
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--glass-border));
+  box-shadow: 0 4px 20px var(--glow-green), var(--glass-shadow);
+  transform: translateY(-2px);
+}
+.fcl .system-card-icon{
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.fcl .system-card-label{ font-size: 9px; color: var(--muted-foreground); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.fcl .system-card-value{ font-size: 13px; font-weight: 600; margin-top: 2px; }
+.fcl .system-card-sub{ font-size: 8px; color: var(--muted-foreground); margin-top: 2px; }
+
+/* Alert block */
+.fcl .alert-block{
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  border: 1px solid;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.fcl .alert-block.alert-warn{
+  background: oklch(.73 .16 28 / .1);
+  border-color: oklch(.73 .16 28 / .35);
+  color: var(--coral);
+}
+.fcl .alert-block.alert-info{
+  background: oklch(.73 .13 246 / .1);
+  border-color: oklch(.73 .13 246 / .35);
+  color: var(--blue);
+}
+.fcl .alert-block.alert-success{
+  background: oklch(.91 .19 112 / .08);
+  border-color: oklch(.91 .19 112 / .3);
+  color: var(--primary);
+}
+.fcl .alert-block svg{ width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+.fcl .alert-block strong{ font-weight: 600; display: block; margin-bottom: 2px; }
+
+/* Toast coloré */
+.fcl .toast{ position:fixed; bottom:90px; right:24px; max-width:320px; padding:14px 18px; border-radius:8px; font-size:11px; line-height:1.6; z-index:200; box-shadow:0 8px 30px oklch(.04 0 0 /.5); backdrop-filter:blur(12px); animation:fcl-reveal .3s var(--motion) both; }
+.fcl .toast.toast-success{ background:oklch(.91 .19 112 / .15); border:1px solid oklch(.91 .19 112 / .4); color:var(--primary); }
+.fcl .toast.toast-warn{ background:oklch(.73 .16 28 / .15); border:1px solid oklch(.73 .16 28 / .4); color:var(--coral); }
+.fcl .toast.toast-info{ background:oklch(.73 .13 246 / .15); border:1px solid oklch(.73 .13 246 / .4); color:var(--blue); }
+
+/* Animations échelonnées reveal */
+.fcl .anim-reveal-0{ animation: fcl-reveal .55s var(--motion) both; }
+.fcl .anim-reveal-1{ animation: fcl-reveal .55s .07s var(--motion) both; }
+.fcl .anim-reveal-2{ animation: fcl-reveal .55s .14s var(--motion) both; }
+.fcl .anim-reveal-3{ animation: fcl-reveal .55s .21s var(--motion) both; }
+.fcl .anim-reveal-4{ animation: fcl-reveal .55s .28s var(--motion) both; }
+.fcl .anim-reveal-5{ animation: fcl-reveal .55s .35s var(--motion) both; }
+@keyframes fcl-reveal{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+
+/* PA (Points d'Attributs) badge */
+.fcl .pa-badge{
+  display: inline-flex; align-items: center; gap: 5px;
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--primary) 35%, transparent);
+  color: var(--primary);
+  font-size: 9px; font-weight: 700;
+  padding: 3px 7px; border-radius: 4px;
+  animation: pa-pulse 2.5s ease-in-out infinite;
+}
+@keyframes pa-pulse{
+  0%, 100% { box-shadow: 0 0 0 0 var(--glow-green); }
+  50%       { box-shadow: 0 0 10px 2px var(--glow-green); }
+}
+
+/* Barre de confiance coach */
+.fcl .trust-bar{ height: 4px; border-radius: 2px; background: var(--secondary); overflow: hidden; }
+.fcl .trust-bar-fill{ height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--blue), var(--primary)); transition: width .6s var(--motion); }
+
+/* Endorsement pill */
+.fcl .endorsement-pill{
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 11px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  font-size: 10px;
+}
+.fcl .endorsement-pill strong{ font-size: 11px; }
+.fcl .endorsement-pill span{ color: var(--muted-foreground); font-size: 8px; }
+
 

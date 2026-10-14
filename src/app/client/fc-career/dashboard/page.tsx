@@ -86,12 +86,12 @@ function Meter({ label, value, invert = false, compact = false }: {
 }
 
 /* ── Bloc d'alerte ─────────────────────────────────────────────── */
-function AlertBlock({ icon, label, to, color = "var(--coral)" }: {
-  icon: React.ReactNode; label: string; to: string; color?: string;
+function AlertBlock({ icon, label, to, color = "var(--coral)", type = "warn" }: {
+  icon: React.ReactNode; label: string; to: string; color?: string; type?: "warn" | "info" | "success";
 }) {
   return (
-    <Link to={to} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 10, fontSize: 11, color, textDecoration: "none", transition: "background .2s" }}>
-      <span style={{ flexShrink: 0 }}>{icon}</span>
+    <Link to={to} className={`alert-block alert-${type}`} style={{ textDecoration: "none" }}>
+      {icon}
       <span style={{ flex: 1 }}>{label}</span>
       <ChevronRight size={12} />
     </Link>
@@ -103,14 +103,14 @@ function SystemCard({ icon, title, value, sub, to, accent = false }: {
   icon: React.ReactNode; title: string; value: string | number; sub?: string; to: string; accent?: boolean;
 }) {
   return (
-    <Link to={to} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "12px 14px", background: accent ? "rgba(16,185,129,0.07)" : "rgba(255,255,255,0.03)", border: `1px solid ${accent ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)"}`, borderRadius: 14, textDecoration: "none", color: "inherit", transition: "transform .2s var(--motion), background .2s" }}>
+    <Link to={to} className={accent ? "glass-card-accent" : "system-card"} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", gap: 4, padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ color: accent ? "var(--primary)" : "var(--muted-foreground)", display: "flex" }}>{icon}</span>
         <ChevronRight size={11} style={{ color: "var(--muted-foreground)", opacity: .5 }} />
       </div>
       <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Barlow', sans-serif", marginTop: 4 }}>{value}</div>
-      <div style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted-foreground)" }}>{title}</div>
-      {sub && <div style={{ fontSize: 9, color: "var(--primary)", marginTop: 2 }}>{sub}</div>}
+      <div className="system-card-label">{title}</div>
+      {sub && <div style={{ fontSize: 9, color: accent ? "var(--primary)" : "var(--muted-foreground)", marginTop: 2 }}>{sub}</div>}
     </Link>
   );
 }
@@ -223,31 +223,31 @@ export default function DashboardPage() {
   const seasonStats  = player.seasonStats[0];
 
   /* ── Alertes système ── */
-  const alerts: { icon: React.ReactNode; label: string; to: string; color?: string }[] = [];
+  const alerts: { icon: React.ReactNode; label: string; to: string; type?: "warn" | "info" | "success" }[] = [];
 
   if (activeInjury)
-    alerts.push({ icon: <HeartPulse size={13} />, label: `Blessé — ${activeInjury.daysLeft}j restants (${activeInjury.type})`, to: "/wellness", color: "var(--coral)" });
+    alerts.push({ icon: <HeartPulse size={13} />, label: `Blessé — ${activeInjury.daysLeft}j restants (${activeInjury.type})`, to: "/wellness", type: "warn" });
 
-  if (sanctionState?.suspendedMatchesLeft && sanctionState.suspendedMatchesLeft > 0)
-    alerts.push({ icon: <Shield size={13} />, label: `Suspendu — ${sanctionState.suspendedMatchesLeft} match(s)`, to: "/wellness", color: "var(--coral)" });
+  if (sanctionState?.suspensionMatchesLeft && sanctionState.suspensionMatchesLeft > 0)
+    alerts.push({ icon: <Shield size={13} />, label: `Suspendu — ${sanctionState.suspensionMatchesLeft} match(s)`, to: "/wellness", type: "warn" });
 
   if (mentalState?.burnout)
-    alerts.push({ icon: <Brain size={13} />, label: "Burnout actif — repose-toi !", to: "/wellness", color: "oklch(.65 .18 30)" });
+    alerts.push({ icon: <Brain size={13} />, label: "Burnout actif — repose-toi !", to: "/wellness", type: "warn" });
 
   if (mentalState?.pressure && mentalState.pressure > 75)
-    alerts.push({ icon: <Brain size={13} />, label: `Pression très haute (${mentalState.pressure}/100)`, to: "/wellness", color: "oklch(.75 .18 80)" });
+    alerts.push({ icon: <Brain size={13} />, label: `Pression très haute (${mentalState.pressure}/100)`, to: "/wellness", type: "warn" });
 
   if (coachRelation?.trust !== undefined && coachRelation.trust < 30)
-    alerts.push({ icon: <Users size={13} />, label: `Relation coach dégradée (${coachRelation.trust}/100)`, to: "/club", color: "oklch(.75 .18 80)" });
+    alerts.push({ icon: <Users size={13} />, label: `Relation coach dégradée (${coachRelation.trust}/100)`, to: "/club", type: "warn" });
 
   if (mercatoState?.activeSagas && mercatoState.activeSagas.length > 0)
-    alerts.push({ icon: <Briefcase size={13} />, label: `Saga de transfert en cours — décide !`, to: "/agent", color: "var(--blue)" });
+    alerts.push({ icon: <Briefcase size={13} />, label: `Saga de transfert en cours — décide !`, to: "/agent", type: "info" });
 
   if (player.contract.yearsRemaining <= 1)
-    alerts.push({ icon: <Briefcase size={13} />, label: `Contrat expire bientôt (${player.contract.yearsRemaining} an${player.contract.yearsRemaining > 1 ? "s" : ""})`, to: "/agent", color: "oklch(.75 .18 80)" });
+    alerts.push({ icon: <Briefcase size={13} />, label: `Contrat expire bientôt (${player.contract.yearsRemaining} an${player.contract.yearsRemaining > 1 ? "s" : ""})`, to: "/agent", type: "warn" });
 
-  if (phoneState?.unread && phoneState.unread > 0)
-    alerts.push({ icon: <Zap size={13} />, label: `${phoneState.unread} message(s) non lu(s)`, to: "/phone", color: "var(--blue)" });
+  if (phoneState?.unreadCount && phoneState.unreadCount > 0)
+    alerts.push({ icon: <Zap size={13} />, label: `${phoneState.unreadCount} message(s) non lu(s)`, to: "/phone", type: "info" });
 
   /* ── Statut joueur ── */
   const statusTag = activeInjury ? "BLESSÉ" : player.condition === "suspended" ? "SUSPENDU" : squadState?.userStatus ?? (player.academy ? STAGE_LABELS[player.academy.stage].toUpperCase() : "ESPOIR");
@@ -277,7 +277,7 @@ export default function DashboardPage() {
       {alerts.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
           {alerts.map((a, i) => (
-            <AlertBlock key={i} icon={a.icon} label={a.label} to={a.to} color={a.color} />
+            <AlertBlock key={i} icon={a.icon} label={a.label} to={a.to} type={a.type} />
           ))}
         </div>
       )}
@@ -475,10 +475,10 @@ export default function DashboardPage() {
             <SystemCard
               icon={<Heart size={14} />}
               title="Popularité"
-              value={fansState ? `${fansState.fanState?.popularity ?? fansState.popularity ?? 50}%` : "—"}
-              sub={fansState?.fanState?.fansSingName || (fansState as any)?.fansSingName ? "Les fans chantent ton nom !" : undefined}
+              value={fansState ? `${fansState.fan?.popularity ?? 50}%` : "—"}
+              sub={fansState?.fan?.fansSingName ? "Les fans chantent ton nom !" : undefined}
               to="/fans"
-              accent={!!(fansState?.fanState?.fansSingName || (fansState as any)?.fansSingName)}
+              accent={!!fansState?.fan?.fansSingName}
             />
 
             {/* Mental */}
@@ -514,18 +514,18 @@ export default function DashboardPage() {
             <SystemCard
               icon={<Globe size={14} />}
               title="Sélection"
-              value={internState ? `${internState.caps ?? 0} caps` : "—"}
-              sub={internState?.isCaptain ? "Capitaine national !" : undefined}
+              value={internState?.career ? `${internState.career.caps} caps` : "—"}
+              sub={internState?.career?.isCaptain ? "Capitaine national !" : undefined}
               to="/international"
-              accent={!!(internState?.isCaptain)}
+              accent={!!internState?.career?.isCaptain}
             />
 
             {/* Récompenses */}
             <SystemCard
               icon={<Trophy size={14} />}
               title="Trophées"
-              value={awardsState?.won?.length ?? 0}
-              sub={awardsState?.won?.[0] ? awardsState.won[0] : undefined}
+              value={(awardsState?.leagueAwards?.length ?? 0) + (awardsState?.europeanAwards?.length ?? 0)}
+              sub={awardsState?.leagueAwards?.[0]?.label ?? undefined}
               to="/awards"
             />
 
@@ -667,9 +667,9 @@ export default function DashboardPage() {
 
       {/* ── Toast notification ── */}
       {notice && (
-        <div className="toast" style={{ borderColor: notice.type === "success" ? "rgba(16,185,129,0.4)" : notice.type === "warn" ? "rgba(234,179,8,0.4)" : "rgba(255,255,255,0.15)" }}>
-          <Activity size={14} style={{ color: notice.type === "success" ? "var(--primary)" : notice.type === "warn" ? "oklch(.8 .15 85)" : "var(--blue)", flexShrink: 0 }} />
-          {notice.msg}
+        <div className={`toast toast-${notice.type ?? "info"}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Activity size={14} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{notice.msg}</span>
           <Button variant="ghost" size="icon" aria-label="Fermer" onClick={() => setNotice(null)}><X size={13} /></Button>
         </div>
       )}
