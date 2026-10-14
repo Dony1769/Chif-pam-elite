@@ -10,7 +10,6 @@ import { useGame }  from "../game/hooks/useGame";
 import { Spinner }  from "../game/components/LoadingState";
 import { selectIsLoading, selectPlayer, selectCareer } from "../game/state/selectors";
 import { pageFade, stagger, itemFade } from "../game/design/animations";
-import { COUNTRIES } from "../game/data/world";
 import {
   createInitialNationalTeam,
   nationalCallupThreshold,
@@ -19,6 +18,18 @@ import {
   type NationalTeamState,
 } from "../game/domain/nationalTeam";
 import type { GameSaveV1 } from "../game/persistence/saveSchema";
+
+const FLAGS: Record<string, string> = {
+  BR:"🇧🇷", FR:"🇫🇷", ES:"🇪🇸", AR:"🇦🇷", DE:"🇩🇪",
+  PT:"🇵🇹", NG:"🇳🇬", IT:"🇮🇹", HT:"🇭🇹", SN:"🇸🇳",
+  CM:"🇨🇲", MA:"🇲🇦", GB:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", US:"🇺🇸", JP:"🇯🇵",
+};
+
+const NATIONALITY_NAMES: Record<string, string> = {
+  BR:"Brésil", FR:"France", ES:"Espagne", AR:"Argentine", DE:"Allemagne",
+  PT:"Portugal", NG:"Nigéria", IT:"Italie", HT:"Haïti", SN:"Sénégal",
+  CM:"Cameroun", MA:"Maroc", GB:"Angleterre", US:"États-Unis", JP:"Japon",
+};
 
 export default function NationalPage() {
   const { state } = useGame();
@@ -32,7 +43,9 @@ export default function NationalPage() {
   const save = state.save as GameSaveV1 & { nationalTeam?: NationalTeamState };
   const national: NationalTeamState = save.nationalTeam ?? createInitialNationalTeam();
 
-  const country = COUNTRIES.find(c => c.id === player.nationality) ?? COUNTRIES[0];
+  const natCode = player.nationality;
+  const countryFlag = FLAGS[natCode] ?? "🌍";
+  const countryName = NATIONALITY_NAMES[natCode] ?? natCode;
   const overall = player.overall;
   const threshold = nationalCallupThreshold(career.season);
   const eligibleBase = overall >= threshold;
@@ -60,7 +73,7 @@ export default function NationalPage() {
     >
       <div className="fc-page-header">
         <h1 className="fc-page-title">Sélection nationale</h1>
-        <p className="fc-page-meta">{country.flag} {country.name}</p>
+        <p className="fc-page-meta">{countryFlag} {countryName}</p>
       </div>
 
       <motion.div variants={stagger} initial="hidden" animate="visible">
@@ -69,7 +82,7 @@ export default function NationalPage() {
         <motion.section className="fc-panel" variants={itemFade} style={{ marginBottom: "var(--fc-space-4)" }}>
           <p className="fc-panel__label">STATUT</p>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--fc-space-3)", marginTop: "var(--fc-space-2)" }}>
-            <span style={{ fontSize: "2rem" }}>{country.flag}</span>
+            <span style={{ fontSize: "2rem" }}>{countryFlag}</span>
             <div style={{ flex: 1 }}>
               <p style={{ fontWeight: 700, color: statusColor, fontSize: "var(--fc-text-base)", margin: 0 }}>
                 {statusLabel}
