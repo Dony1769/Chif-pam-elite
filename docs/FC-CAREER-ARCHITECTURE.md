@@ -1,4 +1,4 @@
-# 🏆 FC-CAREER — ARCHITECTURE COMPLÈTE v4
+# 🏆 FC-CAREER — ARCHITECTURE MASTERCLASS v5
 
 > **Vision** : Tu vis la vie d'un footballeur. Pas un jeu — une vie.
 > Chaque décision a des conséquences qui durent. Une seule action par jour.
@@ -6,23 +6,66 @@
 > Tu choisis ton pays, tu commences en bas, et tu te bats pour monter.
 > Le monde vit autour de toi. Les autres joueurs progressent, déclinent, changent de club.
 > Ce n'est pas toi contre le jeu. C'est toi dans un monde de football vivant.
+>
+> **v5 — Masterclass** : Refonte totale design, gameplay et technique.
+> Le jeu doit être CHAUD, VIVANT, BEAU. Pas une feuille Excel.
+
+---
+
+## ⚠️ DIAGNOSTIC v4 — CE QUI NE VA PAS
+
+Avant de construire la v5, voici le constat brutal de la v4 :
+
+```
+TECHNIQUE :
+  ❌ Pages qui ne s'ouvrent pas → navigation bloquée
+  ❌ Sauvegarde peu fiable → perte de progression
+  ❌ Crashes aléatoires → expérience frustrante
+  ❌ Pas de validation côté moteur → double-actions possibles
+
+GAMEPLAY :
+  ❌ Entraînements répétitifs → aucune profondeur
+  ❌ Progression mal calibrée → trop rapide ou trop lente
+  ❌ IA faible → comportements irréalistes
+  ❌ Pas de feedback → le joueur ne comprend pas l'impact de ses choix
+  ❌ Playstyles invisibles → on ne les voit jamais, on ne les débloque jamais
+  ❌ Pas de points d'attributs → progression passive et froide
+  ❌ Sponsors sans missions → juste un chiffre de revenu
+
+DESIGN / UI / UX :
+  ❌ Direction artistique quelconque → pas d'identité
+  ❌ Écrans surchargés et confus → interactions contre-intuitives
+  ❌ Pas d'animations → le jeu est MORT visuellement
+  ❌ Aucun glassmorphism → fond plat, cartes plates, zéro profondeur
+  ❌ Pas de textes animés → tout apparaît d'un coup, froid
+  ❌ Pas de défilement de casiers → les attributs sont une liste morte
+
+CONTENU :
+  ❌ Peu d'événements → rapidement répétitif
+  ❌ Pas de personnalisation → le joueur ne s'incarne pas
+  ❌ Aucune rejouabilité → une saison et c'est fini
+  ❌ Le jeu est FROID → aucune émotion, aucune chaleur
+```
+
+**La v5 corrige TOUT.**
 
 ---
 
 ## 📖 TABLE DES MATIÈRES
 
-| Étape | Titre | Page |
-|-------|-------|------|
+| Étape | Titre | Focus |
+|-------|-------|-------|
+| 0 | [Design System Masterclass](#-étape-0--design-system-masterclass) | Glassmorphism, animations, identité visuelle |
 | 1 | [Univers Fictif — 5 Grands Pays](#-étape-1--univers-fictif--les-5-grands-pays) | Clubs, ligues, coupes, récompenses |
-| 2 | [Correction des Bugs Critiques](#-étape-2--correction-des-bugs-critiques) | Stabilité avant contenu |
+| 2 | [Correction Bugs + Stabilité](#-étape-2--correction-bugs--stabilité-technique) | Zéro crash, navigation fluide, sauvegarde fiable |
 | 3 | [Création de Carrière & Académie → Pro](#-étape-3--création-de-carrière--académie--pro) | Choix du pays, parcours complet |
-| 4 | [Attributs, PlayStyles & Potentiel](#-étape-4--attributs-playstyles--potentiel) | 51 attributs + traits + étoiles |
-| 5 | [Entraînement & Progression](#-étape-5--entraînement--progression) | Sessions, barre persistante, coaching |
+| 4 | [Attributs, PlayStyles Débloquables & Potentiel](#-étape-4--attributs-playstyles-débloquables--potentiel) | 51 attributs + cases playstyle + étoiles + points |
+| 5 | [Entraînement Immersif & Casiers d'Attributs](#-étape-5--entraînement-immersif--casiers-dattributs) | Sessions visuelles, casiers défilants, skill tree |
 | 6 | [Saison & Compétitions](#-étape-6--saison--compétitions) | Calendrier complet, toutes coupes |
 | 7 | [Concurrence, Coach & Objectifs](#-étape-7--concurrence-coach--objectifs) | Relation coach, banc, prêts, suggestions tactiques |
-| 8 | [Matchs, Notation & Moments Dramatiques](#-étape-8--matchs-notation--moments-dramatiques) | Choix, VAR, célébrations, rituels |
+| 8 | [Matchs, Notation & Moments Dramatiques](#-étape-8--matchs-notation--moments-dramatiques--points-dattributs) | Choix, VAR, célébrations, rituels, **points d'attributs** |
 | 9 | [Agents, Contrats & Sagas de Transfert](#-étape-9--agents-contrats--sagas-de-transfert) | 3 profils, mercato, négociations saga |
-| 10 | [Économie, Marques & Vie Privée](#-étape-10--économie-marques--vie-privée) | Marques fictives, endorsements, style de vie |
+| 10 | [Économie, Marques & Missions Sponsors](#-étape-10--économie-marques--missions-sponsors) | Marques fictives, endorsements, **missions qui donnent des points** |
 | 11 | [Médias, Blessures, Mental & Sanctions](#-étape-11--médias-blessures-mental--sanctions) | Presse, santé mentale, psychologie blessure |
 | 12 | [Récompenses & Trophées](#-étape-12--récompenses--trophées) | Globe d'Or, classements, équipes type |
 | 13 | [Sélection Nationale](#-étape-13--sélection-nationale) | Appels, qualifications, tournois |
@@ -33,6 +76,207 @@
 | 18 | [Journal de Carrière & Autobiographie](#-étape-18--journal-de-carrière--autobiographie) | Ton histoire s'écrit automatiquement |
 | 19 | [Retraite, Vie Après & Héritage](#-étape-19--retraite-vie-après--héritage) | Post-carrière jouable, legacy cross-save |
 | 20 | [Structure Technique & Dossiers](#-étape-20--structure-technique--dossiers) | Code, types, engine, components |
+
+---
+
+## 🎨 ÉTAPE 0 — DESIGN SYSTEM MASTERCLASS
+
+> **C'EST LA BASE DE TOUT. PAS DE BON JEU SANS BON DESIGN.**
+> **Terminé quand** : Chaque écran est beau, fluide, lisible. Le joueur dit "wow" en ouvrant le jeu.
+
+### 0.1 — Glassmorphism : L'Identité Visuelle
+
+```
+LE JEU UTILISE LE GLASSMORPHISM COMME SIGNATURE VISUELLE.
+Chaque carte, chaque panneau, chaque modal = verre dépoli sur fond vivant.
+
+CSS DE BASE (Tailwind v4 + custom) :
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.glass-card-accent {
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.08),    /* emerald */
+    rgba(6, 182, 212, 0.05)      /* cyan */
+  );
+  backdrop-filter: blur(20px) saturate(200%);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 24px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 60px rgba(16, 185, 129, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+FONDS VIVANTS (derrière le glass) :
+  - Dashboard : gradient animé sombre (slate-950 → emerald-950/10)
+  - Match : pulsation de couleur selon le score (vert si on gagne, rouge si on perd)
+  - Entraînement : particules flottantes subtiles (comme de la poussière dorée)
+  - Profil joueur : couleurs du club en arrière-plan, animées doucement
+  - Transfert : flou directionnel + couleurs du nouveau club qui apparaissent
+
+RÈGLES STRICTES :
+  ✅ Toutes les cartes utilisent glass-card ou glass-card-accent
+  ✅ Les modals utilisent un backdrop blur + overlay sombre
+  ✅ Les boutons principaux ont un glow subtil (box-shadow colored)
+  ✅ Les bordures sont toujours semi-transparentes, JAMAIS opaques
+  ❌ JAMAIS de fond opaque plat (bg-slate-800, bg-gray-900...)
+  ❌ JAMAIS de bords durs sans arrondi
+  ❌ JAMAIS de carte sans profondeur (shadow + border)
+```
+
+### 0.2 — Textes Animés : Tout Apparaît avec Vie
+
+```
+RIEN N'APPARAÎT D'UN COUP. Tout entre en scène.
+
+TITRES DE PAGE :
+  - Chaque mot apparaît un par un (stagger 60ms)
+  - framer-motion : variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+  - Le titre "pulse" une fois arrivé (scale 1.02 puis 1.0)
+
+CHIFFRES / STATS :
+  - Animation de compteur (0 → valeur finale en 800ms)
+  - easeOut pour un effet naturel
+  - Flash de couleur quand la stat change (+vert, -rouge)
+
+NOTIFICATIONS / TOASTS :
+  - Slide-in depuis le haut-droit (200ms)
+  - Glassmorphism + bordure accent
+  - Auto-dismiss avec barre de progression visible
+
+RÉSULTATS DE MATCH :
+  - Score apparaît chiffre par chiffre
+  - Note du joueur : cercle qui se remplit (animation SVG stroke-dasharray)
+  - Événements : cascade avec stagger (chaque but, passe, carton)
+
+TRANSITIONS ENTRE PAGES :
+  - Fade + slide-up (300ms, ease [0.25, 0.46, 0.45, 0.94])
+  - La page sortante glisse vers le bas en devenant transparente
+  - La nouvelle page arrive par le bas en devenant opaque
+
+RÈGLE : Aucune donnée n'apparaît sans animation.
+Si un chiffre change → il s'anime. Si un texte arrive → il slide-in.
+```
+
+### 0.3 — Palette de Couleurs
+
+```
+COULEURS PRIMAIRES (oklch dans Tailwind v4) :
+  --primary      : oklch(0.7 0.18 160)   /* Emerald vibrant */
+  --primary-glow : oklch(0.65 0.2 160)   /* Pour les box-shadow */
+  --accent       : oklch(0.7 0.15 195)   /* Cyan/Teal */
+  --surface      : oklch(0.15 0.01 260)  /* Fond sombre profond */
+  --card         : rgba(255, 255, 255, 0.04)
+  --border       : rgba(255, 255, 255, 0.08)
+  --text         : oklch(0.95 0 0)       /* Blanc cassé */
+  --muted        : oklch(0.55 0.01 260)  /* Texte secondaire */
+
+COULEURS CONTEXTUELLES :
+  --success  : oklch(0.7 0.2 145)   /* Vert vif */
+  --danger   : oklch(0.65 0.25 25)  /* Rouge */
+  --warning  : oklch(0.75 0.18 85)  /* Ambre */
+  --info     : oklch(0.7 0.15 230)  /* Bleu */
+  --gold     : oklch(0.8 0.15 85)   /* Or — pour les récompenses */
+
+GRADIENTS SIGNATURE :
+  --gradient-hero    : linear-gradient(135deg, var(--primary), var(--accent))
+  --gradient-card    : linear-gradient(135deg, rgba(16,185,129,0.06), rgba(6,182,212,0.03))
+  --gradient-danger  : linear-gradient(135deg, rgba(239,68,68,0.08), rgba(220,38,38,0.03))
+  --gradient-gold    : linear-gradient(135deg, rgba(234,179,8,0.1), rgba(245,158,11,0.04))
+```
+
+### 0.4 — Typographie & Espacement
+
+```
+FONTS :
+  Titres : 'Barlow Condensed', sans-serif (bold, uppercase, italic)
+  Corps  : 'Inter', sans-serif (regular, medium)
+  Mono   : 'JetBrains Mono' (stats, chiffres)
+
+TAILLES :
+  Page title : 28px bold condensed uppercase italic
+  Section title : 18px bold condensed uppercase
+  Card title : 15px semibold
+  Body : 13px regular
+  Caption : 11px medium, letter-spacing 0.05em
+  Stat number : 24px mono bold
+
+ESPACEMENT :
+  Page padding : 16px (mobile-first)
+  Card padding : 16px-20px
+  Card gap : 12px
+  Section gap : 24px
+  Border-radius cards : 20px (grand) | 12px (boutons) | 8px (tags)
+```
+
+### 0.5 — Composants UI Masterclass
+
+```
+BOUTONS :
+
+  Button "career" (principal) :
+    background: var(--gradient-hero)
+    color: black
+    font: bold condensed uppercase
+    border-radius: 14px
+    padding: 14px 24px
+    box-shadow: 0 0 20px rgba(16,185,129,0.3)
+    hover: scale(1.03), shadow augmente
+    active: scale(0.97)
+    transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94)
+
+  Button "outline" (secondaire) :
+    background: transparent
+    border: 1px solid rgba(255,255,255,0.12)
+    color: white
+    hover: background rgba(255,255,255,0.05)
+
+  Button "ghost" :
+    background: transparent
+    color: var(--muted)
+    hover: color white
+
+  Button "action" (accentué) :
+    background: rgba(16,185,129,0.15)
+    border: 1px solid rgba(16,185,129,0.3)
+    color: var(--primary)
+
+CARTES :
+  Toutes en glass-card. Bords arrondis 20px.
+  Hover subtil : translateY(-2px) + shadow augmente.
+  Contenu structuré : header (titre + badge) | body | footer (actions).
+
+BADGES / TAGS :
+  Petit pill arrondi (border-radius 999px)
+  Background semi-transparent coloré
+  Font 10px uppercase bold, letter-spacing 0.08em
+  Ex : "TITULAIRE" vert | "BLESSÉ" rouge | "EN FORME" bleu
+
+PROGRESS BARS :
+  Background: rgba(255,255,255,0.06)
+  Fill: gradient (vert si bon, jaune si moyen, rouge si mauvais)
+  Border-radius: 999px
+  Height: 6px
+  Animation: width transition 600ms ease-out
+  Glow subtil sur la barre remplie
+
+MODALS :
+  Overlay: rgba(0,0,0,0.7) + backdrop-filter blur(8px)
+  Card: glass-card-accent, max-width 400px, centered
+  Entrée: scale(0.95, 1.0) + fade (200ms)
+  Sortie: scale(1.0, 0.95) + fade (150ms)
+```
 
 ---
 
@@ -315,25 +559,46 @@ Relégation : 3 derniers.
 
 ---
 
-## 🐛 ÉTAPE 2 — CORRECTION DES BUGS CRITIQUES
+## 🐛 ÉTAPE 2 — CORRECTION BUGS + STABILITÉ TECHNIQUE
 
-> **Terminé quand** : Chaque bug est corrigé et testé. Le jeu est stable.
+> **Terminé quand** : ZÉRO page bloquée. ZÉRO crash. ZÉRO perte de sauvegarde. Navigation fluide partout.
 
-| # | Bug | Gravité | Correction |
-|---|-----|---------|------------|
-| B1 | Barre d'entraînement reset au rechargement | 🔴 Critique | Progression sauvée dans `localStorage` à chaque tick. Reprise exacte. |
-| B2 | Entraînement comptabilisé plusieurs fois | 🔴 Critique | Flag `sessionCompleted` + action du jour verrouillée. |
-| B3 | Match repris ne restaure pas l'état | 🟠 Majeur | État match sauvé à chaque événement. Reprise fidèle. |
-| B4 | Actions interdites non bloquées côté logique | 🟠 Majeur | `GameEngine` valide chaque action. Règles métier côté moteur. |
-| B5 | Pas d'export/import sauvegarde | 🟡 Mineur | Bouton export JSON + import dans les paramètres. |
-| B6 | Pas de confirmation avant actions irréversibles | 🟡 Mineur | Modal confirmation : transfert, retraite, changement club. |
+### 2.1 — Bugs Critiques à Résoudre
+
+| # | Bug | Gravité | Solution |
+|---|-----|---------|----------|
+| B1 | **Pages qui ne s'ouvrent pas** | 🔴 BLOQUANT | Chaque page vérifie ses données au mount. Fallback si données manquantes. Aucun crash silencieux. |
+| B2 | **Sauvegarde peu fiable** | 🔴 BLOQUANT | Double-write : localStorage + sessionStorage backup. Vérification d'intégrité au chargement. Export/Import JSON. |
+| B3 | Barre d'entraînement reset au rechargement | 🔴 Critique | Progression sauvée dans `localStorage` à chaque tick. Reprise exacte. |
+| B4 | Entraînement comptabilisé plusieurs fois | 🔴 Critique | Flag `sessionCompleted` + action du jour verrouillée. |
+| B5 | Match repris ne restaure pas l'état | 🟠 Majeur | État match sauvé à chaque événement. Reprise fidèle via `match-result.ts`. |
+| B6 | Actions interdites non bloquées côté logique | 🟠 Majeur | `GameEngine` valide chaque action. Règles métier côté moteur. |
+| B7 | **Navigation incohérente** | 🟠 Majeur | Toutes les routes testées. Sidebar avec état actif visible. Retour arrière cohérent. |
+| B8 | Pas de confirmation avant actions irréversibles | 🟡 Mineur | Modal confirmation glassmorphism : transfert, retraite, changement club. |
+
+### 2.2 — Règles de Stabilité
 
 ```
-✅ Recharger pendant un entraînement → barre reprend
-✅ 10x clic "Entraîner" → 1 seule session comptée
-✅ Fermer pendant un match → reprise correcte
-✅ 2 matchs le même jour → refusé par le moteur
-✅ Export → Import → état identique
+CHAQUE PAGE DOIT :
+  ✅ Gérer le cas "pas de données" → afficher un état vide élégant, pas un crash
+  ✅ Gérer le cas "données corrompues" → reset propre avec notification
+  ✅ Avoir un loading state animé (skeleton glassmorphism)
+  ✅ Sauvegarder à chaque action critique (match, entraînement, transfert)
+  ✅ Vérifier la sauvegarde au mount (intégrité)
+
+NAVIGATION :
+  ✅ Toutes les 18+ pages accessibles depuis la sidebar
+  ✅ État actif visible (highlight glassmorphism sur le lien courant)
+  ✅ Transitions fluides entre les pages (fade + slide)
+  ✅ Breadcrumb ou retour possible sur chaque sous-page
+
+TESTS REQUIS :
+  ✅ Recharger pendant un entraînement → barre reprend
+  ✅ 10x clic "Entraîner" → 1 seule session comptée
+  ✅ Fermer pendant un match → reprise correcte
+  ✅ 2 matchs le même jour → refusé par le moteur
+  ✅ Export → Import → état identique
+  ✅ Ouvrir CHAQUE page de la sidebar → AUCUNE ne crash
 ```
 
 ---
@@ -342,41 +607,49 @@ Relégation : 3 derniers.
 
 > **Objectif** : Le joueur choisit son pays de départ. Il commence en académie. Sa progression détermine où il atterrit.
 > **Terminé quand** : Un joueur peut commencer dans n'importe quel pays et monter par la performance.
+> **DESIGN** : Chaque étape est un écran plein, glassmorphism, avec transition slide entre les étapes.
 
-### 3.1 — Écran de Création
+### 3.1 — Écran de Création (5 étapes visuelles)
 
 ```
-ÉTAPE 1 — IDENTITÉ :
-  - Prénom, Nom
-  - Nationalité (parmi les 5 pays + 15 autres nations)
-  - Date de naissance (14-16 ans)
+ÉTAPE 1 — IDENTITÉ (fond animé : particules dorées) :
+  - Prénom, Nom (input glassmorphism, placeholder animé)
+  - Nationalité (parmi les 5 pays + 15 autres nations) — dropdown avec drapeaux
+  - Date de naissance (14-16 ans) — slider tactile
   - Apparence (visage, coupe, couleur peau — à minima)
+  → Transition : slide-left + fade
 
-ÉTAPE 2 — PHYSIQUE :
-  - Taille (160-195 cm)
-  - Poids (55-95 kg)
-  - Pied préféré (gauche / droite / les deux)
-  - Morphotype : Agile / Équilibré / Puissant / Élancé
+ÉTAPE 2 — PHYSIQUE (fond animé : silhouette qui change) :
+  - Taille (160-195 cm) — slider avec silhouette qui s'adapte
+  - Poids (55-95 kg) — idem
+  - Pied préféré (gauche / droite / les deux) — toggle animé
+  - Morphotype : Agile / Équilibré / Puissant / Élancé — cartes à sélectionner
 
-ÉTAPE 3 — FOOTBALL :
+ÉTAPE 3 — FOOTBALL (fond animé : terrain de foot stylisé) :
   - Position principale (GK, DC, DG, DD, MDC, MC, MOC, AG, AD, BU, SA)
+    → Sélection sur un TERRAIN VISUEL (tap sur la position)
   - Position secondaire (optionnelle)
-  - Style de jeu : voir PlayStyles (Étape 4)
+  - Style de jeu initial : voir PlayStyles (Étape 4)
+    → Carte PlayStyle avec animation de déblocage
 
-ÉTAPE 4 — PAYS DE DÉPART :
+ÉTAPE 4 — PAYS DE DÉPART (fond : carte du monde avec les 5 pays) :
   "Dans quel pays veux-tu commencer ta carrière ?"
-  → Gallia | Albion | Castilla | Germania | Azzurria
+  → 5 cartes glassmorphism avec drapeau + info pays
+  → Hover/tap : la carte s'agrandit, montre les clubs possibles
 
   Le jeu place automatiquement le joueur dans une ACADÉMIE
   d'un club de D1 ou D2 du pays choisi (aléatoire, pondéré par rating joueur).
-
   - Joueur potentiel ⭐⭐⭐⭐⭐ → Académie d'un top club
   - Joueur potentiel ⭐⭐⭐ → Académie d'un club moyen
   - Joueur potentiel ⭐⭐ → Académie d'un petit club
 
-ÉTAPE 5 — GÉNÉRATION :
-  Animation de génération du joueur (attributs calculés, rating initial).
-  Le joueur voit son club d'académie, ses couleurs, son numéro.
+ÉTAPE 5 — GÉNÉRATION (fond : couleurs du club, explosion de particules) :
+  Animation de génération du joueur :
+  - Carte joueur qui se construit en live (attributs qui roulent)
+  - Rating qui monte progressivement (animation compteur)
+  - Couleurs du club qui se révèlent
+  - Nom + numéro de maillot apparaissent
+  - Bouton "COMMENCER MA CARRIÈRE" → glow emerald pulsant
 ```
 
 ### 3.2 — Parcours Académie
@@ -456,9 +729,11 @@ Quotidien Réserve :
 
 ---
 
-## 📊 ÉTAPE 4 — ATTRIBUTS, PLAYSTYLES & POTENTIEL
+## 📊 ÉTAPE 4 — ATTRIBUTS, PLAYSTYLES DÉBLOQUABLES & POTENTIEL
 
-> **Terminé quand** : PlayStyles existent. Étoiles gestes techniques et pied faible. Traits de personnalité. Courbe d'âge.
+> **CHANGEMENT MAJEUR v5** : Les PlayStyles ne sont plus invisibles. Ils ont des CASES à débloquer.
+> Les attributs montent par POINTS gagnés (match, entraînement, missions sponsors).
+> **Terminé quand** : PlayStyles visibles avec cases. Points d'attributs. Étoiles gestes techniques. Traits.
 
 ### 4.1 — 51 Attributs
 
@@ -482,7 +757,158 @@ DÉFENSE (12) : Marquage | Tacle | Position Défensive | Tacle Glissé |
 GARDIEN (5) : Plongeon | Prise de Balle | Jeu au Pied | Placement | Réflexes
 ```
 
-### 4.2 — Étoiles (Gestes Techniques & Pied Faible)
+### 4.2 — POINTS D'ATTRIBUTS (NOUVEAU — Change tout)
+
+```
+LE JOUEUR GAGNE DES POINTS D'ATTRIBUTS (PA) :
+
+SOURCES DE PA :
+  ⚽ MATCH BIEN JOUÉ :
+    Note ≥ 7.0 → +1 PA
+    Note ≥ 8.0 → +2 PA
+    Note ≥ 9.0 → +3 PA
+    Homme du Match → +1 PA bonus
+    But ou Passe D. → +1 PA bonus (max 2/match)
+
+  🏋️ ENTRAÎNEMENT :
+    Session complétée → +1 PA (dans la catégorie entraînée)
+    Session parfaite (aucune erreur) → +2 PA
+
+  📋 MISSIONS SPONSORS (voir Étape 10) :
+    Mission complétée → +2 à +5 PA selon difficulté
+    Série de missions → bonus PA cumulatif
+
+  🏆 ACCOMPLISSEMENTS :
+    Premier but → +3 PA
+    Premier titre → +5 PA
+    Premier appel sélection → +3 PA
+    Joueur du mois → +3 PA
+    Globe d'Or → +10 PA
+
+COMMENT DÉPENSER LES PA :
+  → Le joueur ouvre l'écran ATTRIBUTS
+  → Il voit ses 51 attributs dans des CASIERS visuels (voir Étape 5)
+  → Il tap sur un attribut → modal "Améliorer ?"
+  → Coût : 1 PA par point d'attribut (base)
+  → Au-dessus de 80 : 2 PA par point
+  → Au-dessus de 90 : 3 PA par point
+  → Maximum par attribut par saison : +5 (évite le power-gaming)
+
+LIMITES INTELLIGENTES :
+  → Un attribut ne peut pas dépasser le potentiel du joueur
+  → Certains attributs baissent avec l'âge (physique après 29 ans)
+  → Le joueur CHOISIT quoi améliorer = personnalisation réelle
+  → Un attaquant peut investir en défense s'il veut (mais c'est cher)
+
+C'EST CE QUI MANQUAIT : le joueur contrôle activement sa progression.
+Pas juste "entraîne-toi et attends". Tu CHOISIS qui tu deviens.
+```
+
+### 4.3 — PLAYSTYLES DÉBLOQUABLES (Système de Cases)
+
+```
+NOUVEAU SYSTÈME INSPIRÉ DE FC 27, EN MIEUX :
+
+Chaque PlayStyle a des CASES (paliers) à débloquer.
+
+VISUALISATION :
+  ┌─────────────────────────────────────────────┐
+  │  ⚡ FINESSE                                  │
+  │  [████░░░░░░]  Niveau 1/3                    │
+  │                                              │
+  │  Case 1 : Finition ≥ 75  ✅ Débloqué        │
+  │  Case 2 : Finition ≥ 85  🔒 Verrouillé      │
+  │  Case 3 : Finition ≥ 92  🔒 Verrouillé (PS+)│
+  │                                              │
+  │  Effet actuel : Tirs enroulés +15% précision │
+  └─────────────────────────────────────────────┘
+
+SYSTÈME :
+  - Chaque PlayStyle a 3 cases (niveaux)
+  - Case 1 (PlayStyle basique) : attribut lié ≥ 75
+  - Case 2 (PlayStyle avancé) : attribut lié ≥ 85
+  - Case 3 (PlayStyle+) : attribut lié ≥ 92
+
+  - Quand un attribut atteint le seuil → NOTIFICATION "Nouvelle case débloquée !"
+  - Animation : la case s'illumine, effet de particules, son de déblocage
+  - Le PlayStyle s'active automatiquement en match
+
+  - Un joueur peut avoir MAX 4 PlayStyles actifs (choix stratégique)
+  - Si plus de 4 sont débloqués → le joueur choisit lesquels équiper
+  - C'est comme un LOADOUT de compétences
+
+TOUS LES PLAYSTYLES :
+
+ATTAQUE :
+  ⚡ Finesse (Finition) → Tirs enroulés
+    Case 1 (75) : +15% précision tirs enroulés
+    Case 2 (85) : +30% précision + tirs depuis l'angle
+    Case 3+ (92) : +50% précision, tirs impossibles réussis
+
+  💥 Puissance (Puissance Frappe) → Frappes surpuissantes
+    Case 1 (75) : +15% puissance de frappe
+    Case 2 (85) : +30% puissance + tirs de loin dangereux
+    Case 3+ (92) : Tirs imparables à 25m+
+
+  🦅 Tête d'Or (Détente + Tête) → Dominant aérien
+    Case 1 (75) : +20% duels aériens
+    Case 2 (85) : +35% + buts de la tête x2
+    Case 3+ (92) : Imbattable dans les airs
+
+  🔄 Acrobate (Volée + Agilité) → Retournés, bicyclettes
+    Case 1 (75) : Peut tenter des volées
+    Case 2 (85) : Retournés acrobatiques disponibles
+    Case 3+ (92) : Bicyclettes + scores parfaits
+
+VITESSE :
+  🏃 Dribbleur Rapide (Dribble + Agilité) → Changements de direction
+    Case 1 (75) : Dribbles plus efficaces
+    Case 2 (85) : Changements de direction sans perdre le ballon
+    Case 3+ (92) : Quasi inarrêtable en 1v1
+
+  🚀 Fusée (Accélération + Sprint) → Accélérations fulgurantes
+    Case 1 (75) : Sprint boost en contre-attaque
+    Case 2 (85) : Démarrage éclair + résistance aux tacles
+    Case 3+ (92) : Vitesse maximale instantanée
+
+PASSE :
+  🎯 Passeur Fouetté (Centre + Effet) → Centres parfaits
+    Case 1 (75) : Centres précis au 1er poteau
+    Case 2 (85) : Centres parfaits n'importe où
+    Case 3+ (92) : Centres-tirs possibles
+
+  👁️ Visionnaire (Vision + Passe) → Passes impossibles
+    Case 1 (75) : Passes en profondeur améliorées
+    Case 2 (85) : Passes dans l'espace impossibles réussies
+    Case 3+ (92) : Passes aveugles parfaites
+
+DÉFENSE :
+  🛡️ Mur (Tacle + Anticipation) → Tacles parfaits
+    Case 1 (75) : Tacles propres + récupération rapide
+    Case 2 (85) : Timing parfait, 0 faute
+    Case 3+ (92) : Récupère le ballon dans n'importe quelle situation
+
+  🧱 Roc (Force + Équilibre) → Imbattable en duel
+    Case 1 (75) : Duels physiques +20%
+    Case 2 (85) : Quasiment impossible à passer
+    Case 3+ (92) : Dominance physique totale
+
+GARDIEN :
+  🐱 Réflexe Chat (Réflexes) → Arrêts réflexes
+    Case 1 (78) : Arrêts réflexes améliorés
+    Case 2 (86) : Arrêts impossibles possibles
+    Case 3+ (93) : Arrêts surhumains
+
+ÉCRAN PLAYSTYLES (design) :
+  → Carte glassmorphism par PlayStyle
+  → Cases visualisées comme des jauges ou des hexagones
+  → Cases verrouillées : grisées avec icône cadenas
+  → Cases débloquées : illuminées avec couleur du PlayStyle
+  → Animation au déblocage : explosion de particules + sound
+  → Effet visuel en match quand le PlayStyle s'active (flash subtil)
+```
+
+### 4.4 — Étoiles (Gestes Techniques & Pied Faible)
 
 ```
 GESTES TECHNIQUES (⭐ 1-5) :
@@ -504,41 +930,7 @@ PIED FAIBLE (⭐ 1-5) :
   ⭐⭐⭐⭐⭐ : Ambidextre (0% de différence)
 ```
 
-### 4.3 — PlayStyles (Capacités Spéciales)
-
-```
-Chaque joueur a 1-3 PlayStyles et peut avoir 1 PlayStyle+.
-Ils se débloquent quand un attribut lié dépasse 80 (PlayStyle) ou 90 (PlayStyle+).
-
-ATTAQUE :
-  - Finesse+        → Tirs enroulés avec précision parfaite (Finition ≥ 90)
-  - Puissance+       → Frappes surpuissantes (Puissance Frappe ≥ 90)
-  - Tête d'Or+      → Dominant dans les airs (Détente + Tête ≥ 90)
-  - Acrobate+        → Retournés, bicyclettes (Volée + Agilité ≥ 90)
-
-VITESSE :
-  - Dribbleur Rapide+ → Change de direction sans perdre le ballon (Dribble + Agilité ≥ 90)
-  - Fusée+           → Accélérations fulgurantes (Accélération + Sprint ≥ 90)
-
-PASSE :
-  - Passeur Fouetté+ → Centres parfaits (Centre + Effet ≥ 90)
-  - Visionnaire+     → Passes impossibles dans l'espace (Vision + Passe ≥ 90)
-  - Passeur Long+    → Transversales laser (Passe + Puissance ≥ 85)
-
-DÉFENSE :
-  - Mur+             → Tacles parfaits, timing impeccable (Tacle + Anticipation ≥ 90)
-  - Intercepteur+    → Lit le jeu, coupe les lignes (Interception + Vision ≥ 90)
-  - Roc+             → Imbattable en duel (Force + Équilibre ≥ 90)
-
-GARDIEN :
-  - Réflexe Chat+    → Arrêts réflexes surhumains (Réflexes ≥ 92)
-  - Libéro+          → Sort de sa surface, joue au pied (Jeu Pied + Placement ≥ 85)
-
-→ Les PlayStyles affectent les résultats des CHOIX en match
-→ Un joueur avec "Finesse+" réussit un tir enroulé à 70% au lieu de 35%
-```
-
-### 4.4 — Traits de Personnalité
+### 4.5 — Traits de Personnalité
 
 ```
 Chaque joueur a 2-4 traits (certains cachés, révélés au fil du temps) :
@@ -566,7 +958,7 @@ NEUTRES :
   🏠 Attaché → Ne veut pas quitter son club/pays, malus si transféré loin
 ```
 
-### 4.5 — Courbe d'Âge
+### 4.6 — Courbe d'Âge
 
 ```
 14-17 : Croissance rapide      → Gains ×1.5
@@ -581,7 +973,7 @@ Exception "Longévité" : déclin retardé de 2 ans.
 Exception blessure grave : déclin prématuré possible.
 ```
 
-### 4.6 — Forme, Moral & Fatigue
+### 4.7 — Forme, Moral & Fatigue
 
 ```
 FORME (0-100) : Perf match -15% si < 30. Blessure +20% si < 30.
@@ -594,26 +986,109 @@ FATIGUE (0-100) :
 
 ---
 
-## 🏋️ ÉTAPE 5 — ENTRAÎNEMENT & PROGRESSION
+## 🏋️ ÉTAPE 5 — ENTRAÎNEMENT IMMERSIF & CASIERS D'ATTRIBUTS
 
-> **Terminé quand** : Barre persiste. Gains respectent potentiel, âge, fatigue, moral. Coach affecte les gains.
+> **CHANGEMENT MAJEUR v5** : L'entraînement n'est plus une liste morte.
+> C'est un écran VIVANT avec des casiers qui défilent, des animations, des feedbacks.
+> **Terminé quand** : L'entraînement est visuellement excitant. Les attributs défilent. Le joueur voit SA progression.
 
-### 5.1 — Sessions
+### 5.1 — Écran d'Entraînement (Design Masterclass)
 
-| Session | Cibles | Gain | Fatigue | Limite |
-|---------|--------|------|---------|--------|
-| Équilibré | Tous | +0.5-1.5 | +15 | Illimité |
-| Vitesse | Vit, Accél, Sprint | +2-4 | +20 | 2x/sem |
-| Technique | Dribble, Passe, Ctrl | +2-4 | +18 | 2x/sem |
-| Défense | Marq, Tacle, Pos | +2-4 | +18 | 2x/sem |
-| Finition | Fin, Frappe, Effet | +2-4 | +20 | 2x/sem |
-| Mental | Vision, Décision, Conc | +1-3 | +12 | 3x/sem |
-| Gestes Techniques | Étoiles gestes | Progression lente | +15 | 1x/sem |
-| Gardien | Plongeon, Réflexes | +2-4 | +18 | GK only |
-| Repos Actif | — | 0 | -25 | Illimité |
-| Repos Complet | — | 0 | -40 | Illimité |
+```
+LAYOUT DE LA PAGE ENTRAÎNEMENT :
 
-### 5.2 — Formule de Gains
+┌─────────────────────────────────────────────┐
+│  🏋️ CENTRE D'ENTRAÎNEMENT                   │
+│  "Forge ton talent, un jour à la fois"       │
+├─────────────────────────────────────────────┤
+│                                              │
+│  ┌── CASIERS D'ATTRIBUTS (défilement H) ──┐ │
+│  │                                          │ │
+│  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐       │ │
+│  │  │ VIT │ │ FOR │ │ END │ │ ACC │  →→→   │ │
+│  │  │ 78  │ │ 65  │ │ 72  │ │ 81  │       │ │
+│  │  │ +2  │ │     │ │ +1  │ │ +3  │       │ │
+│  │  └─────┘ └─────┘ └─────┘ └─────┘       │ │
+│  │                                          │ │
+│  │  ← Swipe pour voir tous les attributs → │ │
+│  └──────────────────────────────────────────┘ │
+│                                              │
+│  ┌── SESSIONS DISPONIBLES ────────────────┐  │
+│  │                                          │ │
+│  │  [🏃 Vitesse]  [⚽ Technique]            │ │
+│  │  [🛡️ Défense]  [🎯 Finition]            │ │
+│  │  [🧠 Mental]   [⭐ Gestes Tech]          │ │
+│  │  [⚖️ Équilibré] [🧤 Gardien]            │ │
+│  │  [😴 Repos Actif] [🛏️ Repos Complet]    │ │
+│  │                                          │ │
+│  └──────────────────────────────────────────┘ │
+│                                              │
+│  ┌── BARRE DE PROGRESSION ────────────────┐  │
+│  │  ████████████░░░░░░░░░░  62%            │ │
+│  │  Session en cours : Vitesse             │ │
+│  │  Gains prévus : VIT +2, ACC +3, SPR +1 │ │
+│  └──────────────────────────────────────────┘ │
+│                                              │
+│  PA disponibles : 7 ⚡                       │
+│  [Distribuer mes points →]                   │
+│                                              │
+└─────────────────────────────────────────────┘
+
+CASIERS D'ATTRIBUTS — DESIGN :
+  → Chaque attribut est un CASIER (card 80×100px)
+  → Fond glassmorphism avec bordure colorée selon la catégorie :
+    Physique → bleu | Technique → vert | Mental → violet
+    Défense → rouge | Gardien → jaune
+  → Le chiffre est GROS (24px mono bold), centré
+  → En dessous : nom abrégé (VIT, FOR, END...)
+  → Si l'attribut a changé récemment : badge "+2" animé (pulse vert)
+  → Si l'attribut est au max : bordure dorée + particules
+  → SCROLL HORIZONTAL : le joueur swipe pour voir tous les casiers
+  → Animation au scroll : les casiers entrent avec un léger bounce
+  → Tap sur un casier → modal détaillé avec historique de progression
+
+BARRE DE PROGRESSION ANIMÉE :
+  → Background: glassmorphism sombre
+  → Fill: gradient emerald → teal, animé (shimmer effect)
+  → Particules qui scintillent sur la barre pendant le fill
+  → Quand 100% : explosion + son + les casiers concernés flashent
+```
+
+### 5.2 — Sessions d'Entraînement
+
+| Session | Cibles | Gain | Fatigue | Limite | PA Gagné |
+|---------|--------|------|---------|--------|----------|
+| Équilibré | Tous | +0.5-1.5 | +15 | Illimité | +1 |
+| Vitesse | Vit, Accél, Sprint | +2-4 | +20 | 2x/sem | +1 |
+| Technique | Dribble, Passe, Ctrl | +2-4 | +18 | 2x/sem | +1 |
+| Défense | Marq, Tacle, Pos | +2-4 | +18 | 2x/sem | +1 |
+| Finition | Fin, Frappe, Effet | +2-4 | +20 | 2x/sem | +1 |
+| Mental | Vision, Décision, Conc | +1-3 | +12 | 3x/sem | +1 |
+| Gestes Techniques | Étoiles gestes | Progression lente | +15 | 1x/sem | +1 |
+| Gardien | Plongeon, Réflexes | +2-4 | +18 | GK only | +1 |
+| Repos Actif | — | 0 | -25 | Illimité | 0 |
+| Repos Complet | — | 0 | -40 | Illimité | 0 |
+
+### 5.3 — Distribution des PA (Écran dédié)
+
+```
+ÉCRAN "DISTRIBUER MES POINTS" :
+
+  → Même casiers que l'entraînement, mais interactifs
+  → Tap sur un casier → bouton "+" apparaît
+  → Chaque "+" consomme 1 PA (ou 2 si > 80, ou 3 si > 90)
+  → Animation : le chiffre monte avec un compteur
+  → L'attribut flashe en vert quand amélioré
+  → Compteur de PA restants en haut (toujours visible)
+  → Bouton "Confirmer" pour valider les changements
+  → Bouton "Annuler" pour tout remettre
+
+  → Si un seuil de PlayStyle est atteint → notification immédiate !
+    "🔓 Nouvelle case PlayStyle débloquée : Finesse (Case 2) !"
+    Animation de déblocage avec particules
+```
+
+### 5.4 — Formule de Gains
 
 ```
 Gain = Base × Âge × Fatigue × Potentiel × Moral × Coach
@@ -629,26 +1104,12 @@ Facteur Coach :
 → Raison de plus pour viser un gros club
 ```
 
-### 5.3 — Persistance
-
-```typescript
-type TrainingProgress = {
-  sessionType: string
-  startedAt: number
-  progressPercent: number     // 0-100, sauvé à chaque tick
-  attributeGains: Record<string, number>
-  completed: boolean
-  dayLocked: boolean          // empêche double entraînement
-}
-// localStorage clé "fc_training_progress"
-// Rechargement → reprise à progressPercent exact
-```
-
 ---
 
 ## 📅 ÉTAPE 6 — SAISON & COMPÉTITIONS
 
 > **Terminé quand** : Calendrier complet avec toutes les compétitions du pays choisi + Europe. Classements temps réel.
+> **DESIGN** : Calendrier glassmorphism avec cartes matchs animées.
 
 ### 6.1 — Calendrier (380 jours)
 
@@ -673,22 +1134,19 @@ FIN (370-380)       : Résumé, contrats, passage saison suivante
 | Germania | 1er-4e (groupes) | 5e | Vainqueur DFB-Pokal |
 | Azzurria | 1er-4e (groupes) | 5e | Vainqueur Coppa |
 
-### 6.3 — Classement Temps Réel
+### 6.3 — Écran Calendrier (Design)
 
-```typescript
-type StandingsEntry = {
-  position: number
-  club: string
-  played: number
-  won: number; drawn: number; lost: number
-  goalsFor: number; goalsAgainst: number
-  goalDifference: number
-  points: number
-  form: ('W'|'D'|'L')[]      // 5 derniers matchs
-  homeRecord: { w, d, l }
-  awayRecord: { w, d, l }
-}
-// Mis à jour après chaque journée. Tous les matchs simulés.
+```
+DESIGN CALENDRIER :
+  → Timeline horizontale scrollable (mois en haut)
+  → Chaque match = carte glassmorphism avec :
+    - Logos des 2 clubs
+    - Compétition (badge coloré)
+    - Date + Journée
+    - Si joué : score + note du joueur
+    - Si à venir : heure + importance (badge si derby, finale, etc.)
+  → Match du jour : carte agrandie, glow emerald, pulsation
+  → Filtres : "Tous | Championnat | Coupe | Europe | Sélection"
 ```
 
 ---
@@ -717,6 +1175,7 @@ CONVERSATIONS AVEC LE COACH (événements) :
   - Le coach t'engueule : "Ta dernière prestation était inacceptable"
 
 → Chaque conversation = choix de réponse = conséquence
+→ Design : bulles de chat glassmorphism, avatar du coach, animation de réponse
 ```
 
 ### 7.2 — Hiérarchie & Concurrence
@@ -732,6 +1191,7 @@ Le coach choisit selon :
   - Confiance coach (10%)
 
 Résultat : TITULAIRE | REMPLAÇANT | TRIBUNE
+→ Affiché dans une carte glassmorphism avec icône de statut
 ```
 
 ### 7.3 — Objectifs de Saison
@@ -744,7 +1204,7 @@ Milieu : "Maintiens une note moyenne de 7.0 sur 25 matchs"
 Défenseur : "Pas plus de 3 cartons, 10 clean sheets"
 Gardien : "70% d'arrêts, 12 clean sheets"
 
-Réussite → Moral +15, confiance coach +20, prolongation proposée
+Réussite → Moral +15, confiance coach +20, prolongation proposée, +3 PA BONUS
 Échec → Moral -10, banc, pas de prolongation
 ```
 
@@ -767,9 +1227,10 @@ PRÊT AVEC OBLIGATION D'ACHAT :
 
 ---
 
-## ⚽ ÉTAPE 8 — MATCHS, NOTATION & MOMENTS DRAMATIQUES
+## ⚽ ÉTAPE 8 — MATCHS, NOTATION & MOMENTS DRAMATIQUES + POINTS D'ATTRIBUTS
 
-> **Terminé quand** : Choix tactiques, VAR, célébrations personnalisées, rituels d'avant-match.
+> **CHANGEMENT v5** : Un bon match te rapporte des PA. Le match n'est plus une corvée, c'est une opportunité.
+> **Terminé quand** : Choix tactiques, VAR, célébrations, rituels, points d'attributs post-match.
 
 ### 8.1 — Rituels d'Avant-Match
 
@@ -783,29 +1244,54 @@ Le joueur développe des rituels. Il choisit 1-2 :
 
 Si tu maintiens le même rituel 10 matchs → bonus permanent +1
 Si tu le brises → malus superstition pour 3 matchs (-2 sang-froid)
+
+DESIGN : Écran pré-match glassmorphism avec les rituels en cartes.
+Animation : le rituel choisi s'illumine et pulse doucement.
 ```
 
-### 8.2 — Déroulement du Match
+### 8.2 — Déroulement du Match (Simuler OU Jouer)
 
 ```
-PRÉ-MATCH : Composition, adversaire, conditions, importance
+DEUX MODES DISPONIBLES (dashboard ET page match) :
 
-SIMULATION (2-3 min temps réel) :
-  - Chrono 0'-90'+ (avec temps additionnel)
-  - Score en direct, événements, note live
-  - 3-5 MOMENTS DE CHOIX par match :
+MODE "SIMULER" (instantané) :
+  → Résultat en 1 seconde
+  → Score, note, événements clés
+  → PA gagnés affichés immédiatement
+  → Idéal pour les matchs moins importants
+
+MODE "JOUER LE MATCH" (~1min30 en temps réel) :
+  → Chrono 0'-90'+ avec ticks (1 tick/seconde ≈ 90 ticks)
+  → Score en direct, événements, note live
+  → 3-5 MOMENTS DE CHOIX par match :
     "Corner : 1er poteau (agressif) ou 2e (prudent) ?"
     "Tu dribbles (risqué) ou tu passes (sûr) ?"
     "Tu tires de loin (30%) ou tu avances (50% mais perte possible) ?"
     "Tu contestes l'arbitre (risque carton) ou tu acceptes ?"
     → PlayStyles et étoiles affectent les % de réussite
+    → Bonne décision = PA bonus !
 
-MOMENTS VAR (aléatoire, 1-2 par match max) :
-  - But marqué → "L'arbitre consulte la VAR..."
-  - Animation de review (3 secondes de tension)
-  - Verdict : But validé ✅ ou But annulé ❌ (hors-jeu, main)
-  - Pénalty accordé ou refusé après review
-  → Affecte la note, le score, le moral
+  MOMENTS VAR (aléatoire, 1-2 par match max) :
+    - But marqué → "L'arbitre consulte la VAR..."
+    - Animation glassmorphism : écran TV, replay, tension 3s
+    - Verdict : But validé ✅ ou But annulé ❌ (hors-jeu, main)
+    - Pénalty accordé ou refusé après review
+
+  CÉLÉBRATIONS (quand tu marques) :
+    → Menu rapide glassmorphism avec 6-8 célébrations
+    → Animation de la célébration choisie
+    → Célébration signature (10x la même) → les fans l'attendent
+
+LES DEUX MODES utilisent le même moteur (buildPostMatchState).
+Les deux donnent des PA. Les deux sont accessibles depuis le dashboard.
+
+DESIGN POST-MATCH :
+  → Écran résultat glassmorphism plein écran
+  → Score qui apparaît chiffre par chiffre (animation)
+  → Note dans un cercle SVG qui se remplit (0 → note)
+  → Événements en cascade (stagger 100ms)
+  → PA gagnés : "+3 PA ⚡" avec animation doré pulsant
+  → Bouton "Distribuer mes points" si PA > 0
 ```
 
 ### 8.3 — Célébrations Personnalisées
@@ -862,6 +1348,7 @@ Homme du match : note la plus haute (≥ 7.5 requis)
 Choix agent à 16 ans (ou premier contrat pro).
 Changement possible : pénalité 10% salaire + 6 mois sans agent.
 L'agent a des DIALOGUES — il t'envoie des messages (voir Étape 14).
+Design : chaque agent a un avatar, un style de message, une personnalité visuelle.
 ```
 
 ### 9.2 — Contrats
@@ -909,10 +1396,11 @@ Jour 8-14 : NÉGOCIATIONS
 Jour 15-21 : DÉCISION FINALE
   → Accepter → transfert confirmé, conférence de presse, nouveau club
   → Refuser → retour au club, relations possiblement endommagées
-  → Le deal peut capoter à la dernière minute (le club change d'avis, un autre joueur est signé)
+  → Le deal peut capoter à la dernière minute
   → DEADLINE DAY : si c'est le 31 janvier ou le 31 août, tension maximale
 
 Toute la saga arrive par MESSAGES sur le téléphone du joueur (Étape 14).
+Design : timeline glassmorphism avec étapes visuelles et progress bar.
 ```
 
 ### 9.4 — Fenêtres de Mercato
@@ -926,9 +1414,11 @@ HORS MERCATO : Aucun transfert. Prolongations et joueurs libres seulement.
 
 ---
 
-## 💰 ÉTAPE 10 — ÉCONOMIE, MARQUES & VIE PRIVÉE
+## 💰 ÉTAPE 10 — ÉCONOMIE, MARQUES & MISSIONS SPONSORS
 
-> **Terminé quand** : Marques fictives avec personnalité. Endorsements. Style de vie avec conséquences.
+> **CHANGEMENT MAJEUR v5** : Les sponsors ne sont plus passifs. Ils donnent des MISSIONS.
+> Compléter une mission = PA + argent + image. C'est un GAME LOOP entier.
+> **Terminé quand** : Marques fictives avec missions. Rewards clairs. Le joueur veut ses sponsors.
 
 ### 10.1 — Échelle des Salaires
 
@@ -967,14 +1457,50 @@ NIVEAUX D'ENDORSEMENT :
   - Ambassadeur simple : logo sur tes réseaux, prime mensuelle
   - Ambassadeur principal : pub TV fictive, affiche dans le stade
   - Signature Line : chaussures à TON nom, design personnalisé (rating > 90)
-
-Les marques PARTENT si :
-  - Tes performances baissent (rating chute de 5+)
-  - Scandale médiatique
-  - Blessure longue durée (> 6 mois)
 ```
 
-### 10.3 — Style de Vie & Conséquences
+### 10.3 — MISSIONS SPONSORS (NOUVEAU — Game Loop)
+
+```
+CHAQUE SPONSOR TE DONNE DES MISSIONS :
+
+MISSIONS VELOX (chaussures vitesse) :
+  🎯 "Sprint décisif" : Marque un but après un sprint → +2 PA, +500€
+  🎯 "Course record" : Sois le joueur le plus rapide du match → +3 PA, +1 000€
+  🎯 "Série rapide" : 3 matchs consécutifs avec un sprint réussi → +5 PA, +2 000€
+
+MISSIONS STRIKE FORCE (chaussures buteur) :
+  🎯 "Doublé" : Marque 2 buts dans un match → +3 PA, +1 000€
+  🎯 "Feu à volonté" : 5 tirs cadrés dans un match → +2 PA, +500€
+  🎯 "Série de buteur" : Marque dans 3 matchs consécutifs → +5 PA, +3 000€
+
+MISSIONS KRONOS (montres luxe) :
+  🎯 "Timing parfait" : Homme du match → +2 PA, +2 000€
+  🎯 "Ponctualité" : 5 matchs en tant que titulaire d'affilée → +3 PA, +3 000€
+
+MISSIONS BOOST ENERGY :
+  🎯 "Endurance" : Joue 90 minutes 3 matchs de suite → +2 PA, +500€
+  🎯 "Énergie" : Note > 7 avec fatigue > 60 → +3 PA, +1 000€
+
+MÉCANISME :
+  → Les missions sont affichées dans un onglet "Sponsors" du dashboard
+  → Chaque mission a une barre de progression glassmorphism
+  → Quand complétée → notification animée (confettis mini + PA gagné)
+  → Les missions se renouvellent chaque mois (certaines hebdomadaires)
+  → Série de missions complétées → bonus multiplicateur
+
+DESIGN ÉCRAN SPONSORS :
+  → Carte par sponsor (glassmorphism avec logo de la marque)
+  → Missions listées avec progress bars
+  → Récompenses visibles (PA + argent)
+  → Historique des missions complétées
+  → Badge "Top Ambassadeur" si toutes les missions du mois sont faites (+10 PA !)
+
+C'EST CE QUI REND LES SPONSORS INTÉRESSANTS.
+Pas juste un revenu passif. Un vrai game loop avec des objectifs.
+```
+
+### 10.4 — Style de Vie & Conséquences
 
 ```
 DÉPENSES OBLIGATOIRES :
@@ -1024,9 +1550,12 @@ CONFÉRENCES DE PRESSE (événements ponctuels, 2-3 par mois) :
   → "Je pense d'abord au collectif" (diplomate, +confiance coach)
 
   Impact : image publique, relation coach, sponsors, moral
+
+  Design : écran conférence glassmorphism, micros et caméras en arrière-plan,
+  questions qui slide-in, choix de réponses en cartes à tapper.
 ```
 
-### 11.2 — Santé Mentale (NOUVEAU — aucun jeu ne fait ça)
+### 11.2 — Santé Mentale (UNIQUE — aucun jeu ne fait ça)
 
 ```
 PRESSION (0-100) :
@@ -1063,7 +1592,7 @@ RISQUE PAR MATCH :
 | Chronique | Récurrente | 2% |
 ```
 
-### 11.4 — Psychologie Post-Blessure (NOUVEAU)
+### 11.4 — Psychologie Post-Blessure (UNIQUE)
 
 ```
 Après une blessure grave (> 1 mois) :
@@ -1108,7 +1637,10 @@ Cérémonie en juin. Critères :
 Conditions minimum : Rating moy ≥ 8.0, 25+ matchs, 1 trophée OU 20+ buts
   → Top 30 = Nominé (événement)
   → Top 3 = Finaliste (gala, discours)
-  → 1er = Vainqueur (animation, moral +30, sponsors +50%)
+  → 1er = Vainqueur (animation dorée, confettis, moral +30, sponsors +50%, +10 PA !)
+
+Design : cérémonie plein écran, fond noir + or, trophée 3D rotatif,
+nom qui apparaît lettre par lettre, explosion de particules dorées.
 ```
 
 ### 12.2 — Par Championnat (chacun des 5 pays)
@@ -1117,7 +1649,7 @@ Conditions minimum : Rating moy ≥ 8.0, 25+ matchs, 1 trophée OU 20+ buts
 Chaque championnat a SES récompenses :
   - Meilleur Buteur | Meilleur Passeur | Meilleur Joueur
   - Meilleur Jeune (U21) | Meilleur Gardien
-  - Joueur du Mois (mensuel)
+  - Joueur du Mois (mensuel) → +3 PA
   - Équipe Type de la Saison (11 meilleurs par poste)
 ```
 
@@ -1125,7 +1657,7 @@ Chaque championnat a SES récompenses :
 
 ```
   - Soulier d'Or d'Europa (meilleur buteur tous championnats, coeff ×2 pour top 5)
-  - MVP Coupe des Champions
+  - MVP Coupe des Champions → +5 PA
   - Équipe Type de la Coupe des Champions
 ```
 
@@ -1141,6 +1673,8 @@ Chaque championnat a SES récompenses :
 Critères : Rating ≥ 78 (A) | 70-77 (Espoirs U21) | Forme > 50 | Pas blessé
 Le joueur peut refuser (mais -image, -relation sélectionneur)
 Capitaine possible si : leadership élevé + ancienneté + rating top 3
+
+Design : notification spéciale (drapeau + convocation officielle glassmorphism)
 ```
 
 ### 13.2 — Compétitions
@@ -1151,28 +1685,19 @@ Coupe du Monde (48 nations, tous les 4 ans)
 Championnat d'Europa (24 nations, tous les 4 ans décalé)
 ```
 
-### 13.3 — Stats Internationales
-
-```typescript
-type InternationalCareer = {
-  team: string; caps: number; goals: number; assists: number
-  averageRating: number; isCaptain: boolean
-  tournaments: { name, year, stage, goals, rating }[]
-}
-```
-
 ---
 
 ## 📱 ÉTAPE 14 — TÉLÉPHONE & RELATIONS HUMAINES
 
-> **NOUVEAU — Aucun jeu de foot ne fait ça.**
+> **UNIQUE — Aucun jeu de foot ne fait ça.**
 > **Terminé quand** : Le joueur a un téléphone. Il reçoit des messages. Il interagit avec des personnages.
 
 ### 14.1 — Le Téléphone
 
 ```
 Un écran TÉLÉPHONE accessible depuis le dashboard.
-Notifications push quand un message arrive.
+Design : slide-up comme un vrai téléphone. Glassmorphism sombre.
+Notifications push quand un message arrive (badge rouge).
 
 CONTACTS :
   📞 Agent → Négociations, conseils, offres, contrats
@@ -1183,9 +1708,11 @@ CONTACTS :
   📞 Sélectionneur → Appel en sélection, feedback
   📞 Journaliste → Interviews exclusives (choix de répondre ou non)
   📞 Fans (réseaux sociaux) → Réactions après les matchs
+  📞 Sponsor → Missions, objectifs, récompenses
 
 Chaque message = texte + choix de réponse (2-3 options)
 Les réponses affectent les relations, le moral, l'image, la carrière.
+Design : bulles de chat avec avatars, timestamps, indicateur "vu/lu".
 ```
 
 ### 14.2 — Relations Détaillées
@@ -1202,9 +1729,9 @@ RIVALITÉ :
   - Un joueur au même poste que toi, dans ton club ou un rival
   - Il te provoque par messages ou en conférence de presse
   - Vous êtes comparés par les médias
-  - Si tu le surpasses → satisfaction, image +10
+  - Si tu le surpasses → satisfaction, image +10, +2 PA
   - Si il te surpasse → pression +10
-  - La rivalité peut évoluer en respect mutuel (si longue durée)
+  - La rivalité peut évoluer en respect mutuel
 
 AMITIÉ :
   - 1-2 coéquipiers proches
@@ -1218,7 +1745,7 @@ AMITIÉ :
 
 ## 🌍 ÉTAPE 15 — MONDE VIVANT & ADAPTATION CULTURELLE
 
-> **NOUVEAU — Le monde ne tourne pas autour de toi.**
+> **UNIQUE — Le monde ne tourne pas autour de toi.**
 > **Terminé quand** : Les autres joueurs vivent. L'adaptation culturelle existe.
 
 ### 15.1 — Monde Vivant
@@ -1228,13 +1755,12 @@ LES AUTRES JOUEURS ONT UNE VIE :
   - Ils progressent, déclinent, se blessent, changent de club
   - Le classement des buteurs évolue avec de vrais concurrents
   - Le Globe d'Or est disputé par des candidats crédibles
-  - Les gros transferts de l'été apparaissent dans les NEWS du jeu
+  - Les gros transferts apparaissent dans les NEWS
   - Un jeune de ton ancienne académie peut devenir une star
-  - Ton rival peut être transféré et remplacé par quelqu'un de pire... ou meilleur
   - Les coachs changent (limogés si mauvais résultats)
   - Les clubs montent, descendent, deviennent riches ou pauvres
 
-NEWS FEED (dans le téléphone) :
+NEWS FEED (dans le téléphone, design glassmorphism) :
   "🔥 TRANSFERT : Marcos Silva (87) signe au Real Madrista pour 95M€"
   "📉 Relégation : Havre Athletic descend en Gallia Seconde"
   "🏆 Bayern Münich remporte la Coupe des Champions !"
@@ -1247,23 +1773,22 @@ NEWS FEED (dans le téléphone) :
 TU SIGNES DANS UN PAYS ÉTRANGER :
 
 Mois 1-2 : CHOC CULTUREL
-  - Barrière linguistique → -15% communication avec coach et coéquipiers
-  - Consignes tactiques mal comprises → -10% discipline tactique
+  - Barrière linguistique → -15% communication
+  - Consignes mal comprises → -10% discipline tactique
   - Isolement → moral -10, pression +15
-  - Tu manges mal, tu dors mal → fatigue +5 permanent
+  - Fatigue +5 permanent
 
 Mois 3-4 : ADAPTATION
-  - Tu apprends la langue (action : "Cours de langue", -5% malus/session)
+  - Cours de langue (action : -5% malus/session)
   - Tu te fais des amis → isolement réduit
   - Tu t'habitues au style de jeu local
 
 Mois 5+ : INTÉGRÉ
-  - Plus de malus linguistique
-  - Bonus "Joueur multiculturel" si 2+ pays vécus (+3 adaptabilité)
-  - Après 3 ans dans un pays → bonus de confort (+5 moral à domicile)
+  - Plus de malus
+  - Bonus "Joueur multiculturel" si 2+ pays (+3 adaptabilité)
+  - Après 3 ans → bonus confort (+5 moral à domicile)
 
-RACCOURCI : Si tu signes dans un club où un joueur de ta nationalité existe
-→ Adaptation 2x plus rapide (il t'aide)
+RACCOURCI : Compatriote dans le club → Adaptation 2x plus rapide
 ```
 
 ---
@@ -1275,121 +1800,107 @@ RACCOURCI : Si tu signes dans un club où un joueur de ta nationalité existe
 ### 16.1 — Fans
 
 ```
-COTE DE POPULARITÉ AUPRÈS DES FANS (0-100) :
-  Monte : buts, victoires, fidélité, célébrations, interactions
-  Descend : mauvaises perfs, transfert demandé, scandale
-
+COTE DE POPULARITÉ (0-100) :
   Pop > 80 → Les fans chantent ton nom, tifo à ton effigie
   Pop > 90 → Tu es une IDOLE. Maillot le plus vendu.
   Pop < 30 → Sifflé à domicile. Pression +15.
   Pop < 10 → Les fans demandent ton départ.
 
 ACTIONS FAN :
-  - Jeter ton maillot au public après un match (+pop, -1 maillot)
-  - Aller vers les fans après une victoire (+pop)
-  - Ignorer les fans (-pop)
-  - Applaudir les fans adverses après un match à l'extérieur (+image, +respect)
+  - Jeter ton maillot au public (+pop)
+  - Aller vers les fans après victoire (+pop)
+  - Applaudir les fans adverses (+image, +respect)
 ```
 
 ### 16.2 — Dynamique de Vestiaire
 
 ```
 Le vestiaire est un ÉCOSYSTÈME :
-  - Groupes : leaders, suiveurs, têtes brûlées, jeunes
-  - Un vestiaire uni → bonus collectif en match (+3% perf équipe)
-  - Un vestiaire divisé → malus (-5% perf, conflits fréquents)
-
-Le joueur influence le vestiaire :
-  - Leadership élevé → peut calmer les conflits
-  - Leadership faible → subit les conflits
+  - Un vestiaire uni → bonus collectif (+3% perf équipe)
+  - Un vestiaire divisé → malus (-5% perf, conflits)
   - Si tu es nouveau → tu dois gagner ta place socialement aussi
+  Design : écran vestiaire glassmorphism avec portraits des joueurs et jauges de relation.
 ```
 
 ### 16.3 — Capitanat
 
 ```
-Devenir capitaine : Leadership > 80 + ancienneté + rating top 3 du club
+Devenir capitaine : Leadership > 80 + ancienneté + rating top 3
 
 RESPONSABILITÉS :
-  🎤 Discours d'avant-match (choix) :
-    → Motivant : "On va les écraser" → équipe +5% perf si victoire, -5% si défaite
-    → Calme : "Restons concentrés" → équipe stable, pas de bonus/malus
-    → Agressif : "Pas de pitié" → +8% perf mais risque cartons +20%
+  🎤 Discours d'avant-match (choix glassmorphism) :
+    → Motivant : +5% perf si victoire, -5% si défaite
+    → Calme : stable
+    → Agressif : +8% perf mais cartons +20%
 
-  🤝 Gérer les conflits vestiaire :
-    → 2 coéquipiers se disputent → tu interviens (choix)
-    → Bon choix → vestiaire uni | Mauvais → division
-
+  🤝 Gérer les conflits vestiaire
   🎙️ Représenter l'équipe en conférence de presse
-
-  🏅 Toss d'avant-match (petit rituel, immersion)
+  🏅 Toss d'avant-match
 ```
 
 ---
 
 ## 🎨 ÉTAPE 17 — MOTION DESIGN & IMMERSION
 
-> **Le jeu RESPIRE. Chaque écran a une âme.**
+> **Le jeu RESPIRE. Chaque écran a une âme. Le jeu est CHAUD.**
 
 ### 17.1 — Le Jeu Ressent Ce Que Tu Vis
 
 ```
 VICTOIRE EN FINALE :
-  → Écran explose de confettis dorés
-  → Musique triomphale
-  → Tes coéquipiers t'entourent (illustration)
-  → Trophée levé (animation 3D simple ou illustration animée)
+  → Explosion de confettis dorés (particules)
+  → Fond qui pulse en or
+  → Trophée qui apparaît en rotation
+  → Texte "CHAMPION" lettre par lettre, glow doré
+  → +PA bonus animé avec feux d'artifice
 
 BLESSURE GRAVE :
-  → Écran devient rouge, ralentissement
-  → Son sourd, battement de cœur
-  → Le joueur tombe (animation)
-  → Diagnostic apparaît lettre par lettre
+  → Écran vire au rouge (gradient animé)
+  → Battement de cœur (pulsation de l'écran)
+  → Diagnostic qui apparaît lettre par lettre en rouge
+  → Fond qui devient gris progressivement
 
 SUR LE BANC :
-  → Vue depuis le côté du terrain
-  → Tu vois le match se jouer sans toi
-  → Atmosphère plus froide, couleurs désaturées
-  → Option : "S'échauffer" → possibilité d'entrer en jeu
+  → Couleurs désaturées, ambiance froide
+  → Option "S'échauffer" avec barre de progression
+  → Si tu entres : couleurs qui reviennent d'un coup
 
 RELÉGATION :
-  → Écran gris, pluie
-  → Les fans partent du stade
-  → Message : "Votre club descend en [division inférieure]"
+  → Écran gris, effet de pluie (CSS animé)
+  → Message sombre qui slide-in lentement
 
-TRANSFERT DANS UN GRAND CLUB :
-  → Animation arrivée à l'aéroport
-  → Flash des photographes
-  → Présentation officielle avec le maillot
-  → Les fans scandent ton nom
+TRANSFERT GRAND CLUB :
+  → Couleurs du nouveau club qui envahissent l'écran
+  → Flash des photographes (flash blanc rapide)
+  → Maillot qui apparaît avec ton nom
 ```
 
-### 17.2 — Transitions
+### 17.2 — Transitions & Micro-Interactions
 
 ```
-Dashboard → Match : Stade apparaît + flip score (500ms, bounce)
-Dashboard → Training : Slide-in + barre de progression (300ms)
-Dashboard → Téléphone : Slide-up comme un vrai téléphone (250ms)
-Match terminé → Stats : Stabilité 3s puis cascade (stagger)
-Transfert confirmé → Nouveau club : Fondu noir → couleurs du nouveau club
-```
+TRANSITIONS :
+  Dashboard → Match : Fade + zoom-in stade (500ms)
+  Dashboard → Training : Slide-in + particules (300ms)
+  Dashboard → Téléphone : Slide-up depuis le bas (250ms)
+  Match terminé → Stats : Stabilité 3s puis cascade (stagger)
+  Transfert → Nouveau club : Fondu noir → couleurs du nouveau club
 
-### 17.3 — Micro-Interactions
-
-```
-Clic bouton : Ripple + scale 0.95→1.0 (100ms)
-Stat monte : Nombre animate + flash vert
-Fatigue change : Barre smooth (600ms), couleur vert→jaune→rouge
-Notification : Toast slide-in + subtle shake (200ms)
-Nouveau record : Éclat doré + confettis mini
-Message téléphone : Vibration + notification badge
+MICRO-INTERACTIONS :
+  Clic bouton : Ripple glassmorphism + scale 0.97→1.0 (100ms)
+  Stat monte : Nombre animate + flash vert + particule
+  Fatigue change : Barre smooth (600ms), vert→jaune→rouge
+  Notification : Toast glassmorphism slide-in + glow (200ms)
+  Nouveau record : Éclat doré + confettis mini
+  Message téléphone : Badge pulse + notification sound
+  PA gagné : "+2 PA ⚡" flotte vers le haut et disparaît (fade-out)
+  PlayStyle débloqué : Case s'illumine + onde de choc + particles
 ```
 
 ---
 
 ## 📓 ÉTAPE 18 — JOURNAL DE CARRIÈRE & AUTOBIOGRAPHIE
 
-> **NOUVEAU — Ton histoire s'écrit toute seule.**
+> **UNIQUE — Ton histoire s'écrit toute seule.**
 > **Terminé quand** : Chaque événement majeur est enregistré. Le joueur peut lire son histoire.
 
 ### 18.1 — Journal Automatique
@@ -1399,31 +1910,27 @@ Le jeu enregistre chaque moment important et génère un texte narratif :
 
 "À l'âge de 15 ans, [Joueur] intègre le centre de formation du Racing Lensois.
 Repéré lors d'un tournoi régional, le jeune [position] impressionne par
-sa [qualité principale]. Son premier entraîneur, visiblement enthousiaste,
-déclare : 'Ce gamin a quelque chose de spécial.'"
+sa [qualité principale]."
 
 "Saison 3, journée 28. Le derby contre le LOSC Lillois. [Joueur] entre
-en jeu à la 72e minute, son équipe mène 1-0. À la 89e, il reçoit le
-ballon dos au but, se retourne et frappe. 2-0. Le stade explose.
+en jeu à la 72e minute. À la 89e, il frappe. 2-0. Le stade explose.
 Sa note : 8.2. Les médias titrent : 'La révélation du derby.'"
 
 ÉVÉNEMENTS ENREGISTRÉS :
-  - Premier match pro
-  - Premier but / première passe décisive
-  - Premier titre
-  - Premier appel en sélection
-  - Transferts majeurs
-  - Blessures graves et retours
-  - Rivalités marquantes
-  - Récompenses individuelles
-  - Moments clés (but en finale, erreur catastrophique, etc.)
+  - Premier match pro | Premier but | Premier titre
+  - Premier appel en sélection | Transferts majeurs
+  - Blessures graves et retours | Rivalités marquantes
+  - Récompenses | Moments clés (but en finale, etc.)
+  - PlayStyles débloqués | Records personnels
+
+Design : journal glassmorphism avec pages qu'on feuillette.
+Chaque entrée a une date, un titre, et une illustration stylisée.
 ```
 
 ### 18.2 — Autobiographie de Fin
 
 ```
 À la retraite, le joueur peut lire son AUTOBIOGRAPHIE COMPLÈTE.
-C'est toute sa carrière racontée comme un livre.
 Chapitres générés automatiquement :
   Ch. 1 : Les débuts (académie)
   Ch. 2 : La percée (premier club pro)
@@ -1431,6 +1938,7 @@ Chapitres générés automatiquement :
   Ch. dernier : L'héritage
 
 Le joueur peut la partager (screenshot/export texte).
+Design : livre numérique avec couverture personnalisée (couleurs du club + nom).
 ```
 
 ---
@@ -1477,43 +1985,32 @@ PARCOURS (max 15) : 3+ championnats +3 | Capitaine club +2 |
 ### 19.4 — Vie Après le Football (JOUABLE)
 
 ```
-Selon ton score d'héritage et tes choix, tu peux :
-
 🎙️ CONSULTANT TV (score > 40) :
-  - Tu commentes les matchs
-  - Tu donnes ton avis sur les joueurs et les tactiques
   - Mini-jeu simplifié : choix de commentaires → popularité
 
 ⚽ ENTRAÎNEUR (score > 60, Leadership > 70) :
   - Version simplifiée de "Football Manager"
-  - Tu gères une équipe (formation, tactique, recrutement)
   - Tu peux croiser ton ancien club
 
 🏢 DIRECTEUR SPORTIF (score > 70) :
-  - Tu recrutes des joueurs pour un club
-  - Tu gères le budget transfert
-  - Tu construis un projet
+  - Tu recrutes des joueurs, tu gères le budget
 
 🏖️ RETRAITE PAISIBLE (tout score) :
-  - Tu vis de tes investissements
-  - Tu regardes les matchs depuis ta villa
-  - Fin du jeu, stats finales
+  - Tu vis de tes investissements. Fin du jeu.
 
 💰 FAILLITE (si dépenses > revenus trop longtemps) :
-  - Pas de choix post-carrière
-  - Fin sombre
+  - Pas de choix post-carrière. Fin sombre.
 ```
 
 ### 19.5 — Héritage Cross-Carrière
 
 ```
 Quand tu recommences une NOUVELLE CARRIÈRE :
-  - Ton ancien joueur EXISTE dans le monde du jeu
-  - Il est une légende (NPC)
-  - Les commentateurs le mentionnent : "Il essaie de marcher dans les pas de [ancien joueur]"
+  - Ton ancien joueur EXISTE dans le monde du jeu (NPC)
+  - Les commentateurs le mentionnent
   - Sa statue est devant un stade (si score > 90)
   - Ses records sont dans les livres
-  - Tu peux même le croiser (consultant TV, entraîneur)
+  - Tu peux le croiser (consultant TV, entraîneur)
 ```
 
 ---
@@ -1524,52 +2021,57 @@ Quand tu recommences une NOUVELLE CARRIÈRE :
 src/app/client/fc-career/
 ├── types/
 │   ├── game.ts              # Univers, saisons, calendrier
-│   ├── player.ts            # Joueur, attributs, potentiel, PlayStyles, traits
-│   ├── club.ts              # Club, effectif, coach, académie, philosophie
+│   ├── player.ts            # Joueur, attributs, potentiel, PlayStyles, traits, PA
+│   ├── club.ts              # Club, effectif, coach, académie
 │   ├── match.ts             # Simulation, choix, notation, VAR, célébrations
-│   ├── economy.ts           # Salaires, primes, impôts, marques, endorsements
+│   ├── economy.ts           # Salaires, primes, impôts, marques, missions sponsors
 │   ├── agent.ts             # 3 profils, négociations, commissions
-│   ├── media.ts             # Médias, conférences, image, réseaux sociaux
+│   ├── media.ts             # Médias, conférences, image
 │   ├── injury.ts            # Blessures, rééducation, psychologie post-blessure
 │   ├── mental.ts            # Pression, burnout, psychologue
 │   ├── award.ts             # Globe d'Or, trophées, classements
-│   ├── international.ts     # Sélection, compétitions, stats
+│   ├── international.ts     # Sélection, compétitions
 │   ├── phone.ts             # Messages, contacts, notifications
 │   ├── relationship.ts      # Mentor, rival, ami, coach, fans
 │   ├── adaptation.ts        # Adaptation culturelle, langue
 │   ├── legacy.ts            # Score héritage, fins, post-carrière, journal
-│   └── ui.ts                # États UI, animations
+│   ├── sponsor.ts           # Missions sponsors, objectifs, récompenses PA
+│   ├── playstyle.ts         # PlayStyles avec cases, déblocage, loadout
+│   ├── attribute-points.ts  # Système de PA, sources, coûts, limites
+│   └── ui.ts                # États UI, animations, design tokens
 │
 ├── engine/
 │   ├── player-generator.ts  # Création joueur + potentiel + traits + PlayStyles
-│   ├── attribute-calculator.ts # Attributs + courbe âge + étoiles
-│   ├── match-engine.ts      # Simulation + choix + VAR + notation
-│   ├── progression.ts       # Entraînement, forme, moral, fatigue
+│   ├── attribute-calculator.ts # Attributs + courbe âge + étoiles + PA
+│   ├── match-engine.ts      # Simulation + choix + VAR + notation + PA post-match
+│   ├── progression.ts       # Entraînement, forme, moral, fatigue, PA
 │   ├── season-manager.ts    # Calendrier 5 pays + compétitions
-│   ├── competition-engine.ts # Coupes, groupes, éliminations, classements
-│   ├── transfer-system.ts   # Sagas transfert, mercato, prêts (option/obligation)
+│   ├── competition-engine.ts # Coupes, groupes, éliminations
+│   ├── transfer-system.ts   # Sagas transfert, mercato, prêts
 │   ├── agent-system.ts      # Agents, négociations, commissions
-│   ├── economic-engine.ts   # Salaires, marques, endorsements, impôts
-│   ├── media-engine.ts      # Presse, conférences, image publique
+│   ├── economic-engine.ts   # Salaires, marques, endorsements
+│   ├── sponsor-engine.ts    # Missions sponsors, vérification, récompenses PA
+│   ├── playstyle-engine.ts  # Déblocage PlayStyles, cases, activation
+│   ├── media-engine.ts      # Presse, conférences
 │   ├── injury-engine.ts     # Blessures, rééducation, psychologie
-│   ├── mental-engine.ts     # Pression, burnout, psychologue sportif
+│   ├── mental-engine.ts     # Pression, burnout, psychologue
 │   ├── award-engine.ts      # Globe d'Or, votes, nominations
-│   ├── international-engine.ts # Sélections, qualifications, tournois
-│   ├── academy-engine.ts    # Parcours académie, promotions, évaluations
+│   ├── international-engine.ts # Sélections, qualifications
+│   ├── academy-engine.ts    # Parcours académie, promotions
 │   ├── legacy-engine.ts     # Héritage, fins, autobiographie, post-carrière
-│   ├── ai-coach.ts          # IA coach : titulaires, objectifs, conversations
+│   ├── ai-coach.ts          # IA coach : titulaires, objectifs
 │   ├── ai-world.ts          # Monde vivant : autres joueurs, transferts, news
-│   ├── phone-system.ts      # Messages, notifications, interactions
-│   ├── relationship-engine.ts # Mentor, rival, ami, dynamique vestiaire
-│   ├── adaptation-engine.ts # Choc culturel, langue, intégration
-│   ├── fan-engine.ts        # Popularité, chants, tifos, réactions
+│   ├── phone-system.ts      # Messages, notifications
+│   ├── relationship-engine.ts # Mentor, rival, ami, vestiaire
+│   ├── adaptation-engine.ts # Choc culturel, langue
+│   ├── fan-engine.ts        # Popularité, chants, tifos
 │   ├── ritual-engine.ts     # Rituels d'avant-match
 │   ├── celebration-engine.ts # Célébrations personnalisées
 │   └── journal-engine.ts    # Autobiographie automatique
 │
 ├── constants/
-│   ├── attributes.ts        # 51 attributs
-│   ├── playstyles.ts        # PlayStyles et PlayStyles+
+│   ├── attributes.ts        # 51 attributs + coûts PA
+│   ├── playstyles.ts        # PlayStyles, cases, seuils de déblocage
 │   ├── traits.ts            # Traits de personnalité
 │   ├── positions.ts         # Postes, formations
 │   ├── clubs-gallia.ts      # Clubs Gallia (D1, D2, D3)
@@ -1582,81 +2084,137 @@ src/app/client/fc-career/
 │   ├── countries.ts         # Pays + confédérations
 │   ├── awards.ts            # Récompenses
 │   ├── brands.ts            # Marques fictives (Velox, Ironwall, Phantom...)
+│   ├── sponsor-missions.ts  # Missions par marque + récompenses PA
 │   ├── injuries.ts          # Types de blessures
 │   ├── agents.ts            # Profils d'agents
 │   ├── celebrations.ts      # Célébrations débloquables
 │   ├── rituals.ts           # Rituels d'avant-match
-│   └── scaling.ts           # Courbes progression, âge, multiplicateurs
+│   └── scaling.ts           # Courbes progression, âge, PA multiplicateurs
 │
 ├── components/
-│   ├── Onboarding/          # Création joueur (5 étapes)
-│   ├── Dashboard/           # Hub principal
-│   ├── Phone/               # Téléphone avec messages et contacts
+│   ├── GlassCard/           # Composant glass réutilisable (base de tout)
+│   ├── AnimatedNumber/      # Compteur animé pour les stats/PA
+│   ├── AttributeLocker/     # Casier d'attribut avec scroll horizontal
+│   ├── PlayStyleGrid/       # Grille de PlayStyles avec cases débloquables
+│   ├── ProgressBar/         # Barre glassmorphism animée (shimmer)
+│   ├── Onboarding/          # Création joueur (5 étapes glassmorphism)
+│   ├── Dashboard/           # Hub principal (glassmorphism, dual match buttons)
+│   ├── Phone/               # Téléphone (slide-up, chat, contacts)
 │   ├── Academy/             # Vue académie (U17, U19, Réserve)
-│   ├── SeasonView/          # Calendrier, classements 5 pays
-│   ├── MatchCenter/         # Pré-match (rituels), simulation (VAR, choix), post (célébrations)
-│   ├── TrainingCenter/      # Entraînement avec barre persistante
+│   ├── SeasonView/          # Calendrier glassmorphism
+│   ├── MatchCenter/         # Pré-match (rituels), simulation (VAR), post (PA)
+│   ├── TrainingCenter/      # Entraînement avec casiers défilants
+│   ├── AttributeShop/       # Distribution des PA (casiers interactifs)
+│   ├── SponsorHub/          # Missions sponsors avec progress bars
 │   ├── ClubView/            # Club, effectif, vestiaire, coach
-│   ├── TransferHub/         # Sagas transfert, mercato, agent
-│   ├── PlayerProfile/       # Stats, PlayStyles, étoiles, journal
-│   ├── MediaCenter/         # Presse, conférences, réseaux sociaux
-│   ├── MentalHealth/        # Pression, psychologue, burnout
-│   ├── AwardCeremony/       # Globe d'Or, galas, équipe type
+│   ├── TransferHub/         # Sagas transfert, timeline glassmorphism
+│   ├── PlayerProfile/       # Stats, PlayStyles (cases), étoiles, journal
+│   ├── MediaCenter/         # Presse, conférences
+│   ├── MentalHealth/        # Pression, psychologue
+│   ├── AwardCeremony/       # Globe d'Or (animation dorée)
 │   ├── International/       # Sélection, matchs
-│   ├── InjuryCenter/        # Blessures, rééducation, psychologie
+│   ├── InjuryCenter/        # Blessures, rééducation
 │   ├── FanZone/             # Popularité, chants, tifos
-│   ├── Locker Room/         # Vestiaire, discours, dynamique
-│   ├── RetirementScreen/    # Fin, héritage, autobiographie
+│   ├── LockerRoom/          # Vestiaire, discours, dynamique
+│   ├── RetirementScreen/    # Fin, héritage (livre numérique)
 │   ├── PostCareer/          # Entraîneur, consultant, DS
 │   ├── NewsRoom/            # News du monde vivant
-│   └── SharedUI/            # Composants réutilisables
+│   └── SharedUI/            # Badge, Tag, Modal, Toast, Skeleton glassmorphism
 │
-├── hooks/ (...)
-├── context/ (...)
-├── page.tsx
+├── utils/
+│   ├── storage.ts           # localStorage + backup + intégrité
+│   ├── match-result.ts      # Logique unifiée post-match (PA inclus)
+│   ├── formatters.ts        # Formatage (argent, dates, notes)
+│   ├── session.ts           # PIN, session, auth
+│   └── animations.ts        # Variants framer-motion réutilisables
+│
+├── hooks/
+│   ├── useCareer.ts         # Hook principal état carrière
+│   ├── useAttributePoints.ts # Hook PA (solde, dépenser, historique)
+│   ├── usePlayStyles.ts     # Hook PlayStyles (cases, déblocage)
+│   ├── useSponsorMissions.ts # Hook missions (actives, progression)
+│   └── useGlassTheme.ts     # Hook couleurs dynamiques selon contexte
+│
+├── context/
+│   ├── CareerContext.tsx     # État global carrière
+│   └── ThemeContext.tsx      # Thème glassmorphism dynamique
+│
+├── page.tsx                  # PIN auth
 ├── layout.tsx
-└── globals.css
+└── globals.css               # Design tokens + glassmorphism + animations
 ```
 
 ---
 
-## 📊 COMPARAISON FC 27 vs CHIF-PAM ELITE
+## 📊 COMPARAISON FC 27 vs CHIF-PAM ELITE v5
 
-| Aspect | FC 27 | Chif-Pam Elite |
-|--------|-------|----------------|
-| **Univers** | Noms sous licence (vrais clubs) | Univers fictif immersif (5 pays, 100+ clubs) |
-| **Pays jouables** | 30+ ligues | 5 grands pays avec pyramide complète (D1→D4) |
-| **Académie** | Simplifié, souvent sauté | U17→U19→Réserve→Pro, strict et réaliste |
-| **Sortie académie** | Direct en D1 | D1, D2, D3 ou D4 selon performance |
-| **PlayStyles** | Oui, déblocage flou | Oui, liés aux attributs (80=PS, 90=PS+) |
-| **Traits personnalité** | Basiques | 15+ traits (positifs, négatifs, neutres) qui changent le gameplay |
-| **Relation coach** | Limitée, peu d'impact | Confiance, conversations, suggestions tactiques, conflits |
-| **Téléphone/Messages** | Cutscenes scriptées | Vrai téléphone avec messages dynamiques de 8+ contacts |
-| **Rival** | Optionnel, peu développé | Rival au poste avec messages, provocations, comparaisons médias |
-| **Mentor** | Absent | Vétéran mentor avec conseils et bonus d'entraînement |
-| **Saga transfert** | Offre → Accepter/Refuser | 2-3 semaines de saga (rumeurs, négo, visite, deadline day) |
-| **Agents** | Inexistant en mode joueur | 3 profils (5-15%), personnalité, dialogues, commissions |
-| **Santé mentale** | Absente | Pression, anxiété, burnout, psychologue sportif |
-| **Psycho post-blessure** | Absent | Peur du contact, reconstruction mentale, rechute psycho |
-| **VAR** | Absent en carrière | Moments VAR avec tension et impact |
-| **Célébrations** | Fixes | Personnalisées, débloquables, signature, impact médiatique |
-| **Rituels avant-match** | Absents | Choix de rituels avec bonus/malus de superstition |
-| **Fans** | Passifs | Cote de popularité, chants, tifos, sifflets, interactions |
-| **Capitanat** | Brassard cosmétique | Discours vestiaire, gestion conflits, représentation |
-| **Vestiaire** | Absent | Dynamique de groupe, cliques, impact sur performances |
-| **Marques** | Licences réelles | 5+ marques fictives avec personnalité, signature line |
-| **Adaptation culturelle** | Absente | Choc culturel, cours de langue, intégration progressive |
-| **Monde vivant** | Statique | Autres joueurs vivent, transferts, retraites, news dynamiques |
-| **Journal/Autobio** | Absent | Autobiographie générée automatiquement, lisible à la retraite |
-| **Post-carrière** | Absente | Jouable : entraîneur, consultant TV, directeur sportif |
-| **Cross-carrière** | Absent | Ancien joueur existe comme légende NPC dans la prochaine carrière |
-| **Motion design** | Standard AAA | Émotionnel : confettis victoire, écran rouge blessure, gris relégation |
-| **Prêts** | Basiques | Sec, option d'achat, obligation d'achat |
-| **Droits à l'image** | Absents | Négociables dans les contrats |
+| Aspect | FC 27 | Chif-Pam Elite v5 | Avantage |
+|--------|-------|-------------------|----------|
+| **Design** | Standard, cartes plates | 🎨 **Glassmorphism complet**, animations 60fps, textes animés | 🏆 CPE |
+| **Attributs** | Progression passive | 🎯 **Points d'Attributs (PA)** gagnés et distribués manuellement | 🏆 CPE |
+| **PlayStyles** | Déblocage flou, invisible | 🔓 **Cases débloquables** visibles, 3 niveaux, loadout de 4 | 🏆 CPE |
+| **Entraînement** | Liste statique | 🏋️ **Casiers défilants**, animations, barre shimmer, feedback visuel | 🏆 CPE |
+| **Sponsors** | Revenus passifs | 📋 **Missions sponsors** → PA + argent, game loop complet | 🏆 CPE |
+| **Univers** | Noms sous licence | Univers fictif immersif (5 pays, 100+ clubs) | ⚖️ Différent |
+| **Pays jouables** | 30+ ligues | 5 grands pays avec pyramide complète (D1→D4) | ⚖️ Profondeur vs Quantité |
+| **Académie** | Simplifié, souvent sauté | U17→U19→Réserve→Pro, strict et réaliste | 🏆 CPE |
+| **Sortie académie** | Direct en D1 | D1, D2, D3 ou D4 selon performance | 🏆 CPE |
+| **Traits personnalité** | Basiques | 15+ traits qui changent le gameplay | 🏆 CPE |
+| **Relation coach** | Limitée | Confiance, conversations, suggestions, conflits | 🏆 CPE |
+| **Téléphone** | Cutscenes scriptées | Vrai téléphone avec messages dynamiques de 9+ contacts | 🏆 CPE |
+| **Rival** | Optionnel, peu développé | Rival avec messages, provocations, comparaisons médias | 🏆 CPE |
+| **Mentor** | Absent | Vétéran mentor avec conseils et bonus | 🏆 CPE |
+| **Saga transfert** | Offre → Accepter/Refuser | 2-3 semaines de saga (rumeurs, négo, deadline day) | 🏆 CPE |
+| **Agents** | Inexistant en mode joueur | 3 profils avec personnalité et dialogues | 🏆 CPE |
+| **Santé mentale** | Absente | Pression, anxiété, burnout, psychologue sportif | 🏆 CPE |
+| **Psycho post-blessure** | Absent | Peur du contact, reconstruction mentale | 🏆 CPE |
+| **VAR** | Absent en carrière | Moments VAR glassmorphism avec tension | 🏆 CPE |
+| **Célébrations** | Fixes | Personnalisées, débloquables, signature | 🏆 CPE |
+| **Rituels avant-match** | Absents | Choix avec bonus/malus de superstition | 🏆 CPE |
+| **Fans** | Passifs | Cote de popularité, chants, tifos, interactions | 🏆 CPE |
+| **Capitanat** | Brassard cosmétique | Discours vestiaire, gestion conflits | 🏆 CPE |
+| **Vestiaire** | Absent | Dynamique de groupe, cliques, impact perf | 🏆 CPE |
+| **Marques** | Licences réelles | 5+ marques fictives avec missions et personnalité | 🏆 CPE |
+| **Adaptation culturelle** | Absente | Choc culturel, cours de langue, intégration | 🏆 CPE |
+| **Monde vivant** | Statique | Transferts, retraites, news dynamiques | 🏆 CPE |
+| **Journal/Autobio** | Absent | Autobiographie générée, livre numérique | 🏆 CPE |
+| **Post-carrière** | Absente | Jouable : entraîneur, consultant TV, DS | 🏆 CPE |
+| **Cross-carrière** | Absent | Ancien joueur = légende NPC | 🏆 CPE |
+| **Feedback visuel** | Minimal | Animations partout, PA visibles, progress bars | 🏆 CPE |
+| **Chaleur du jeu** | Froid, mécanique | CHAUD : émotions, confettis, animations contextuelles | 🏆 CPE |
+
+### Leçons tirées de FC 27 (appliquées dans v5) :
+
+```
+CE QUE FC 27 FAIT BIEN ET QU'ON REPREND EN MIEUX :
+  ✅ PlayStyles visibles → On ajoute les CASES débloquables (FC 27 les a mais mal)
+  ✅ Progression par le jeu → On ajoute les PA comme récompense directe
+  ✅ Sponsors → On ajoute les MISSIONS (FC 27 = juste un contrat passif)
+  ✅ Feeling de progression → On ajoute les animations et feedbacks visuels
+  ✅ Match day experience → On garde les 2 modes (simuler + jouer)
+
+CE QUE FC 27 FAIT MAL ET QU'ON CORRIGE :
+  ❌ Design plat et froid → Glassmorphism + animations + textes animés
+  ❌ Progression invisible → PA + casiers d'attributs visuels
+  ❌ Sponsors ennuyeux → Missions avec récompenses PA
+  ❌ PlayStyles flous → Cases avec niveaux et déblocage visible
+  ❌ Pas de choix réels → Chaque décision a un impact mesurable
+  ❌ Pas de chaleur → Confettis, sons, glow, particules, émotions visuelles
+```
 
 ---
 
-> **Ce document est la BIBLE du projet.**
+> **Ce document est la BIBLE du projet v5.**
 > Chaque étape est indépendante. On ne passe à la suivante que quand la précédente est **terminée et testée**.
-> Les étapes 1-8 sont le CŒUR. Les étapes 9-19 sont ce qui rend le jeu MEILLEUR que FC 27.
-> L'étape 20 est la structure technique qui supporte tout.
+>
+> **ORDRE DE PRIORITÉ :**
+> 1. **Étape 0** (Design System) — C'est la fondation visuelle de TOUT
+> 2. **Étape 2** (Bugs + Stabilité) — RIEN ne marche si ça crash
+> 3. **Étapes 4-5** (PA + PlayStyles + Entraînement) — Le cœur de la NOUVELLE progression
+> 4. **Étape 8** (Match + PA) — Le match doit récompenser
+> 5. **Étape 10** (Missions Sponsors) — Le game loop secondaire
+> 6. **Le reste** dans l'ordre
+>
+> Le jeu ne doit plus être FROID. Il doit être CHAUD, VIVANT, BEAU.
+> Chaque pixel compte. Chaque animation compte. Chaque feedback compte.
+> C'est ça, une Masterclass.
