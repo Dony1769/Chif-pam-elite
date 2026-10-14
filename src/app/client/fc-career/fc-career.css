@@ -409,6 +409,70 @@
  }
 
 /* ============================================================
+   LOT D — Design System Additions
+   ============================================================ */
+
+/* --- Generic card (used by awards, immersion, journal, etc.) --- */
+.fcl .card{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+/* --- Tabular nums for all stats, scores, counters --- */
+.fcl .metric strong,
+.fcl .arena-score,
+.fcl .wallet-box strong,
+.fcl .contract-details strong,
+.fcl .season-percent,
+.fcl .attribute-list em,
+.fcl .table-head,
+.fcl .calendar-row strong,
+.fcl .fixture-date strong{
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Layered surface tokens (deeper hierarchy) --- */
+.fcl{
+  --surface-0: oklch(.11 .006 260);
+  --surface-1: oklch(.16 .006 260);
+  --surface-2: oklch(.20 .005 260);
+  --surface-3: oklch(.25 .006 260);
+}
+
+/* Override sidebar to use deeper surface */
+.fcl .sidebar{ background: var(--surface-0); }
+.fcl .player-card{ background: var(--surface-1); }
+.fcl .metric{ background: var(--surface-1); }
+.fcl .match-card{ background: var(--surface-1); }
+.fcl .card{ background: var(--surface-1); }
+
+/* --- Ensure emerald is accent only — not the default border --- */
+.fcl *{ border-color: var(--border); }
+.fcl .card:hover{ border-color: oklch(.38 .01 260); }
+
+/* --- Season table improved readability --- */
+.fcl .season-table{ border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.fcl .table-head{ background: oklch(.14 .005 260); }
+.fcl .calendar-row.highlight{ background: color-mix(in oklab, var(--primary) 8%, var(--surface-1)); }
+
+/* --- Touch targets 44px minimum for mobile --- */
+@media(max-width:600px){
+  .fcl .fcl-btn,
+  .fcl .nav-item,
+  .fcl .career-button,
+  .fcl .action-button{ min-height: 44px; }
+  .fcl .fcl-size-sm{ min-height: 40px; }
+  .fcl .tabs button{ min-height: 40px; }
+}
+
+/* --- Stat card tone variants (used by StatCard) --- */
+.fcl .metric.amber .metric-icon{ color: oklch(.85 .19 72); }
+.fcl .metric.red .metric-icon{ color: var(--coral); }
+.fcl .metric.green .metric-icon{ color: var(--primary); }
+
+/* ============================================================
    GLASSMORPHISM — FC Career Design System
    ============================================================ */
 
