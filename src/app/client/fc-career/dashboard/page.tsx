@@ -106,6 +106,34 @@ function DashboardContent() {
     // Marquer le match joué dans weekState
     dispatch({ type: "MARK_MATCH_PLAYED" });
 
+    // Journal : entrée automatique pour le match
+    const scoreStr2 = isHome
+      ? `${result.scoreHome} – ${result.scoreAway}`
+      : `${result.scoreAway} – ${result.scoreHome}`;
+    dispatch({
+      type: "ADD_JOURNAL_ENTRY",
+      entry: {
+        id: `journal-match-${Date.now()}`,
+        season: career.season,
+        week: career.week,
+        type: "match",
+        title: `J${weekFixture.matchday} — ${scoreStr2}`,
+        body: `Note ${result.playerRating}/10 · ${result.playerStats.goals} but(s) · ${result.playerStats.assists} passe(s) · ${result.playerStats.minutesPlayed} min`,
+      },
+    });
+
+    // Fans : update basé sur le résultat
+    const playerWon = isHome
+      ? result.scoreHome > result.scoreAway
+      : result.scoreAway > result.scoreHome;
+    const fanRatingDelta = playerWon ? (result.playerStats.goals > 0 ? 3 : 1) : -1;
+    const followersDelta = playerWon ? (result.playerStats.goals > 0 ? 50 : 20) : 0;
+    dispatch({
+      type: "UPDATE_FANS",
+      fanRatingDelta,
+      followersDelta,
+    });
+
     setMatchResult(result);
     setSimulating(false);
 
@@ -118,8 +146,7 @@ function DashboardContent() {
   /* — Terminer la semaine ----------------------------------------- */
   const handleCommitWeek = useCallback(() => {
     if (career.week >= 38) {
-      toast("Fin de saison ! Rendez-vous en page Carrière pour le bilan.", "success");
-      router.push("/client/fc-career/career");
+      router.push("/client/fc-career/season-end");
       return;
     }
     if (!weekState.trainingDone) {

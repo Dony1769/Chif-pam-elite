@@ -685,6 +685,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case "UPDATE_FANS": {
+      if (!state.save) return state;
+      const prevFans = state.save.fans ?? { fanRating: 30, followers: 0, events: [] };
+      const newFanRating = Math.max(0, Math.min(100, prevFans.fanRating + action.fanRatingDelta));
+      const newFollowers = Math.max(0, prevFans.followers + action.followersDelta);
+      const newEvents = action.event
+        ? [...prevFans.events, action.event].slice(-20)
+        : prevFans.events;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          fans: { fanRating: newFanRating, followers: newFollowers, events: newEvents },
+        },
+        isDirty: true,
+      };
+    }
+
     case "SIGN_SPONSOR": {
       if (!state.save) return state;
       return {

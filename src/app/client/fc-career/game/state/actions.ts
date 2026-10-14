@@ -65,8 +65,15 @@ export type GameAction =
   | { type: "RESPOND_CONTRACT_OFFER"; offerId: string; accepted: boolean }
   | { type: "REQUEST_OFFERS" }
 
+  // Santé & blessures
+  | { type: "APPLY_INJURY"; injury: import("../domain/player").PlayerInjury }
+  | { type: "HEAL_INJURY" }
+
   // Médias & Réputation
   | { type: "UPDATE_MEDIA"; mediaRepDelta: number; conference: import("../persistence/saveSchema").PressConference }
+
+  // Fans
+  | { type: "UPDATE_FANS"; fanRatingDelta: number; followersDelta: number; event?: import("../persistence/saveSchema").FanEvent }
 
   // Sponsors
   | { type: "SIGN_SPONSOR"; contract: import("../persistence/saveSchema").SponsorContract }
