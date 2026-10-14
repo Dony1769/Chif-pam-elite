@@ -209,6 +209,35 @@ export default function SeasonEndPage() {
 
     dispatch({ type: "END_SEASON", setup, summary, paBonus: evaluation.paBonus });
 
+    // Journal : entrée de fin de saison
+    dispatch({
+      type: "ADD_JOURNAL_ENTRY",
+      entry: {
+        id: `journal-season-${career.season}-${Date.now()}`,
+        season: career.season,
+        week: career.week,
+        type: "milestone",
+        title: `Fin de saison ${career.season} — ${evaluation.verdict === "promotion" ? "Promotion !" : evaluation.verdict === "relegated" ? "Relégation" : "Maintien"}`,
+        body: `Score d'évaluation : ${evaluation.score}/100 · +${evaluation.paBonus} PA`,
+      },
+    });
+
+    // Awards : distinction si excellent
+    const currentSeasonStats = player.stats.seasons.find(s => s.season === career.season);
+    if (currentSeasonStats && currentSeasonStats.avgRating >= 7.5) {
+      dispatch({
+        type: "ADD_JOURNAL_ENTRY",
+        entry: {
+          id: `journal-award-${career.season}-${Date.now()}`,
+          season: career.season,
+          week: career.week,
+          type: "award",
+          title: `Joueur de la saison ${career.season}`,
+          body: `Note moyenne ${currentSeasonStats.avgRating.toFixed(1)}/10 · ${currentSeasonStats.goals} buts · ${currentSeasonStats.assists} passes`,
+        },
+      });
+    }
+
     /* Construire la sauvegarde mise à jour et la persister */
     const newAcademy = setup.newAcademyStage
       ? { stage: setup.newAcademyStage, evaluationScore: 50, promotionThreshold: 80, weeksInStage: 0 }
@@ -388,6 +417,40 @@ export default function SeasonEndPage() {
         >
           {confirming ? "Transition en cours…" : "Commencer la saison suivante →"}
         </button>
+
+        {/* Retraite : disponible si ≥ 35 ans */}
+        {player.age >= 35 && (
+          <button
+            className="fc-btn fc-btn--secondary"
+            style={{ width: "100%", marginTop: "var(--fc-space-2)", opacity: 0.7 }}
+            onClick={() => {
+              if (!career || !save) return;
+              const summary = buildSeasonSummary(player, career, evaluation!);
+              dispatch({
+                type: "END_SEASON",
+                setup: { ...prepareNextSeason(career.id, player, career, "maintained"), newPhase: "retired" as import("../game/domain/career").CareerPhase },
+                summary,
+                paBonus: 0,
+              });
+              dispatch({
+                type: "ADD_JOURNAL_ENTRY",
+                entry: {
+                  id: `journal-retire-${Date.now()}`,
+                  season: career.season,
+                  week: career.week,
+                  type: "milestone",
+                  title: "Fin de carrière",
+                  body: `${player.firstName} ${player.lastName} raccroche les crampons à ${player.age} ans. Une carrière de légende.`,
+                },
+              });
+              writeSave({ ...save, career: { ...career, phase: "retired", completedMatchIds: [] as unknown as string[] } } as unknown as Parameters<typeof writeSave>[0]);
+              toast("Vous avez pris votre retraite. Merci pour tout !", "success");
+              router.push("/client/fc-career/career");
+            }}
+          >
+            Prendre sa retraite
+          </button>
+        )}
       </motion.div>
     </motion.div>
   );
