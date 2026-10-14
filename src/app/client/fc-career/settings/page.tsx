@@ -155,8 +155,6 @@ export default function SettingsPage() {
   const [saving,  setSaving]  = useState(false);
   const [showErase, setShowErase] = useState(false);
 
-  if (isLoading) return <Spinner />;
-
   /* ── Sauvegarde manuelle ────────────────────────────────────────── */
   const handleSave = useCallback(async () => {
     if (!state.save) return;
@@ -184,6 +182,8 @@ export default function SettingsPage() {
     toast("🗑️ Carrière effacée", "warning");
     router.push("/client/fc-career/create-player");
   }, [dispatch, toast, router]);
+
+  if (isLoading) return <Spinner />;
 
   return (
     <>
