@@ -12,7 +12,7 @@ import type { SeasonSchedule } from "../domain/season";
 import { applyResultsToSchedule, updateStanding, simulateMatchday } from "../domain/worldSimulator";
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
 import { createInitialAgentState } from "../domain/agent";
-import { computeWeeklyCondition } from "../domain/training";
+import { computeWeeklyCondition, paCostForAttribute } from "../domain/training";
 import { buildInitialChallenges, activateChallenge, updateChallengeProgress } from "../domain/challenges";
 import { pickInitialRivals, updateRivalsEndOfSeason } from "../domain/rivals";
 import { getAllWorldPlayers } from "../data/worldPlayers";
@@ -87,6 +87,42 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             attributes: newAttrs,
             overall: newOverall,
             paPoints: player.paPoints - amount,
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "BATCH_INVEST_ATTRIBUTES": {
+      if (!state.save) return state;
+      let player = state.save.player;
+      // Calcul du coût total et validation avant d'appliquer
+      const totalCost = action.investments.reduce((sum, inv) => {
+        let cost = 0;
+        let val = player.attributes[inv.attribute] ?? 50;
+        for (let i = 0; i < inv.amount; i++) {
+          cost += paCostForAttribute(val + i);
+        }
+        return sum + cost;
+      }, 0);
+      if (player.paPoints < totalCost) return state;
+      // Appliquer chaque investissement
+      let newAttrs = { ...player.attributes };
+      for (const inv of action.investments) {
+        const currentVal = newAttrs[inv.attribute] ?? 50;
+        const newVal = clamp(currentVal + inv.amount, 1, player.potential);
+        newAttrs = { ...newAttrs, [inv.attribute]: newVal };
+      }
+      const newOverall = computeOverall(newAttrs, positionFamily(player.position));
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          player: {
+            ...player,
+            attributes: newAttrs,
+            overall: newOverall,
+            paPoints: player.paPoints - totalCost,
           },
         },
         isDirty: true,

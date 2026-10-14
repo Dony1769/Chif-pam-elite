@@ -23,6 +23,7 @@ export type GameAction =
   // Joueur
   | { type: "UPDATE_PLAYER"; player: Partial<Player> }
   | { type: "INVEST_ATTRIBUTE"; attribute: keyof PlayerAttributes; amount: number }
+  | { type: "BATCH_INVEST_ATTRIBUTES"; investments: Array<{ attribute: keyof PlayerAttributes; amount: number }> }
   | { type: "UPDATE_CONDITION"; condition: Partial<Player["condition"]> }
 
   // Match
