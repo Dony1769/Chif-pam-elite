@@ -9,6 +9,7 @@ import type { GameSaveV1 } from "../persistence/saveSchema";
 import { computeOverall, positionFamily } from "../domain/player";
 import { clamp } from "../utils/validation";
 import type { SeasonSchedule } from "../domain/season";
+import { applyResultsToSchedule, updateStanding } from "../domain/worldSimulator";
 
 export interface GameState {
   save: GameSaveV1 | null;
@@ -275,6 +276,39 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             schedules: newSchedules,
           },
           meta: { ...save.meta, savedAt: Date.now() },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "SIMULATE_WORLD_MATCHDAY": {
+      if (!state.save) return state;
+      const { matchday, results, leagueId } = action;
+
+      // Mise à jour des fixtures du schedule de ligue
+      const updatedSchedules = state.save.world.schedules.map((s) =>
+        s.competitionId === leagueId
+          ? applyResultsToSchedule(s, results)
+          : s,
+      );
+
+      // Mise à jour du classement de la ligue
+      const playerClubId = state.save.player.contract.clubId;
+      const currentStanding = state.save.world.standings[leagueId] ?? [];
+      const newStanding = updateStanding(currentStanding, results, playerClubId);
+
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          world: {
+            ...state.save.world,
+            schedules: updatedSchedules,
+            standings: {
+              ...state.save.world.standings,
+              [leagueId]: newStanding,
+            },
+          },
         },
         isDirty: true,
       };

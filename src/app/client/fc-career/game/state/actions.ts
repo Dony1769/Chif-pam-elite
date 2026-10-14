@@ -9,6 +9,7 @@ import type { Wallet } from "../domain/economy";
 import type { MatchResult } from "../domain/match";
 import type { GameSaveV1 } from "../persistence/saveSchema";
 import type { NextSeasonSetup, SeasonSummary } from "../domain/seasonEnd";
+import type { SimulatedMatchResult } from "../domain/worldSimulator";
 
 export type GameAction =
   // Initialisation
@@ -29,6 +30,9 @@ export type GameAction =
   | { type: "ADVANCE_WEEK" }
   | { type: "ADVANCE_SEASON" }
   | { type: "END_SEASON"; setup: NextSeasonSetup; summary: SeasonSummary; paBonus: number }
+
+  // Monde vivant
+  | { type: "SIMULATE_WORLD_MATCHDAY"; matchday: number; results: SimulatedMatchResult[]; leagueId: string }
 
   // Économie
   | { type: "CREDIT_WALLET"; amount: number; reason: string }

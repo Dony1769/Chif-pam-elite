@@ -180,6 +180,9 @@ function DashboardContent() {
         </div>
       </section>
 
+      {/* ── Position au classement ───────────────────────────────── */}
+      <StandingWidget state={state} />
+
       {/* ── Actions ──────────────────────────────────────────────── */}
       <section className="fc-section" style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-3)" }}>
         <Button
@@ -197,6 +200,13 @@ function DashboardContent() {
         >
           📅 Calendrier des matchs
         </Button>
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => router.push("/client/fc-career/world")}
+        >
+          🌍 Voir le classement
+        </Button>
       </section>
 
       <div style={{ height: "var(--fc-space-8)" }} />
@@ -204,6 +214,7 @@ function DashboardContent() {
   );
 }
 
+import type { GameState } from "../game/state/gameReducer";
 import type { Player } from "../game/domain/player";
 import { positionFamily } from "../game/domain/player";
 
@@ -250,5 +261,89 @@ function KeyAttrs({ player }: { player: Player }) {
         <StatBar key={s.label} label={s.label} value={s.value} />
       ))}
     </>
+  );
+}
+
+/* ── Widget classement ──────────────────────────────────────────── */
+function StandingWidget({ state }: { state: GameState }) {
+  const save   = state.save;
+  const player = selectPlayer(state);
+  const career = selectCareer(state);
+  if (!save || !player || !career) return null;
+
+  const season = career.season;
+  const leagueSchedule = save.world.schedules.find(
+    (s) => s.competitionId !== "academy-eval" && s.season === season,
+  );
+  const academySchedule = save.world.schedules.find(
+    (s) => s.competitionId === "academy-eval" && s.season === season,
+  );
+  const activeSchedule  = leagueSchedule ?? academySchedule;
+  const standingKey     = activeSchedule?.competitionId;
+  if (!standingKey) return null;
+
+  const standing = save.world.standings[standingKey] ?? [];
+  const pos = standing.findIndex((r) => r.clubId === player.contract.clubId) + 1;
+  if (pos === 0 || standing.length === 0) return null;
+
+  const myRow = standing[pos - 1];
+  const top3 = standing.slice(0, 3);
+
+  return (
+    <section className="fc-section">
+      <h2 className="fc-label" style={{ marginBottom: "var(--fc-space-3)" }}>Classement</h2>
+      <div className="fc-panel">
+        {/* Ma position */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--fc-space-3)" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "var(--fc-space-2)" }}>
+            <span style={{
+              fontFamily: "var(--fc-font-display)", fontWeight: 900,
+              fontSize: "1.8rem", color: "var(--fc-emerald)", lineHeight: 1,
+            }}>{pos}</span>
+            <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+              / {standing.length}
+            </span>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>Points</span>
+            <p style={{ fontFamily: "var(--fc-font-display)", fontWeight: 800, color: "var(--fc-text)", fontSize: "var(--fc-text-lg)" }}>
+              {myRow?.points ?? 0}
+            </p>
+          </div>
+        </div>
+
+        {/* Top 3 */}
+        {top3.map((row, i) => {
+          const club = save.world.clubs.find(c => c.id === row.clubId);
+          const isMe = row.clubId === player.contract.clubId;
+          return (
+            <div
+              key={row.clubId}
+              style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "var(--fc-space-1) 0",
+                borderTop: i === 0 ? "1px solid var(--fc-border)" : undefined,
+              }}
+            >
+              <div style={{ display: "flex", gap: "var(--fc-space-2)", alignItems: "center" }}>
+                <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 700, width: 16 }}>
+                  {i + 1}
+                </span>
+                <span style={{
+                  fontSize: "var(--fc-text-sm)", fontWeight: isMe ? 700 : 400,
+                  color: isMe ? "var(--fc-emerald)" : "var(--fc-text-2)",
+                }}>
+                  {club?.shortName ?? row.clubId}
+                  {isMe && " ●"}
+                </span>
+              </div>
+              <span style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)" }}>
+                {row.points}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
