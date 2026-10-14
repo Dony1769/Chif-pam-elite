@@ -1,421 +1,340 @@
 "use client";
 
 /**
- * FC CAREER — Page : Monde vivant
- * Classement du championnat, résultats récents, météo de forme.
+ * FC CAREER — Monde vivant
+ * 4 pays, 8 ligues, 64 clubs.
+ * Navigation par pays → ligue → classement.
  */
 
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useGame }  from "../game/hooks/useGame";
-import { useToast } from "../game/components/Toast";
 import { Spinner }  from "../game/components/LoadingState";
-import {
-  selectPlayer, selectCareer, selectIsLoading,
-} from "../game/state/selectors";
-import { writeSave } from "../game/persistence/saveRepository";
-import {
-  simulateMatchday,
-  applyResultsToSchedule,
-  updateStanding,
-  getClubForm,
-} from "../game/domain/worldSimulator";
-import type { FormResult } from "../game/domain/worldSimulator";
-import type { StandingRow }  from "../game/domain/club";
-import type { SeasonSchedule } from "../game/domain/season";
+import { selectPlayer, selectCareer, selectIsLoading } from "../game/state/selectors";
 import { pageFade, stagger, itemFade } from "../game/design/animations";
+import { COUNTRIES, LEAGUES, CLUBS } from "../game/data/world";
+import type { StandingRow } from "../game/domain/club";
 
-/* ── Utilitaires UI ─────────────────────────────────────────────── */
-
-function FormBadge({ r }: { r: FormResult }) {
-  const cfg: Record<FormResult, { bg: string; color: string; label: string }> = {
-    W: { bg: "rgba(55,217,154,0.15)", color: "var(--fc-emerald)", label: "V" },
-    D: { bg: "rgba(251,191,36,0.15)", color: "var(--fc-amber)",   label: "N" },
-    L: { bg: "rgba(248,113,113,0.15)", color: "var(--fc-coral)",  label: "D" },
-  };
-  const { bg, color, label } = cfg[r];
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: 20, height: 20, borderRadius: 4,
-      background: bg, color, fontWeight: 800,
-      fontSize: 10,
-    }}>
-      {label}
-    </span>
-  );
-}
-
-function GD(row: StandingRow) {
-  const diff = row.goalsFor - row.goalsAgainst;
-  const color = diff > 0 ? "var(--fc-emerald)" : diff < 0 ? "var(--fc-coral)" : "var(--fc-text-3)";
-  return <span style={{ color }}>{diff > 0 ? `+${diff}` : diff}</span>;
-}
-
-/* ── Composant classement ───────────────────────────────────────── */
-
-function StandingsTable({
-  standing,
-  clubs,
-  playerClubId,
-  schedule,
-}: {
-  standing: StandingRow[];
-  clubs: { id: string; shortName: string; name: string }[];
-  playerClubId: string;
-  schedule: SeasonSchedule;
-}) {
-  const clubMap = new Map(clubs.map(c => [c.id, c]));
-
-  if (standing.length === 0) {
-    return (
-      <p style={{ color: "var(--fc-text-3)", fontSize: "var(--fc-text-sm)", padding: "var(--fc-space-4) 0" }}>
-        Aucun classement disponible. Simulez une journée pour commencer.
-      </p>
-    );
-  }
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      {/* En-têtes */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "28px 1fr 32px 32px 32px 32px 40px 60px",
-        gap: "var(--fc-space-2)",
-        padding: "var(--fc-space-2) var(--fc-space-3)",
-        fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)",
-        borderBottom: "1px solid var(--fc-border)",
-      }}>
-        <span>#</span>
-        <span>Club</span>
-        <span style={{ textAlign: "center" }}>J</span>
-        <span style={{ textAlign: "center" }}>G</span>
-        <span style={{ textAlign: "center" }}>N</span>
-        <span style={{ textAlign: "center" }}>P</span>
-        <span style={{ textAlign: "center" }}>DB</span>
-        <span style={{ textAlign: "right" }}>Pts</span>
-      </div>
-
-      {standing.map((row, idx) => {
-        const club = clubMap.get(row.clubId);
-        const isPlayer = row.clubId === playerClubId;
-        const form = getClubForm(row.clubId, schedule, 5);
-
-        return (
-          <div
-            key={row.clubId}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "28px 1fr 32px 32px 32px 32px 40px 60px",
-              gap: "var(--fc-space-2)",
-              padding: "var(--fc-space-3) var(--fc-space-3)",
-              alignItems: "center",
-              background: isPlayer ? "rgba(55,217,154,0.06)" : "transparent",
-              borderBottom: "1px solid var(--fc-border)",
-              borderLeft: isPlayer ? "2px solid var(--fc-emerald)" : "2px solid transparent",
-            }}
-          >
-            <span style={{
-              fontSize: "var(--fc-text-xs)", fontWeight: idx < 3 ? 700 : 400,
-              color: idx < 3 ? "var(--fc-emerald)" : "var(--fc-text-3)",
-            }}>
-              {idx + 1}
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{
-                fontSize: "var(--fc-text-sm)", fontWeight: isPlayer ? 700 : 500,
-                color: isPlayer ? "var(--fc-emerald)" : "var(--fc-text)",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>
-                {club?.shortName ?? club?.name ?? row.clubId}
-                {isPlayer && (
-                  <span style={{ fontSize: 10, color: "var(--fc-emerald)", marginLeft: 4 }}>●</span>
-                )}
-              </div>
-              {form.length > 0 && (
-                <div style={{ display: "flex", gap: 2, marginTop: 2 }}>
-                  {form.map((r, i) => <FormBadge key={i} r={r} />)}
-                </div>
-              )}
-            </div>
-            <span style={{ textAlign: "center", fontSize: "var(--fc-text-xs)", color: "var(--fc-text-2)" }}>{row.played}</span>
-            <span style={{ textAlign: "center", fontSize: "var(--fc-text-xs)", color: "var(--fc-text-2)" }}>{row.won}</span>
-            <span style={{ textAlign: "center", fontSize: "var(--fc-text-xs)", color: "var(--fc-text-2)" }}>{row.drawn}</span>
-            <span style={{ textAlign: "center", fontSize: "var(--fc-text-xs)", color: "var(--fc-text-2)" }}>{row.lost}</span>
-            <span style={{ textAlign: "center", fontSize: "var(--fc-text-xs)" }}>{GD(row)}</span>
-            <span style={{
-              textAlign: "right",
-              fontFamily: "var(--fc-font-display)", fontWeight: 800,
-              fontSize: "var(--fc-text-md)",
-              color: isPlayer ? "var(--fc-emerald)" : "var(--fc-text)",
-            }}>
-              {row.points}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ── Résultats récents ───────────────────────────────────────────── */
-
-function RecentResults({
-  schedule,
-  clubs,
-}: {
-  schedule: SeasonSchedule;
-  clubs: { id: string; shortName: string; name: string }[];
-}) {
-  const clubMap = new Map(clubs.map(c => [c.id, c]));
-  const played = schedule.fixtures
-    .filter((f) => f.result !== null)
-    .slice(-8)
-    .reverse();
-
-  if (played.length === 0) {
-    return (
-      <p style={{ color: "var(--fc-text-3)", fontSize: "var(--fc-text-sm)" }}>
-        Aucun match joué.
-      </p>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
-      {played.map((f) => {
-        const home = clubMap.get(f.homeClubId);
-        const away = clubMap.get(f.awayClubId);
-        const gs = f.result!.scoreHome;
-        const ga = f.result!.scoreAway;
-        return (
-          <div
-            key={f.id}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 48px 1fr",
-              gap: "var(--fc-space-2)",
-              alignItems: "center",
-              padding: "var(--fc-space-2) var(--fc-space-3)",
-              background: "var(--fc-surface-2)",
-              borderRadius: "var(--fc-radius-sm)",
-              fontSize: "var(--fc-text-sm)",
-            }}
-          >
-            <span style={{ textAlign: "right", color: "var(--fc-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {home?.shortName ?? home?.name ?? f.homeClubId}
-            </span>
-            <span style={{
-              textAlign: "center",
-              fontFamily: "var(--fc-font-display)", fontWeight: 800,
-              color: "var(--fc-text)", fontSize: "var(--fc-text-md)",
-            }}>
-              {gs}–{ga}
-            </span>
-            <span style={{ color: "var(--fc-text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {away?.shortName ?? away?.name ?? f.awayClubId}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ── Page principale ─────────────────────────────────────────────── */
+/* ── Composant principal ─────────────────────────────────────────── */
 
 export default function WorldPage() {
-  const { state, dispatch } = useGame();
-  const { toast }           = useToast();
-  const isLoading           = selectIsLoading(state);
-  const player              = selectPlayer(state);
-  const career              = selectCareer(state);
+  const { state }     = useGame();
+  const isLoading     = selectIsLoading(state);
+  const player        = selectPlayer(state);
+  const career        = selectCareer(state);
 
-  const [simulating, setSimulating] = useState(false);
+  const [activeCountryId, setActiveCountryId] = useState<string>(COUNTRIES[0].id);
+  const [activeTier, setActiveTier]           = useState<1 | 2>(1);
 
   if (isLoading) return <Spinner />;
-  if (!player || !career || !state.save) {
-    return (
-      <div className="fc-page">
-        <p style={{ color: "var(--fc-text-3)", textAlign: "center", paddingTop: "var(--fc-space-8)" }}>
-          Aucune carrière active.
-        </p>
-      </div>
-    );
-  }
 
-  const save   = state.save;
-  const clubs  = save.world.clubs;
-  const season = career.season;
+  const save = state.save;
 
-  // Chercher le schedule de ligue actif (non académie)
-  const leagueSchedule = save.world.schedules.find(
-    (s) => s.competitionId !== "academy-eval" && s.season === season,
+  // Ligue active
+  const activeLeague = LEAGUES.find(
+    l => l.countryId === activeCountryId && l.tier === activeTier
   );
-  // Si phase académie, utiliser le schedule académie
-  const academySchedule = save.world.schedules.find(
-    (s) => s.competitionId === "academy-eval" && s.season === season,
-  );
-  const activeSchedule = leagueSchedule ?? academySchedule;
+  const leagueClubs = activeLeague
+    ? CLUBS.filter(c => c.leagueId === activeLeague.id)
+    : [];
 
-  // Classement actif
-  const standingLeagueId = leagueSchedule?.competitionId ?? "academy-eval";
-  const standing: StandingRow[] = save.world.standings[standingLeagueId] ?? [];
+  // Classement stocké (ou vide)
+  const standingRows: StandingRow[] = activeLeague
+    ? (save?.world.standings[activeLeague.id] ?? [])
+    : [];
 
-  // Prochaine journée non simulée
-  const nextMatchday = activeSchedule
-    ? (activeSchedule.fixtures.find((f) => f.result === null)?.matchday ?? null)
-    : null;
+  // Si pas de classement stocké, afficher les clubs sans stats
+  const rows: StandingRow[] = standingRows.length > 0
+    ? standingRows
+    : leagueClubs.map((c, i) => ({
+        clubId: c.id, position: i + 1, points: 0,
+        played: 0, won: 0, drawn: 0, lost: 0,
+        goalsFor: 0, goalsAgainst: 0, form: [],
+      }));
 
-  function handleSimulate() {
-    if (!activeSchedule || !nextMatchday || simulating) return;
-    setSimulating(true);
-
-    try {
-      const seasonSeed = `${save.meta.careerId}-s${season}`;
-      const results = simulateMatchday(nextMatchday, activeSchedule, clubs, seasonSeed);
-
-      dispatch({
-        type: "SIMULATE_WORLD_MATCHDAY",
-        matchday: nextMatchday,
-        results,
-        leagueId: standingLeagueId,
-      });
-
-      // Persister
-      const updatedSchedule = applyResultsToSchedule(activeSchedule, results);
-      const currentStanding = save.world.standings[standingLeagueId] ?? [];
-      const newStanding = updateStanding(currentStanding, results, player!.contract.clubId);
-
-      writeSave({
-        ...save,
-        world: {
-          ...save.world,
-          schedules: save.world.schedules.map((s) =>
-            s.competitionId === standingLeagueId && s.season === season
-              ? updatedSchedule
-              : s,
-          ),
-          standings: {
-            ...save.world.standings,
-            [standingLeagueId]: newStanding,
-          },
-        },
-        meta: { ...save.meta, savedAt: Date.now() },
-      });
-
-      toast(`Journée ${nextMatchday} simulée — ${results.length} match(s)`, "success");
-    } catch (err) {
-      console.error(err);
-      toast("Erreur lors de la simulation", "error");
-    } finally {
-      setSimulating(false);
-    }
-  }
-
-  const playerPos = standing.findIndex((r) => r.clubId === player.contract.clubId) + 1;
+  const activeCountry  = COUNTRIES.find(c => c.id === activeCountryId)!;
+  const playerClubId   = player?.contract.clubId ?? "";
 
   return (
     <motion.div
-      className="fc-page"
-      variants={pageFade}
-      initial="hidden"
-      animate="visible"
+      variants={pageFade} initial="hidden" animate="visible"
+      style={{ padding: "var(--fc-space-5) var(--fc-space-4)", maxWidth: 720, margin: "0 auto" }}
     >
-      {/* En-tête */}
-      <div className="fc-section-header">
-        <h1 className="fc-section-title">Monde</h1>
-        <span className="fc-badge fc-badge--neutral">Saison {season}</span>
+      {/* Header */}
+      <div className="fc-page-header">
+        <h1 className="fc-page-title">Monde</h1>
+        <p className="fc-page-meta">
+          4 pays · 8 championnats · 64 clubs
+          {career && ` · Saison ${career.season}`}
+        </p>
       </div>
 
-      {/* Position du joueur */}
-      {playerPos > 0 && (
-        <div className="fc-card" style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "var(--fc-space-4) var(--fc-space-5)",
-        }}>
-          <div>
-            <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>Mon classement</p>
-            <p style={{
-              fontFamily: "var(--fc-font-display)", fontWeight: 900,
-              fontSize: "2rem", color: "var(--fc-emerald)", lineHeight: 1,
-            }}>
-              {playerPos}<span style={{ fontSize: "var(--fc-text-sm)", fontWeight: 500, marginLeft: 2, color: "var(--fc-text-3)" }}>e</span>
-            </p>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>Points</p>
-            <p style={{
-              fontFamily: "var(--fc-font-display)", fontWeight: 800,
-              fontSize: "var(--fc-text-xl)", color: "var(--fc-text)",
-            }}>
-              {standing.find((r) => r.clubId === player.contract.clubId)?.points ?? 0}
-            </p>
-          </div>
-        </div>
-      )}
+      <motion.div variants={stagger} initial="hidden" animate="visible">
 
-      {/* Bouton simulation journée */}
-      {nextMatchday !== null && (
-        <button
-          className="fc-btn fc-btn--secondary"
-          style={{ width: "100%" }}
-          onClick={handleSimulate}
-          disabled={simulating}
-        >
-          {simulating
-            ? "Simulation en cours…"
-            : `Simuler journée ${nextMatchday}`}
-        </button>
-      )}
-
-      {/* Classement */}
-      <motion.div
-        className="fc-card"
-        variants={stagger}
-        initial="hidden"
-        animate="visible"
-        style={{ padding: 0, overflow: "hidden" }}
-      >
-        <div style={{ padding: "var(--fc-space-4) var(--fc-space-4) 0" }}>
-          <h2 style={{
-            fontFamily: "var(--fc-font-display)", fontWeight: 700,
-            fontSize: "var(--fc-text-md)", color: "var(--fc-text)",
-          }}>
-            Classement
-          </h2>
-        </div>
-        {activeSchedule ? (
-          <StandingsTable
-            standing={standing}
-            clubs={clubs}
-            playerClubId={player.contract.clubId}
-            schedule={activeSchedule}
-          />
-        ) : (
-          <p style={{ padding: "var(--fc-space-4)", color: "var(--fc-text-3)", fontSize: "var(--fc-text-sm)" }}>
-            Aucun championnat actif pour cette saison.
-          </p>
-        )}
-      </motion.div>
-
-      {/* Résultats récents */}
-      {activeSchedule && (
-        <motion.div
-          className="fc-card"
-          variants={itemFade}
-          style={{ padding: "var(--fc-space-5)" }}
-        >
-          <h2 style={{
-            fontFamily: "var(--fc-font-display)", fontWeight: 700,
-            fontSize: "var(--fc-text-md)", color: "var(--fc-text)",
-            marginBottom: "var(--fc-space-4)",
-          }}>
-            Derniers résultats
-          </h2>
-          <RecentResults schedule={activeSchedule} clubs={clubs} />
+        {/* ── Onglets pays ────────────────────────────────────────── */}
+        <motion.div variants={itemFade} style={{ display: "flex", gap: "var(--fc-space-2)", marginBottom: "var(--fc-space-4)", flexWrap: "wrap" }}>
+          {COUNTRIES.map(country => {
+            const active = country.id === activeCountryId;
+            return (
+              <button
+                key={country.id}
+                onClick={() => setActiveCountryId(country.id)}
+                style={{
+                  padding: "var(--fc-space-2) var(--fc-space-4)",
+                  borderRadius: "var(--fc-radius)",
+                  border: `1px solid ${active ? "var(--fc-emerald)" : "var(--fc-border-mid)"}`,
+                  background: active ? "var(--fc-emerald-10)" : "var(--fc-surface-3)",
+                  color: active ? "var(--fc-emerald)" : "var(--fc-text-2)",
+                  fontWeight: active ? 700 : 400,
+                  fontSize: "var(--fc-text-sm)",
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "var(--fc-space-2)",
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+              >
+                <span>{country.flag}</span>
+                <span>{country.name}</span>
+              </button>
+            );
+          })}
         </motion.div>
-      )}
+
+        {/* ── Onglets division ────────────────────────────────────── */}
+        <motion.div variants={itemFade} style={{ display: "flex", gap: "var(--fc-space-2)", marginBottom: "var(--fc-space-4)" }}>
+          {([1, 2] as const).map(tier => {
+            const leagueForTier = LEAGUES.find(l => l.countryId === activeCountryId && l.tier === tier);
+            if (!leagueForTier) return null;
+            const active = activeTier === tier;
+            return (
+              <button
+                key={tier}
+                onClick={() => setActiveTier(tier)}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: "var(--fc-radius-sm)",
+                  border: `1px solid ${active ? "var(--fc-text)" : "var(--fc-border)"}`,
+                  background: active ? "var(--fc-surface-1)" : "var(--fc-surface-3)",
+                  color: active ? "var(--fc-text)" : "var(--fc-text-3)",
+                  fontWeight: active ? 700 : 400,
+                  fontSize: "var(--fc-text-xs)",
+                  cursor: "pointer",
+                }}
+              >
+                {leagueForTier.name}
+              </button>
+            );
+          })}
+        </motion.div>
+
+        {/* ── Info ligue ──────────────────────────────────────────── */}
+        {activeLeague && (
+          <motion.div variants={itemFade} style={{
+            display: "flex", alignItems: "center", gap: "var(--fc-space-3)",
+            marginBottom: "var(--fc-space-3)",
+          }}>
+            <span style={{ fontSize: "var(--fc-text-base)", fontWeight: 700, color: "var(--fc-text)" }}>
+              {activeLeague.name}
+            </span>
+            <span style={{
+              fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)",
+              background: "var(--fc-surface-2)", padding: "2px 8px",
+              borderRadius: 99, border: "1px solid var(--fc-border)",
+            }}>
+              {activeCountry.flag} {activeCountry.name}
+            </span>
+          </motion.div>
+        )}
+
+        {/* ── Tableau de classement ────────────────────────────────── */}
+        <motion.section variants={itemFade} className="fc-panel" style={{ padding: 0, overflow: "hidden" }}>
+          {/* En-tête tableau */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "28px 1fr 32px 80px 32px",
+            gap: "var(--fc-space-2)",
+            padding: "var(--fc-space-2) var(--fc-space-4)",
+            background: "var(--fc-surface-2)",
+            borderBottom: "1px solid var(--fc-border)",
+            fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", fontWeight: 700,
+          }}>
+            <span>#</span>
+            <span>Club</span>
+            <span style={{ textAlign: "center" }}>J</span>
+            <span style={{ textAlign: "center" }}>V N D</span>
+            <span style={{ textAlign: "center" }}>Pts</span>
+          </div>
+
+          {/* Lignes */}
+          {rows.map((row, idx) => {
+            const club    = CLUBS.find(c => c.id === row.clubId) ?? leagueClubs[idx];
+            const isMe    = row.clubId === playerClubId;
+            const pos     = idx + 1;
+            const zoneColor =
+              pos <= 2 ? "var(--fc-emerald)"          // promotion/champions
+              : pos >= rows.length - 1 ? "var(--fc-coral)"  // relégation
+              : "transparent";
+
+            return (
+              <div
+                key={row.clubId}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "28px 1fr 32px 80px 32px",
+                  gap: "var(--fc-space-2)",
+                  padding: "var(--fc-space-2) var(--fc-space-4)",
+                  borderBottom: idx < rows.length - 1 ? "1px solid var(--fc-border)" : "none",
+                  background: isMe ? "var(--fc-emerald-10)" : "transparent",
+                  borderLeft: `3px solid ${zoneColor}`,
+                  alignItems: "center",
+                }}
+              >
+                {/* Position */}
+                <span style={{
+                  fontSize: "var(--fc-text-xs)",
+                  fontFamily: "var(--fc-font-display)",
+                  fontWeight: 700,
+                  color: pos <= 3 ? "var(--fc-emerald)" : "var(--fc-text-3)",
+                }}>
+                  {pos}
+                </span>
+
+                {/* Club */}
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--fc-space-2)", minWidth: 0 }}>
+                  {/* Badge couleur club */}
+                  <span style={{
+                    width: 8, height: 8, borderRadius: 2, flexShrink: 0,
+                    background: club?.colors.primary ?? "var(--fc-border)",
+                  }} />
+                  <span style={{
+                    fontSize: "var(--fc-text-sm)",
+                    fontWeight: isMe ? 800 : 500,
+                    color: isMe ? "var(--fc-emerald)" : "var(--fc-text)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {club?.shortName ?? row.clubId}
+                    {isMe && " ●"}
+                  </span>
+                </div>
+
+                {/* Matchs joués */}
+                <span style={{ textAlign: "center", fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+                  {row.played}
+                </span>
+
+                {/* V / N / D */}
+                <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
+                  <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 600, minWidth: 18, textAlign: "center" }}>{row.won}</span>
+                  <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-amber)",   fontWeight: 600, minWidth: 18, textAlign: "center" }}>{row.drawn}</span>
+                  <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-coral)",   fontWeight: 600, minWidth: 18, textAlign: "center" }}>{row.lost}</span>
+                </div>
+
+                {/* Points */}
+                <span style={{
+                  textAlign: "center",
+                  fontFamily: "var(--fc-font-display)", fontWeight: 900,
+                  fontSize: "var(--fc-text-base)",
+                  color: isMe ? "var(--fc-emerald)" : "var(--fc-text)",
+                }}>
+                  {row.points}
+                </span>
+              </div>
+            );
+          })}
+        </motion.section>
+
+        {/* ── Légende zones ───────────────────────────────────────── */}
+        <motion.div variants={itemFade} style={{
+          display: "flex", gap: "var(--fc-space-4)", marginTop: "var(--fc-space-3)",
+          fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)",
+        }}>
+          <span><span style={{ color: "var(--fc-emerald)" }}>●</span> Promotion / Champions</span>
+          <span><span style={{ color: "var(--fc-coral)" }}>●</span> Relégation</span>
+        </motion.div>
+
+        {/* ── Clubs du monde (grid de vitrines) ───────────────────── */}
+        <motion.section variants={itemFade} style={{ marginTop: "var(--fc-space-6)" }}>
+          <h2 style={{ fontSize: "var(--fc-text-base)", fontWeight: 700, color: "var(--fc-text)", marginBottom: "var(--fc-space-3)" }}>
+            Clubs du championnat
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--fc-space-2)" }}>
+            {leagueClubs.map(club => {
+              const isMe = club.id === playerClubId;
+              return (
+                <div
+                  key={club.id}
+                  style={{
+                    padding: "var(--fc-space-3)",
+                    borderRadius: "var(--fc-radius-sm)",
+                    border: `1px solid ${isMe ? "rgba(55,217,154,0.4)" : "var(--fc-border)"}`,
+                    background: isMe ? "var(--fc-emerald-10)" : "var(--fc-surface-2)",
+                    display: "flex", alignItems: "center", gap: "var(--fc-space-2)",
+                  }}
+                >
+                  {/* Bande couleur */}
+                  <div style={{
+                    width: 6, height: 36, borderRadius: 3, flexShrink: 0,
+                    background: `linear-gradient(to bottom, ${club.colors.primary}, ${club.colors.secondary})`,
+                  }} />
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{
+                      fontWeight: isMe ? 800 : 600, fontSize: "var(--fc-text-sm)",
+                      color: isMe ? "var(--fc-emerald)" : "var(--fc-text)",
+                      margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {club.name}
+                    </p>
+                    <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", margin: 0, marginTop: 1 }}>
+                      Rép. {club.reputation} · {club.philosophy}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        {/* ── Aperçu tous pays ─────────────────────────────────────── */}
+        <motion.section variants={itemFade} style={{ marginTop: "var(--fc-space-6)" }}>
+          <h2 style={{ fontSize: "var(--fc-text-base)", fontWeight: 700, color: "var(--fc-text)", marginBottom: "var(--fc-space-3)" }}>
+            Aperçu mondial
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--fc-space-3)" }}>
+            {COUNTRIES.map(country => {
+              const d1 = LEAGUES.find(l => l.countryId === country.id && l.tier === 1)!;
+              const d1clubs = CLUBS.filter(c => c.leagueId === d1.id);
+              const topClub = d1clubs.sort((a, b) => b.reputation - a.reputation)[0];
+              return (
+                <button
+                  key={country.id}
+                  onClick={() => { setActiveCountryId(country.id); setActiveTier(1); }}
+                  style={{
+                    padding: "var(--fc-space-3)",
+                    borderRadius: "var(--fc-radius)",
+                    border: `1px solid ${country.id === activeCountryId ? "var(--fc-emerald)" : "var(--fc-border)"}`,
+                    background: "var(--fc-surface-2)",
+                    cursor: "pointer", textAlign: "left",
+                    transition: "border-color 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--fc-space-2)", marginBottom: "var(--fc-space-1)" }}>
+                    <span style={{ fontSize: "1.2rem" }}>{country.flag}</span>
+                    <span style={{ fontWeight: 700, fontSize: "var(--fc-text-sm)", color: "var(--fc-text)" }}>
+                      {country.name}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", margin: 0 }}>
+                    {d1.name}
+                  </p>
+                  <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-2)", margin: 0, marginTop: 2 }}>
+                    Top club : {topClub?.shortName}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </motion.section>
+
+      </motion.div>
 
       <div style={{ height: "var(--fc-space-8)" }} />
     </motion.div>
