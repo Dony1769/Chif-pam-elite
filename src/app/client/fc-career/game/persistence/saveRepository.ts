@@ -97,7 +97,14 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
     career: {
       ...save.career,
       // completedMatchIds est stocké en tableau, on le garde en tableau côté runtime
-      // (il sera converti en Set dans le state si besoin)
+    },
+    world: {
+      clubs:            save.world?.clubs            ?? [],
+      leagues:          save.world?.leagues          ?? [],
+      countries:        save.world?.countries        ?? [],
+      schedules:        save.world?.schedules        ?? [],
+      lastMatchResults: save.world?.lastMatchResults ?? [],
+      standings:        save.world?.standings        ?? {},
     },
   };
 }

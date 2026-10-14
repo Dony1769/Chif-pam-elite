@@ -119,7 +119,7 @@ export default function CalendarPage() {
         ...career,
         completedMatchIds: [...(career.completedMatchIds as string[]), fixture.id],
       },
-      world: { ...save.world, schedules: updatedSchedules, lastMatchResults: [result, ...save.world.lastMatchResults].slice(0, 20) },
+      world: { ...save.world, schedules: updatedSchedules, lastMatchResults: [result, ...(save.world.lastMatchResults ?? [])].slice(0, 20) },
       meta: { ...save.meta, savedAt: Date.now() },
     };
     writeSave(updatedSave);
