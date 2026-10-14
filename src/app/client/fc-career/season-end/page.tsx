@@ -208,6 +208,8 @@ export default function SeasonEndPage() {
     const setup   = prepareNextSeason(career.id, player, career, evaluation.verdict);
 
     dispatch({ type: "END_SEASON", setup, summary, paBonus: evaluation.paBonus });
+    // Clore la saison du monde vivant (promotions/relégations, vieillissement, transferts)
+    dispatch({ type: "END_WORLD_SEASON" });
 
     // Journal : entrée de fin de saison
     dispatch({

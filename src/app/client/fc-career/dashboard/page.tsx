@@ -297,6 +297,8 @@ function DashboardContent() {
       return;
     }
     dispatch({ type: "COMMIT_WEEK" });
+    // Avancer le monde vivant d'une semaine en même temps
+    dispatch({ type: "ADVANCE_WORLD_WEEK" });
     setMatchResult(null);
     setAcademyEval(null);
     const intensityLabel = { light: "Légère", normal: "Normale", intense: "Intense" }[weekState.trainingIntensity ?? "normal"];

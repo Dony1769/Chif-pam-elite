@@ -42,9 +42,10 @@ export default function WorldPage() {
     ? CLUBS.filter(c => c.leagueId === activeLeague.id)
     : [];
 
-  // Classement stocké (ou vide)
+  // Classement stocké — préférer worldLiveState si disponible
+  const worldLiveState = (save as import("../game/persistence/saveSchema").GameSaveV1)?.worldLiveState;
   const standingRows: StandingRow[] = activeLeague
-    ? (save?.world.standings[activeLeague.id] ?? [])
+    ? (worldLiveState?.standings[activeLeague.id] ?? save?.world.standings[activeLeague.id] ?? [])
     : [];
 
   // Si pas de classement stocké, afficher les clubs sans stats
@@ -103,7 +104,8 @@ export default function WorldPage() {
 
         {/* ── Actualités transferts ────────────────────────────────── */}
         {mainTab === "transfers" && (() => {
-          const history = (save as import("../game/persistence/saveSchema").GameSaveV1 & { worldTransferHistory?: import("../game/domain/worldTransfers").WorldTransferEvent[] })?.worldTransferHistory ?? [];
+          // Utiliser transferHistory du monde vivant, sinon historique legacy
+          const history = worldLiveState?.transferHistory ?? (save as import("../game/persistence/saveSchema").GameSaveV1 & { worldTransferHistory?: import("../game/domain/worldTransfers").WorldTransferEvent[] })?.worldTransferHistory ?? [];
           const ICONS: Record<string, string> = {
             transfer: "↔️",
             loan: "🔁",
