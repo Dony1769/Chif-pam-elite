@@ -44,29 +44,15 @@ export default function CalendarPage() {
   const player = save?.player;
   const career = save?.career;
 
-  /* ── Guard ──────────────────────────────────────────────────── */
-  if (!save || !player || !career) {
-    return (
-      <div style={{ padding: "var(--fc-space-6)", textAlign: "center", color: "var(--fc-text-2)" }}>
-        <p>Aucune sauvegarde.</p>
-        <Button variant="primary" onClick={() => router.push("/client/fc-career/create-player")} style={{ marginTop: "var(--fc-space-4)" }}>
-          Nouvelle carrière
-        </Button>
-      </div>
-    );
-  }
-
   /* ── Calendrier courant ─────────────────────────────────────── */
-  const schedule = save.world.schedules.find(s => s.season === career.season);
+  const schedule = save?.world.schedules.find(s => s.season === career?.season);
   const fixtures = schedule?.fixtures ?? [];
-  const completedIds = new Set(career.completedMatchIds as string[]);
-
-  // Prochain match non joué
+  const completedIds = new Set((career?.completedMatchIds ?? []) as string[]);
   const nextFixture = fixtures.find(f => !completedIds.has(f.id) && f.result === null);
 
-  /* ── Simulation ─────────────────────────────────────────────── */
+  /* ── Simulation (hook déclaré avant tout return conditionnel) ── */
   const handleSimulate = useCallback(async (fixture: Fixture) => {
-    if (simulating) return;
+    if (simulating || !save || !player || !career) return;
     setSimulating(true);
 
     // Petite pause pour l'animation
@@ -127,13 +113,25 @@ export default function CalendarPage() {
     setLastResult(result);
     setSimulating(false);
 
-    const outcome = result.scoreHome > result.scoreAway
+    const outcome = (result.scoreHome ?? 0) > (result.scoreAway ?? 0)
       ? (isHome ? "Victoire" : "Défaite")
       : result.scoreHome < result.scoreAway
       ? (isHome ? "Défaite" : "Victoire")
       : "Match nul";
     toast(`${outcome} ${result.scoreHome}-${result.scoreAway} · Note ${result.playerRating}/10 · +${result.paEarned} PA`, result.playerRating >= 7 ? "success" : "warning");
   }, [simulating, career, player, save, fixtures, dispatch, toast]);
+
+  /* ── Guard ──────────────────────────────────────────────────── */
+  if (!save || !player || !career) {
+    return (
+      <div style={{ padding: "var(--fc-space-6)", textAlign: "center", color: "var(--fc-text-2)" }}>
+        <p>Aucune sauvegarde.</p>
+        <Button variant="primary" onClick={() => router.push("/client/fc-career/create-player")} style={{ marginTop: "var(--fc-space-4)" }}>
+          Nouvelle carrière
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <motion.div
