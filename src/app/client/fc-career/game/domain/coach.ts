@@ -124,6 +124,91 @@ export function generateCoachMessage(
   return pool[Math.floor(trust / 34)] ?? pool[0];
 }
 
+/* ── Décision intelligente de temps de jeu ─────────────────────────── */
+
+export type PlayingTimeDecision = {
+  minutesPlanned: number; // 0 | 30 | 45 | 60 | 90
+  role: "starter" | "sub_early" | "sub_late" | "unused";
+  reason: string;
+};
+
+/**
+ * Le coach décide du temps de jeu selon :
+ * - La confiance (trust)
+ * - Le rôle actuel dans l'effectif
+ * - La forme du joueur
+ * - La fatigue
+ * - L'importance du match (competition level)
+ * - La position du joueur vs philosophie coach
+ */
+export function decidePlayingTime(
+  coach: CoachProfile,
+  playerOvr: number,
+  playerForm: number,    // 0-100
+  playerFatigue: number, // 0-100
+  playerPosition: string,
+  competitionType: "league" | "cup" | "friendly" | "champions",
+  isInjured: boolean,
+): PlayingTimeDecision {
+  if (isInjured) {
+    return { minutesPlanned: 0, role: "unused", reason: "Blessé — non disponible." };
+  }
+
+  const baseTrust = coach.trust;
+  const role = coach.playerRole;
+  const philo = coach.philosophy;
+
+  // Pénalité fatigue
+  const fatigueModifier = playerFatigue > 80 ? -25 : playerFatigue > 60 ? -10 : 0;
+  // Bonus forme
+  const formBonus = playerForm > 75 ? 15 : playerForm > 55 ? 5 : playerForm < 35 ? -15 : 0;
+  // Alignement philosophie-position
+  const philoBonus = (
+    (philo === "offensif" && ["ST", "LW", "RW", "AM"].includes(playerPosition)) ||
+    (philo === "défensif" && ["CB", "LB", "RB", "DM"].includes(playerPosition)) ||
+    (philo === "possession" && ["CM", "DM", "AM"].includes(playerPosition))
+  ) ? 10 : 0;
+
+  const effectiveTrust = Math.min(100, baseTrust + formBonus + fatigueModifier + philoBonus);
+
+  // En amical : rotation plus forte
+  if (competitionType === "friendly") {
+    if (effectiveTrust >= 60) return { minutesPlanned: 60, role: "starter", reason: "Titulaire en match amical." };
+    if (effectiveTrust >= 35) return { minutesPlanned: 30, role: "sub_early", reason: "Entrée en jeu en amical." };
+    return { minutesPlanned: 0, role: "unused", reason: "Non retenu pour cet amical." };
+  }
+
+  // Titulaire établi
+  if (role === "titulaire") {
+    if (effectiveTrust >= 55 && playerFatigue < 80) {
+      return { minutesPlanned: 90, role: "starter", reason: "Titulaire — confiance du coach totale." };
+    }
+    if (playerFatigue >= 80) {
+      return { minutesPlanned: 45, role: "sub_early", reason: "Gestion de la fatigue — entrée à la mi-temps." };
+    }
+    return { minutesPlanned: 60, role: "starter", reason: "Titulaire avec sortie possible." };
+  }
+
+  // Rotation
+  if (role === "rotation") {
+    if (effectiveTrust >= 65) return { minutesPlanned: 90, role: "starter", reason: "Titulaire en rotation selon les performances." };
+    if (effectiveTrust >= 45) return { minutesPlanned: 45, role: "sub_early", reason: "Entrée à la mi-temps." };
+    if (effectiveTrust >= 25) return { minutesPlanned: 20, role: "sub_late", reason: "Entrée courte en fin de match." };
+    return { minutesPlanned: 0, role: "unused", reason: "Sur le banc — pas retenu aujourd'hui." };
+  }
+
+  // Remplaçant
+  if (role === "remplaçant") {
+    if (effectiveTrust >= 70) return { minutesPlanned: 45, role: "sub_early", reason: "Le coach te fait confiance malgré ton rôle." };
+    if (effectiveTrust >= 50) return { minutesPlanned: 20, role: "sub_late", reason: "Entrée courte." };
+    return { minutesPlanned: 0, role: "unused", reason: "Non utilisé ce match." };
+  }
+
+  // Espoir
+  if (effectiveTrust >= 60) return { minutesPlanned: 30, role: "sub_early", reason: "Le coach veut te voir progresser." };
+  return { minutesPlanned: 0, role: "unused", reason: "L'espoir apprend depuis le banc." };
+}
+
 /** Génère un profil coach initial selon la phase de carrière */
 export function createInitialCoach(phase: string, season: number): CoachProfile {
   const coaches: Record<string, { name: string; philosophy: CoachPhilosophy }> = {

@@ -1,7 +1,8 @@
 /**
  * FC CAREER — Simulateur du monde
- * Simule les matchs des autres clubs et met à jour le classement.
- * Aucune dépendance React — pur domaine.
+ * Moteur hybride : résultats générés depuis OVR/forme/fatigue/avantage domicile + aléatoire.
+ * Un seul moteur pour tous les matchs — classements et stats cohérents.
+ * Support relégation/promotion dynamique.
  */
 
 import type { Club, Standing, StandingRow } from "./club";
@@ -16,30 +17,83 @@ export interface SimulatedMatchResult {
   awayClubId: string;
   scoreHome: number;
   scoreAway: number;
+  /** Buteurs (IDs des joueurs monde) */
+  scorers?: { clubId: string; playerId: string; minute: number }[];
+  /** Passes décisives */
+  assists?: { clubId: string; playerId: string; scorerPlayerId: string }[];
 }
 
-/* ── Force relative d'un club (0–1) ─────────────────────────────── */
+/* ── Résultats de relégation/promotion ─────────────────────────── */
 
-function clubStrength(club: Club): number {
-  // Normalise la réputation (0-100) en force (0.2–1.0)
-  return 0.2 + (club.reputation / 100) * 0.8;
+export interface PromotionRelegationResult {
+  leagueId: string;
+  promoted: string[];   // clubIds promus
+  relegated: string[];  // clubIds relégués
 }
 
-/* ── Simulation d'un match entre deux clubs ──────────────────────── */
+/* ── Force d'un club (0–1) — moteur hybride ─────────────────────── */
+
+export interface ClubFormState {
+  recentResults: ("W" | "D" | "L")[]; // 5 derniers
+  fatigue: number;     // 0-100 (100 = épuisé)
+  cohesion: number;    // 0-100
+  tacticsRating: number; // 0-100
+}
+
+function clubStrength(
+  club: Club,
+  form?: ClubFormState,
+): number {
+  // Base depuis la réputation (0-100) → force (0.2–0.9)
+  let strength = 0.2 + (club.reputation / 100) * 0.7;
+
+  if (form) {
+    // Forme récente (5 derniers matchs)
+    const formScore = form.recentResults.reduce((acc, r) => {
+      if (r === "W") return acc + 1;
+      if (r === "D") return acc + 0.4;
+      return acc;
+    }, 0) / Math.max(form.recentResults.length, 1);
+    const formFactor = 0.7 + formScore * 0.6; // 0.7–1.3
+    strength *= formFactor;
+
+    // Fatigue
+    const fatigueFactor = 1 - (form.fatigue / 100) * 0.2; // max -20%
+    strength *= fatigueFactor;
+
+    // Cohésion tactique
+    const cohesionFactor = 0.85 + (form.cohesion / 100) * 0.3;
+    strength *= cohesionFactor;
+
+    // Tactique
+    const tacticsFactor = 0.9 + (form.tacticsRating / 100) * 0.2;
+    strength *= tacticsFactor;
+  }
+
+  return Math.max(0.1, Math.min(1.0, strength));
+}
+
+/* ── Simulation d'un match (moteur central) ─────────────────────── */
 
 function simulateClubMatch(
   home: Club,
   away: Club,
   rng: ReturnType<typeof createRng>,
+  homeForm?: ClubFormState,
+  awayForm?: ClubFormState,
 ): { scoreHome: number; scoreAway: number } {
-  const homeStr  = clubStrength(home) * 1.1; // léger avantage domicile
-  const awayStr  = clubStrength(away);
+  const homeStr  = clubStrength(home, homeForm) * 1.12; // avantage domicile
+  const awayStr  = clubStrength(away, awayForm);
   const total    = homeStr + awayStr;
   const homeBias = homeStr / total;
 
-  // Nombre de buts : entre 0 et 5, pondéré par force combinée
-  const avgGoals = 2.5 * (homeStr + awayStr) / 2;
-  const totalGoals = Math.round(rng.float(0, avgGoals * 1.8));
+  // Distribution buts : Poisson approximé
+  const avgGoals = 1.8 + (homeStr + awayStr) * 0.8;
+  const maxGoals = Math.min(9, Math.round(avgGoals * 2));
+  let totalGoals = 0;
+  for (let i = 0; i < maxGoals; i++) {
+    if (rng.chance(avgGoals / maxGoals)) totalGoals++;
+  }
 
   let scoreHome = 0;
   let scoreAway = 0;
@@ -57,6 +111,7 @@ export function simulateMatchday(
   schedule: SeasonSchedule,
   clubs: Club[],
   seasonSeed: string,
+  formStates?: Map<string, ClubFormState>,
 ): SimulatedMatchResult[] {
   const clubMap = new Map(clubs.map(c => [c.id, c]));
   const rng = createRng(seedFromString(`${seasonSeed}-md${matchday}`));
@@ -71,7 +126,9 @@ export function simulateMatchday(
     const away = clubMap.get(fixture.awayClubId);
     if (!home || !away) continue;
 
-    const score = simulateClubMatch(home, away, rng);
+    const homeForm = formStates?.get(fixture.homeClubId);
+    const awayForm = formStates?.get(fixture.awayClubId);
+    const score = simulateClubMatch(home, away, rng, homeForm, awayForm);
     results.push({
       fixtureId: fixture.id,
       homeClubId: fixture.homeClubId,
@@ -100,7 +157,7 @@ export function applyResultsToSchedule(
   };
 }
 
-/* ── Mise à jour du classement ───────────────────────────────────── */
+/* ── Mise à jour du classement (même moteur, même résultats) ──────── */
 
 export function updateStanding(
   standing: StandingRow[],
@@ -111,14 +168,10 @@ export function updateStanding(
 
   // S'assurer que chaque club a bien une entrée
   for (const r of results) {
-    if (!map.has(r.homeClubId)) {
-      map.set(r.homeClubId, emptyRow(r.homeClubId));
-    }
-    if (!map.has(r.awayClubId)) {
-      map.set(r.awayClubId, emptyRow(r.awayClubId));
-    }
+    if (!map.has(r.homeClubId)) map.set(r.homeClubId, emptyRow(r.homeClubId));
+    if (!map.has(r.awayClubId)) map.set(r.awayClubId, emptyRow(r.awayClubId));
 
-    // Ignorer les matchs impliquant le joueur (gérés par APPLY_MATCH_RESULT)
+    // Les matchs du joueur sont gérés par APPLY_MATCH_RESULT
     if (r.homeClubId === playerClubId || r.awayClubId === playerClubId) continue;
 
     const home = map.get(r.homeClubId)!;
@@ -165,6 +218,77 @@ function sortStanding(a: StandingRow, b: StandingRow): number {
 
 export function buildInitialStanding(clubIds: string[]): StandingRow[] {
   return clubIds.map(emptyRow);
+}
+
+/* ── Relégation / Promotion dynamique ───────────────────────────── */
+
+/**
+ * Calcule les relégations et promotions à la fin de saison.
+ * - Les 3 derniers sont relégués (si league assez grande)
+ * - Le champion + 2e sont promus automatiquement
+ * - Le 3e à 6e jouent des barrages (simulés simplement)
+ */
+export function computePromotionRelegation(
+  leagueId: string,
+  finalStanding: StandingRow[],
+  clubCount: number,
+  rng: ReturnType<typeof createRng>,
+): PromotionRelegationResult {
+  const n = finalStanding.length;
+  if (n < 6) return { leagueId, promoted: [], relegated: [] };
+
+  // Relégation : 3 derniers
+  const relegated = finalStanding.slice(n - 3).map(r => r.clubId);
+
+  // Promotion directe : champion et vice-champion
+  const promoted: string[] = [finalStanding[0].clubId, finalStanding[1].clubId];
+
+  // Barrages : 3e et 4e (le 3e est légèrement favorisé)
+  const playoff3 = finalStanding[2];
+  const playoff4 = finalStanding[3];
+  const str3 = playoff3.points + (playoff3.goalsFor - playoff3.goalsAgainst);
+  const str4 = playoff4.points + (playoff4.goalsFor - playoff4.goalsAgainst);
+  const total = Math.max(str3 + str4, 1);
+  const winner = rng.chance(str3 / total) ? playoff3.clubId : playoff4.clubId;
+  promoted.push(winner);
+
+  return { leagueId, promoted, relegated };
+}
+
+/* ── Vieillissement des clubs / évolution OVR ────────────────────── */
+
+/**
+ * Met à jour la réputation d'un club en fin de saison selon ses performances.
+ * Un grand club peut décliner, un petit peut progresser.
+ */
+export function updateClubReputation(
+  club: Club,
+  standing: StandingRow[],
+  season: number,
+  rng: ReturnType<typeof createRng>,
+): Club {
+  const row = standing.find(r => r.clubId === club.id);
+  if (!row) return club;
+
+  const position = standing.findIndex(r => r.clubId === club.id) + 1;
+  const total = standing.length;
+  const relativePct = 1 - (position - 1) / Math.max(total - 1, 1); // 0=dernier, 1=premier
+
+  // Tendance longue (réversion à la moyenne)
+  const meanRep = 50;
+  const reversion = (meanRep - club.reputation) * 0.05;
+
+  // Performance
+  const performanceDelta = (relativePct - 0.5) * 6; // -3 à +3
+
+  // Aléatoire
+  const noise = rng.float(-1.5, 1.5);
+
+  const newRep = Math.max(10, Math.min(100,
+    club.reputation + reversion + performanceDelta + noise
+  ));
+
+  return { ...club, reputation: Math.round(newRep) };
 }
 
 /* ── Météo de forme (5 derniers résultats) ───────────────────────── */

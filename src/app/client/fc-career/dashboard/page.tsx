@@ -30,6 +30,16 @@ import type { Fixture }     from "../game/domain/season";
 import type { GameState }   from "../game/state/gameReducer";
 import type { Player }      from "../game/domain/player";
 import { positionFamily }   from "../game/domain/player";
+import {
+  YOUTH_LEAGUE_OPPONENTS,
+  decideStartingStatus,
+  generatePostMatchEval,
+  simulateYouthMatch,
+  type AcademyMatchContext,
+  type AcademyPostMatchEval,
+} from "../game/domain/academySchedule";
+import { createRng, seedFromString } from "../game/utils/random";
+import { decidePlayingTime } from "../game/domain/coach";
 
 /* ── Page racine ─────────────────────────────────────────────────── */
 
@@ -79,6 +89,30 @@ function DashboardContent() {
   // Simulation locale
   const [simulating, setSimulating]   = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [academyEval, setAcademyEval] = useState<AcademyPostMatchEval | null>(null);
+
+  const isAcademy = career.phase === "academy";
+
+  // Trouver le contexte académie pour le match de la semaine
+  const weekAcademyContext = isAcademy && weekFixture
+    ? save.academyMatchContexts?.find(c => c.fixtureId === weekFixture.id) ?? null
+    : null;
+
+  // Décision coach pour les phases pro (calculée à l'avance pour affichage)
+  const proCoachDecision = (!isAcademy && save.coach && weekFixture)
+    ? decidePlayingTime(
+        save.coach,
+        player.overall,
+        player.condition.form,
+        player.condition.fatigue,
+        player.position,
+        weekFixture.competitionId?.includes("cup") ? "cup"
+          : weekFixture.competitionId?.includes("friendly") ? "friendly"
+          : weekFixture.competitionId?.includes("champions") ? "champions"
+          : "league",
+        !!player.condition.injury,
+      )
+    : null;
 
   /* — Jouer le match de la semaine --------------------------------- */
   const handlePlayMatch = useCallback(async () => {
@@ -87,8 +121,107 @@ function DashboardContent() {
 
     await new Promise(r => setTimeout(r, 600));
 
-    const isHome       = weekFixture.homeClubId === player.contract.clubId;
-    const opponentId   = isHome ? weekFixture.awayClubId : weekFixture.homeClubId;
+    const rng = createRng(seedFromString(`match-${weekFixture.id}-${career.week}`));
+    const isHome       = weekFixture.homeClubId === player.contract.clubId
+                      || weekFixture.homeClubId === "academy";
+    const opponentId   = weekFixture.homeClubId === "academy"
+      ? weekFixture.awayClubId
+      : weekFixture.homeClubId;
+
+    // ── Phase académie : logique spéciale ─────────────────────────
+    if (isAcademy) {
+      const oppData = YOUTH_LEAGUE_OPPONENTS.find(o => o.id === opponentId);
+      const oppStrength = oppData?.strength ?? 65;
+      const academy = career.academy;
+      const trainingScore = save.weekState?.trainingDone ? 70 : 45;
+      const evalScore = academy?.evaluationScore ?? 50;
+
+      // Décider le statut titulaire/remplaçant
+      const startingStatus = weekAcademyContext?.startingStatus
+        ?? decideStartingStatus(trainingScore, evalScore, weekFixture.competitionId, rng);
+
+      // Simuler le match d'académie
+      const { scoreAcademy, scoreOpp } = simulateYouthMatch(
+        oppStrength,
+        evalScore,
+        startingStatus,
+        rng,
+      );
+
+      // Temps de jeu selon statut
+      const minutesPlayed = startingStatus === "starter" ? 60 + rng.int(0, 30)
+        : startingStatus === "sub" ? rng.int(15, 45)
+        : 0;
+
+      // Rating du joueur (influence par le résultat et l'écart)
+      const baseRating = startingStatus === "unused" ? 0
+        : scoreAcademy > scoreOpp ? rng.float(6.2, 8.8)
+        : scoreAcademy === scoreOpp ? rng.float(5.5, 7.5)
+        : rng.float(4.5, 7.0);
+
+      const goals   = baseRating >= 8.0 ? rng.int(0, 2) : rng.int(0, 1);
+      const assists = goals === 0 && baseRating >= 7.5 ? rng.int(0, 1) : 0;
+      const matchRating = Math.min(10, baseRating + goals * 0.4 + assists * 0.2);
+
+      // Éval coach
+      const postEval = generatePostMatchEval(
+        Math.round(matchRating * 10) / 10,
+        goals,
+        assists,
+        minutesPlayed,
+        startingStatus,
+        academy?.evaluationScore ?? 50,
+        rng,
+      );
+
+      // Stocker le contexte + éval
+      const ctx: AcademyMatchContext = {
+        fixtureId: weekFixture.id,
+        competitionId: weekFixture.competitionId as AcademyMatchContext["competitionId"],
+        opponentId,
+        opponentName: oppData?.name ?? opponentId,
+        opponentStrength: oppStrength,
+        isHome,
+        matchday: weekFixture.matchday,
+        startingStatus,
+        postMatchEval: postEval,
+      };
+      dispatch({ type: "SET_ACADEMY_MATCH_CONTEXT", context: ctx });
+      dispatch({ type: "APPLY_ACADEMY_MATCH_EVAL", fixtureId: weekFixture.id, eval: postEval });
+      dispatch({
+        type: "UPDATE_YOUTH_LEAGUE_STANDING",
+        scoreAcademy: isHome ? scoreAcademy : scoreOpp,
+        scoreOpp: isHome ? scoreOpp : scoreAcademy,
+        opponentId,
+      });
+      dispatch({ type: "MARK_MATCH_PLAYED" });
+      setAcademyEval(postEval);
+      setMatchResult(null);
+      setSimulating(false);
+
+      const scoreStr = isHome ? `${scoreAcademy} – ${scoreOpp}` : `${scoreOpp} – ${scoreAcademy}`;
+      toast(`Match joué : ${scoreStr} · Note ${postEval.rating.toFixed(1)}/10`, "success");
+      return;
+    }
+
+    // ── Décision de temps de jeu (coach intelligent) ──────────────
+    const coach = save.coach;
+    const compType: "league" | "cup" | "friendly" | "champions" =
+      weekFixture.competitionId?.includes("cup") ? "cup"
+      : weekFixture.competitionId?.includes("friendly") ? "friendly"
+      : weekFixture.competitionId?.includes("champions") ? "champions"
+      : "league";
+    const coachDecision = coach
+      ? decidePlayingTime(
+          coach,
+          player.overall,
+          player.condition.form,
+          player.condition.fatigue,
+          player.position,
+          compType,
+          !!player.condition.injury,
+        )
+      : null;
 
     const result = simulateMatch({
       matchId:        weekFixture.id,
@@ -100,6 +233,16 @@ function DashboardContent() {
       isHome,
       competitionId:  weekFixture.competitionId,
     });
+
+    // Appliquer la décision du coach sur le temps de jeu
+    if (coachDecision && coachDecision.minutesPlanned < result.playerStats.minutesPlayed) {
+      result.playerStats = {
+        ...result.playerStats,
+        minutesPlayed: coachDecision.minutesPlanned,
+        goals:   coachDecision.minutesPlanned < 45 ? Math.min(result.playerStats.goals, 1) : result.playerStats.goals,
+        assists: coachDecision.minutesPlanned < 45 ? Math.min(result.playerStats.assists, 1) : result.playerStats.assists,
+      };
+    }
 
     // Appliquer le résultat (stats + PA)
     dispatch({ type: "APPLY_MATCH_RESULT", result });
@@ -155,6 +298,7 @@ function DashboardContent() {
     }
     dispatch({ type: "COMMIT_WEEK" });
     setMatchResult(null);
+    setAcademyEval(null);
     const intensityLabel = { light: "Légère", normal: "Normale", intense: "Intense" }[weekState.trainingIntensity ?? "normal"];
     toast(`Semaine ${career.week} terminée — Entraînement ${intensityLabel}`, "success");
   }, [career.week, weekState, dispatch, toast, router]);
@@ -225,12 +369,15 @@ function DashboardContent() {
           {weekFixture ? (
             <WeekMatchCard
               fixture={weekFixture}
-              playerClubId={player.contract.clubId}
+              playerClubId={isAcademy ? "academy" : player.contract.clubId}
               clubs={save.world.clubs}
               done={weekState.matchPlayed}
               result={matchResult}
               simulating={simulating}
               onPlay={handlePlayMatch}
+              academyContext={weekAcademyContext}
+              isAcademy={isAcademy}
+              coachDecision={proCoachDecision}
             />
           ) : (
             <WeekAction
@@ -253,6 +400,16 @@ function DashboardContent() {
             exit={{ opacity: 0, y: -8 }}
           >
             <MatchResultCard result={matchResult} player={player} />
+          </motion.section>
+        )}
+        {academyEval && (
+          <motion.section
+            className="fc-section"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+          >
+            <AcademyEvalCard eval={academyEval} />
           </motion.section>
         )}
       </AnimatePresence>
@@ -338,7 +495,10 @@ function DashboardContent() {
       </section>
 
       {/* ── Classement ───────────────────────────────────────────── */}
-      <StandingWidget state={state} />
+      {isAcademy
+        ? <YouthLeagueWidget state={state} />
+        : <StandingWidget state={state} />
+      }
 
       {/* ── Navigation secondaire ────────────────────────────────── */}
       <section className="fc-section" style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
@@ -416,7 +576,7 @@ function WeekAction({
 /* ── Carte match de la semaine ───────────────────────────────────── */
 
 function WeekMatchCard({
-  fixture, playerClubId, clubs, done, result, simulating, onPlay,
+  fixture, playerClubId, clubs, done, result, simulating, onPlay, academyContext, isAcademy, coachDecision,
 }: {
   fixture: Fixture;
   playerClubId: string;
@@ -425,24 +585,61 @@ function WeekMatchCard({
   result: MatchResult | null;
   simulating: boolean;
   onPlay: () => void;
+  academyContext?: AcademyMatchContext | null;
+  isAcademy?: boolean;
+  coachDecision?: import("../game/domain/coach").PlayingTimeDecision | null;
 }) {
   const homeClub = clubs.find(c => c.id === fixture.homeClubId);
   const awayClub = clubs.find(c => c.id === fixture.awayClubId);
-  const homeLabel = homeClub?.shortName ?? fixture.homeClubId;
-  const awayLabel = awayClub?.shortName ?? fixture.awayClubId;
+
+  // Pour l'académie, résoudre les noms depuis YOUTH_LEAGUE_OPPONENTS
+  const getLabel = (clubId: string) => {
+    if (clubId === "academy") return "Mon Académie";
+    const youth = YOUTH_LEAGUE_OPPONENTS.find(o => o.id === clubId);
+    if (youth) return youth.name;
+    return clubs.find(c => c.id === clubId)?.shortName ?? clubId;
+  };
+
+  const homeLabel = isAcademy ? getLabel(fixture.homeClubId) : (homeClub?.shortName ?? fixture.homeClubId);
+  const awayLabel = isAcademy ? getLabel(fixture.awayClubId) : (awayClub?.shortName ?? fixture.awayClubId);
   const isHome    = fixture.homeClubId === playerClubId;
+
+  const statusLabel: Record<string, string> = {
+    starter: "⚽ Titulaire",
+    sub: "🔄 Remplaçant",
+    unused: "🪑 Non utilisé",
+  };
+  const startLabel = academyContext?.startingStatus ? statusLabel[academyContext.startingStatus] : null;
+
+  const compLabel = fixture.competitionId === "youth-league" ? "Ligue Jeunes"
+    : fixture.competitionId === "academy-cup" ? "Coupe Académie"
+    : fixture.competitionId === "friendly" ? "Amical"
+    : `J${fixture.matchday}`;
 
   return (
     <div className="fc-panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--fc-space-2)" }}>
         <p className="fc-panel__label" style={{ margin: 0 }}>
-          Match J{fixture.matchday}
+          {compLabel} · J{fixture.matchday}
           {done && <span style={{ marginLeft: 8, color: "var(--fc-emerald)", fontWeight: 700 }}>✓ Joué</span>}
         </p>
         <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
           {isHome ? "Domicile" : "Extérieur"}
         </span>
       </div>
+      {startLabel && (
+        <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-amber)", fontWeight: 600, marginBottom: "var(--fc-space-2)" }}>
+          {startLabel}
+        </p>
+      )}
+      {!isAcademy && coachDecision && !done && (
+        <p style={{ fontSize: "var(--fc-text-xs)", color: coachDecision.role === "unused" ? "var(--fc-text-3)" : coachDecision.role === "starter" ? "var(--fc-emerald)" : "var(--fc-amber)", fontWeight: 600, marginBottom: "var(--fc-space-2)" }}>
+          {coachDecision.role === "starter" ? "⚽ Titulaire prévu"
+            : coachDecision.role === "sub_early" ? "🔄 Entrée mi-temps prévue"
+            : coachDecision.role === "sub_late" ? "🔄 Entrée en fin de match prévue"
+            : "🪑 Non utilisé prévu"} · {coachDecision.reason}
+        </p>
+      )}
 
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -564,6 +761,133 @@ function KeyAttrs({ player }: { player: Player }) {
     <>
       {stats.map(s => <StatBar key={s.label} label={s.label} value={s.value} />)}
     </>
+  );
+}
+
+/* ── Carte évaluation académie ──────────────────────────────────── */
+
+function AcademyEvalCard({ eval: ev }: { eval: AcademyPostMatchEval }) {
+  const ratingColor = ev.rating >= 7.5 ? "var(--fc-emerald)" : ev.rating >= 6 ? "var(--fc-amber)" : "var(--fc-coral)";
+  const statusLabel = ev.minutesPlayed === 0 ? "🪑 Non utilisé"
+    : ev.minutesPlayed < 45 ? `🔄 Remplaçant · ${ev.minutesPlayed} min`
+    : `⚽ Titulaire · ${ev.minutesPlayed} min`;
+
+  return (
+    <div className="fc-panel" style={{ borderTop: `3px solid var(--fc-amber)` }}>
+      <p className="fc-panel__label">Évaluation du coach</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--fc-space-3)", marginTop: "var(--fc-space-3)" }}>
+        <div className="fc-stat-hero">
+          <span className="fc-stat-hero__value" style={{ color: ratingColor }}>
+            {ev.minutesPlayed === 0 ? "—" : ev.rating.toFixed(1)}
+          </span>
+          <span className="fc-stat-hero__label">Note</span>
+        </div>
+        <div className="fc-stat-hero">
+          <span className="fc-stat-hero__value">{ev.goals}</span>
+          <span className="fc-stat-hero__label">Buts</span>
+        </div>
+        <div className="fc-stat-hero">
+          <span className="fc-stat-hero__value">{ev.assists}</span>
+          <span className="fc-stat-hero__label">Passes D</span>
+        </div>
+      </div>
+      <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", marginTop: "var(--fc-space-2)" }}>{statusLabel}</p>
+      <div style={{ marginTop: "var(--fc-space-3)", borderTop: "1px solid var(--fc-border)", paddingTop: "var(--fc-space-3)" }}>
+        <p style={{ fontSize: "var(--fc-text-xs)", fontStyle: "italic", color: "var(--fc-text-2)", marginBottom: "var(--fc-space-2)" }}>
+          &ldquo;{ev.coachComment}&rdquo;
+        </p>
+        <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+          <span style={{ fontWeight: 700, color: "var(--fc-text-2)" }}>Objectif : </span>
+          {ev.coachObjectiveForNext}
+        </p>
+      </div>
+      {ev.recruiterNoticed && (
+        <div style={{
+          marginTop: "var(--fc-space-3)", padding: "var(--fc-space-2) var(--fc-space-3)",
+          background: "rgba(55,217,154,0.08)", border: "1px solid rgba(55,217,154,0.3)",
+          borderRadius: "var(--fc-radius-sm)",
+        }}>
+          <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 700 }}>
+            👀 Un recruteur a remarqué ta performance !
+          </p>
+          {ev.recruiterClubId && (
+            <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", marginTop: 2 }}>
+              Club intéressé : {ev.recruiterClubId}
+            </p>
+          )}
+        </div>
+      )}
+      <p style={{
+        marginTop: "var(--fc-space-3)", fontSize: "var(--fc-text-xs)",
+        color: ev.evalScoreDelta >= 0 ? "var(--fc-emerald)" : "var(--fc-coral)",
+        fontWeight: 700, textAlign: "center",
+      }}>
+        Score évaluation : {ev.evalScoreDelta >= 0 ? "+" : ""}{ev.evalScoreDelta} pts
+      </p>
+    </div>
+  );
+}
+
+/* ── Widget ligue jeunes ────────────────────────────────────────── */
+
+function YouthLeagueWidget({ state }: { state: GameState }) {
+  const save = state.save;
+  if (!save?.youthLeagueStanding) return null;
+  const standing = save.youthLeagueStanding;
+  const myPos = standing.findIndex(r => r.teamId === "academy") + 1;
+  const myRow = standing.find(r => r.teamId === "academy");
+  const top4 = standing.slice(0, 4);
+
+  return (
+    <section className="fc-section">
+      <h2 className="fc-label" style={{ marginBottom: "var(--fc-space-3)" }}>Ligue Jeunes</h2>
+      <div className="fc-panel">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--fc-space-3)" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "var(--fc-space-2)" }}>
+            <span style={{ fontFamily: "var(--fc-font-display)", fontWeight: 900, fontSize: "1.8rem", color: "var(--fc-emerald)", lineHeight: 1 }}>
+              {myPos}
+            </span>
+            <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>/ {standing.length}</span>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>Points</span>
+            <p style={{ fontFamily: "var(--fc-font-display)", fontWeight: 800, color: "var(--fc-text)", fontSize: "var(--fc-text-lg)" }}>
+              {myRow?.points ?? 0}
+            </p>
+          </div>
+        </div>
+        {top4.map((row, i) => {
+          const isMe = row.teamId === "academy";
+          return (
+            <div key={row.teamId} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "var(--fc-space-1) 0",
+              borderTop: i === 0 ? "1px solid var(--fc-border)" : undefined,
+            }}>
+              <div style={{ display: "flex", gap: "var(--fc-space-2)", alignItems: "center" }}>
+                <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 700, width: 16 }}>{i + 1}</span>
+                <span style={{ fontSize: "var(--fc-text-sm)", fontWeight: isMe ? 700 : 400, color: isMe ? "var(--fc-emerald)" : "var(--fc-text-2)" }}>
+                  {row.teamName}{isMe && " ●"}
+                </span>
+              </div>
+              <span style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)" }}>{row.points}</span>
+            </div>
+          );
+        })}
+        {myPos > 4 && myRow && (
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "var(--fc-space-1) 0", borderTop: "1px dashed var(--fc-border-mid)",
+          }}>
+            <div style={{ display: "flex", gap: "var(--fc-space-2)", alignItems: "center" }}>
+              <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-amber)", fontWeight: 700, width: 16 }}>{myPos}</span>
+              <span style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-emerald)" }}>Mon Académie ●</span>
+            </div>
+            <span style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)" }}>{myRow.points}</span>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

@@ -15,6 +15,9 @@ import type { CoachProfile } from "../domain/coach";
 import type { AgentState } from "../domain/agent";
 import type { CareerChallenge } from "../domain/challenges";
 import type { PlayerRival } from "../domain/rivals";
+import type { AcademyMatchContext, YouthLeagueRow } from "../domain/academySchedule";
+import type { WorldPlayer } from "../data/worldPlayers";
+import type { WorldTransferEvent } from "../domain/worldTransfers";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -89,6 +92,16 @@ export interface GameSaveV1 {
   rivals?: PlayerRival[];
   /** Semaines consécutives sans blessure — pour les défis endurance */
   weeksUninjured?: number;
+  /** Matchs académie avec contexte complet (statut titulaire, éval coach, recruteurs) */
+  academyMatchContexts?: AcademyMatchContext[];
+  /** Classement de la ligue jeunes — optionnel pour rétrocompatibilité */
+  youthLeagueStanding?: YouthLeagueRow[];
+  /** Relégations/promotions de fin de saison par ligue — optionnel */
+  seasonPromotionResults?: import("../domain/worldSimulator").PromotionRelegationResult[];
+  /** Joueurs monde avec leur état évolutif — optionnel pour rétrocompatibilité */
+  worldPlayers?: WorldPlayer[];
+  /** Historique des transferts monde (100 derniers) — optionnel */
+  worldTransferHistory?: WorldTransferEvent[];
 }
 
 export interface PressConference {

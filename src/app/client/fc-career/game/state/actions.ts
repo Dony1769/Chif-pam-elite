@@ -12,6 +12,9 @@ import type { NextSeasonSetup, SeasonSummary } from "../domain/seasonEnd";
 import type { SimulatedMatchResult } from "../domain/worldSimulator";
 import type { CoachProfile, CoachConversation } from "../domain/coach";
 import type { AgentProfile, ContractOffer } from "../domain/agent";
+import type { AcademyMatchContext, AcademyPostMatchEval } from "../domain/academySchedule";
+import type { PromotionRelegationResult } from "../domain/worldSimulator";
+import type { WorldTransferEvent } from "../domain/worldTransfers";
 
 export type GameAction =
   // Initialisation
@@ -85,6 +88,21 @@ export type GameAction =
   // Défis de carrière
   | { type: "ACTIVATE_CHALLENGE"; challengeId: string }
   | { type: "SYNC_CHALLENGES" }
+
+  // Académie
+  | { type: "INIT_ACADEMY_SCHEDULE" }
+  | { type: "SET_ACADEMY_MATCH_CONTEXT"; context: AcademyMatchContext }
+  | { type: "APPLY_ACADEMY_MATCH_EVAL"; fixtureId: string; eval: AcademyPostMatchEval }
+  | { type: "UPDATE_YOUTH_LEAGUE_STANDING"; scoreAcademy: number; scoreOpp: number; opponentId: string }
+
+  // Relégation / Promotion
+  | { type: "APPLY_PROMOTION_RELEGATION"; results: PromotionRelegationResult[] }
+  | { type: "UPDATE_CLUB_REPUTATION_END_SEASON" }
+
+  // Transferts monde
+  | { type: "AGE_WORLD_PLAYERS" }
+  | { type: "SIMULATE_WORLD_TRANSFERS_SEASON" }
+  | { type: "ADD_WORLD_TRANSFER_EVENTS"; events: WorldTransferEvent[] }
 
   // Rivaux évolutifs
   | { type: "INIT_RIVALS" }

@@ -9,13 +9,16 @@ import type { GameSaveV1 } from "../persistence/saveSchema";
 import { computeOverall, positionFamily } from "../domain/player";
 import { clamp } from "../utils/validation";
 import type { SeasonSchedule } from "../domain/season";
-import { applyResultsToSchedule, updateStanding, simulateMatchday } from "../domain/worldSimulator";
+import { applyResultsToSchedule, updateStanding, simulateMatchday, computePromotionRelegation, updateClubReputation } from "../domain/worldSimulator";
+import { generateAcademySchedule, buildInitialYouthLeagueStanding, YOUTH_LEAGUE_OPPONENTS, decideStartingStatus } from "../domain/academySchedule";
+import { seedFromString, createRng } from "../utils/random";
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
 import { createInitialAgentState } from "../domain/agent";
 import { computeWeeklyCondition, paCostForAttribute } from "../domain/training";
 import { buildInitialChallenges, activateChallenge, updateChallengeProgress } from "../domain/challenges";
 import { pickInitialRivals, updateRivalsEndOfSeason } from "../domain/rivals";
 import { getAllWorldPlayers } from "../data/worldPlayers";
+import { ageWorldPlayers, simulateWorldTransfers, generateTransferOffers } from "../domain/worldTransfers";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -272,7 +275,73 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const save = state.save;
       const career = save.career;
 
-      // Mise à jour des rivaux en fin de saison
+      // ── Relégation / Promotion dynamique ──────────────────────
+      const seasonEndRng = createRng(seedFromString(`promo-relg-s${career.season}`));
+      const promotionResults = Object.entries(save.world.standings).map(([leagueId, standing]) => {
+        return computePromotionRelegation(leagueId, standing, standing.length, seasonEndRng);
+      });
+
+      // ── Réputation des clubs selon performances ────────────────
+      const clubRepRng = createRng(seedFromString(`club-rep-s${career.season}`));
+      const updatedClubs = save.world.clubs.map(club => {
+        const leagueStanding = save.world.standings[club.leagueId];
+        if (!leagueStanding) return club;
+        return updateClubReputation(club, leagueStanding, career.season, clubRepRng);
+      });
+
+      // ── Vieillissement des joueurs monde ──────────────────────────
+      const worldPlayers = (save as GameSaveV1 & { worldPlayers?: import("../data/worldPlayers").WorldPlayer[] }).worldPlayers ?? getAllWorldPlayers();
+      const ageRng = createRng(seedFromString(`age-players-s${career.season}`));
+      const { updated: agedPlayers, events: ageEvents } = ageWorldPlayers(worldPlayers, career.season, ageRng);
+
+      // ── Transferts entre clubs du monde ───────────────────────────
+      const transferRng = createRng(seedFromString(`world-transfers-s${career.season}`));
+      const { updated: transferredPlayers, events: transferEvents } = simulateWorldTransfers(
+        agedPlayers.filter(p => !(p as import("../data/worldPlayers").WorldPlayer & { retired?: boolean }).retired),
+        updatedClubs,
+        career.season,
+        transferRng
+      );
+
+      // ── Offres de transfert pour le joueur humain ─────────────────
+      const offerRng = createRng(seedFromString(`player-offers-s${career.season}`));
+      const playerCurrentClub = updatedClubs.find(c => c.id === save.player.contract.clubId);
+      const transferOffersForPlayer = playerCurrentClub
+        ? generateTransferOffers(
+            save.player.overall,
+            save.player.age,
+            playerCurrentClub.reputation,
+            updatedClubs,
+            career.season,
+            offerRng,
+          )
+        : [];
+      // Convertir en ContractOffer pour l'agentState
+      const agentState = save.agentState ?? createInitialAgentState();
+      const newContractOffers: import("../domain/agent").ContractOffer[] = transferOffersForPlayer.map((offer, i) => ({
+        id: `auto-offer-s${career.season}-${i}`,
+        clubId: offer.clubId,
+        clubName: offer.clubName,
+        season: career.season,
+        week: 1,
+        terms: {
+          clubId: offer.clubId,
+          salary: offer.proposedSalary,
+          bonusGoal: 0,
+          bonusAssist: 0,
+          startSeason: career.season + 1,
+          endSeason: offer.isLoan ? career.season + 2 : career.season + 3,
+          role: "starter" as import("../domain/player").ContractRole,
+        },
+        transferFee: offer.transferFee,
+        isLoan: offer.isLoan,
+        loanEndSeason: offer.isLoan ? career.season + 2 : undefined,
+        expiresInWeeks: 8,
+        status: "pending" as const,
+        message: offer.message,
+      }));
+
+      // ── Mise à jour des rivaux en fin de saison ───────────────────
       const allWorldPlayersForRivals = getAllWorldPlayers();
       const updatedRivals = updateRivalsEndOfSeason(
         save.rivals ?? [],
@@ -329,8 +398,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           world: {
             ...save.world,
             schedules: newSchedules,
+            clubs: updatedClubs,
+          },
+          worldPlayers: transferredPlayers,
+          worldTransferHistory: [...((save as GameSaveV1 & { worldTransferHistory?: import("../domain/worldTransfers").WorldTransferEvent[] }).worldTransferHistory ?? []), ...ageEvents, ...transferEvents].slice(-100),
+          agentState: {
+            ...agentState,
+            offers: [
+              ...agentState.offers.filter(o => o.status === "pending"),
+              ...newContractOffers,
+            ],
           },
           rivals: updatedRivals,
+          seasonPromotionResults: promotionResults,
+          youthLeagueStanding: undefined, // réinitialise pour la nouvelle saison
+          academyMatchContexts: [], // réinitialise pour la nouvelle saison
           weeksUninjured: 0,
           meta: { ...save.meta, savedAt: Date.now() },
         },
@@ -911,6 +993,203 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         save: { ...state.save, rivals: updated },
+        isDirty: true,
+      };
+    }
+
+    /* ── Académie ─────────────────────────────────────────────── */
+
+    case "INIT_ACADEMY_SCHEDULE": {
+      if (!state.save) return state;
+      const { career } = state.save;
+      const schedule = generateAcademySchedule(career.id, career.season);
+      const existingIdx = state.save.world.schedules.findIndex(
+        s => s.competitionId === "youth-league" && s.season === career.season
+      );
+      const newSchedules = existingIdx >= 0
+        ? state.save.world.schedules.map((s, i) => i === existingIdx ? schedule : s)
+        : [...state.save.world.schedules, schedule];
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          world: { ...state.save.world, schedules: newSchedules },
+          youthLeagueStanding: state.save.youthLeagueStanding ?? buildInitialYouthLeagueStanding(),
+          academyMatchContexts: state.save.academyMatchContexts ?? [],
+        },
+        isDirty: true,
+      };
+    }
+
+    case "SET_ACADEMY_MATCH_CONTEXT": {
+      if (!state.save) return state;
+      const existing = state.save.academyMatchContexts ?? [];
+      // Remplacer si le fixtureId existe déjà, sinon ajouter
+      const idx = existing.findIndex(c => c.fixtureId === action.context.fixtureId);
+      const updated = idx >= 0
+        ? existing.map((c, i) => i === idx ? action.context : c)
+        : [...existing, action.context];
+      return {
+        ...state,
+        save: { ...state.save, academyMatchContexts: updated },
+        isDirty: true,
+      };
+    }
+
+    case "APPLY_ACADEMY_MATCH_EVAL": {
+      if (!state.save) return state;
+      const contexts = state.save.academyMatchContexts ?? [];
+      const academy = state.save.career.academy;
+      const updated = contexts.map(c =>
+        c.fixtureId === action.fixtureId
+          ? { ...c, postMatchEval: action.eval }
+          : c
+      );
+      // Mettre à jour le score d'évaluation académie
+      const newEvalScore = academy
+        ? Math.max(0, Math.min(100, academy.evaluationScore + action.eval.evalScoreDelta))
+        : 50;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          academyMatchContexts: updated,
+          career: {
+            ...state.save.career,
+            academy: academy
+              ? { ...academy, evaluationScore: newEvalScore }
+              : null,
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "UPDATE_YOUTH_LEAGUE_STANDING": {
+      if (!state.save) return state;
+      const { scoreAcademy, scoreOpp, opponentId } = action;
+      const standing = state.save.youthLeagueStanding ?? buildInitialYouthLeagueStanding();
+      const updated = standing.map(row => {
+        if (row.teamId === "academy") {
+          const won = scoreAcademy > scoreOpp;
+          const drawn = scoreAcademy === scoreOpp;
+          return {
+            ...row,
+            played: row.played + 1,
+            won: row.won + (won ? 1 : 0),
+            drawn: row.drawn + (drawn ? 1 : 0),
+            lost: row.lost + (!won && !drawn ? 1 : 0),
+            goalsFor: row.goalsFor + scoreAcademy,
+            goalsAgainst: row.goalsAgainst + scoreOpp,
+            points: row.points + (won ? 3 : drawn ? 1 : 0),
+          };
+        }
+        if (row.teamId === opponentId) {
+          const won = scoreOpp > scoreAcademy;
+          const drawn = scoreOpp === scoreAcademy;
+          return {
+            ...row,
+            played: row.played + 1,
+            won: row.won + (won ? 1 : 0),
+            drawn: row.drawn + (drawn ? 1 : 0),
+            lost: row.lost + (!won && !drawn ? 1 : 0),
+            goalsFor: row.goalsFor + scoreOpp,
+            goalsAgainst: row.goalsAgainst + scoreAcademy,
+            points: row.points + (won ? 3 : drawn ? 1 : 0),
+          };
+        }
+        return row;
+      });
+      // Trier
+      const sorted = [...updated].sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        const gdA = a.goalsFor - a.goalsAgainst;
+        const gdB = b.goalsFor - b.goalsAgainst;
+        if (gdB !== gdA) return gdB - gdA;
+        return b.goalsFor - a.goalsFor;
+      });
+      return {
+        ...state,
+        save: { ...state.save, youthLeagueStanding: sorted },
+        isDirty: true,
+      };
+    }
+
+    /* ── Relégation / Promotion ────────────────────────────────── */
+
+    case "APPLY_PROMOTION_RELEGATION": {
+      if (!state.save) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          seasonPromotionResults: action.results,
+        },
+        isDirty: true,
+      };
+    }
+
+    case "AGE_WORLD_PLAYERS": {
+      if (!state.save) return state;
+      const save = state.save;
+      const worldPlayers = (save as GameSaveV1 & { worldPlayers?: import("../data/worldPlayers").WorldPlayer[] }).worldPlayers ?? getAllWorldPlayers();
+      const rng = createRng(seedFromString(`age-players-s${save.career.season}`));
+      const { updated, events } = ageWorldPlayers(worldPlayers, save.career.season, rng);
+      return {
+        ...state,
+        save: {
+          ...save,
+          worldPlayers: updated,
+          worldTransferHistory: [...((save as GameSaveV1 & { worldTransferHistory?: import("../domain/worldTransfers").WorldTransferEvent[] }).worldTransferHistory ?? []), ...events].slice(-100),
+        },
+        isDirty: true,
+      };
+    }
+
+    case "SIMULATE_WORLD_TRANSFERS_SEASON": {
+      if (!state.save) return state;
+      const save = state.save;
+      const worldPlayers = (save as GameSaveV1 & { worldPlayers?: import("../data/worldPlayers").WorldPlayer[] }).worldPlayers ?? getAllWorldPlayers();
+      const rng = createRng(seedFromString(`world-transfers-s${save.career.season}`));
+      const { updated, events } = simulateWorldTransfers(worldPlayers, save.world.clubs, save.career.season, rng);
+      return {
+        ...state,
+        save: {
+          ...save,
+          worldPlayers: updated,
+          worldTransferHistory: [...((save as GameSaveV1 & { worldTransferHistory?: import("../domain/worldTransfers").WorldTransferEvent[] }).worldTransferHistory ?? []), ...events].slice(-100),
+        },
+        isDirty: true,
+      };
+    }
+
+    case "ADD_WORLD_TRANSFER_EVENTS": {
+      if (!state.save) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          worldTransferHistory: [...((state.save as GameSaveV1 & { worldTransferHistory?: import("../domain/worldTransfers").WorldTransferEvent[] }).worldTransferHistory ?? []), ...action.events].slice(-100),
+        },
+        isDirty: true,
+      };
+    }
+
+    case "UPDATE_CLUB_REPUTATION_END_SEASON": {
+      if (!state.save) return state;
+      const save = state.save;
+      const rng = createRng(seedFromString(`club-rep-s${save.career.season}`));
+      const updatedClubs = save.world.clubs.map(club => {
+        const leagueStanding = save.world.standings[club.leagueId];
+        if (!leagueStanding) return club;
+        return updateClubReputation(club, leagueStanding, save.career.season, rng);
+      });
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          world: { ...save.world, clubs: updatedClubs },
+        },
         isDirty: true,
       };
     }

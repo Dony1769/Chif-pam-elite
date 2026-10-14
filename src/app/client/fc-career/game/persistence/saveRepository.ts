@@ -121,6 +121,9 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
     fans: save.fans,
     awards: save.awards,
     journal: save.journal,
+    // Monde vivant étendu
+    worldPlayers: save.worldPlayers,
+    worldTransferHistory: save.worldTransferHistory ?? [],
   };
 }
 
@@ -160,6 +163,7 @@ export function createEmptySave(
   wallet: GameSaveV1["wallet"],
   world: GameSaveV1["world"],
 ): GameSaveV1 {
+  const isAcademy = career.phase === "academy";
   return {
     version: SAVE_VERSION,
     meta: {
@@ -173,5 +177,13 @@ export function createEmptySave(
     wallet,
     world,
     transferHistory: [],
+    // Initialiser les données académie si en phase académie
+    ...(isAcademy ? {
+      academyMatchContexts: [],
+      youthLeagueStanding: (() => {
+        const { buildInitialYouthLeagueStanding } = require("../domain/academySchedule");
+        return buildInitialYouthLeagueStanding();
+      })(),
+    } : {}),
   };
 }
