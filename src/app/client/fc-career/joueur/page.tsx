@@ -12,8 +12,10 @@ import { ATTRIBUTES_BY_GROUP, ALL_ATTRIBUTES } from "../constants/attributes";
 import { formatMoneyCompact, formatRating } from "../utils/formatters";
 import { STAGE_LABELS } from "../engine/academy-engine";
 import type { AttributeGroup } from "../types/player";
-import { getPlayStyleDef } from "../constants/playstyles";
+import { getPlayStyleDef, PLAYSTYLE_DEFS } from "../constants/playstyles";
 import { getTraitDef } from "../constants/traits";
+import type { Player } from "../types/player";
+import { investPA } from "../engine/attribute-points-engine";
 
 const GROUP_LABELS: Record<string, string> = {
   technical: "Technique",
@@ -23,6 +25,100 @@ const GROUP_LABELS: Record<string, string> = {
   defensive: "Defensif",
   offensive: "Offensif",
 };
+
+/* ── Composant PlayStylesGrid : 3 cas visuels ─────────────────── */
+function PlayStylesGrid({ player }: { player: Player }) {
+  const unlockedMap = new Map(player.playStyles?.map(ps => [ps.id, ps.isPlus]) ?? []);
+
+  // Calculer la progression de chaque PlayStyle
+  const items = PLAYSTYLE_DEFS.map(def => {
+    const avg = def.requiredAttributes.reduce((s, id) => s + (player.attributes[id] ?? 0), 0) / (def.requiredAttributes.length || 1);
+    const isPlus = unlockedMap.get(def.id) === true;
+    const isStandard = unlockedMap.has(def.id) && !isPlus;
+    const pctToStandard = Math.min(100, Math.round((avg / def.threshold) * 100));
+    const pctToPlus     = Math.min(100, Math.round((avg / def.thresholdPlus) * 100));
+    return { def, isPlus, isStandard, pctToStandard, pctToPlus, avg };
+  });
+
+  // Trier : PLUS → STANDARD → LOCKED (proche > loin)
+  items.sort((a, b) => {
+    if (a.isPlus !== b.isPlus) return a.isPlus ? -1 : 1;
+    if (a.isStandard !== b.isStandard) return a.isStandard ? -1 : 1;
+    return b.pctToStandard - a.pctToStandard;
+  });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      {items.map(({ def, isPlus, isStandard, pctToStandard, pctToPlus }) => {
+        const isLocked = !isPlus && !isStandard;
+        const borderColor = isPlus
+          ? "oklch(.91 .19 112 / .5)"
+          : isStandard
+          ? "oklch(.73 .13 246 / .4)"
+          : "rgba(255,255,255,0.06)";
+        const bgColor = isPlus
+          ? "oklch(.91 .19 112 / .07)"
+          : isStandard
+          ? "oklch(.73 .13 246 / .06)"
+          : "rgba(255,255,255,0.02)";
+        const glowColor = isPlus ? "0 0 12px oklch(.91 .19 112 / .18)" : "none";
+
+        return (
+          <div
+            key={def.id}
+            style={{
+              display: "flex", flexDirection: "column", gap: 6,
+              padding: "10px 12px",
+              background: bgColor,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 8,
+              boxShadow: glowColor,
+              opacity: isLocked ? 0.55 : 1,
+              transition: "opacity .2s",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{def.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: isPlus ? "var(--primary)" : isStandard ? "var(--blue)" : "var(--muted-foreground)",
+                }}>
+                  {isPlus ? def.labelPlus : def.label}
+                  {isPlus && <span style={{ marginLeft: 4, fontSize: 8, background: "var(--primary)", color: "var(--primary-foreground)", padding: "1px 4px", borderRadius: 3, fontWeight: 800 }}>+</span>}
+                </div>
+                <div style={{ fontSize: 9, color: "var(--muted-foreground)", marginTop: 1, lineHeight: 1.4 }}>
+                  {isPlus ? def.descriptionPlus : def.description}
+                </div>
+              </div>
+            </div>
+            {/* Barre de progression */}
+            {isLocked && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "var(--muted-foreground)", marginBottom: 3 }}>
+                  <span>Progression</span><span>{pctToStandard}%</span>
+                </div>
+                <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pctToStandard}%`, borderRadius: 2, background: "var(--muted-foreground)", transition: "width .5s" }} />
+                </div>
+              </div>
+            )}
+            {isStandard && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "var(--blue)", marginBottom: 3 }}>
+                  <span>Vers +</span><span>{pctToPlus}%</span>
+                </div>
+                <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pctToPlus}%`, borderRadius: 2, background: "var(--blue)", transition: "width .5s" }} />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function JoueurPage() {
   const router = useRouter();
@@ -111,33 +207,14 @@ export default function JoueurPage() {
           </div>
         </section>
 
-        {(player.playStyles?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-heading">
-              <h2>PlayStyles</h2>
-              <span><Zap size={14} /> {player.playStyles.length} ACTIF{player.playStyles.length > 1 ? 'S' : ''}</span>
-            </div>
-            <div className="attribute-list profile-attributes">
-              {player.playStyles.map(ps => {
-                const def = getPlayStyleDef(ps.id);
-                if (!def) return null;
-                return (
-                  <div key={ps.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
-                    <span style={{ fontSize: 20 }}>{def.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <strong style={{ color: ps.isPlus ? 'var(--accent)' : 'var(--text)' }}>
-                        {ps.isPlus ? def.labelPlus : def.label}
-                      </strong>
-                      <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>
-                        {ps.isPlus ? def.descriptionPlus : def.description}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
+        {/* ── PlayStyles : 3 cas (LOCKED / STANDARD / PLUS) ── */}
+        <section>
+          <div className="section-heading">
+            <h2>PlayStyles</h2>
+            <span><Zap size={14} /> {player.playStyles?.length ?? 0} ACTIF{(player.playStyles?.length ?? 0) !== 1 ? 'S' : ''}</span>
+          </div>
+          <PlayStylesGrid player={player} />
+        </section>
 
         {(player.traits?.length ?? 0) > 0 && (
           <section>
