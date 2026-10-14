@@ -758,6 +758,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           player: {
             ...state.save.player,
             contract: offer.terms,
+            // Boost réputation lors d'une transition pro/transfert
+            reputation: offerType === "academy_recruitment" || offerType === "academy_promotion"
+              ? state.save.player.reputation
+              : Math.min(100, state.save.player.reputation + (
+                  targetPhase === "professional" ? 10 :
+                  targetPhase === "elite" ? 20 :
+                  targetPhase === "legend" ? 30 : 5
+                )),
           },
           career: {
             ...currentCareer,
