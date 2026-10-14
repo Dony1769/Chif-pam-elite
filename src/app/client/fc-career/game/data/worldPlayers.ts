@@ -253,11 +253,9 @@ function generatePlayer(
   const careerGoals   = Math.round(careerAppearances * goalsPerGame);
   const careerAssists = Math.round(careerAppearances * goalsPerGame * 0.6 + rng.int(0, 20));
 
-  // Stats saison en cours (saison 1 pour init)
-  const appsThisSeason = rng.int(0, 18);
-  const goalsSeason    = Math.round(appsThisSeason * goalsPerGame * rng.next());
-  const assistsSeason  = Math.round(appsThisSeason * goalsPerGame * 0.5 * rng.next());
-  const avgRating      = parseFloat((rng.next() * 2 + 6 + (overall > 80 ? 0.5 : 0)).toFixed(1));
+  // Stats saison en cours : toujours initialisées à zéro.
+  // Les statistiques ne s'accumulent QUE via les résultats de matchs réels (updateWorldPlayerStats).
+  // Les données historiques (careerGoals, etc.) représentent les saisons précédentes.
 
   return {
     id: `wp-${club.id}-${slot}`,
@@ -280,15 +278,7 @@ function generatePlayer(
     careerGoals,
     careerAssists,
     careerAppearances,
-    seasonStats: [{
-      season: 1,
-      goals: goalsSeason,
-      assists: assistsSeason,
-      appearances: appsThisSeason,
-      avgRating,
-      yellowCards: rng.int(0, 4),
-      redCards: rng.bool(0.05) ? 1 : 0,
-    }],
+    seasonStats: [],          // ✅ Zéro stat au démarrage — seuls les matchs réels incrémentent
     marketValue: computeMarketValue(overall, age, potential),
     contractWeeksLeft: rng.int(20, 200),
   };
@@ -320,9 +310,35 @@ export function getPlayersByLeague(leagueId: string): WorldPlayer[] {
   return getAllWorldPlayers().filter(p => p.leagueId === leagueId);
 }
 
-export function getTopScorers(leagueId: string, season = 1, limit = 10): WorldPlayer[] {
-  return getPlayersByLeague(leagueId)
-    .filter(p => p.seasonStats.some(s => s.season === season))
+/**
+ * Meilleurs buteurs de la ligue pour une saison donnée.
+ * Si livePlayerStats est fourni (depuis WorldLiveState.playerStats), il est utilisé
+ * comme source de vérité plutôt que player.seasonStats (qui reste pour rétrocompatibilité).
+ */
+export function getTopScorers(
+  leagueId: string,
+  season = 1,
+  limit = 10,
+  livePlayerStats?: Array<{ playerId: string; leagueId: string; season: number; goals: number; assists: number; appearances: number }>,
+): Array<WorldPlayer & { liveGoals?: number; liveAssists?: number; liveAppearances?: number }> {
+  const players = getPlayersByLeague(leagueId);
+  if (livePlayerStats && livePlayerStats.length > 0) {
+    const leagueStats = livePlayerStats.filter(s => s.leagueId === leagueId && s.season === season);
+    if (leagueStats.length > 0) {
+      return leagueStats
+        .sort((a, b) => b.goals - a.goals)
+        .slice(0, limit)
+        .map(s => {
+          const player = players.find(p => p.id === s.playerId);
+          if (!player) return null;
+          return { ...player, liveGoals: s.goals, liveAssists: s.assists, liveAppearances: s.appearances };
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null);
+    }
+  }
+  // Fallback : player.seasonStats (vide pour une nouvelle carrière — aucun buteur fantôme)
+  return players
+    .filter(p => p.seasonStats.some(s => s.season === season && s.goals > 0))
     .sort((a, b) => {
       const ag = a.seasonStats.find(s => s.season === season)?.goals ?? 0;
       const bg = b.seasonStats.find(s => s.season === season)?.goals ?? 0;

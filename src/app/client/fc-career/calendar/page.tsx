@@ -13,6 +13,12 @@ import { Button }    from "../game/components/Button";
 import { pageFade, stagger, itemFade } from "../game/design/animations";
 import type { Fixture } from "../game/domain/season";
 import type { MatchResult } from "../game/domain/match";
+import { formatGameDateShort } from "../game/utils/dates";
+
+/** Le championnat commence à la semaine 5 (semaines 1-4 = pré-saison) */
+function matchdayToWeek(matchday: number): number {
+  return 4 + matchday;
+}
 
 /* ── Composant principal ─────────────────────────────────────────── */
 
@@ -70,10 +76,10 @@ export default function CalendarPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--fc-space-3)" }}>
               <p className="fc-panel__label" style={{ margin: 0 }}>Prochain match — J{nextFixture.matchday}</p>
               <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 600 }}>
-                Semaine {career.week}
+                {formatGameDateShort(matchdayToWeek(nextFixture.matchday), career.season)}
               </span>
             </div>
-            <FixtureRow fixture={nextFixture} playerClubId={player.contract.clubId} clubLabel={clubLabel} highlight />
+            <FixtureRow fixture={nextFixture} playerClubId={player.contract.clubId} clubLabel={clubLabel} season={career.season} highlight />
             <Button
               variant="primary"
               fullWidth
@@ -103,7 +109,7 @@ export default function CalendarPage() {
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-1)" }}>
               {upcoming.slice(1, 8).map(f => (
-                <FixtureRow key={f.id} fixture={f} playerClubId={player.contract.clubId} clubLabel={clubLabel} />
+                <FixtureRow key={f.id} fixture={f} playerClubId={player.contract.clubId} clubLabel={clubLabel} season={career.season} />
               ))}
               {upcoming.length > 8 && (
                 <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", textAlign: "center", marginTop: "var(--fc-space-2)" }}>
@@ -130,6 +136,7 @@ export default function CalendarPage() {
                     playerClubId={player.contract.clubId}
                     clubLabel={clubLabel}
                     matchResult={matchResult}
+                    season={career.season}
                   />
                 );
               })}
@@ -157,13 +164,14 @@ export default function CalendarPage() {
 /* ── Ligne de fixture ─────────────────────────────────────────────── */
 
 function FixtureRow({
-  fixture, playerClubId, clubLabel, highlight, matchResult,
+  fixture, playerClubId, clubLabel, highlight, matchResult, season,
 }: {
   fixture: Fixture;
   playerClubId: string;
   clubLabel: (id: string) => string;
   highlight?: boolean;
   matchResult?: MatchResult;
+  season: number;
 }) {
   const isHome   = fixture.homeClubId === playerClubId;
   const oppId    = isHome ? fixture.awayClubId : fixture.homeClubId;
@@ -189,10 +197,15 @@ function FixtureRow({
       alignItems: "center",
       gap: "var(--fc-space-3)",
     }}>
-      {/* Journée */}
-      <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", minWidth: 28, textAlign: "center", fontFamily: "var(--fc-font-display)", fontWeight: 700 }}>
-        J{fixture.matchday}
-      </span>
+      {/* Journée + Date */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 52 }}>
+        <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", fontFamily: "var(--fc-font-display)", fontWeight: 700 }}>
+          J{fixture.matchday}
+        </span>
+        <span style={{ fontSize: 10, color: "var(--fc-text-3)", whiteSpace: "nowrap" }}>
+          {formatGameDateShort(matchdayToWeek(fixture.matchday), season)}
+        </span>
+      </div>
 
       {/* Mon équipe */}
       <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-emerald)", fontWeight: 700, minWidth: 70 }}>

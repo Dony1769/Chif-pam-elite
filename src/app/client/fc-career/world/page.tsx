@@ -287,7 +287,7 @@ export default function WorldPage() {
         {/* ── Top Buteurs ─────────────────────────────────────────── */}
         {worldTab === "scorers" && activeLeague && (() => {
           const season = career?.season ?? 1;
-          const scorers = getTopScorers(activeLeague.id, season, 10);
+          const scorers = getTopScorers(activeLeague.id, season, 10, worldLiveState?.playerStats);
           return (
             <motion.section variants={itemFade} className="fc-panel" style={{ padding: 0, overflow: "hidden" }}>
               <div style={{
@@ -304,7 +304,10 @@ export default function WorldPage() {
                 </p>
               )}
               {scorers.map((wp, idx) => {
+                const liveWp = wp as typeof wp & { liveGoals?: number; liveAssists?: number };
                 const stats = wp.seasonStats.find(s => s.season === season);
+                const goals   = liveWp.liveGoals   ?? stats?.goals   ?? 0;
+                const assists = liveWp.liveAssists  ?? stats?.assists ?? 0;
                 const club  = CLUBS.find(c => c.id === wp.clubId);
                 return (
                   <div key={wp.id} style={{
@@ -322,8 +325,8 @@ export default function WorldPage() {
                         {POSITION_DISPLAY[wp.position]} · {club?.shortName ?? wp.clubId}
                       </div>
                     </div>
-                    <span style={{ textAlign: "center", fontWeight: 700, color: "var(--fc-text)" }}>{stats?.goals ?? 0}</span>
-                    <span style={{ textAlign: "center", color: "var(--fc-text-2)" }}>{stats?.assists ?? 0}</span>
+                    <span style={{ textAlign: "center", fontWeight: 700, color: "var(--fc-text)" }}>{goals}</span>
+                    <span style={{ textAlign: "center", color: "var(--fc-text-2)" }}>{assists}</span>
                     <span style={{ textAlign: "center", color: "var(--fc-text-3)" }}>{wp.overall}</span>
                   </div>
                 );

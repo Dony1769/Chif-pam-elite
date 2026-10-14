@@ -22,7 +22,7 @@ import {
   selectPlayer, selectCareer, selectWallet,
   selectHasSave, selectIsLoading,
 } from "../game/state/selectors";
-import { weekToMonth, seasonLabel } from "../game/utils/dates";
+import { formatGameDateShort, seasonLabel } from "../game/utils/dates";
 import { formatMoney, overallTier } from "../game/utils/formatters";
 import { simulateMatch } from "../game/domain/matchEngine";
 import type { MatchResult } from "../game/domain/match";
@@ -77,7 +77,7 @@ function DashboardContent() {
   const save      = state.save!;
   const weekState = save.weekState ?? { trainingDone: false, trainingIntensity: null, matchPlayed: false };
 
-  const month  = weekToMonth(career.week);
+  const month  = formatGameDateShort(career.week, career.season);
   const season = seasonLabel(career.season);
 
   // Match de la semaine (fixture correspondant à cette matchday)
@@ -246,6 +246,14 @@ function DashboardContent() {
 
     // Appliquer le résultat (stats + PA)
     dispatch({ type: "APPLY_MATCH_RESULT", result });
+    // Mettre à jour la confiance et les objectifs du coach avec les stats réelles du match
+    dispatch({
+      type: "APPLY_MATCH_TRUST_DELTA",
+      matchRating: result.playerRating,
+      minutesPlayed: result.playerStats.minutesPlayed,
+      goals: result.playerStats.goals,
+      assists: result.playerStats.assists,
+    });
     // Marquer le match joué dans weekState
     dispatch({ type: "MARK_MATCH_PLAYED" });
 

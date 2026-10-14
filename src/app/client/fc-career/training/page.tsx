@@ -136,6 +136,19 @@ export default function TrainingPage() {
   const previewIntensity = currentIntensity ?? "normal";
   const weekDelta = computeWeeklyCondition(condition.fatigue, condition.form, previewIntensity);
 
+  // Section 6 : limiter l'entraînement selon la fatigue
+  // Fatigue > 85 → repos obligatoire (seulement "light" possible)
+  // Fatigue > 60 → "intense" bloqué
+  const isForcedRest   = condition.fatigue > 85;
+  const isIntenseBlocked = condition.fatigue > 60;
+
+  const intensityAvailable = (lvl: "light" | "normal" | "intense"): boolean => {
+    if (condition.injury) return lvl === "light"; // blessé → light seulement
+    if (isForcedRest)     return lvl === "light";
+    if (isIntenseBlocked) return lvl !== "intense";
+    return true;
+  };
+
   const totalCost  = cartTotalCost(cart, player.attributes);
   const cartSize   = Object.values(cart).reduce((s, n) => s + (n ?? 0), 0);
   const paAfterCart = player.paPoints - totalCost;
@@ -208,6 +221,36 @@ export default function TrainingPage() {
             )}
           </div>
 
+          {/* Bannière fatigue si repos forcé */}
+          {isForcedRest && (
+            <div style={{
+              padding: "var(--fc-space-2) var(--fc-space-3)",
+              borderRadius: "var(--fc-radius-sm)",
+              background: "rgba(255,107,107,0.1)",
+              border: "1px solid var(--fc-coral)",
+              marginBottom: "var(--fc-space-3)",
+              fontSize: "var(--fc-text-xs)",
+              color: "var(--fc-coral)",
+              fontWeight: 600,
+            }}>
+              😮‍💨 Fatigue extrême ({condition.fatigue}/100) — repos obligatoire. Seule l&apos;intensité légère est disponible.
+            </div>
+          )}
+          {!isForcedRest && isIntenseBlocked && (
+            <div style={{
+              padding: "var(--fc-space-2) var(--fc-space-3)",
+              borderRadius: "var(--fc-radius-sm)",
+              background: "rgba(255,170,0,0.1)",
+              border: "1px solid var(--fc-amber)",
+              marginBottom: "var(--fc-space-3)",
+              fontSize: "var(--fc-text-xs)",
+              color: "var(--fc-amber)",
+              fontWeight: 600,
+            }}>
+              ⚠️ Fatigue élevée ({condition.fatigue}/100) — entraînement intense déconseillé et bloqué.
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: "var(--fc-space-2)" }}>
             {(["light", "normal", "intense"] as const).map(lvl => {
               const cfg = {
@@ -215,32 +258,35 @@ export default function TrainingPage() {
                 normal:  { label: "Normale", sub: "+2 PA · fatigue modérée",  icon: "⚽" },
                 intense: { label: "Intense", sub: "+3 PA · grosse fatigue",   icon: "🔥" },
               }[lvl];
-              const active = currentIntensity === lvl;
+              const active    = currentIntensity === lvl;
+              const available = intensityAvailable(lvl);
               return (
                 <button
                   key={lvl}
-                  onClick={() => handleChooseIntensity(lvl)}
+                  onClick={() => available && handleChooseIntensity(lvl)}
+                  disabled={!available}
                   style={{
                     flex: 1,
                     padding: "var(--fc-space-3) var(--fc-space-2)",
                     borderRadius: "var(--fc-radius)",
-                    border: `2px solid ${active ? "var(--fc-emerald)" : "var(--fc-border-mid)"}`,
-                    background: active ? "var(--fc-emerald-10)" : "var(--fc-surface-3)",
-                    cursor: "pointer",
+                    border: `2px solid ${active ? "var(--fc-emerald)" : available ? "var(--fc-border-mid)" : "var(--fc-border)"}`,
+                    background: active ? "var(--fc-emerald-10)" : available ? "var(--fc-surface-3)" : "var(--fc-surface-2)",
+                    cursor: available ? "pointer" : "not-allowed",
                     textAlign: "center",
                     transition: "border-color 0.15s, background 0.15s",
+                    opacity: available ? 1 : 0.4,
                   }}
                 >
                   <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{cfg.icon}</div>
                   <div style={{
                     fontSize: "var(--fc-text-sm)",
                     fontWeight: 700,
-                    color: active ? "var(--fc-emerald)" : "var(--fc-text)",
+                    color: active ? "var(--fc-emerald)" : available ? "var(--fc-text)" : "var(--fc-text-3)",
                   }}>
                     {cfg.label}
                   </div>
                   <div style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", marginTop: 2 }}>
-                    {cfg.sub}
+                    {available ? cfg.sub : "Indisponible"}
                   </div>
                 </button>
               );

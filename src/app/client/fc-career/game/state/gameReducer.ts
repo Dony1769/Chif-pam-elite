@@ -23,6 +23,7 @@ import { createInitialLockerRoom, updateLockerRoomWeekly, triggerLockerRoomEvent
 import { createInitialPersonalLife, updatePersonalLifeWeekly, applyPersonalEvent, generatePersonalEvent } from "../domain/personalLife";
 import { createInitialNationalTeam, updateNationalTeamEndOfSeason } from "../domain/nationalTeam";
 import { advanceWorldWeek, endWorldSeason } from "../domain/worldEngine";
+import { computeSeasonAwards, mergeAwards } from "../domain/awards";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -356,6 +357,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         career.season,
       );
 
+      // ── Récompenses de fin de saison (Section 9) ─────────────────
+      const playerLeagueId = save.world.clubs.find(c => c.id === save.player.contract.clubId)?.leagueId ?? "";
+      const newSeasonAwards = computeSeasonAwards({
+        player: save.player,
+        season: career.season,
+        standings: save.world.standings,
+        playerClubId: save.player.contract.clubId,
+        playerLeagueId,
+      });
+      const allAwards = mergeAwards(save.awards ?? [], newSeasonAwards);
+
       // Nouveau calendrier
       const newSchedules: SeasonSchedule[] = setup.newSchedule
         ? [...save.world.schedules, setup.newSchedule]
@@ -414,6 +426,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ],
           },
           rivals: updatedRivals,
+          awards: allAwards,
           seasonPromotionResults: promotionResults,
           youthLeagueStanding: undefined, // réinitialise pour la nouvelle saison
           academyMatchContexts: [], // réinitialise pour la nouvelle saison
@@ -531,14 +544,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const newTrust = clamp(coach.trust + delta, 0, 100);
       const newRole  = roleFromTrust(newTrust);
 
-      // Mettre à jour l'objectif appearances
+      // Mettre à jour l'objectif selon son type — lié à l'événement réel du match
       const obj = coach.seasonObjective;
-      const newCurrent = obj.type === "appearances"
-        ? Math.min(obj.current + 1, obj.target)
+      const played = action.minutesPlayed > 0;
+      const newCurrent = obj.completed ? obj.current
+        : obj.type === "appearances" && played
+          ? Math.min(obj.current + 1, obj.target)
+        : obj.type === "goals"
+          ? Math.min(obj.current + (action.goals ?? 0), obj.target)
+        : obj.type === "assists"
+          ? Math.min(obj.current + (action.assists ?? 0), obj.target)
         : obj.type === "rating"
-        ? action.matchRating
+          ? action.matchRating           // note du dernier match (pas cumulé)
         : obj.current;
-      const newCompleted = newCurrent >= obj.target;
+      const newCompleted = obj.type === "rating"
+        ? newCurrent >= obj.target
+        : newCurrent >= obj.target;
 
       return {
         ...state,
@@ -671,6 +692,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "SET_TRAINING_CHOICE": {
       if (!state.save) return state;
       const weekState = state.save.weekState ?? { ...DEFAULT_WEEK_STATE };
+      const fatigue = state.save.player.condition.fatigue;
+      const injured = !!state.save.player.condition.injury;
+      // Sécurité section 6 : limiter l'intensité selon la fatigue
+      let safeIntensity = action.intensity;
+      if (injured || fatigue > 85) safeIntensity = "light";
+      else if (fatigue > 60 && safeIntensity === "intense") safeIntensity = "normal";
       return {
         ...state,
         save: {
@@ -678,7 +705,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           weekState: {
             ...weekState,
             trainingDone: true,
-            trainingIntensity: action.intensity,
+            trainingIntensity: safeIntensity,
           },
         },
         isDirty: true,

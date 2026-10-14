@@ -61,7 +61,7 @@ export type GameAction =
   // Coach
   | { type: "UPDATE_COACH"; coach: Partial<CoachProfile> }
   | { type: "ADD_COACH_CONVERSATION"; conversation: CoachConversation }
-  | { type: "APPLY_MATCH_TRUST_DELTA"; matchRating: number; minutesPlayed: number }
+  | { type: "APPLY_MATCH_TRUST_DELTA"; matchRating: number; minutesPlayed: number; goals?: number; assists?: number }
 
   // Agent & Contrats
   | { type: "HIRE_AGENT"; agent: AgentProfile }
