@@ -7,6 +7,7 @@
 import { SAVE_KEY, SAVE_VERSION, type GameSaveV1, type LoadResult } from "./saveSchema";
 import { migrate } from "./migrations";
 import type { Career } from "../domain/career";
+import { createInitialCoach } from "../domain/coach";
 
 // ── Lecture ────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,8 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
       lastMatchResults: save.world?.lastMatchResults ?? [],
       standings:        save.world?.standings        ?? {},
     },
+    // Rétrocompatibilité : créer un coach par défaut si absent
+    coach: save.coach ?? createInitialCoach(save.career?.phase ?? "academy", save.career?.season ?? 1),
   };
 }
 

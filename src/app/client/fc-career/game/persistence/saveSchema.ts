@@ -11,6 +11,7 @@ import type { Wallet, Transfer } from "../domain/economy";
 import type { Club, League, Country, Standing } from "../domain/club";
 import type { SeasonSchedule } from "../domain/season";
 import type { MatchResult } from "../domain/match";
+import type { CoachProfile } from "../domain/coach";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -41,6 +42,8 @@ export interface GameSaveV1 {
     lastMatchResults: MatchResult[]; // 20 derniers max
   };
   transferHistory: Transfer[];
+  /** Profil coach — optionnel pour compatibilité avec les sauvegardes existantes */
+  coach?: CoachProfile;
 }
 
 /** Type union pour les migrations futures */

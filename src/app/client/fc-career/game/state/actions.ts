@@ -10,6 +10,7 @@ import type { MatchResult } from "../domain/match";
 import type { GameSaveV1 } from "../persistence/saveSchema";
 import type { NextSeasonSetup, SeasonSummary } from "../domain/seasonEnd";
 import type { SimulatedMatchResult } from "../domain/worldSimulator";
+import type { CoachProfile, CoachConversation } from "../domain/coach";
 
 export type GameAction =
   // Initialisation
@@ -37,6 +38,11 @@ export type GameAction =
   // Économie
   | { type: "CREDIT_WALLET"; amount: number; reason: string }
   | { type: "DEBIT_WALLET"; amount: number; reason: string }
+
+  // Coach
+  | { type: "UPDATE_COACH"; coach: Partial<CoachProfile> }
+  | { type: "ADD_COACH_CONVERSATION"; conversation: CoachConversation }
+  | { type: "APPLY_MATCH_TRUST_DELTA"; matchRating: number; minutesPlayed: number }
 
   // Erreur
   | { type: "SET_ERROR"; message: string }

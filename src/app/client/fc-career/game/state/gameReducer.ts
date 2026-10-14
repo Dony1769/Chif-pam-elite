@@ -10,6 +10,7 @@ import { computeOverall, positionFamily } from "../domain/player";
 import { clamp } from "../utils/validation";
 import type { SeasonSchedule } from "../domain/season";
 import { applyResultsToSchedule, updateStanding } from "../domain/worldSimulator";
+import { computeTrustDelta, roleFromTrust } from "../domain/coach";
 
 export interface GameState {
   save: GameSaveV1 | null;
@@ -335,6 +336,71 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         save: {
           ...state.save,
           wallet: { ...w, balance: w.balance - action.amount, totalSpent: w.totalSpent + action.amount },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "UPDATE_COACH": {
+      if (!state.save) return state;
+      const currentCoach = state.save.coach;
+      if (!currentCoach) return state;
+      return {
+        ...state,
+        save: { ...state.save, coach: { ...currentCoach, ...action.coach } },
+        isDirty: true,
+      };
+    }
+
+    case "ADD_COACH_CONVERSATION": {
+      if (!state.save) return state;
+      const currentCoach = state.save.coach;
+      if (!currentCoach) return state;
+      // Appliquer l'effet de la conversation (trust, role)
+      const effect = action.conversation.effect ?? {};
+      const newTrust = clamp((currentCoach.trust) + (effect.trust ?? 0), 0, 100);
+      const newRole  = effect.role ?? roleFromTrust(newTrust);
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          coach: {
+            ...currentCoach,
+            trust: newTrust,
+            playerRole: newRole,
+            conversations: [...currentCoach.conversations, action.conversation],
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "APPLY_MATCH_TRUST_DELTA": {
+      if (!state.save?.coach) return state;
+      const coach = state.save.coach;
+      const delta = computeTrustDelta(coach.playerRole, action.matchRating, action.minutesPlayed);
+      const newTrust = clamp(coach.trust + delta, 0, 100);
+      const newRole  = roleFromTrust(newTrust);
+
+      // Mettre à jour l'objectif appearances
+      const obj = coach.seasonObjective;
+      const newCurrent = obj.type === "appearances"
+        ? Math.min(obj.current + 1, obj.target)
+        : obj.type === "rating"
+        ? action.matchRating
+        : obj.current;
+      const newCompleted = newCurrent >= obj.target;
+
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          coach: {
+            ...coach,
+            trust: newTrust,
+            playerRole: newRole,
+            seasonObjective: { ...obj, current: newCurrent, completed: newCompleted },
+          },
         },
         isDirty: true,
       };
