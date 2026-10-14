@@ -24,6 +24,7 @@ import { createInitialPersonalLife, updatePersonalLifeWeekly, applyPersonalEvent
 import { createInitialNationalTeam, updateNationalTeamEndOfSeason } from "../domain/nationalTeam";
 import { advanceWorldWeek, endWorldSeason } from "../domain/worldEngine";
 import { computeSeasonAwards, mergeAwards } from "../domain/awards";
+import { updateSponsorMissions, buildMissionContext } from "../domain/sponsors";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -215,6 +216,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Ajouter les résultats de match à l'historique world (20 max)
       const lastResults = [result, ...(state.save.world.lastMatchResults ?? [])].slice(0, 20);
 
+      // Mise à jour des missions sponsors après chaque match
+      const updatedPlayerForMissions = { ...player, stats: updatedCareerStats };
+      const missionCtx = buildMissionContext(
+        updatedPlayerForMissions,
+        state.save.career.season,
+        state.save.world.standings as unknown as Record<string, { clubId: string }[]>,
+        lastResults,
+      );
+      const updatedSponsorsAfterMatch = updateSponsorMissions(state.save.sponsors ?? [], missionCtx);
+
       return {
         ...state,
         save: {
@@ -229,6 +240,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             completedMatchIds: [...ids, result.matchId] as unknown as string[],
           },
           world: { ...state.save.world, lastMatchResults: lastResults },
+          sponsors: updatedSponsorsAfterMatch,
         },
         isDirty: true,
       };
@@ -775,8 +787,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // ── Bonus sponsors actifs ────────────────────────────────────
       const activeSponsors = (save.sponsors ?? []).filter(s => s.weeksLeft > 0);
       const sponsorBonus = activeSponsors.reduce((sum, s) => sum + s.weeklyBonus, 0);
-      const updatedSponsors = (save.sponsors ?? []).map(s =>
-        s.weeksLeft > 0 ? { ...s, weeksLeft: s.weeksLeft - 1 } : s
+      // Évaluer les missions sponsors à chaque fin de semaine (pour conditions de forme, classement, etc.)
+      const weekMissionCtx = buildMissionContext(
+        newPlayer,
+        career.season,
+        save.world.standings as unknown as Record<string, { clubId: string }[]>,
+        save.world.lastMatchResults ?? [],
+      );
+      const updatedSponsors = updateSponsorMissions(
+        (save.sponsors ?? []).map(s => s.weeksLeft > 0 ? { ...s, weeksLeft: s.weeksLeft - 1 } : s),
+        weekMissionCtx,
       );
 
       // ── Simulation monde : avancer les autres clubs ──────────────

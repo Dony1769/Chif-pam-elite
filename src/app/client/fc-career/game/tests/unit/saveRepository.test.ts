@@ -1,6 +1,5 @@
 /**
  * FC CAREER — Tests unitaires : saveRepository
- * Exécutable avec : npx ts-node --esm (ou via jest si configuré)
  */
 
 import {
@@ -85,85 +84,45 @@ function makeMinimalSave(): GameSaveV1 {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-let passed = 0;
-let failed = 0;
+describe("saveRepository", () => {
+  it("createEmptySave produit une sauvegarde valide", () => {
+    const save = makeMinimalSave();
+    const errors = validateSave(save);
+    expect(errors).toHaveLength(0);
+  });
 
-function test(name: string, fn: () => void) {
-  try {
-    fn();
-    console.log(`  ✅ ${name}`);
-    passed++;
-  } catch (e) {
-    console.error(`  ❌ ${name}: ${e}`);
-    failed++;
-  }
-}
+  it("La sauvegarde a la version 1", () => {
+    const save = makeMinimalSave();
+    expect(save.version).toBe(1);
+  });
 
-function expect(value: unknown) {
-  return {
-    toBe(expected: unknown) {
-      if (value !== expected) throw new Error(`Attendu ${expected}, reçu ${value}`);
-    },
-    toBeTrue() { if (value !== true) throw new Error(`Attendu true, reçu ${value}`); },
-    toBeFalse() { if (value !== false) throw new Error(`Attendu false, reçu ${value}`); },
-    toHaveLength(n: number) {
-      if (!Array.isArray(value) || value.length !== n)
-        throw new Error(`Attendu longueur ${n}, reçu ${Array.isArray(value) ? value.length : typeof value}`);
-    },
-    toBeEmpty() {
-      if (Array.isArray(value) && value.length !== 0) throw new Error(`Attendu tableau vide`);
-    },
-  };
-}
+  it("isMatchAlreadyCompleted retourne false pour un nouveau match", () => {
+    const save = makeMinimalSave();
+    expect(isMatchAlreadyCompleted(save, "match-xyz")).toBe(false);
+  });
 
-// ─────────────────────────────────────────────────────────────────────────────
+  it("markMatchCompleted enregistre un match", () => {
+    const save = makeMinimalSave();
+    const updated = markMatchCompleted(save, "match-001");
+    expect(isMatchAlreadyCompleted(updated, "match-001")).toBe(true);
+  });
 
-console.log("\n📋 Tests : saveRepository\n");
+  it("markMatchCompleted est idempotent (pas de doublon)", () => {
+    const save = makeMinimalSave();
+    const s1 = markMatchCompleted(save, "match-001");
+    const s2 = markMatchCompleted(s1, "match-001");
+    const ids = s2.career.completedMatchIds as unknown as string[];
+    expect(ids.filter(id => id === "match-001")).toHaveLength(1);
+  });
 
-test("createEmptySave produit une sauvegarde valide", () => {
-  const save = makeMinimalSave();
-  const errors = validateSave(save);
-  expect(errors).toHaveLength(0);
+  it("updateSaveMeta met à jour savedAt", () => {
+    const save = makeMinimalSave();
+    const updated = updateSaveMeta({ ...save, meta: { ...save.meta, savedAt: 0 } });
+    expect(updated.meta.savedAt).toBeGreaterThan(0);
+  });
+
+  it("validateSave signale les champs manquants", () => {
+    const errors = validateSave({ version: 1, meta: { careerId: "x" } });
+    expect(errors.some(e => e.includes("player"))).toBe(true);
+  });
 });
-
-test("La sauvegarde a la version 1", () => {
-  const save = makeMinimalSave();
-  expect(save.version).toBe(1);
-});
-
-test("isMatchAlreadyCompleted retourne false pour un nouveau match", () => {
-  const save = makeMinimalSave();
-  expect(isMatchAlreadyCompleted(save, "match-xyz")).toBeFalse();
-});
-
-test("markMatchCompleted enregistre un match", () => {
-  const save = makeMinimalSave();
-  const updated = markMatchCompleted(save, "match-001");
-  expect(isMatchAlreadyCompleted(updated, "match-001")).toBeTrue();
-});
-
-test("markMatchCompleted est idempotent (pas de doublon)", () => {
-  const save = makeMinimalSave();
-  const s1 = markMatchCompleted(save, "match-001");
-  const s2 = markMatchCompleted(s1, "match-001");
-  const ids = s2.career.completedMatchIds as unknown as string[];
-  expect(ids.filter(id => id === "match-001")).toHaveLength(1);
-});
-
-test("updateSaveMeta met à jour savedAt", () => {
-  const save = makeMinimalSave();
-  const before = save.meta.savedAt;
-  // Petit délai artificiel
-  const updated = updateSaveMeta({ ...save, meta: { ...save.meta, savedAt: 0 } });
-  if (updated.meta.savedAt <= 0) throw new Error("savedAt non mis à jour");
-});
-
-test("validateSave signale les champs manquants", () => {
-  const errors = validateSave({ version: 1, meta: { careerId: "x" } });
-  if (!errors.some(e => e.includes("player"))) throw new Error("Erreur player attendue");
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-console.log(`\n${passed} passés, ${failed} échoués\n`);
-if (failed > 0) process.exit(1);

@@ -14,6 +14,7 @@ import { pageFade, stagger, itemFade } from "../game/design/animations";
 import type { Fixture } from "../game/domain/season";
 import type { MatchResult } from "../game/domain/match";
 import { formatGameDateShort } from "../game/utils/dates";
+import { YOUTH_LEAGUE_OPPONENTS } from "../game/domain/academySchedule";
 
 /** Le championnat commence à la semaine 5 (semaines 1-4 = pré-saison) */
 function matchdayToWeek(matchday: number): number {
@@ -35,7 +36,16 @@ export default function CalendarPage() {
   const completedIds = new Set((career?.completedMatchIds ?? []) as string[]);
   const clubs      = save?.world.clubs ?? [];
 
-  const clubLabel = (id: string) => clubs.find(c => c.id === id)?.shortName ?? id;
+  // Résolution des noms de clubs : clubs monde + adversaires académie
+  const clubLabel = (id: string) => {
+    const worldClub = clubs.find(c => c.id === id);
+    if (worldClub) return worldClub.shortName ?? worldClub.name ?? id;
+    const youthOpp = YOUTH_LEAGUE_OPPONENTS.find(o => o.id === id);
+    if (youthOpp) return youthOpp.name;
+    // Identifiants lisibles pour les clubs académie génériques
+    if (id.startsWith("youth-")) return id.replace("youth-", "Youth ").replace(/-/g, " ");
+    return id;
+  };
 
   const played   = fixtures.filter(f => completedIds.has(f.id));
   const upcoming = fixtures.filter(f => !completedIds.has(f.id));

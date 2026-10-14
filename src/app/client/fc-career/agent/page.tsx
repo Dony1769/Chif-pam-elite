@@ -303,14 +303,26 @@ export default function AgentPage() {
     const nbOffers = player.reputation >= 60 ? 3 : player.reputation >= 30 ? 2 : 1;
     const agentBoost = agentState.agent?.salaryBoostPct ?? 0;
 
-    // Faux clubs selon la phase de carrière
-    const fakeClubs = [
-      { id: "club-offer-1", name: "FC Meridian" },
-      { id: "club-offer-2", name: "AS Castillon" },
-      { id: "club-offer-3", name: "Sporting Vallura" },
-    ].slice(0, nbOffers);
+    // Sélection de clubs réels depuis le monde vivant (filtrés selon le niveau du joueur)
+    const worldClubs = state.save?.world?.clubs ?? [];
+    const playerClubId = player.contract.clubId;
+    // Filtrer : clubs différents du club actuel, de division compatible avec le niveau du joueur
+    const candidateClubs = worldClubs
+      .filter(c => c.id !== playerClubId)
+      .map(c => ({ id: c.id, name: c.name ?? c.id }));
 
-    for (const club of fakeClubs) {
+    // Trier par seed déterministe (semaine + saison = sélection stable)
+    const seed = `prospect-${career.season}-${career.week}-${player.reputation}`;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = (h * 0x01000193) >>> 0; }
+    const shuffled = [...candidateClubs].sort((a, b) => {
+      const ha = (h ^ a.id.charCodeAt(0)) >>> 0;
+      const hb = (h ^ b.id.charCodeAt(0)) >>> 0;
+      return ha - hb;
+    });
+    const selectedClubs = shuffled.slice(0, nbOffers);
+
+    for (const club of selectedClubs) {
       const offer = generateContractOffer({
         clubId: club.id,
         clubName: club.name,
