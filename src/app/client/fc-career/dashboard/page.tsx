@@ -40,6 +40,8 @@ import {
   Check,
 } from "lucide-react";
 import { Shell, Crest, PageTitle, StatCard } from "../lib/components";
+import { PageTitleAnimated } from "../lib/PageTitleAnimated";
+import { AnimatedNumber } from "../lib/AnimatedNumber";
 import { Button, Link } from "../lib/ui";
 import type { CareerRuntimeState } from "../types/career";
 import { toCareerState, toFullSave } from "../types/career";
@@ -258,7 +260,7 @@ export default function DashboardPage() {
 
   return (
     <Shell>
-      <PageTitle
+      <PageTitleAnimated
         eyebrow={`SAISON ${season?.seasonYear ?? ""} / ${divisionName}`}
         title={`À vous de jouer, ${player.firstName}.`}
         subtitle={`${player.academy ? STAGE_LABELS[player.academy.stage] + " · " : ""}Chaque jour compte. Chaque décision construit votre légende.`}
@@ -627,7 +629,7 @@ export default function DashboardPage() {
             <Wallet size={18} />
             <div>
               <span>Votre solde</span>
-              <strong>{formatMoneyCompact(career.wallet?.balance ?? 0)}</strong>
+              <strong><AnimatedNumber value={career.wallet?.balance ?? 0} format={formatMoneyCompact} /></strong>
             </div>
             <Button asChild variant="ghost" size="icon" aria-label="Finances">
               <Link to="/club"><ArrowRight size={14} /></Link>

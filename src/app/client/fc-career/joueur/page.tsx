@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, ArrowRight, Sparkles, Star, Zap, Eye } from "lucide-react";
 import { Shell, Crest, PageTitle, StatCard } from "../lib/components";
+import { PageTitleAnimated } from "../lib/PageTitleAnimated";
 import { Button, Link } from "../lib/ui";
 import { loadGame, saveGame } from "../utils/storage";
 import { toCareerState, toFullSave, type CareerRuntimeState } from "../types/career";
@@ -141,7 +142,7 @@ export default function JoueurPage() {
 
   return (
     <Shell>
-      <PageTitle
+      <PageTitleAnimated
         eyebrow="LE TALENT EN CHIFFRES"
         title={`${player.firstName} ${player.lastName}`}
         subtitle={`${player.age} ans · ${player.position} · Overall ${player.overall}`}
