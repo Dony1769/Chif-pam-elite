@@ -47,6 +47,15 @@ export interface GameSaveV1 {
   coach?: CoachProfile;
   /** Agent & contrats — optionnel pour compatibilité avec les sauvegardes existantes */
   agentState?: AgentState;
+  /**
+   * État de la semaine en cours — optionnel pour rétrocompatibilité.
+   * Réinitialisé à chaque COMMIT_WEEK.
+   */
+  weekState?: {
+    trainingDone: boolean;
+    trainingIntensity: "light" | "normal" | "intense" | null;
+    matchPlayed: boolean;
+  };
 }
 
 /** Type union pour les migrations futures */

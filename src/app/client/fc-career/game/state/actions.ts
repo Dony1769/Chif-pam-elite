@@ -28,10 +28,23 @@ export type GameAction =
   // Match
   | { type: "APPLY_MATCH_RESULT"; result: MatchResult }
 
-  // Progression
+  // Progression du temps
   | { type: "ADVANCE_WEEK" }
   | { type: "ADVANCE_SEASON" }
   | { type: "END_SEASON"; setup: NextSeasonSetup; summary: SeasonSummary; paBonus: number }
+  /**
+   * Choix d'intensité d'entraînement pour la semaine.
+   * N'avance PAS le temps — enregistre juste le choix dans weekState.
+   */
+  | { type: "SET_TRAINING_CHOICE"; intensity: "light" | "normal" | "intense" }
+  /**
+   * Terminer la semaine depuis le Dashboard.
+   * Applique l'entraînement, crédite le salaire, incrémente week/matchday.
+   * Réinitialise weekState pour la semaine suivante.
+   */
+  | { type: "COMMIT_WEEK" }
+  /** Marqué depuis le Dashboard après que le match de la semaine a été joué */
+  | { type: "MARK_MATCH_PLAYED" }
 
   // Monde vivant
   | { type: "SIMULATE_WORLD_MATCHDAY"; matchday: number; results: SimulatedMatchResult[]; leagueId: string }

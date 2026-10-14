@@ -112,6 +112,8 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
     coach: save.coach ?? createInitialCoach(save.career?.phase ?? "academy", save.career?.season ?? 1),
     // Rétrocompatibilité : état agent par défaut si absent
     agentState: save.agentState ?? createInitialAgentState(),
+    // Rétrocompatibilité : état de semaine par défaut si absent
+    weekState: save.weekState ?? { trainingDone: false, trainingIntensity: null, matchPlayed: false },
   };
 }
 

@@ -12,6 +12,9 @@ import type { SeasonSchedule } from "../domain/season";
 import { applyResultsToSchedule, updateStanding } from "../domain/worldSimulator";
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
 import { createInitialAgentState } from "../domain/agent";
+import { computeWeeklyCondition } from "../domain/training";
+
+const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
 export interface GameState {
   save: GameSaveV1 | null;
@@ -515,6 +518,90 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...agentState,
             lastRequestWeek: state.save.career.week,
           },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "SET_TRAINING_CHOICE": {
+      if (!state.save) return state;
+      const weekState = state.save.weekState ?? { ...DEFAULT_WEEK_STATE };
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          weekState: {
+            ...weekState,
+            trainingDone: true,
+            trainingIntensity: action.intensity,
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "MARK_MATCH_PLAYED": {
+      if (!state.save) return state;
+      const weekState = state.save.weekState ?? { ...DEFAULT_WEEK_STATE };
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          weekState: { ...weekState, matchPlayed: true },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "COMMIT_WEEK": {
+      if (!state.save) return state;
+      const save = state.save;
+      const career = save.career;
+      const player = save.player;
+      const weekState = save.weekState ?? { ...DEFAULT_WEEK_STATE };
+
+      // Appliquer l'entraînement si défini
+      let newPlayer = player;
+      if (weekState.trainingDone && weekState.trainingIntensity) {
+        const delta = computeWeeklyCondition(
+          player.condition.fatigue,
+          player.condition.form,
+          weekState.trainingIntensity,
+        );
+        const newFatigue = Math.min(100, player.condition.fatigue + delta.fatigueGain);
+        const newForm    = Math.max(1, Math.min(100, player.condition.form + delta.formDelta));
+        const newMorale  = Math.max(1, Math.min(100, player.condition.morale + delta.moraleDelta));
+        newPlayer = {
+          ...player,
+          paPoints: player.paPoints + delta.paGained,
+          condition: { ...player.condition, fatigue: newFatigue, form: newForm, morale: newMorale },
+        };
+      } else {
+        // Récupération passive si pas d'entraînement
+        const newFatigue = Math.max(0, player.condition.fatigue - 5);
+        newPlayer = {
+          ...player,
+          condition: { ...player.condition, fatigue: newFatigue },
+        };
+      }
+
+      const newWeek     = career.week + 1;
+      const newMatchday = career.matchday + 1;
+      const wallet      = save.wallet;
+
+      return {
+        ...state,
+        save: {
+          ...save,
+          player: newPlayer,
+          career: { ...career, week: newWeek, matchday: newMatchday },
+          wallet: {
+            ...wallet,
+            balance:     wallet.balance + wallet.weeklyWage,
+            totalEarned: wallet.totalEarned + wallet.weeklyWage,
+          },
+          weekState: { trainingDone: false, trainingIntensity: null, matchPlayed: false },
+          meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
       };

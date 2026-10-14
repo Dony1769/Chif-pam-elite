@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * FC CAREER — Étape 4 : Entraînement
- * Investissement de PA par attribut + avancement de semaine.
+ * FC CAREER — Entraînement
+ * Choisir l'intensité de la semaine + investir les PA.
+ * N'avance PAS le temps — c'est le Dashboard qui termine la semaine.
  */
 
 import { useState, useCallback } from "react";
@@ -21,7 +22,6 @@ import {
 } from "../game/domain/training";
 import type { AttributeGroup } from "../game/domain/training";
 import type { PlayerAttributes } from "../game/domain/player";
-import { writeSave } from "../game/persistence/saveRepository";
 
 /* ── Composant principal ─────────────────────────────────────────── */
 
@@ -30,59 +30,23 @@ export default function TrainingPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const [intensity, setIntensity] = useState<"light" | "normal" | "intense">("normal");
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [pendingInvest, setPendingInvest] = useState<{ key: keyof PlayerAttributes; cost: number } | null>(null);
 
-  const save   = state.save;
-  const player = save?.player;
+  const save      = state.save;
+  const player    = save?.player;
+  const weekState = save?.weekState;
 
-  /* — Avancer la semaine ------------------------------------------ */
-  const handleAdvanceWeek = useCallback(() => {
-    if (!save || !player) return;
+  // Intensité courante : celle du weekState si déjà choisie, sinon "normal"
+  const currentIntensity = weekState?.trainingIntensity ?? null;
+  const trainingDone     = weekState?.trainingDone ?? false;
 
-    const delta = computeWeeklyCondition(
-      player.condition.fatigue,
-      player.condition.form,
-      intensity,
-    );
-
-    const newFatigue = Math.min(100, player.condition.fatigue + delta.fatigueGain);
-    const newForm    = Math.max(1, Math.min(100, player.condition.form + delta.formDelta));
-    const newMorale  = Math.max(1, Math.min(100, player.condition.morale + delta.moraleDelta));
-
-    dispatch({ type: "UPDATE_CONDITION", condition: { fatigue: newFatigue, form: newForm, morale: newMorale } });
-
-    // PA gagnés via l'entraînement
-    if (delta.paGained > 0) {
-      dispatch({ type: "UPDATE_PLAYER", player: { paPoints: player.paPoints + delta.paGained } });
-    }
-
-    dispatch({ type: "ADVANCE_WEEK" });
-
-    // Persistance immédiate
-    if (state.isDirty || delta.paGained > 0) {
-      const updatedSave = {
-        ...save,
-        player: {
-          ...player,
-          paPoints: player.paPoints + delta.paGained,
-          condition: { ...player.condition, fatigue: newFatigue, form: newForm, morale: newMorale },
-        },
-        career: { ...save.career, week: save.career.week + 1, matchday: save.career.matchday + 1 },
-        wallet: {
-          ...save.wallet,
-          balance: save.wallet.balance + save.wallet.weeklyWage,
-          totalEarned: save.wallet.totalEarned + save.wallet.weeklyWage,
-        },
-        meta: { ...save.meta, savedAt: Date.now() },
-      };
-      writeSave(updatedSave);
-    }
-
-    const pa = delta.paGained > 0 ? ` +${delta.paGained} PA` : "";
-    toast(`Semaine ${save.career.week + 1} — Entraînement ${intensity}${pa}`, "success");
-  }, [save, player, intensity, dispatch, state.isDirty, toast]);
+  /* — Choisir l'intensité (SET_TRAINING_CHOICE) ------------------- */
+  const handleChooseIntensity = useCallback((intensity: "light" | "normal" | "intense") => {
+    dispatch({ type: "SET_TRAINING_CHOICE", intensity });
+    const labels = { light: "Légère", normal: "Normale", intense: "Intense" };
+    toast(`Entraînement ${labels[intensity]} planifié pour cette semaine`, "success");
+  }, [dispatch, toast]);
 
   /* — Investir un attribut ---------------------------------------- */
   const handleInvest = useCallback((key: keyof PlayerAttributes) => {
@@ -119,9 +83,10 @@ export default function TrainingPage() {
     );
   }
 
-  const groups = getAttributeGroups(player.position);
+  const groups    = getAttributeGroups(player.position);
   const condition = player.condition;
-  const weekDelta = computeWeeklyCondition(condition.fatigue, condition.form, intensity);
+  const previewIntensity = currentIntensity ?? "normal";
+  const weekDelta = computeWeeklyCondition(condition.fatigue, condition.form, previewIntensity);
 
   return (
     <motion.div
@@ -139,8 +104,9 @@ export default function TrainingPage() {
         </p>
       </div>
 
-      {/* ── Condition actuelle ──────────────────────────────────────── */}
       <motion.div variants={stagger} initial="hidden" animate="visible">
+
+        {/* ── Condition actuelle ────────────────────────────────────── */}
         <motion.section className="fc-panel" variants={itemFade} style={{ marginBottom: "var(--fc-space-4)" }}>
           <p className="fc-panel__label">Condition physique</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-3)", marginTop: "var(--fc-space-3)" }}>
@@ -150,29 +116,45 @@ export default function TrainingPage() {
           </div>
         </motion.section>
 
-        {/* ── Intensité d'entraînement ─────────────────────────────── */}
+        {/* ── Choix de l'intensité ─────────────────────────────────── */}
         <motion.section className="fc-panel" variants={itemFade} style={{ marginBottom: "var(--fc-space-4)" }}>
-          <p className="fc-panel__label">Intensité de la semaine</p>
-          <div style={{ display: "flex", gap: "var(--fc-space-2)", marginTop: "var(--fc-space-3)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--fc-space-3)" }}>
+            <p className="fc-panel__label" style={{ marginBottom: 0 }}>Intensité de la semaine</p>
+            {trainingDone && (
+              <span style={{
+                fontSize: "var(--fc-text-xs)",
+                color: "var(--fc-emerald)",
+                fontWeight: 700,
+                background: "var(--fc-emerald-10)",
+                padding: "2px 8px",
+                borderRadius: 99,
+              }}>
+                ✓ Planifié
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: "var(--fc-space-2)" }}>
             {(["light", "normal", "intense"] as const).map(lvl => {
               const cfg = {
-                light:   { label: "Légère",   sub: "+1 PA · peu de fatigue",  icon: "🌱" },
-                normal:  { label: "Normale",  sub: "+2 PA · fatigue modérée", icon: "⚽" },
-                intense: { label: "Intense",  sub: "+3 PA · grosse fatigue",  icon: "🔥" },
+                light:   { label: "Légère",  sub: "+1 PA · peu de fatigue",   icon: "🌱" },
+                normal:  { label: "Normale", sub: "+2 PA · fatigue modérée",  icon: "⚽" },
+                intense: { label: "Intense", sub: "+3 PA · grosse fatigue",   icon: "🔥" },
               }[lvl];
-              const active = intensity === lvl;
+              const active = currentIntensity === lvl;
               return (
                 <button
                   key={lvl}
-                  onClick={() => setIntensity(lvl)}
+                  onClick={() => handleChooseIntensity(lvl)}
                   style={{
                     flex: 1,
                     padding: "var(--fc-space-3) var(--fc-space-2)",
                     borderRadius: "var(--fc-radius)",
-                    border: `1px solid ${active ? "var(--fc-emerald)" : "var(--fc-border-mid)"}`,
+                    border: `2px solid ${active ? "var(--fc-emerald)" : "var(--fc-border-mid)"}`,
                     background: active ? "var(--fc-emerald-10)" : "var(--fc-surface-3)",
                     cursor: "pointer",
                     textAlign: "center",
+                    transition: "border-color 0.15s, background 0.15s",
                   }}
                 >
                   <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{cfg.icon}</div>
@@ -202,33 +184,36 @@ export default function TrainingPage() {
             display: "flex",
             gap: "var(--fc-space-4)",
           }}>
-            <span>
-              Fatigue <span style={{ color: "var(--fc-coral)" }}>+{weekDelta.fatigueGain}</span>
-            </span>
-            <span>
-              Forme <span style={{ color: weekDelta.formDelta >= 0 ? "var(--fc-emerald)" : "var(--fc-coral)" }}>
-                {weekDelta.formDelta >= 0 ? "+" : ""}{weekDelta.formDelta}
-              </span>
-            </span>
-            <span>
-              Moral <span style={{ color: weekDelta.moraleDelta >= 0 ? "var(--fc-emerald)" : "var(--fc-coral)" }}>
-                {weekDelta.moraleDelta >= 0 ? "+" : ""}{weekDelta.moraleDelta}
-              </span>
-            </span>
-            <span>
-              PA <span style={{ color: "var(--fc-emerald)" }}>+{weekDelta.paGained}</span>
-            </span>
+            <span>Fatigue <span style={{ color: "var(--fc-coral)" }}>+{weekDelta.fatigueGain}</span></span>
+            <span>Forme <span style={{ color: weekDelta.formDelta >= 0 ? "var(--fc-emerald)" : "var(--fc-coral)" }}>
+              {weekDelta.formDelta >= 0 ? "+" : ""}{weekDelta.formDelta}
+            </span></span>
+            <span>Moral <span style={{ color: weekDelta.moraleDelta >= 0 ? "var(--fc-emerald)" : "var(--fc-coral)" }}>
+              {weekDelta.moraleDelta >= 0 ? "+" : ""}{weekDelta.moraleDelta}
+            </span></span>
+            <span>PA <span style={{ color: "var(--fc-emerald)" }}>+{weekDelta.paGained}</span></span>
           </div>
 
+          {/* Retour au Dashboard */}
           <Button
-            variant="primary"
+            variant="secondary"
             fullWidth
-            size="lg"
-            onClick={handleAdvanceWeek}
+            onClick={() => router.push("/client/fc-career/dashboard")}
             style={{ marginTop: "var(--fc-space-4)" }}
           >
-            Passer la semaine →
+            ← Retour au tableau de bord
           </Button>
+
+          {!trainingDone && (
+            <p style={{
+              marginTop: "var(--fc-space-2)",
+              fontSize: "var(--fc-text-xs)",
+              color: "var(--fc-text-3)",
+              textAlign: "center",
+            }}>
+              Choisissez une intensité ci-dessus pour planifier votre entraînement de la semaine
+            </p>
+          )}
         </motion.section>
 
         {/* ── Investir les PA ──────────────────────────────────────── */}
@@ -244,19 +229,11 @@ export default function TrainingPage() {
             </h2>
             <motion.span
               key={player.paPoints}
-              animate={{
-                boxShadow: [
-                  "0 0 0px rgba(55,217,154,0)",
-                  "0 0 20px rgba(55,217,154,0.4)",
-                  "0 0 0px rgba(55,217,154,0)",
-                ],
-              }}
+              animate={{ boxShadow: ["0 0 0px rgba(55,217,154,0)", "0 0 20px rgba(55,217,154,0.4)", "0 0 0px rgba(55,217,154,0)"] }}
               transition={{ duration: 0.9, ease: "easeOut" }}
               style={{
-                fontSize: "var(--fc-text-sm)",
-                fontWeight: 800,
-                color: "var(--fc-emerald)",
-                fontFamily: "var(--fc-font-display)",
+                fontSize: "var(--fc-text-sm)", fontWeight: 800,
+                color: "var(--fc-emerald)", fontFamily: "var(--fc-font-display)",
               }}
             >
               {player.paPoints} PA
@@ -284,9 +261,7 @@ export default function TrainingPage() {
           <>
             <motion.div
               key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setPendingInvest(null)}
               style={{
                 position: "fixed", inset: 0, zIndex: "var(--fc-z-modal)",
@@ -295,9 +270,7 @@ export default function TrainingPage() {
             />
             <motion.div
               key="sheet"
-              initial={{ y: "100%", opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: "100%", opacity: 0 }}
+              initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
               style={{
                 position: "fixed", bottom: 0, left: 0, right: 0,
@@ -306,8 +279,7 @@ export default function TrainingPage() {
                 borderTopLeftRadius: "var(--fc-radius-lg)",
                 borderTopRightRadius: "var(--fc-radius-lg)",
                 padding: "var(--fc-space-6) var(--fc-space-5)",
-                maxWidth: 480,
-                margin: "0 auto",
+                maxWidth: 480, margin: "0 auto",
               }}
             >
               <p style={{ fontWeight: 700, fontSize: "var(--fc-text-lg)", marginBottom: "var(--fc-space-2)" }}>
@@ -345,7 +317,6 @@ function AttributeGroupPanel({
   const avg = Math.round(
     group.keys.reduce((s, k) => s + attributes[k], 0) / group.keys.length,
   );
-
   const colorVar = ({
     emerald: "var(--fc-emerald)",
     amber:   "var(--fc-amber)",
@@ -354,11 +325,7 @@ function AttributeGroupPanel({
   } as Record<string, string>)[group.color] ?? "var(--fc-emerald)";
 
   return (
-    <div
-      className="fc-panel"
-      style={{ marginBottom: "var(--fc-space-3)", overflow: "hidden" }}
-    >
-      {/* Header du groupe */}
+    <div className="fc-panel" style={{ marginBottom: "var(--fc-space-3)", overflow: "hidden" }}>
       <button
         onClick={onToggle}
         style={{
@@ -371,77 +338,52 @@ function AttributeGroupPanel({
           {group.label}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--fc-space-3)" }}>
-          <span style={{
-            fontFamily: "var(--fc-font-display)",
-            fontWeight: 800,
-            fontSize: "var(--fc-text-lg)",
-            color: colorVar,
-          }}>
+          <span style={{ fontFamily: "var(--fc-font-display)", fontWeight: 800, fontSize: "var(--fc-text-lg)", color: colorVar }}>
             {avg}
           </span>
           <span style={{
-            fontSize: "var(--fc-text-xs)",
-            color: "var(--fc-text-3)",
+            fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)",
             transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 0.2s ease",
-            display: "inline-block",
-          }}>
-            ▾
-          </span>
+            transition: "transform 0.2s ease", display: "inline-block",
+          }}>▾</span>
         </div>
       </button>
 
-      {/* Barre globale du groupe */}
       <div style={{ marginTop: "var(--fc-space-2)" }}>
         <StatBar label="" value={avg} />
       </div>
 
-      {/* Attributs individuels (expandable) */}
       <AnimatePresence>
         {expanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: "easeInOut" }}
             style={{ overflow: "hidden" }}
           >
             <div style={{ marginTop: "var(--fc-space-4)", display: "flex", flexDirection: "column", gap: "var(--fc-space-3)" }}>
               {group.keys.map(key => {
-                const val  = attributes[key];
-                const cost = paCostForAttribute(val);
-                const canAfford  = paPoints >= cost;
+                const val         = attributes[key];
+                const cost        = paCostForAttribute(val);
+                const canAfford   = paPoints >= cost;
                 const atPotential = val >= potential;
-
                 return (
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: "var(--fc-space-3)" }}>
                     <div style={{ flex: 1 }}>
-                      <StatBar
-                        label={ATTRIBUTE_LABELS[key]}
-                        value={val}
-                        showValue
-                      />
+                      <StatBar label={ATTRIBUTE_LABELS[key]} value={val} showValue />
                     </div>
                     <button
                       onClick={() => onInvest(key)}
                       disabled={!canAfford || atPotential}
                       style={{
-                        flexShrink: 0,
-                        width: 40,
-                        height: 36,
+                        flexShrink: 0, width: 40, height: 36,
                         borderRadius: "var(--fc-radius-sm)",
                         border: `1px solid ${canAfford && !atPotential ? "var(--fc-emerald)" : "var(--fc-border)"}`,
                         background: canAfford && !atPotential ? "var(--fc-emerald-10)" : "var(--fc-surface-3)",
                         color: canAfford && !atPotential ? "var(--fc-emerald)" : "var(--fc-text-3)",
-                        fontSize: "var(--fc-text-xs)",
-                        fontWeight: 700,
+                        fontSize: "var(--fc-text-xs)", fontWeight: 700,
                         cursor: canAfford && !atPotential ? "pointer" : "not-allowed",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexDirection: "column",
-                        lineHeight: 1,
-                        gap: 1,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexDirection: "column", lineHeight: 1, gap: 1,
                       }}
                     >
                       <span style={{ fontSize: "0.65rem" }}>{atPotential ? "MAX" : `${cost}PA`}</span>
