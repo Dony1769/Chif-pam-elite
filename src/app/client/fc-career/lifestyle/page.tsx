@@ -34,6 +34,7 @@ import {
   ALL_BRANDS,
   LIFE_EVENTS,
 } from "../types/lifestyle";
+import { SPONSOR_MISSIONS, getMissionsForBrand, type SponsorMission } from "../constants/brands";
 import {
   createLifestyleState,
   setLifestyle as doSetLifestyle,
@@ -47,7 +48,7 @@ import {
   applyLifeEvent,
 } from "../engine/lifestyle-engine";
 
-type Tab = "lifestyle" | "brands" | "endorsements" | "events";
+type Tab = "lifestyle" | "brands" | "endorsements" | "missions" | "events";
 
 const ease: [number, number, number, number] = [0.4, 0, 0.2, 1];
 
@@ -89,6 +90,7 @@ export default function LifestylePage() {
     { id: "lifestyle", label: "Vie privée", icon: <Heart size={16} /> },
     { id: "brands", label: "Marques", icon: <ShoppingBag size={16} /> },
     { id: "endorsements", label: "Contrats", icon: <Star size={16} /> },
+    { id: "missions", label: "Missions", icon: <Gift size={16} /> },
     { id: "events", label: "Événements", icon: <Tv size={16} /> },
   ];
 
@@ -149,6 +151,12 @@ export default function LifestylePage() {
           {tab === "endorsements" && (
             <motion.div key="endorsements" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25, ease }}>
               <EndorsementsTab endorsements={endorsements} />
+            </motion.div>
+          )}
+
+          {tab === "missions" && (
+            <motion.div key="missions" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25, ease }}>
+              <MissionsTab endorsements={endorsements} player={player} />
             </motion.div>
           )}
 
@@ -392,6 +400,109 @@ function EndorsementsTab({ endorsements }: { endorsements: Endorsement[] }) {
       <div style={{ padding: 12, borderRadius: 10, background: "color-mix(in oklch, var(--fcl-accent) 8%, var(--fcl-bg))", fontSize: 13 }}>
         <strong>Total sponsoring :</strong> {formatMoneyCompact(endorsements.reduce((s, e) => s + e.monthlyPay, 0))}/mois
       </div>
+    </div>
+  );
+}
+
+/* ================================================================== */
+/* Missions Tab                                                       */
+/* ================================================================== */
+
+function computeMissionProgress(mission: SponsorMission, player: NonNullable<CareerRuntimeState["player"]>): { current: number; pct: number } {
+  const stats = player.careerTotals;
+  let current = 0;
+  switch (mission.condition.type) {
+    case "goals":        current = stats.goals ?? 0; break;
+    case "assists":      current = stats.assists ?? 0; break;
+    case "match-played": current = stats.matches ?? 0; break;
+    case "no-card":      current = stats.matches - (stats.redCards ?? 0); break;
+    case "rating": {
+      const avg = player.lastThreeMatchRatings.length > 0
+        ? player.lastThreeMatchRatings.reduce((a, b) => a + b, 0) / player.lastThreeMatchRatings.length
+        : 0;
+      current = avg;
+      break;
+    }
+    case "motm":
+      // approximate: if avg rating >= 8 in last 3, count those
+      current = player.lastThreeMatchRatings.filter(r => r >= 8).length;
+      break;
+  }
+  const pct = Math.min(100, Math.round((current / mission.condition.target) * 100));
+  return { current, pct };
+}
+
+function MissionsTab({
+  endorsements,
+  player,
+}: {
+  endorsements: Endorsement[];
+  player: NonNullable<CareerRuntimeState["player"]>;
+}) {
+  const signedBrandIds = new Set(endorsements.map(e => e.brandId));
+  // Show missions for signed brands first, then rest
+  const signedMissions = SPONSOR_MISSIONS.filter(m => signedBrandIds.has(m.brandId));
+  const otherMissions = SPONSOR_MISSIONS.filter(m => !signedBrandIds.has(m.brandId));
+
+  if (signedMissions.length === 0 && otherMissions.length === 0) {
+    return <p style={{ fontSize: 13, color: "var(--fcl-muted)", textAlign: "center", padding: 32 }}>Signe des contrats sponsors pour débloquer des missions.</p>;
+  }
+
+  function MissionCard({ mission, active }: { mission: SponsorMission; active: boolean }) {
+    const brand = ALL_BRANDS.find(b => b.id === mission.brandId);
+    const { current, pct } = computeMissionProgress(mission, player);
+    const done = pct >= 100;
+    return (
+      <div style={{
+        padding: 14, borderRadius: 12,
+        background: active ? "var(--fcl-card)" : "oklch(.14 .004 260 / .6)",
+        border: `1px solid ${done ? "oklch(.91 .19 112 / .5)" : active ? "var(--fcl-border)" : "oklch(.3 .006 260 / .4)"}`,
+        opacity: active ? 1 : 0.55,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <span style={{ fontSize: 22 }}>{mission.emoji}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>
+              {mission.label}
+              {done && <span style={{ marginLeft: 6, fontSize: 10, background: "oklch(.91 .19 112 / .3)", color: "oklch(.91 .19 112)", padding: "1px 6px", borderRadius: 4 }}>✓ ACCOMPLI</span>}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fcl-muted)" }}>{brand?.emoji} {brand?.name}</div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 11 }}>
+            <div style={{ color: "oklch(.91 .19 112)", fontWeight: 600 }}>+{formatMoneyCompact(mission.reward.bonus)}</div>
+            {mission.reward.paBonus > 0 && <div style={{ color: "var(--fcl-muted)" }}>+{mission.reward.paBonus} PA</div>}
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: "var(--fcl-muted)", margin: "0 0 8px" }}>{mission.description}</p>
+        {/* Progress */}
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--fcl-muted)", marginBottom: 4 }}>
+          <span>Progression</span>
+          <span>{pct}%</span>
+        </div>
+        <div style={{ height: 4, borderRadius: 2, background: "oklch(.25 .006 260)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, borderRadius: 2, background: done ? "oklch(.91 .19 112)" : "oklch(.73 .13 246)", transition: "width .5s" }} />
+        </div>
+        {!active && (
+          <p style={{ fontSize: 10, color: "var(--fcl-muted)", marginTop: 6, fontStyle: "italic" }}>Signe un contrat avec {brand?.name} pour activer cette mission.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {signedMissions.length > 0 && (
+        <>
+          <h4 style={{ fontSize: 13, margin: 0, color: "oklch(.91 .19 112)" }}>🎯 Missions actives ({signedMissions.length})</h4>
+          {signedMissions.map(m => <MissionCard key={m.id} mission={m} active />)}
+        </>
+      )}
+      {otherMissions.length > 0 && (
+        <>
+          <h4 style={{ fontSize: 13, margin: "8px 0 0", color: "var(--fcl-muted)" }}>🔒 Missions disponibles</h4>
+          {otherMissions.map(m => <MissionCard key={m.id} mission={m} active={false} />)}
+        </>
+      )}
     </div>
   );
 }
