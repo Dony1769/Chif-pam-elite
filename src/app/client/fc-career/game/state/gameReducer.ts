@@ -22,6 +22,7 @@ import { ageWorldPlayers, simulateWorldTransfers, generateTransferOffers } from 
 import { createInitialLockerRoom, updateLockerRoomWeekly, triggerLockerRoomEvent, resetLockerRoomEndOfSeason } from "../domain/lockerRoom";
 import { createInitialPersonalLife, updatePersonalLifeWeekly, applyPersonalEvent, generatePersonalEvent } from "../domain/personalLife";
 import { createInitialNationalTeam, updateNationalTeamEndOfSeason } from "../domain/nationalTeam";
+import { advanceWorldWeek, endWorldSeason } from "../domain/worldEngine";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -1287,6 +1288,35 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         save: {
           ...state.save,
           personalLife: applyPersonalEvent(pl, ev, action.accepted),
+        },
+        isDirty: true,
+      };
+    }
+
+    // ── Monde vivant : avancer d'une semaine ─────────────────────
+    case "ADVANCE_WORLD_WEEK": {
+      if (!state.save?.worldLiveState) return state;
+      const { world: newWorld, weekResults, newsItems } = advanceWorldWeek(state.save.worldLiveState);
+      void newsItems; // disponible pour log si besoin
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          worldLiveState: newWorld,
+        },
+        isDirty: true,
+      };
+    }
+
+    // ── Monde vivant : fin de saison ──────────────────────────────
+    case "END_WORLD_SEASON": {
+      if (!state.save?.worldLiveState) return state;
+      const { world: newWorld } = endWorldSeason(state.save.worldLiveState);
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          worldLiveState: newWorld,
         },
         isDirty: true,
       };

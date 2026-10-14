@@ -116,6 +116,12 @@ export type GameAction =
   | { type: "PERSONAL_EVENT_RESPONSE"; eventId: string; accepted: boolean }
   | { type: "TRIGGER_PERSONAL_EVENT"; event: import("../domain/personalLife").PersonalLifeEvent }
 
+  // Monde vivant (WorldLiveState)
+  /** Avance le monde d'une semaine : simule les matchdays, IA coaches, micro-transfers */
+  | { type: "ADVANCE_WORLD_WEEK" }
+  /** Clôt la saison du monde : promotions/relégations, vieillissement, transferts, saison suivante */
+  | { type: "END_WORLD_SEASON" }
+
   // Erreur
   | { type: "SET_ERROR"; message: string }
   | { type: "CLEAR_ERROR" };

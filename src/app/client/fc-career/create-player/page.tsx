@@ -17,6 +17,7 @@ import { createEmptySave, writeSave } from "../game/persistence/saveRepository";
 import type { GameSaveV1 } from "../game/persistence/saveSchema";
 import { careerId }   from "../game/utils/ids";
 import type { Position } from "../game/domain/player";
+import { generateWorld } from "../game/domain/worldGenerator";
 
 /* ── Données formulaire ─────────────────────────────────────────── */
 
@@ -116,6 +117,9 @@ export default function CreatePlayerPage() {
       };
       const schedule = generateAcademySchedule(id, 1);
 
+      // Générer le monde vivant complet (déterministe depuis l'id carrière)
+      const worldLiveState = generateWorld(id);
+
       const save = createEmptySave(
         id,
         player,
@@ -128,6 +132,9 @@ export default function CreatePlayerPage() {
           lastMatchResults: [],
         },
       );
+
+      // Attacher le monde vivant à la sauvegarde
+      (save as GameSaveV1).worldLiveState = worldLiveState;
 
       writeSave(save);
       dispatch({ type: "LOAD_SAVE", save });
