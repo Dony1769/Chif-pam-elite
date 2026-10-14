@@ -137,7 +137,7 @@ export default function AgentPage() {
     const choice = event?.choices?.find((c) => c.id === choiceId);
     if (!choice) return;
 
-    let updatedSaga = applySagaChoice(saga, eventId, choice);
+    const updatedSaga = applySagaChoice(saga, eventId, choice);
 
     // Appliquer les effets sur le joueur
     let updatedPlayer = { ...career.player };

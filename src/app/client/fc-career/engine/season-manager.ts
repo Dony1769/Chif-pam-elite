@@ -162,7 +162,7 @@ export function simulateFixtureResult(
   const lambdaHome = Math.max(0.25, 1.35 + diff / 45);
   const lambdaAway = Math.max(0.2, 1.1 - diff / 45);
   const poisson = (lambda: number) => {
-    let L = Math.exp(-lambda);
+    const L = Math.exp(-lambda);
     let k = 0;
     let p = 1;
     do {

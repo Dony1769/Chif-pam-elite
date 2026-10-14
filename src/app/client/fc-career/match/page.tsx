@@ -90,22 +90,19 @@ export default function MatchPage() {
     saveGame(toFullSave(next));
   }, []);
 
-  if (!career?.player) {
-    return <Shell><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)', opacity: .6, gap: 8 }}><Sparkles className="animate-pulse" size={16} /><span style={{ fontSize: 12 }}>Chargement...</span></div></Shell>;
-  }
-
-  const player = career.player;
-  const club = getClub(player.contract.clubId)!;
-  const season = career.meta.season;
-  const divisionName = DIVISION_INFO[club.division]?.name ?? club.division;
-  const fixture = season ? nextUserFixture(season, club.id) : undefined;
+  // Derived values (safe to compute even when career is null — guarded by early return below)
+  const player = career?.player ?? null;
+  const club = player ? (getClub(player.contract.clubId) ?? null) : null;
+  const season = career?.meta.season ?? null;
+  const divisionName = club ? (DIVISION_INFO[club.division]?.name ?? club.division) : "";
+  const fixture = season && club ? nextUserFixture(season, club.id) : undefined;
   const currentTick: LiveMatchTick | undefined = ticks[tickIndex];
 
   /* ================================================================ */
   /* Apply match result to career state                                */
   /* ================================================================ */
 
-  function applyMatchResult(sim: SimulatedMatch) {
+  const applyMatchResult = useCallback((sim: SimulatedMatch) => {
     if (!career || !player || !club || !season || !fixture) return;
     const next = buildPostMatchState({ career, player, clubId: club.id, fixture, sim });
     persist(next);
@@ -114,84 +111,50 @@ export default function MatchPage() {
     setMatchLocked(true);
     setLastMatch(sim);
     setMode("result");
-  }
+  }, [career, player, club, season, fixture, persist]);
 
   /* ================================================================ */
-  /* SIMULER — résultat instantané                                     */
+  /* startTicking (declared before effects that reference it)          */
   /* ================================================================ */
 
-  function handleSimulate() {
-    if (!career || !player || !club || !season || !fixture || matchLocked) return;
-    setMode("simulating");
-
-    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now() });
-
-    const home = getClub(fixture.homeClubId)!;
-    const away = getClub(fixture.awayClubId)!;
-    const sim = simulateMatch(home, away, player);
-
-    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now(), result: sim });
-
-    setTimeout(() => applyMatchResult(sim), 800);
-  }
-
-  /* ================================================================ */
-  /* JOUER — match en live (1-1.5 min)                                 */
-  /* ================================================================ */
-
-  function startLiveMatch() {
-    if (!career || !player || !club || !season || !fixture || matchLocked) return;
-
-    // Apply ritual bonuses
-    const ritualResult = applyRitualPreMatch(ritualState, chosenRituals);
-    setRitualState(ritualResult.state);
-    saveRitualState(ritualResult.state);
-
-    const seed = Date.now();
-    const rng = createRng(seed);
-    const choiceMoments = generateChoiceMoments(rng);
-
-    const home = getClub(fixture.homeClubId)!;
-    const away = getClub(fixture.awayClubId)!;
-    const { ticks: timeline, baseResult } = generateLiveTimeline(home, away, player, choiceMoments, seed);
-
-    setTicks(timeline);
-    setTickIndex(0);
-    setLiveResult(baseResult);
-    setChoiceBonus(ritualResult.ratingBonus);
-    setChoicesMade([]);
-    setEventLog([]);
-    setMode("live");
-
-    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now() });
-
-    // Start ticking — ~1 second per game minute ≈ 90s total
-    startTicking();
-  }
-
-  function startTicking() {
+  const startTicking = useCallback(() => {
     if (tickTimer.current) clearInterval(tickTimer.current);
     tickTimer.current = setInterval(() => {
-      setTickIndex((prev) => {
-        const next = prev + 1;
-        return next;
-      });
-    }, 1000); // 1 tick per second
-  }
+      setTickIndex((prev) => prev + 1);
+    }, 1000);
+  }, []);
 
-  // Handle tick progression
+  /* ================================================================ */
+  /* finalizeLiveMatch (declared before the tick effect)              */
+  /* ================================================================ */
+
+  const finalizeLiveMatch = useCallback(() => {
+    if (!liveResult || !fixture || !player) return;
+    const finalRating = Math.max(3.0, Math.min(10.0,
+      Math.round((liveResult.userRating.rating + choiceBonus + 0.5) * 10) / 10,
+    ));
+    const finalSim: SimulatedMatch = {
+      ...liveResult,
+      userRating: { ...liveResult.userRating, rating: liveResult.userPlayed ? finalRating : 0 },
+      manOfTheMatch: finalRating >= 7.5 ? `${player.firstName} ${player.lastName}` : liveResult.manOfTheMatch,
+      choicesMade: choicesMade as SimulatedMatch["choicesMade"],
+      celebration: chosenCelebration ?? undefined,
+    };
+    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now(), result: finalSim });
+    applyMatchResult(finalSim);
+  }, [liveResult, fixture, player, choiceBonus, choicesMade, chosenCelebration, applyMatchResult]);
+
+  // Handle tick progression — MUST be before early return
   useEffect(() => {
     if (mode !== "live" || !ticks.length) return;
 
     const tick = ticks[tickIndex];
     if (!tick) {
-      // Match finished
       if (tickTimer.current) clearInterval(tickTimer.current);
       finalizeLiveMatch();
       return;
     }
 
-    // Log event
     if (tick.event) {
       const ev = tick.event;
       let msg = "";
@@ -209,15 +172,13 @@ export default function MatchPage() {
       }
       if (msg) setEventLog((prev) => [...prev.slice(-8), msg]);
 
-      // Show celebration if user scored
-      if (ev.type === "goal" && ev.scorer === `${player.firstName} ${player.lastName}`) {
+      if (ev.type === "goal" && player && ev.scorer === `${player.firstName} ${player.lastName}`) {
         if (tickTimer.current) clearInterval(tickTimer.current);
         setShowCelebration(true);
-        return; // pause until celebration chosen
+        return;
       }
     }
 
-    // VAR moment
     if (tick.varMoment) {
       setVarPending(true);
       if (tickTimer.current) clearInterval(tickTimer.current);
@@ -234,20 +195,63 @@ export default function MatchPage() {
       return;
     }
 
-    // Choice moment
     if (tick.choiceMoment && !pendingChoice) {
       if (tickTimer.current) clearInterval(tickTimer.current);
       setPendingChoice(tick.choiceMoment);
-      return; // pause until user chooses
+      return;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickIndex, mode, finalizeLiveMatch, startTicking]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickIndex, mode]);
-
-  // Cleanup
+  // Cleanup — MUST be before early return
   useEffect(() => {
     return () => { if (tickTimer.current) clearInterval(tickTimer.current); };
   }, []);
+
+  if (!career?.player) {
+    return <Shell><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)', opacity: .6, gap: 8 }}><Sparkles className="animate-pulse" size={16} /><span style={{ fontSize: 12 }}>Chargement...</span></div></Shell>;
+  }
+
+  /* ================================================================ */
+  /* SIMULER — résultat instantané                                     */
+  /* ================================================================ */
+
+  function handleSimulate() {
+    if (!career || !player || !club || !season || !fixture || matchLocked) return;
+    setMode("simulating");
+    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now() });
+    const home = getClub(fixture.homeClubId)!;
+    const away = getClub(fixture.awayClubId)!;
+    const sim = simulateMatch(home, away, player);
+    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now(), result: sim });
+    setTimeout(() => applyMatchResult(sim), 800);
+  }
+
+  /* ================================================================ */
+  /* JOUER — match en live                                             */
+  /* ================================================================ */
+
+  function startLiveMatch() {
+    if (!career || !player || !club || !season || !fixture || matchLocked) return;
+    const ritualResult = applyRitualPreMatch(ritualState, chosenRituals);
+    setRitualState(ritualResult.state);
+    saveRitualState(ritualResult.state);
+    const seed = Date.now();
+    const rng = createRng(seed);
+    const choiceMoments = generateChoiceMoments(rng);
+    const home = getClub(fixture.homeClubId)!;
+    const away = getClub(fixture.awayClubId)!;
+    const { ticks: timeline, baseResult } = generateLiveTimeline(home, away, player, choiceMoments, seed);
+    setTicks(timeline);
+    setTickIndex(0);
+    setLiveResult(baseResult);
+    setChoiceBonus(ritualResult.ratingBonus);
+    setChoicesMade([]);
+    setEventLog([]);
+    setMode("live");
+    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now() });
+    startTicking();
+  }
 
   function handleChoice(choice: MatchChoice) {
     if (!player) return;
@@ -288,26 +292,6 @@ export default function MatchPage() {
     startTicking();
   }
 
-  function finalizeLiveMatch() {
-    if (!liveResult || !fixture) return;
-
-    // Recalculate rating with choices bonus
-    const finalRating = Math.max(3.0, Math.min(10.0,
-      Math.round((liveResult.userRating.rating + choiceBonus + 0.5) * 10) / 10, // +0.5 participation bonus for playing live
-    ));
-
-    const finalSim: SimulatedMatch = {
-      ...liveResult,
-      userRating: { ...liveResult.userRating, rating: liveResult.userPlayed ? finalRating : 0 },
-      manOfTheMatch: finalRating >= 7.5 ? `${player.firstName} ${player.lastName}` : liveResult.manOfTheMatch,
-      choicesMade: choicesMade as SimulatedMatch["choicesMade"],
-      celebration: chosenCelebration ?? undefined,
-    };
-
-    saveMatchState({ fixtureId: fixture.id, startedAt: Date.now(), result: finalSim });
-    applyMatchResult(finalSim);
-  }
-
   /* ================================================================ */
   /* RENDER                                                            */
   /* ================================================================ */
@@ -331,13 +315,13 @@ export default function MatchPage() {
               <div style={{ textAlign: 'center' }}>
                 <Crest name={getClub(fixture.homeClubId)?.shortName ?? ''} clubId={fixture.homeClubId} />
                 <strong style={{ display: 'block', marginTop: 8, fontSize: 14 }}>{getClub(fixture.homeClubId)?.shortName ?? '?'}</strong>
-                <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{fixture.homeClubId === club.id ? 'DOMICILE' : ''}</span>
+                <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{fixture.homeClubId === club!.id ? 'DOMICILE' : ''}</span>
               </div>
               <span style={{ fontSize: 28, fontWeight: 800, fontFamily: "'Barlow', sans-serif", color: 'var(--muted-foreground)' }}>VS</span>
               <div style={{ textAlign: 'center' }}>
                 <Crest name={getClub(fixture.awayClubId)?.shortName ?? ''} clubId={fixture.awayClubId} />
                 <strong style={{ display: 'block', marginTop: 8, fontSize: 14 }}>{getClub(fixture.awayClubId)?.shortName ?? '?'}</strong>
-                <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{fixture.awayClubId === club.id ? 'EXTÉRIEUR' : ''}</span>
+                <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{fixture.awayClubId === club!.id ? 'EXTÉRIEUR' : ''}</span>
               </div>
             </div>
             <div style={{ marginTop: 20, fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -576,7 +560,7 @@ export default function MatchPage() {
                 color: lastMatch.userRating.rating >= 7 ? 'var(--success, #4ade80)' : lastMatch.userRating.rating < 5 ? 'var(--danger, #f87171)' : 'inherit',
               }}>
                 <Activity size={16} />Note : {formatRating(lastMatch.userRating.rating)}
-                {lastMatch.manOfTheMatch === `${player.firstName} ${player.lastName}` && (
+                {lastMatch.manOfTheMatch === `${player!.firstName} ${player!.lastName}` && (
                   <span style={{ fontSize: 10, background: '#fbbf24', color: '#000', padding: '2px 6px', borderRadius: 8, fontWeight: 700 }}>⭐ HOMME DU MATCH</span>
                 )}
               </div>

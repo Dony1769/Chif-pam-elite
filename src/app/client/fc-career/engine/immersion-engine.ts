@@ -129,6 +129,7 @@ export interface ConfettiParticle {
   scale: number;
   color: string;
   delay: number;
+  borderRadius: string;
 }
 
 const CONFETTI_COLORS = ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE"];
@@ -142,5 +143,6 @@ export function generateConfetti(count: number = 50): ConfettiParticle[] {
     scale: 0.5 + Math.random() * 1,
     color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
     delay: Math.random() * 0.5,
+    borderRadius: Math.random() > 0.5 ? "50%" : "2px",
   }));
 }

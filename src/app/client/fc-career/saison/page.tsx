@@ -32,16 +32,13 @@ export default function SaisonPage() {
     setCareer(toCareerState(save));
   }, [router]);
 
-  if (!career?.player) {
-    return <Shell><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)', opacity: .6, gap: 8 }}><Sparkles className="animate-pulse" size={16} /><span style={{ fontSize: 12 }}>Chargement...</span></div></Shell>;
-  }
-
-  const player = career.player;
-  const club = getClub(player.contract.clubId);
-  const season = career.meta.season;
+  const player = career?.player ?? null;
+  const club = player ? getClub(player.contract.clubId) ?? null : null;
+  const season = career?.meta.season ?? null;
   const divisionName = club ? (DIVISION_INFO[club.division]?.name ?? club.division) : '';
   const currentDay = season?.currentDay ?? 0;
   const phase = getPhaseForDay(currentDay);
+  const country: Country = club ? DIVISION_INFO[club.division]?.country ?? "gallia" : "gallia";
 
   const fixtures = useMemo(() => {
     if (!season || !club) return [];
@@ -55,7 +52,9 @@ export default function SaisonPage() {
     return computeStandings(season, getClubsByDivision(club.division));
   }, [season, club]);
 
-  const country: Country = club ? DIVISION_INFO[club.division]?.country ?? "gallia" : "gallia";
+  if (!career?.player) {
+    return <Shell><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 200px)', opacity: .6, gap: 8 }}><Sparkles className="animate-pulse" size={16} /><span style={{ fontSize: 12 }}>Chargement...</span></div></Shell>;
+  }
 
   return (
     <Shell>

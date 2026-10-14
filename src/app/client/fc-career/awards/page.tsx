@@ -72,7 +72,7 @@ export default function AwardsPage() {
     });
   }, []);
 
-  const simulateGoldenGlobe = useCallback(() => {
+  function simulateGoldenGlobe() {
     if (!player) return;
     const seasonYear = save?.meta?.season?.seasonYear ?? 2026;
     const ceremony = runGoldenGlobeCeremony(
@@ -88,13 +88,12 @@ export default function AwardsPage() {
       50, // popularity
     );
     const updated: AwardsState = { ...awards, goldenGlobes: [...awards.goldenGlobes, ceremony] };
-    // Also update rankings
     if (rankings) {
       updated.topScorers = rankings.topScorers;
       updated.topAssisters = rankings.topAssisters;
     }
     persist(updated);
-  }, [player, playerName, clubId, save, awards, rankings, persist]);
+  }
 
   if (!save) {
     return (

@@ -136,7 +136,7 @@ export default function ImmersionPage() {
                   position: "absolute",
                   width: 10, height: 10,
                   background: p.color,
-                  borderRadius: Math.random() > 0.5 ? "50%" : "2px",
+                  borderRadius: p.borderRadius,
                 }}
               />
             ))}
