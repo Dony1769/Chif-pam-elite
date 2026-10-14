@@ -20,6 +20,7 @@ import type { WorldPlayer } from "../data/worldPlayers";
 import type { WorldTransferEvent } from "../domain/worldTransfers";
 import type { LockerRoomState } from "../domain/lockerRoom";
 import type { PersonalLifeState } from "../domain/personalLife";
+import type { NationalTeamState } from "../domain/nationalTeam";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -72,12 +73,7 @@ export interface GameSaveV1 {
   /** Sponsors — optionnel pour rétrocompatibilité */
   sponsors?: SponsorContract[];
   /** Sélection nationale — optionnel pour rétrocompatibilité */
-  nationalTeam?: {
-    called: boolean;
-    caps: number;
-    goals: number;
-    lastCallSeason: number | null;
-  };
+  nationalTeam?: NationalTeamState;
   /** Fans & popularité — optionnel pour rétrocompatibilité */
   fans?: {
     fanRating: number;   // 0-100

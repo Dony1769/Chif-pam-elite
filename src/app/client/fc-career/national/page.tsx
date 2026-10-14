@@ -2,7 +2,7 @@
 
 /**
  * FC CAREER — Sélection nationale
- * Convocations, statistiques nationales, compétitions.
+ * Convocations, matchs internationaux, compétitions, objectifs.
  */
 
 import { motion } from "framer-motion";
@@ -11,6 +11,14 @@ import { Spinner }  from "../game/components/LoadingState";
 import { selectIsLoading, selectPlayer, selectCareer } from "../game/state/selectors";
 import { pageFade, stagger, itemFade } from "../game/design/animations";
 import { COUNTRIES } from "../game/data/world";
+import {
+  createInitialNationalTeam,
+  nationalCallupThreshold,
+  COMPETITION_LABELS,
+  COMPETITION_ICONS,
+  type NationalTeamState,
+} from "../game/domain/nationalTeam";
+import type { GameSaveV1 } from "../game/persistence/saveSchema";
 
 export default function NationalPage() {
   const { state } = useGame();
@@ -21,23 +29,16 @@ export default function NationalPage() {
   if (isLoading) return <Spinner />;
   if (!state.save || !player || !career) return null;
 
-  const national = state.save.nationalTeam ?? {
-    called: false,
-    caps: 0,
-    goals: 0,
-    lastCallSeason: null,
-  };
+  const save = state.save as GameSaveV1 & { nationalTeam?: NationalTeamState };
+  const national: NationalTeamState = save.nationalTeam ?? createInitialNationalTeam();
 
   const country = COUNTRIES.find(c => c.id === player.nationality) ?? COUNTRIES[0];
-
-  // Critères de convocation
-  const overall       = player.overall;
-  const season        = career.season;
-  const eligibleBase  = overall >= 72;
-  const calledThisYear = national.lastCallSeason === season;
+  const overall = player.overall;
+  const threshold = nationalCallupThreshold(career.season);
+  const eligibleBase = overall >= threshold;
 
   const statusLabel = national.called
-    ? "International"
+    ? national.squadRank <= 5 ? "Titulaire en sélection" : "International"
     : eligibleBase
     ? "Sur la liste de surveillance"
     : "Non retenu";
@@ -47,6 +48,10 @@ export default function NationalPage() {
     : eligibleBase
     ? "var(--fc-amber)"
     : "var(--fc-text-3)";
+
+  const avgRating = national.matches.length > 0
+    ? national.matches.reduce((s, m) => s + m.playerRating, 0) / national.matches.length
+    : 0;
 
   return (
     <motion.div
@@ -65,31 +70,42 @@ export default function NationalPage() {
           <p className="fc-panel__label">STATUT</p>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--fc-space-3)", marginTop: "var(--fc-space-2)" }}>
             <span style={{ fontSize: "2rem" }}>{country.flag}</span>
-            <div>
+            <div style={{ flex: 1 }}>
               <p style={{ fontWeight: 700, color: statusColor, fontSize: "var(--fc-text-base)", margin: 0 }}>
                 {statusLabel}
               </p>
               <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", margin: 0, marginTop: 2 }}>
-                Note globale : {overall} / 99
+                Note globale : {overall} / 99 · Seuil sélection : {threshold}
               </p>
             </div>
+            {national.isNationalCaptain && (
+              <span style={{ fontSize: "1.4rem" }} title="Capitaine national">🏅</span>
+            )}
           </div>
         </motion.section>
 
         {/* ── Statistiques nationales ─────────────────────────────── */}
         <motion.section className="fc-panel" variants={itemFade} style={{ marginBottom: "var(--fc-space-4)" }}>
           <p className="fc-panel__label">STATISTIQUES NATIONALES</p>
-          <div style={{ display: "flex", gap: "var(--fc-space-4)", marginTop: "var(--fc-space-3)", flexWrap: "wrap" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "var(--fc-space-3)",
+            marginTop: "var(--fc-space-3)",
+          }}>
             {[
-              { label: "Sélections", value: national.caps, icon: "🌍" },
-              { label: "Buts", value: national.goals, icon: "⚽" },
-              { label: "Dernière conv.", value: national.lastCallSeason ? `S${national.lastCallSeason}` : "—", icon: "📅" },
+              { label: "Sélections",    value: national.caps,    icon: "🌍" },
+              { label: "Buts",          value: national.goals,   icon: "⚽" },
+              { label: "Passes D.",     value: national.assists, icon: "🎯" },
+              { label: "Note moy.",     value: avgRating > 0 ? avgRating.toFixed(1) : "—", icon: "⭐" },
+              { label: "Rang équipe",   value: national.squadRank > 0 ? `#${national.squadRank}` : "—", icon: "📊" },
+              { label: "Dern. conv.",   value: national.lastCallSeason ? `S${national.lastCallSeason}` : "—", icon: "📅" },
             ].map(stat => (
-              <div key={stat.label} style={{ flex: "1 1 80px", textAlign: "center" }}>
-                <p style={{ fontSize: "1.5rem", margin: 0 }}>{stat.icon}</p>
+              <div key={stat.label} style={{ textAlign: "center" }}>
+                <p style={{ fontSize: "1.3rem", margin: 0 }}>{stat.icon}</p>
                 <p style={{
-                  fontFamily: "var(--fc-font-display)", fontWeight: 900,
-                  fontSize: "var(--fc-text-xl)", color: "var(--fc-text)", margin: 0,
+                  fontWeight: 900, fontSize: "var(--fc-text-xl)",
+                  color: "var(--fc-text)", margin: 0,
                 }}>
                   {stat.value}
                 </p>
@@ -106,15 +122,16 @@ export default function NationalPage() {
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
             {[
-              { label: "Note globale ≥ 72", met: overall >= 72, current: `${overall}` },
-              { label: "Convoqué cette saison", met: calledThisYear, current: calledThisYear ? "Oui" : "Non" },
+              { label: `Note globale ≥ ${threshold}`, met: eligibleBase, current: `${overall}` },
+              { label: "Âge ≤ 37 ans", met: player.age <= 37, current: `${player.age} ans` },
+              { label: "Convoqué cette saison", met: national.lastCallSeason === career.season, current: national.lastCallSeason === career.season ? "Oui" : "Non" },
               { label: "International actif", met: national.called, current: national.called ? "Oui" : "Non" },
             ].map(crit => (
               <div key={crit.label} style={{
                 padding: "var(--fc-space-2) var(--fc-space-3)",
                 borderRadius: "var(--fc-radius-sm)",
                 border: `1px solid ${crit.met ? "rgba(55,217,154,0.3)" : "var(--fc-border)"}`,
-                background: crit.met ? "var(--fc-emerald-10)" : "var(--fc-surface-2)",
+                background: crit.met ? "rgba(16,185,129,0.05)" : "var(--fc-surface-2)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}>
                 <span style={{ fontSize: "var(--fc-text-sm)", color: "var(--fc-text-2)" }}>{crit.label}</span>
@@ -129,26 +146,102 @@ export default function NationalPage() {
           </div>
         </motion.section>
 
-        {/* ── Prochain rassemblement ──────────────────────────────── */}
-        <motion.section className="fc-panel" variants={itemFade}>
-          <p className="fc-panel__label">PROCHAIN RASSEMBLEMENT</p>
-          {national.called ? (
-            <div style={{ marginTop: "var(--fc-space-2)" }}>
-              <p style={{ color: "var(--fc-emerald)", fontWeight: 700, fontSize: "var(--fc-text-sm)", margin: 0 }}>
-                🏆 Fenêtre internationale — Semaine {career.week + 4}
-              </p>
-              <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", marginTop: 4 }}>
-                Match amical vs Nordheim ·  {country.flag} {country.name}
-              </p>
+        {/* ── Trophées nationaux ──────────────────────────────────── */}
+        {national.majorTrophies.length > 0 && (
+          <motion.section variants={itemFade} style={{ marginBottom: "var(--fc-space-4)" }}>
+            <h2 style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)", marginBottom: "var(--fc-space-3)" }}>
+              Palmarès international
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
+              {national.majorTrophies.map((t, i) => (
+                <div key={i} style={{
+                  padding: "var(--fc-space-3) var(--fc-space-4)",
+                  background: "rgba(245,158,11,0.08)",
+                  borderRadius: "var(--fc-radius)",
+                  border: "1px solid rgba(245,158,11,0.3)",
+                  display: "flex", alignItems: "center", gap: "var(--fc-space-3)",
+                }}>
+                  <span style={{ fontSize: "1.4rem" }}>{t.icon}</span>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: "var(--fc-text-sm)", color: "var(--fc-text)" }}>
+                      {t.label}
+                    </p>
+                    <p style={{ margin: 0, fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+                      Saison {t.season}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ) : (
-            <p style={{ fontSize: "var(--fc-text-sm)", color: "var(--fc-text-3)", marginTop: "var(--fc-space-2)" }}>
+          </motion.section>
+        )}
+
+        {/* ── Derniers matchs ─────────────────────────────────────── */}
+        {national.matches.length > 0 && (
+          <motion.section variants={itemFade} style={{ marginBottom: "var(--fc-space-4)" }}>
+            <h2 style={{ fontSize: "var(--fc-text-sm)", fontWeight: 700, color: "var(--fc-text)", marginBottom: "var(--fc-space-3)" }}>
+              Derniers matchs ({national.matches.length})
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
+              {national.matches.slice(0, 8).map(match => {
+                const resultColor = match.result === "win" ? "var(--fc-emerald)"
+                  : match.result === "loss" ? "var(--fc-red)"
+                  : "var(--fc-amber)";
+                const resultLabel = match.result === "win" ? "V" : match.result === "loss" ? "D" : "N";
+                return (
+                  <div key={match.id} style={{
+                    padding: "var(--fc-space-3) var(--fc-space-4)",
+                    background: "var(--fc-surface-2)",
+                    borderRadius: "var(--fc-radius)",
+                    border: "1px solid var(--fc-border)",
+                    display: "flex", alignItems: "center", gap: "var(--fc-space-3)",
+                  }}>
+                    <span style={{
+                      width: 24, height: 24, borderRadius: "50%",
+                      background: resultColor, color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 10, fontWeight: 900, flexShrink: 0,
+                    }}>
+                      {resultLabel}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: "var(--fc-text-sm)", color: "var(--fc-text)" }}>
+                          {match.opponentFlag} vs {match.opponentCountry}
+                        </p>
+                        <span style={{ fontSize: "var(--fc-text-sm)", fontWeight: 800, color: resultColor }}>
+                          {match.scoreFor}–{match.scoreAgainst}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+                        <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+                          {COMPETITION_ICONS[match.competition]} {COMPETITION_LABELS[match.competition]} · S{match.season}
+                        </span>
+                        <span style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-2)" }}>
+                          ⭐ {match.playerRating}
+                          {match.playerGoals > 0 && ` · ⚽ ${match.playerGoals}`}
+                          {match.playerAssists > 0 && ` · 🎯 ${match.playerAssists}`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.section>
+        )}
+
+        {/* ── Statut si pas encore convoqué ─────────────────────── */}
+        {!national.called && (
+          <motion.section className="fc-panel" variants={itemFade}>
+            <p className="fc-panel__label">OBJECTIF</p>
+            <p style={{ fontSize: "var(--fc-text-sm)", color: "var(--fc-text-2)", marginTop: "var(--fc-space-2)" }}>
               {eligibleBase
-                ? "Tu es sur la liste de surveillance. Continue à performer pour être convoqué."
-                : `Atteins la note 72 pour entrer dans le radar du sélectionneur. Actuellement : ${overall}.`}
+                ? `Tu es dans le radar du sélectionneur (${overall} OVR ≥ ${threshold}). Maintiens tes performances pour être convoqué l'an prochain.`
+                : `Atteins ${threshold} OVR pour entrer dans le radar du sélectionneur. Tu es actuellement à ${overall} — il te manque ${threshold - overall} points.`}
             </p>
-          )}
-        </motion.section>
+          </motion.section>
+        )}
 
       </motion.div>
       <div style={{ height: "var(--fc-space-8)" }} />

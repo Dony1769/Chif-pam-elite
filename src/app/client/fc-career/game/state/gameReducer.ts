@@ -21,6 +21,7 @@ import { getAllWorldPlayers } from "../data/worldPlayers";
 import { ageWorldPlayers, simulateWorldTransfers, generateTransferOffers } from "../domain/worldTransfers";
 import { createInitialLockerRoom, updateLockerRoomWeekly, triggerLockerRoomEvent, resetLockerRoomEndOfSeason } from "../domain/lockerRoom";
 import { createInitialPersonalLife, updatePersonalLifeWeekly, applyPersonalEvent, generatePersonalEvent } from "../domain/personalLife";
+import { createInitialNationalTeam, updateNationalTeamEndOfSeason } from "../domain/nationalTeam";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -417,6 +418,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           academyMatchContexts: [], // réinitialise pour la nouvelle saison
           weeksUninjured: 0,
           lockerRoom: resetLockerRoomEndOfSeason(save.lockerRoom ?? createInitialLockerRoom()),
+          nationalTeam: (() => {
+            const nationalRng = createRng(seedFromString(`national-s${career.season}`));
+            const rngFn = () => nationalRng.float(0, 1);
+            const currentNational = (save.nationalTeam as import("../domain/nationalTeam").NationalTeamState | undefined) ?? createInitialNationalTeam();
+            return updateNationalTeamEndOfSeason(currentNational, save.player.overall, save.player.age, career.season, rngFn);
+          })(),
           meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
