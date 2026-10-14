@@ -35,23 +35,25 @@ const minAttrs = {
 const academySchedule = {
   competitionId: "youth-league",
   season: 1,
+  currentMatchday: 3,
+  totalMatchdays: 38,
   fixtures: [
-    { id: "fix-1", homeClubId: "academy", awayClubId: "opp-1", matchday: 1, result: null, competitionId: "youth-league" },
-    { id: "fix-2", homeClubId: "opp-2",   awayClubId: "academy", matchday: 2, result: null, competitionId: "youth-league" },
-    { id: "fix-3", homeClubId: "academy", awayClubId: "opp-3", matchday: 3, result: null, competitionId: "youth-league" },
+    { id: "fix-1", season: 1, homeClubId: "academy", awayClubId: "opp-1", matchday: 1, result: null, competitionId: "youth-league" },
+    { id: "fix-2", season: 1, homeClubId: "opp-2",   awayClubId: "academy", matchday: 2, result: null, competitionId: "youth-league" },
+    { id: "fix-3", season: 1, homeClubId: "academy", awayClubId: "opp-3", matchday: 3, result: null, competitionId: "youth-league" },
   ],
-  standings: [],
 };
 
 // Schedule professionnel simulant la ligue 1
 const proSchedule = {
   competitionId: "league-valtara-1",
   season: 1,
+  currentMatchday: 5,
+  totalMatchdays: 38,
   fixtures: [
-    { id: "pro-fix-1", homeClubId: "club-pro", awayClubId: "club-opp", matchday: 5, result: null, competitionId: "league-valtara-1" },
-    { id: "pro-fix-2", homeClubId: "club-opp", awayClubId: "club-pro", matchday: 6, result: null, competitionId: "league-valtara-1" },
+    { id: "pro-fix-1", season: 1, homeClubId: "club-pro", awayClubId: "club-opp", matchday: 5, result: null, competitionId: "league-valtara-1" },
+    { id: "pro-fix-2", season: 1, homeClubId: "club-opp", awayClubId: "club-pro", matchday: 6, result: null, competitionId: "league-valtara-1" },
   ],
-  standings: [],
 };
 
 const baseAcademySave: GameSaveV1 = {
@@ -84,8 +86,8 @@ const baseAcademySave: GameSaveV1 = {
     countries: [],
     leagues: [],
     clubs: [
-      { id: "club-pro", name: "FC Valtara Pro", leagueId: "league-valtara-1", reputation: 70, countryId: "valtara", emblemUrl: "" },
-      { id: "club-opp", name: "FC Opponent",    leagueId: "league-valtara-1", reputation: 65, countryId: "valtara", emblemUrl: "" },
+      { id: "club-pro", name: "FC Valtara Pro", shortName: "VAL", leagueId: "league-valtara-1", reputation: 70, countryId: "valtara", tier: 1 as const, colors: { primary: "#0000ff", secondary: "#ffffff" }, wagesBudget: 100000, transferBudget: 5000000, academyLevel: 3, philosophy: "balanced" as const },
+      { id: "club-opp", name: "FC Opponent",    shortName: "OPP", leagueId: "league-valtara-1", reputation: 65, countryId: "valtara", tier: 1 as const, colors: { primary: "#ff0000", secondary: "#ffffff" }, wagesBudget: 80000, transferBudget: 3000000, academyLevel: 2, philosophy: "defensive" as const },
     ],
     standings: {},
     schedules: [academySchedule, proSchedule],
@@ -100,8 +102,18 @@ const baseAcademySave: GameSaveV1 = {
   },
   weekState: { trainingDone: false, trainingIntensity: null, matchPlayed: false },
   academyMatchContexts: [
-    { fixtureId: "fix-1", startingStatus: "titulaire", rating: 7.5, goals: 1, assists: 0, minutesPlayed: 90, evaluationBefore: 70, evaluationAfter: 73, recruiterNoticed: false },
-    { fixtureId: "fix-2", startingStatus: "titulaire", rating: 7.0, goals: 1, assists: 1, minutesPlayed: 90, evaluationBefore: 73, evaluationAfter: 75, recruiterNoticed: true, recruiterClubId: "club-pro" },
+    {
+      fixtureId: "fix-1", competitionId: "youth-league" as const,
+      opponentId: "opp-1", opponentName: "Académie Opp 1", opponentStrength: 50,
+      isHome: true, matchday: 1, startingStatus: "starter" as const,
+      postMatchEval: { rating: 7.5, goals: 1, assists: 0, minutesPlayed: 90, coachComment: "Bon match", coachObjectiveForNext: "Améliorer le jeu sans ballon", evalScoreDelta: 3, recruiterNoticed: false },
+    },
+    {
+      fixtureId: "fix-2", competitionId: "youth-league" as const,
+      opponentId: "opp-2", opponentName: "Académie Opp 2", opponentStrength: 55,
+      isHome: false, matchday: 2, startingStatus: "starter" as const,
+      postMatchEval: { rating: 7.0, goals: 1, assists: 1, minutesPlayed: 90, coachComment: "Très bon match", coachObjectiveForNext: "Continuer sur cette lancée", evalScoreDelta: 2, recruiterNoticed: true, recruiterClubId: "club-pro" },
+    },
   ],
 };
 
