@@ -254,7 +254,7 @@ export default function DashboardPage() {
   const statusColor = activeInjury || player.condition === "suspended" ? "var(--coral)" : squadState?.userStatus === "TITULAIRE" ? "var(--primary)" : "var(--muted-foreground)";
 
   /* ── PA disponibles ── */
-  const paAvailable = (player as any).attributePoints ?? 0;
+  const paAvailable = player.attributePoints ?? 0;
 
   return (
     <Shell>

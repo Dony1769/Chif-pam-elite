@@ -164,6 +164,9 @@ export function generatePlayer(input: GenerationInput, seed = Date.now()): Playe
     progressionHistory: [{ dayNumber: 0, overall, potential, fatigue: 10 }],
     achievements: [],
     lastThreeMatchRatings: [],
+    attributePoints: 0,
+    attributePointsTotal: 0,
+    attributePointsSpent: 0,
   };
 }
 

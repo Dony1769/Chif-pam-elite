@@ -128,6 +128,14 @@ export interface Player {
 
   // Coach & concurrence (Étape 7)
   lastThreeMatchRatings: number[]; // 3 dernières notes de match
+
+  // Points d'Attributs (PA) — Phase B
+  /** PA disponibles à investir. Dépensés dans /joueur (invest). */
+  attributePoints: number;
+  /** Total de PA gagnés depuis le début (pour stats). */
+  attributePointsTotal: number;
+  /** Total de PA déjà dépensés. */
+  attributePointsSpent: number;
 }
 
 /** Résultat d'une notation de match (0-10). */

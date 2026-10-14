@@ -12,6 +12,7 @@ import type { Player, SeasonStatLine } from "../types/player";
 import { advanceSeason } from "../engine/season-manager";
 import { endOfWeek } from "../engine/progression";
 import { emptyWallet, processWeeklyPayroll, computeMatchBonuses } from "../engine/economic-engine";
+import { awardPA, paFromMatch } from "../engine/attribute-points-engine";
 import type { MatchDay } from "../types/game";
 
 function emptyStatLine(seasonYear: number, clubId: string, competitionId: string): SeasonStatLine {
@@ -82,8 +83,11 @@ export function buildPostMatchState(input: ApplyMatchResultInput): CareerRuntime
 
   const lastThree = [...player.lastThreeMatchRatings, sim.userRating.rating].slice(-3);
 
+  const pa = paFromMatch(sim.userRating.rating);
+  const playerWithPA = awardPA(player, pa);
+
   const updatedPlayer: Player = {
-    ...player,
+    ...playerWithPA,
     seasonStats: [line, ...player.seasonStats.slice(1)],
     fatigue: Math.min(100, player.fatigue + 22),
     form: Math.max(0, Math.min(100, player.form + (sim.userRating.rating >= 7 ? 4 : sim.userRating.rating <= 5 ? -3 : 0))),
