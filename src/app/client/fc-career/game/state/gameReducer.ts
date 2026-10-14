@@ -906,12 +906,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       let newSchedules = save.world.schedules ?? [];
       let newStandings = { ...(save.world.standings ?? {}) };
 
-      // Pendant les saisons académie, simuler quand même le monde avec la saison courante
-      // ou la dernière saison disponible si la saison courante n'a pas encore de calendrier
-      let scheduleIdx = newSchedules.findIndex(s => s.season === career.season);
+      // Simuler les championnats réels (pas les ligues académie fictives)
+      // Cherche un schedule de championnat pro pour la saison courante
+      const ACADEMY_COMP_IDS = ["youth-league", "academy-cup"];
+      let scheduleIdx = newSchedules.findIndex(
+        s => s.season === career.season && !ACADEMY_COMP_IDS.includes(s.competitionId)
+      );
+      // Fallback : saison précédente si aucun schedule pro cette saison
       if (scheduleIdx < 0 && newSchedules.length > 0) {
-        // Trouver la saison la plus récente dans les schedules
         scheduleIdx = newSchedules.reduce((best, s, i) =>
+          !ACADEMY_COMP_IDS.includes(s.competitionId) &&
           s.season > (newSchedules[best]?.season ?? -1) ? i : best, 0);
       }
       if (scheduleIdx >= 0 && worldClubs.length > 0) {
