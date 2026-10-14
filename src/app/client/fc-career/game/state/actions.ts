@@ -112,6 +112,10 @@ export type GameAction =
   // Vestiaire
   | { type: "UPDATE_LOCKER_ROOM"; cohesionDelta?: number; leadershipDelta?: number; event?: LockerRoomEvent }
 
+  // Vie personnelle
+  | { type: "PERSONAL_EVENT_RESPONSE"; eventId: string; accepted: boolean }
+  | { type: "TRIGGER_PERSONAL_EVENT"; event: import("../domain/personalLife").PersonalLifeEvent }
+
   // Erreur
   | { type: "SET_ERROR"; message: string }
   | { type: "CLEAR_ERROR" };

@@ -20,6 +20,7 @@ import { pickInitialRivals, updateRivalsEndOfSeason } from "../domain/rivals";
 import { getAllWorldPlayers } from "../data/worldPlayers";
 import { ageWorldPlayers, simulateWorldTransfers, generateTransferOffers } from "../domain/worldTransfers";
 import { createInitialLockerRoom, updateLockerRoomWeekly, triggerLockerRoomEvent, resetLockerRoomEndOfSeason } from "../domain/lockerRoom";
+import { createInitialPersonalLife, updatePersonalLifeWeekly, applyPersonalEvent, generatePersonalEvent } from "../domain/personalLife";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -809,6 +810,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         career.season,
       );
 
+      // Vie personnelle — mise à jour hebdomadaire
+      const currentPersonalLife = save.personalLife ?? createInitialPersonalLife();
+      const rngObj = createRng(seedFromString(`personal-${career.season}-${career.week}`));
+      const rng = () => rngObj.float(0, 1);
+      const newPersonalEvent = generatePersonalEvent(currentPersonalLife, save.player.age, career.season, career.week, rng);
+      const updatedPersonalLife = newPersonalEvent
+        ? applyPersonalEvent(updatePersonalLifeWeekly(currentPersonalLife), newPersonalEvent, true)
+        : updatePersonalLifeWeekly(currentPersonalLife);
+
       // ── Sync challenges weekly ───────────────────────────────────
       const weeksUninjured = newPlayer.condition.injury ? 0 : (save.weeksUninjured ?? 0) + 1;
       const updatedChallenges = updateChallengeProgress(
@@ -843,6 +853,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           challenges: updatedChallenges,
           weeksUninjured,
           lockerRoom: updatedLockerRoom,
+          personalLife: updatedPersonalLife,
           meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
@@ -1237,6 +1248,38 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         save: {
           ...state.save,
           world: { ...save.world, clubs: updatedClubs },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "TRIGGER_PERSONAL_EVENT": {
+      if (!state.save) return state;
+      const pl = state.save.personalLife ?? createInitialPersonalLife();
+      // Store event without applying impacts yet (user will respond)
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          personalLife: {
+            ...pl,
+            events: [action.event, ...pl.events].slice(0, 50),
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "PERSONAL_EVENT_RESPONSE": {
+      if (!state.save) return state;
+      const pl = state.save.personalLife ?? createInitialPersonalLife();
+      const ev = pl.events.find(e => e.id === action.eventId && e.season === state.save!.career.season);
+      if (!ev) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          personalLife: applyPersonalEvent(pl, ev, action.accepted),
         },
         isDirty: true,
       };

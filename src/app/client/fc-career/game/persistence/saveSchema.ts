@@ -19,6 +19,7 @@ import type { AcademyMatchContext, YouthLeagueRow } from "../domain/academySched
 import type { WorldPlayer } from "../data/worldPlayers";
 import type { WorldTransferEvent } from "../domain/worldTransfers";
 import type { LockerRoomState } from "../domain/lockerRoom";
+import type { PersonalLifeState } from "../domain/personalLife";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -105,6 +106,8 @@ export interface GameSaveV1 {
   worldTransferHistory?: WorldTransferEvent[];
   /** Vestiaire — cohésion, relations, leadership — optionnel pour rétrocompatibilité */
   lockerRoom?: LockerRoomState;
+  /** Vie personnelle — moral, événements, famille — optionnel pour rétrocompatibilité */
+  personalLife?: PersonalLifeState;
 }
 
 export interface PressConference {

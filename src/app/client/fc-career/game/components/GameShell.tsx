@@ -39,8 +39,9 @@ const NAV: NavItem[] = [
   { href: `${BASE}/journal`,    label: "Journal",        icon: <IconBook /> },
   { href: `${BASE}/challenges`, label: "Défis",           icon: <IconChallenge /> },
   { href: `${BASE}/rivals`,       label: "Rivaux",          icon: <IconRival /> },
-  { href: `${BASE}/locker-room`, label: "Vestiaire",       icon: <IconLockerRoom /> },
-  { href: `${BASE}/legacy`,      label: "Héritage",        icon: <IconLegacy /> },
+  { href: `${BASE}/locker-room`,    label: "Vestiaire",       icon: <IconLockerRoom /> },
+  { href: `${BASE}/legacy`,         label: "Héritage",        icon: <IconLegacy /> },
+  { href: `${BASE}/personal-life`,  label: "Vie perso",       icon: <IconPersonalLife /> },
   { href: `${BASE}/settings`,    label: "Paramètres",      icon: <IconSettings /> },
 ];
 
@@ -224,4 +225,5 @@ function IconBook()      { return <svg viewBox="0 0 20 20" fill="currentColor"><
 function IconChallenge() { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l1.8 5.5H18l-4.7 3.4 1.8 5.5L10 12l-5.1 3.4 1.8-5.5L2 5.5h6.2L10 1z"/></svg>; }
 function IconRival()      { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a3 3 0 100 6 3 3 0 000-6zm10 0a3 3 0 100 6 3 3 0 000-6zM2 14a5 5 0 015-5h1l2 3 2-3h1a5 5 0 015 5v2H2v-2z"/></svg>; }
 function IconLockerRoom() { return <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="3" width="5" height="14" rx="1"/><rect x="8" y="3" width="5" height="14" rx="1"/><rect x="14" y="3" width="4" height="14" rx="1"/><rect x="3" y="9" width="3" height="1" rx="0.5" fill="var(--fc-surface-3)"/><rect x="9" y="9" width="3" height="1" rx="0.5" fill="var(--fc-surface-3)"/></svg>; }
-function IconLegacy()     { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2 6h6l-5 3.5 2 6L10 13l-5 3.5 2-6L2 7h6L10 1z"/></svg>; }
+function IconLegacy()       { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2 6h6l-5 3.5 2 6L10 13l-5 3.5 2-6L2 7h6L10 1z"/></svg>; }
+function IconPersonalLife() { return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 3a4 4 0 100 8 4 4 0 000-8zm-7 13c0-3.3 3.1-6 7-6s7 2.7 7 6v1H3v-1z"/><path d="M14 8l1.5 1.5-4 4L9 12l1.5-1.5 1 1z" fill="var(--fc-surface-3)"/></svg>; }
