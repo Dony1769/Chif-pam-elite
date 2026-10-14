@@ -81,11 +81,12 @@ function DashboardContent() {
   const month  = formatGameDateShort(career.week, career.season);
   const season = seasonLabel(career.season);
 
-  // Match de la semaine (fixture correspondant à cette matchday)
-  const schedule = save.world.schedules.find(s => s.season === career.season);
-  const fixtures = schedule?.fixtures ?? [];
+  // Match de la semaine — cherche dans tous les schedules de la saison courante
+  // (un joueur académie peut avoir youth-league + academy-cup en parallèle)
+  const seasonSchedules = save.world.schedules.filter(s => s.season === career.season);
+  const allSeasonFixtures = seasonSchedules.flatMap(s => s.fixtures);
   const completedIds = new Set(Array.from((career.completedMatchIds ?? []) as unknown as string[]));
-  const weekFixture  = fixtures.find(f => f.matchday === career.matchday && !completedIds.has(f.id)) ?? null;
+  const weekFixture  = allSeasonFixtures.find(f => f.matchday === career.matchday && !completedIds.has(f.id)) ?? null;
 
   // Simulation locale
   const [simulating, setSimulating]   = useState(false);

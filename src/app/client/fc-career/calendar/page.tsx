@@ -31,8 +31,9 @@ export default function CalendarPage() {
   const player = save?.player;
   const career = save?.career;
 
-  const schedule   = save?.world.schedules.find(s => s.season === career?.season);
-  const fixtures   = schedule?.fixtures ?? [];
+  // Tous les schedules de la saison (youth-league + academy-cup pour les joueurs académie, championnat pour les pros)
+  const seasonSchedules = (save?.world.schedules ?? []).filter(s => s.season === career?.season);
+  const fixtures = seasonSchedules.flatMap(s => s.fixtures).sort((a, b) => a.matchday - b.matchday);
   const completedIds = new Set((career?.completedMatchIds ?? []) as string[]);
   const clubs      = save?.world.clubs ?? [];
 
