@@ -15,6 +15,7 @@ import type { AgentProfile, ContractOffer } from "../domain/agent";
 import type { AcademyMatchContext, AcademyPostMatchEval } from "../domain/academySchedule";
 import type { PromotionRelegationResult } from "../domain/worldSimulator";
 import type { WorldTransferEvent } from "../domain/worldTransfers";
+import type { LockerRoomEvent } from "../domain/lockerRoom";
 
 export type GameAction =
   // Initialisation
@@ -107,6 +108,9 @@ export type GameAction =
   // Rivaux évolutifs
   | { type: "INIT_RIVALS" }
   | { type: "SEASON_END_RIVALS" }
+
+  // Vestiaire
+  | { type: "UPDATE_LOCKER_ROOM"; cohesionDelta?: number; leadershipDelta?: number; event?: LockerRoomEvent }
 
   // Erreur
   | { type: "SET_ERROR"; message: string }

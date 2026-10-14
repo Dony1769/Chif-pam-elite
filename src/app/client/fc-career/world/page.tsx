@@ -28,6 +28,7 @@ export default function WorldPage() {
   const [activeCountryId, setActiveCountryId] = useState<string>(COUNTRIES[0].id);
   const [activeTier, setActiveTier]           = useState<1 | 2>(1);
   const [worldTab, setWorldTab]               = useState<"standings" | "scorers" | "players">("standings");
+  const [mainTab, setMainTab]                 = useState<"leagues" | "transfers">("leagues");
 
   if (isLoading) return <Spinner />;
 
@@ -73,6 +74,111 @@ export default function WorldPage() {
       </div>
 
       <motion.div variants={stagger} initial="hidden" animate="visible">
+
+        {/* ── Onglets principaux ─────────────────────────────────── */}
+        <motion.div variants={itemFade} style={{ display: "flex", gap: "var(--fc-space-2)", marginBottom: "var(--fc-space-4)", borderBottom: "1px solid var(--fc-border)", paddingBottom: "var(--fc-space-3)" }}>
+          {([
+            { key: "leagues" as const, label: "🏆 Ligues" },
+            { key: "transfers" as const, label: "🔄 Actualités" },
+          ]).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setMainTab(tab.key)}
+              style={{
+                padding: "8px 18px",
+                borderRadius: "var(--fc-radius)",
+                border: "none",
+                background: mainTab === tab.key ? "var(--fc-text)" : "transparent",
+                color: mainTab === tab.key ? "var(--fc-bg)" : "var(--fc-text-3)",
+                fontWeight: mainTab === tab.key ? 700 : 500,
+                fontSize: "var(--fc-text-sm)",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </motion.div>
+
+        {/* ── Actualités transferts ────────────────────────────────── */}
+        {mainTab === "transfers" && (() => {
+          const history = (save as import("../game/persistence/saveSchema").GameSaveV1 & { worldTransferHistory?: import("../game/domain/worldTransfers").WorldTransferEvent[] })?.worldTransferHistory ?? [];
+          const ICONS: Record<string, string> = {
+            transfer: "↔️",
+            loan: "🔁",
+            retirement: "🎖️",
+            promotion: "⬆️",
+            youth_breakout: "⭐",
+          };
+          return (
+            <motion.section variants={itemFade}>
+              <p style={{ fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)", marginBottom: "var(--fc-space-4)" }}>
+                {history.length === 0
+                  ? "Aucune actualité — le marché s'animera en fin de saison."
+                  : `${history.length} événement${history.length > 1 ? "s" : ""} · Les 100 derniers mouvements`}
+              </p>
+              {history.length === 0 && (
+                <div style={{
+                  padding: "var(--fc-space-8)", textAlign: "center",
+                  background: "var(--fc-surface-2)", borderRadius: "var(--fc-radius)",
+                  border: "1px solid var(--fc-border)",
+                }}>
+                  <div style={{ fontSize: "2rem", marginBottom: "var(--fc-space-2)" }}>📋</div>
+                  <p style={{ color: "var(--fc-text-2)", margin: 0, fontSize: "var(--fc-text-sm)" }}>
+                    L'actualité du marché apparaîtra ici à la fin de la première saison.
+                  </p>
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--fc-space-2)" }}>
+                {[...history].reverse().map((ev, idx) => (
+                  <div key={`${ev.playerId}-${idx}`} style={{
+                    padding: "var(--fc-space-3) var(--fc-space-4)",
+                    background: "var(--fc-surface-2)",
+                    borderRadius: "var(--fc-radius)",
+                    border: "1px solid var(--fc-border)",
+                    display: "flex", alignItems: "flex-start", gap: "var(--fc-space-3)",
+                  }}>
+                    <span style={{ fontSize: "1.2rem", flexShrink: 0, marginTop: 1 }}>
+                      {ICONS[ev.type] ?? "📰"}
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{
+                        margin: 0, fontSize: "var(--fc-text-sm)", color: "var(--fc-text)",
+                        lineHeight: 1.4,
+                      }}>
+                        {ev.description}
+                      </p>
+                      <p style={{ margin: 0, marginTop: 4, fontSize: "var(--fc-text-xs)", color: "var(--fc-text-3)" }}>
+                        Saison {ev.season} ·{" "}
+                        <span style={{
+                          padding: "1px 7px", borderRadius: 99,
+                          background: ev.type === "retirement" ? "var(--fc-surface-3)"
+                            : ev.type === "youth_breakout" ? "rgba(245,158,11,0.12)"
+                            : ev.type === "promotion" ? "rgba(16,185,129,0.12)"
+                            : "var(--fc-surface-3)",
+                          color: ev.type === "youth_breakout" ? "var(--fc-amber)"
+                            : ev.type === "promotion" ? "var(--fc-emerald)"
+                            : "var(--fc-text-3)",
+                          fontSize: "var(--fc-text-xs)", fontWeight: 600,
+                        }}>
+                          {ev.type === "transfer" ? "Transfert"
+                            : ev.type === "loan" ? "Prêt"
+                            : ev.type === "retirement" ? "Retraite"
+                            : ev.type === "promotion" ? "Promotion"
+                            : "Révélation"}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.section>
+          );
+        })()}
+
+        {/* ── Contenu ligues ─────────────────────────────────────── */}
+        {mainTab === "leagues" && <>
 
         {/* ── Onglets pays ────────────────────────────────────────── */}
         <motion.div variants={itemFade} style={{ display: "flex", gap: "var(--fc-space-2)", marginBottom: "var(--fc-space-4)", flexWrap: "wrap" }}>
@@ -454,6 +560,8 @@ export default function WorldPage() {
             })}
           </div>
         </motion.section>
+
+        </>}
 
       </motion.div>
 

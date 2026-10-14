@@ -19,6 +19,7 @@ import { buildInitialChallenges, activateChallenge, updateChallengeProgress } fr
 import { pickInitialRivals, updateRivalsEndOfSeason } from "../domain/rivals";
 import { getAllWorldPlayers } from "../data/worldPlayers";
 import { ageWorldPlayers, simulateWorldTransfers, generateTransferOffers } from "../domain/worldTransfers";
+import { createInitialLockerRoom, updateLockerRoomWeekly, triggerLockerRoomEvent, resetLockerRoomEndOfSeason } from "../domain/lockerRoom";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
 
@@ -414,6 +415,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           youthLeagueStanding: undefined, // réinitialise pour la nouvelle saison
           academyMatchContexts: [], // réinitialise pour la nouvelle saison
           weeksUninjured: 0,
+          lockerRoom: resetLockerRoomEndOfSeason(save.lockerRoom ?? createInitialLockerRoom()),
           meta: { ...save.meta, savedAt: Date.now() },
         },
         isDirty: true,
@@ -785,6 +787,28 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
+      // ── Mise à jour vestiaire ────────────────────────────────────
+      const currentLockerRoom = save.lockerRoom ?? createInitialLockerRoom();
+      // Récupérer le dernier résultat de match pour l'effet sur cohésion
+      const lastMatchResult = weekState.matchPlayed && save.world.lastMatchResults.length > 0
+        ? save.world.lastMatchResults[save.world.lastMatchResults.length - 1]
+        : null;
+      const lastMatchRating = lastMatchResult
+        ? lastMatchResult.playerRating
+        : null;
+      const lastMatchWon = lastMatchResult
+        ? (lastMatchResult.isHome
+            ? lastMatchResult.scoreHome > lastMatchResult.scoreAway
+            : lastMatchResult.scoreAway > lastMatchResult.scoreHome)
+        : null;
+      const updatedLockerRoom = updateLockerRoomWeekly(
+        currentLockerRoom,
+        lastMatchRating,
+        lastMatchWon,
+        career.week,
+        career.season,
+      );
+
       // ── Sync challenges weekly ───────────────────────────────────
       const weeksUninjured = newPlayer.condition.injury ? 0 : (save.weeksUninjured ?? 0) + 1;
       const updatedChallenges = updateChallengeProgress(
@@ -818,7 +842,31 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           },
           challenges: updatedChallenges,
           weeksUninjured,
+          lockerRoom: updatedLockerRoom,
           meta: { ...save.meta, savedAt: Date.now() },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "UPDATE_LOCKER_ROOM": {
+      if (!state.save) return state;
+      const prevLR = state.save.lockerRoom ?? createInitialLockerRoom();
+      const newCohesion = Math.min(100, Math.max(0, prevLR.teamCohesion + (action.cohesionDelta ?? 0)));
+      const newLP = Math.min(200, Math.max(0, prevLR.leadershipPoints + (action.leadershipDelta ?? 0)));
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          lockerRoom: {
+            ...prevLR,
+            teamCohesion: newCohesion,
+            leadershipPoints: newLP,
+            atmosphere: (newCohesion >= 85 ? "excellent" : newCohesion >= 65 ? "positive" : newCohesion >= 40 ? "neutral" : newCohesion >= 20 ? "tense" : "toxic") as import("../domain/lockerRoom").LockerRoomState["atmosphere"],
+            recentEvents: action.event
+              ? [action.event, ...prevLR.recentEvents].slice(0, 5)
+              : prevLR.recentEvents,
+          },
         },
         isDirty: true,
       };

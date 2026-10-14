@@ -18,6 +18,7 @@ import type { PlayerRival } from "../domain/rivals";
 import type { AcademyMatchContext, YouthLeagueRow } from "../domain/academySchedule";
 import type { WorldPlayer } from "../data/worldPlayers";
 import type { WorldTransferEvent } from "../domain/worldTransfers";
+import type { LockerRoomState } from "../domain/lockerRoom";
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = "fc-career-v2:save";
@@ -102,6 +103,8 @@ export interface GameSaveV1 {
   worldPlayers?: WorldPlayer[];
   /** Historique des transferts monde (100 derniers) — optionnel */
   worldTransferHistory?: WorldTransferEvent[];
+  /** Vestiaire — cohésion, relations, leadership — optionnel pour rétrocompatibilité */
+  lockerRoom?: LockerRoomState;
 }
 
 export interface PressConference {

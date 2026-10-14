@@ -9,6 +9,7 @@ import { migrate } from "./migrations";
 import type { Career } from "../domain/career";
 import { createInitialCoach } from "../domain/coach";
 import { createInitialAgentState } from "../domain/agent";
+import { createInitialLockerRoom } from "../domain/lockerRoom";
 
 // ── Lecture ────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,8 @@ function deserializeCareer(save: GameSaveV1): GameSaveV1 {
     // Monde vivant étendu
     worldPlayers: save.worldPlayers,
     worldTransferHistory: save.worldTransferHistory ?? [],
+    // Vestiaire — rétrocompatibilité
+    lockerRoom: save.lockerRoom ?? createInitialLockerRoom(),
   };
 }
 
