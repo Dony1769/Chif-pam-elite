@@ -245,6 +245,7 @@ function DashboardContent() {
       // ── Si un recruteur a remarqué le joueur → créer une offre ───
       if (postEval.recruiterNoticed && postEval.recruiterClubId) {
         const recruiterClub = save.world?.clubs?.find((c: { id: string }) => c.id === postEval.recruiterClubId);
+        // Un recruteur repère le joueur depuis l'académie → offre professionnelle
         const offer = generateContractOffer({
           clubId:           postEval.recruiterClubId,
           clubName:         recruiterClub?.name ?? postEval.recruiterClubId,
@@ -254,6 +255,8 @@ function DashboardContent() {
           week:             career.week,
           currentSalary:    player.contract.salary,
           agentBoostPct:    save.agentState?.agent?.salaryBoostPct ?? 0,
+          offerType:        "professional",
+          targetPhase:      "professional",
         });
         dispatch({ type: "ADD_CONTRACT_OFFER", offer });
       }

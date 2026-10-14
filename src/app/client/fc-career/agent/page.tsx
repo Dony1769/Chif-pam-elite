@@ -322,6 +322,11 @@ export default function AgentPage() {
     });
     const selectedClubs = shuffled.slice(0, nbOffers);
 
+    // Déterminer le type d'offre selon la phase actuelle du joueur
+    const isInAcademy = career.phase === "academy";
+    const offerType = isInAcademy ? "professional" : "transfer";
+    const targetPhase = isInAcademy ? "professional" : career.phase;
+
     for (const club of selectedClubs) {
       const offer = generateContractOffer({
         clubId: club.id,
@@ -332,6 +337,8 @@ export default function AgentPage() {
         week: career.week,
         currentSalary: player.contract.salary,
         agentBoostPct: agentBoost,
+        offerType,
+        targetPhase,
       });
       dispatch({ type: "ADD_CONTRACT_OFFER", offer });
     }

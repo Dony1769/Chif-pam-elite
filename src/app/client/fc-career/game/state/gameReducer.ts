@@ -335,12 +335,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         : [];
       // Convertir en ContractOffer pour l'agentState
       const agentState = save.agentState ?? createInitialAgentState();
+      // offerType et targetPhase selon la phase actuelle du joueur
+      const _playerOfferType: import("../domain/agent").ContractOfferType =
+        career.phase === "academy" ? "professional" : "transfer";
+      const _playerTargetPhase: import("../domain/career").CareerPhase =
+        career.phase === "academy" ? "professional" : career.phase;
+
       const newContractOffers: import("../domain/agent").ContractOffer[] = transferOffersForPlayer.map((offer, i) => ({
         id: `auto-offer-s${career.season}-${i}`,
         clubId: offer.clubId,
         clubName: offer.clubName,
         season: career.season,
         week: 1,
+        offerType: _playerOfferType,
+        targetPhase: _playerTargetPhase,
         terms: {
           clubId: offer.clubId,
           salary: offer.proposedSalary,
@@ -652,15 +660,95 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      // Acceptation : mettre à jour le contrat du joueur et créer un transfert
+      // ── Transition de carrière atomique ─────────────────────────────
+      // Discriminer selon le type d'offre pour appliquer la bonne transition.
+      // Cf. mission P0 : la simple mise à jour du contrat ne suffit pas.
+
+      const currentCareer = state.save.career;
+      const offerType = (offer as import("../domain/agent").ContractOffer).offerType ?? "transfer";
+      const targetPhase = (offer as import("../domain/agent").ContractOffer).targetPhase ?? "professional";
+      const targetAcademyStage = (offer as import("../domain/agent").ContractOffer).targetAcademyStage;
+
+      // 1. Enregistrer le transfert
       const newTransfer = {
         id: `transfer-${offerId}`,
-        season: state.save.career.season,
+        season: currentCareer.season,
         fromClubId: state.save.player.contract.clubId,
         toClubId: offer.clubId,
         fee: offer.transferFee,
         isLoan: offer.isLoan,
         loanEndSeason: offer.loanEndSeason,
+      };
+
+      // 2. Calculer la nouvelle phase et l'état académie
+      let newAcademy = currentCareer.academy;
+
+      if (offerType === "academy_recruitment") {
+        // Recrutement dans une académie — on reste en phase academy, on initialise l'académie
+        newAcademy = {
+          stage: targetAcademyStage ?? "youth",
+          evaluationScore: 50,
+          promotionThreshold: 70,
+          weeksInStage: 0,
+        };
+      } else if (offerType === "academy_promotion") {
+        // Promotion interne (youth→u18, u18→u21, u21→reserve) — on garde la phase academy
+        newAcademy = {
+          stage: targetAcademyStage ?? (currentCareer.academy?.stage ?? "u18"),
+          evaluationScore: 50,
+          promotionThreshold: 70,
+          weeksInStage: 0,
+        };
+      } else {
+        // Contrat professionnel ou transfert — l'académie devient null
+        newAcademy = null;
+      }
+
+      // 3. Nouveau coach correspondant à la phase cible
+      const { createInitialCoach } = require("../domain/coach");
+      const newCoach = createInitialCoach(targetPhase, currentCareer.season);
+
+      // 4. Mettre à jour / réinitialiser le planning selon le type de transition
+      // On supprime les schedules académie si on quitte l'académie,
+      // pour que le dashboard ne serve plus les anciens matchs.
+      let newSchedules = state.save.world.schedules;
+      if (offerType === "professional" || offerType === "transfer") {
+        // Retirer les schedules de compétition académie (youth-league, academy-cup…)
+        newSchedules = newSchedules.filter(
+          s => s.competitionId !== "youth-league" && s.competitionId !== "academy-cup"
+        );
+      } else if (offerType === "academy_recruitment") {
+        // Nouveau schedule académie pour la nouvelle saison — sera régénéré au prochain INIT_ACADEMY_SCHEDULE
+        newSchedules = newSchedules.filter(
+          s => s.competitionId !== "youth-league" && s.competitionId !== "academy-cup"
+        );
+      }
+
+      // 5. Réinitialiser les matchs complétés (nouveau contexte d'équipe)
+      // Dans GameSaveV1, completedMatchIds est string[] (Set sérialisé)
+      const newCompletedMatchIds: string[] = [];
+
+      // 6. Effacer les contextes de matchs académie si on quitte l'académie
+      const newAcademyMatchContexts =
+        (offerType === "professional" || offerType === "transfer")
+          ? []
+          : (state.save.academyMatchContexts ?? []);
+
+      // 7. Événement journal de transfert
+      const transferEvent: import("../domain/career").CareerEvent = {
+        id: `event-transfer-${offerId}`,
+        season: currentCareer.season,
+        matchday: currentCareer.matchday,
+        type: "transfer",
+        title: offerType === "professional"
+          ? `Premier contrat professionnel — ${offer.clubName}`
+          : offerType === "academy_promotion"
+          ? `Promotion — ${offer.clubName}`
+          : offerType === "academy_recruitment"
+          ? `Recrutement académie — ${offer.clubName}`
+          : `Transfert vers ${offer.clubName}`,
+        description: `Offre acceptée. Nouveau club : ${offer.clubName}. Salaire : ${offer.terms.salary}€/sem. Contrat jusqu'à la saison ${offer.terms.endSeason}.`,
+        timestamp: Date.now(),
       };
 
       return {
@@ -671,6 +759,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...state.save.player,
             contract: offer.terms,
           },
+          career: {
+            ...currentCareer,
+            phase: targetPhase,
+            academy: newAcademy,
+            completedMatchIds: newCompletedMatchIds,
+            events: [...(currentCareer.events ?? []), transferEvent],
+          },
           agentState: {
             ...agentState,
             offers: updatedOffers,
@@ -680,6 +775,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...state.save.wallet,
             weeklyWage: offer.terms.salary,
           },
+          coach: newCoach,
+          world: {
+            ...state.save.world,
+            schedules: newSchedules,
+          },
+          academyMatchContexts: newAcademyMatchContexts,
         },
         isDirty: true,
       };

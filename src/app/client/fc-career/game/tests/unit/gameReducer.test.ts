@@ -412,6 +412,7 @@ describe("Agent et contrats", () => {
   it("ADD_CONTRACT_OFFER ajoute l'offre à agentState.offers", () => {
     const offer = {
       id: "offer-1", clubId: "club-999", clubName: "FC Test", season: 1, week: 3,
+      offerType: "professional" as const, targetPhase: "professional" as const,
       terms: { clubId: "club-999", salary: 1500, bonusGoal: 200, bonusAssist: 100, startSeason: 1, endSeason: 3, role: "squad" as const },
       transferFee: 0, isLoan: false, status: "pending" as const, message: "Test", expiresInWeeks: 3,
     };
@@ -423,6 +424,7 @@ describe("Agent et contrats", () => {
   it("RESPOND_CONTRACT_OFFER: acceptation met à jour le contrat du joueur", () => {
     const offer = {
       id: "offer-1", clubId: "club-999", clubName: "FC Test", season: 1, week: 3,
+      offerType: "professional" as const, targetPhase: "professional" as const,
       terms: { clubId: "club-999", salary: 2000, bonusGoal: 200, bonusAssist: 100, startSeason: 1, endSeason: 3, role: "starter" as const },
       transferFee: 0, isLoan: false, status: "pending" as const, message: "Test", expiresInWeeks: 3,
     };
@@ -436,6 +438,7 @@ describe("Agent et contrats", () => {
   it("RESPOND_CONTRACT_OFFER: refus change seulement le statut", () => {
     const offer = {
       id: "offer-2", clubId: "club-888", clubName: "FC Test 2", season: 1, week: 4,
+      offerType: "transfer" as const, targetPhase: "professional" as const,
       terms: { clubId: "club-888", salary: 800, bonusGoal: 50, bonusAssist: 30, startSeason: 1, endSeason: 2, role: "squad" as const },
       transferFee: 0, isLoan: false, status: "pending" as const, message: "Test", expiresInWeeks: 3,
     };

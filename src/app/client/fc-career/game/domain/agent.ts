@@ -5,6 +5,8 @@
 
 import type { PlayerContract } from "./player";
 import type { Transfer } from "./economy";
+import type { CareerPhase } from "./career";
+import type { AcademyState } from "./career";
 
 // ── Agent ────────────────────────────────────────────────────────────────────
 
@@ -32,12 +34,31 @@ export type ContractOfferStatus =
   | "rejected"
   | "expired";   // semaine dépassée
 
+/**
+ * Type d'offre — discriminant pour la transition de carrière.
+ * - academy_recruitment : recrutement dans une académie (reste en phase academy)
+ * - academy_promotion   : promotion interne U18/U21/réserve (reste en phase academy)
+ * - professional        : premier contrat professionnel (passage à la phase professional)
+ * - transfer            : transfert entre deux clubs professionnels (même phase, nouveau club)
+ */
+export type ContractOfferType =
+  | "academy_recruitment"
+  | "academy_promotion"
+  | "professional"
+  | "transfer";
+
 export interface ContractOffer {
   id: string;
   clubId: string;
   clubName: string;
   season: number;
   week: number;
+  /** Type d'offre — discriminant pour la transition de carrière */
+  offerType: ContractOfferType;
+  /** Phase cible après acceptation */
+  targetPhase: CareerPhase;
+  /** Étape académie cible (si offerType est academy_*) */
+  targetAcademyStage?: AcademyState["stage"];
   /** Contrat proposé */
   terms: PlayerContract;
   /** Indemnité de transfert demandée (0 = joueur libre) */
@@ -117,6 +138,12 @@ export interface OfferParams {
   week: number;
   currentSalary: number;
   agentBoostPct: number;
+  /** Type d'offre — à fournir explicitement pour garantir la bonne transition de carrière */
+  offerType: ContractOfferType;
+  /** Phase cible après acceptation */
+  targetPhase: CareerPhase;
+  /** Étape académie cible si offerType est academy_* */
+  targetAcademyStage?: AcademyState["stage"];
 }
 
 const OFFER_MESSAGES = [
@@ -140,6 +167,7 @@ export function generateContractOffer(params: OfferParams): ContractOffer {
   const {
     clubId, clubName, playerOverall, playerReputation,
     season, week, currentSalary, agentBoostPct,
+    offerType, targetPhase, targetAcademyStage,
   } = params;
 
   const seed = `${clubId}-${season}-${week}-${playerOverall}`;
@@ -179,6 +207,9 @@ export function generateContractOffer(params: OfferParams): ContractOffer {
     clubName,
     season,
     week,
+    offerType,
+    targetPhase,
+    ...(targetAcademyStage !== undefined ? { targetAcademyStage } : {}),
     terms: {
       clubId,
       salary: proposedSalary,
