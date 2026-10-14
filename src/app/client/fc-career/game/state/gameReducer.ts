@@ -585,9 +585,27 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
+      // ── Guérison progressive des blessures ──────────────────────
+      const currentInjury = newPlayer.condition.injury;
+      if (currentInjury) {
+        const remaining = currentInjury.daysRemaining - 7;
+        if (remaining <= 0) {
+          newPlayer = { ...newPlayer, condition: { ...newPlayer.condition, injury: null } };
+        } else {
+          newPlayer = { ...newPlayer, condition: { ...newPlayer.condition, injury: { ...currentInjury, daysRemaining: remaining } } };
+        }
+      }
+
       const newWeek     = career.week + 1;
       const newMatchday = career.matchday + 1;
       const wallet      = save.wallet;
+
+      // ── Bonus sponsors actifs ────────────────────────────────────
+      const activeSponsors = (save.sponsors ?? []).filter(s => s.weeksLeft > 0);
+      const sponsorBonus = activeSponsors.reduce((sum, s) => sum + s.weeklyBonus, 0);
+      const updatedSponsors = (save.sponsors ?? []).map(s =>
+        s.weeksLeft > 0 ? { ...s, weeksLeft: s.weeksLeft - 1 } : s
+      );
 
       // ── Simulation monde : avancer les autres clubs ──────────────
       const currentMatchday = career.matchday;
@@ -634,9 +652,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           career: { ...career, week: newWeek, matchday: newMatchday },
           wallet: {
             ...wallet,
-            balance:     wallet.balance + wallet.weeklyWage,
-            totalEarned: wallet.totalEarned + wallet.weeklyWage,
+            balance:     wallet.balance + wallet.weeklyWage + sponsorBonus,
+            totalEarned: wallet.totalEarned + wallet.weeklyWage + sponsorBonus,
           },
+          sponsors: updatedSponsors,
           weekState: { trainingDone: false, trainingIntensity: null, matchPlayed: false },
           world: {
             ...save.world,
@@ -686,6 +705,44 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         save: {
           ...state.save,
           journal: [...current, action.entry],
+        },
+        isDirty: true,
+      };
+    }
+
+    case "APPLY_INJURY": {
+      if (!state.save) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          player: {
+            ...state.save.player,
+            condition: {
+              ...state.save.player.condition,
+              injury: action.injury,
+              fatigue: Math.min(100, state.save.player.condition.fatigue + 30),
+              morale: Math.max(1, state.save.player.condition.morale - 20),
+            },
+          },
+        },
+        isDirty: true,
+      };
+    }
+
+    case "HEAL_INJURY": {
+      if (!state.save) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          player: {
+            ...state.save.player,
+            condition: {
+              ...state.save.player.condition,
+              injury: null,
+            },
+          },
         },
         isDirty: true,
       };
