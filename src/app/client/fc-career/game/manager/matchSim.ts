@@ -63,6 +63,8 @@ export interface LiveMatch {
   events: MatchEvent[];
   managedSide: "home" | "away";
   finished: boolean;
+  /** Bonus de note par joueur (décisions réussies en carrière joueur) */
+  ratingBonus?: Record<string, number>;
 }
 
 const HOME_ADVANTAGE = 1.09;
@@ -335,6 +337,7 @@ function rateTeam(m: LiveMatch, side: "home" | "away"): Record<string, number> {
       if (e.type === "red" && e.playerId === id) r -= 1.5;
     }
     if (defensive) r += opp.goals === 0 ? 0.5 : -0.25 * opp.goals;
+    r += m.ratingBonus?.[id] ?? 0;
     out[id] = Math.round(Math.max(3, Math.min(10, r)) * 10) / 10;
   }
   return out;
