@@ -160,6 +160,54 @@ export interface LoanOut {
   untilSeason: number;
 }
 
+// ─── Club : stade, installations, staff, sponsors (Lot M3) ───────────────────
+
+export type FacilityId = "training" | "academy" | "medical";
+export type StaffRole = "coach" | "fitness" | "physio" | "youth" | "scout";
+
+export interface StaffMember {
+  id: string;
+  role: StaffRole;
+  name: string;
+  /** Compétence 1-5 */
+  quality: number;
+  wage: number;
+}
+
+export interface BuildProject {
+  kind: "stadium" | FacilityId;
+  /** Index absolu de semaine de livraison (season*100+week) */
+  readyAt: number;
+  cost: number;
+  /** Places ajoutées (stade) */
+  seats?: number;
+}
+
+export interface SponsorOffer {
+  id: string;
+  name: string;
+  weekly: number;
+  winBonus: number;
+  /** Prime si l'objectif du conseil est atteint en fin de saison */
+  objectiveBonus: number;
+  style: "safe" | "balanced" | "ambitious";
+}
+
+export interface ClubInfra {
+  stadium: { name: string; capacity: number; ticketPrice: number };
+  facilities: Record<FacilityId, number>;
+  staff: StaffMember[];
+  /** Candidats disponibles au recrutement (renouvelés chaque saison) */
+  staffMarket: StaffMember[];
+  projects: BuildProject[];
+  sponsor: SponsorOffer | null;
+  sponsorOffers: SponsorOffer[];
+  /** Saison pour laquelle offres sponsors et staff ont été générés */
+  generatedSeason: number;
+  /** Dernière affluence à domicile */
+  lastAttendance: { spectators: number; fill: number; revenue: number } | null;
+}
+
 export interface MarketState {
   contracts: Record<string, PlayerContract>;
   /** Joueurs mis sur la liste des transferts : prix demandé */
@@ -200,6 +248,8 @@ export interface ManagerState {
   finances: ClubFinances;
   /** Marché des transferts — optionnel : complété au chargement des parties M1 */
   market?: MarketState;
+  /** Stade, installations, staff, sponsors — optionnel : complété au chargement */
+  infra?: ClubInfra;
   board: BoardState;
   inbox: InboxMessage[];
   lastMatch: ManagerMatchReport | null;

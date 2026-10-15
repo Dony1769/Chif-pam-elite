@@ -9,6 +9,9 @@ import {
   autoLineup, createManagerGame, markRead, setCaptain, setTactic, swapPlayers,
 } from "./engine";
 import type { MarketResult } from "./market";
+import type { ClubResult } from "./club";
+import { chooseSponsor, ensureInfra, expandStadium, hireStaff, setTicketPrice, upgradeFacility } from "./club";
+import type { FacilityId } from "./types";
 import {
   acceptOffer, advanceWeek, approachFreeAgent, cancelDeal, ensureMarket, listForTransfer, loanOut,
   makeBid, offerContract, promoteYouth, rejectOffer, releasePlayer, releaseYouth, renewContract,
@@ -39,7 +42,13 @@ export type ManagerAction =
   | { type: "RENEW_CONTRACT"; playerId: string; wage: number; seasons: number }
   | { type: "SCOUT"; playerId: string }
   | { type: "PROMOTE_YOUTH"; youthId: string }
-  | { type: "RELEASE_YOUTH"; youthId: string };
+  | { type: "RELEASE_YOUTH"; youthId: string }
+  // Club
+  | { type: "SET_TICKET_PRICE"; price: number }
+  | { type: "EXPAND_STADIUM" }
+  | { type: "UPGRADE_FACILITY"; facility: FacilityId }
+  | { type: "HIRE_STAFF"; candidateId: string }
+  | { type: "CHOOSE_SPONSOR"; offerId: string };
 
 /** Résultat d'une action : nouvel état + message éventuel à afficher. */
 export interface ManagerStep {
@@ -47,17 +56,17 @@ export interface ManagerStep {
   message: { ok: boolean; text: string } | null;
 }
 
-const fromResult = (r: MarketResult): ManagerStep => ({ state: r.state, message: { ok: r.ok, text: r.message } });
+const fromResult = (r: MarketResult | ClubResult): ManagerStep => ({ state: r.state, message: { ok: r.ok, text: r.message } });
 
 export function managerStep(state: ManagerState | null, action: ManagerAction): ManagerStep {
   switch (action.type) {
     case "NEW_GAME":
-      return { state: ensureMarket(createManagerGame({ seed: action.seed, clubId: action.clubId, managerName: action.managerName, now: action.now })), message: null };
+      return { state: ensureInfra(ensureMarket(createManagerGame({ seed: action.seed, clubId: action.clubId, managerName: action.managerName, now: action.now }))), message: null };
     case "LOAD":
-      return { state: ensureMarket(action.state), message: null };
+      return { state: ensureInfra(ensureMarket(action.state)), message: null };
   }
   if (!state) return { state, message: null };
-  const s = ensureMarket(state);
+  const s = ensureInfra(ensureMarket(state));
   const plain = (next: ManagerState): ManagerStep => ({ state: next, message: null });
   switch (action.type) {
     case "SET_TACTIC":     return plain(setTactic(s, action.tactic));
@@ -81,6 +90,11 @@ export function managerStep(state: ManagerState | null, action: ManagerAction): 
     case "SCOUT":          return fromResult(scoutPlayer(s, action.playerId));
     case "PROMOTE_YOUTH":  return fromResult(promoteYouth(s, action.youthId));
     case "RELEASE_YOUTH":  return plain(releaseYouth(s, action.youthId));
+    case "SET_TICKET_PRICE": return fromResult(setTicketPrice(s, action.price));
+    case "EXPAND_STADIUM":   return fromResult(expandStadium(s));
+    case "UPGRADE_FACILITY": return fromResult(upgradeFacility(s, action.facility));
+    case "HIRE_STAFF":       return fromResult(hireStaff(s, action.candidateId));
+    case "CHOOSE_SPONSOR":   return fromResult(chooseSponsor(s, action.offerId));
   }
 }
 

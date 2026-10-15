@@ -12,6 +12,8 @@ import type { WorldPlayer, WorldPlayerPosition } from "../data/worldPlayers";
 import type { WorldTransferRecord } from "../domain/worldState";
 import { FIRST_NAMES, LAST_NAMES } from "../domain/playerProgression";
 import { createRng, seedFromString } from "../utils/random";
+import { scoutCostFactor, youthIntakeSize, youthPotentialBonus } from "./clubMath";
+import { ensureInfra, seasonClub, weeklyClub } from "./club";
 import type {
   IncomingOffer, ManagerState, MarketState, PendingDeal, PlayerContract,
 } from "./types";
@@ -161,7 +163,7 @@ export function knownRating(s: ManagerState, p: WorldPlayer): KnownRating {
 }
 
 export function scoutCost(s: ManagerState): number {
-  return Math.round(getManagedClub(s).wagesBudget * 0.06 / 1000) * 1000;
+  return Math.round(getManagedClub(s).wagesBudget * 0.06 * scoutCostFactor(s.infra) / 1000) * 1000;
 }
 
 export function scoutPlayer(s: ManagerState, playerId: string): MarketResult {
@@ -495,9 +497,10 @@ const YOUTH_POSITIONS: WorldPlayerPosition[] = ["GK", "CB", "LB", "RB", "DM", "C
 export function generateYouthIntake(s: ManagerState): WorldPlayer[] {
   const club = getManagedClub(s);
   const rng = createRng(seedFromString(`${s.world.seed}-youth-${club.id}-s${s.world.season}`));
-  const n = 1 + club.academyLevel;
+  const n = youthIntakeSize(s.infra, club.academyLevel);
+  const bonus = youthPotentialBonus(s.infra, club.academyLevel);
   return Array.from({ length: n }, (_, i) => {
-    const potential = clamp(rng.int(58, 70) + club.academyLevel * 4, 55, 92);
+    const potential = clamp(rng.int(58, 70) + bonus, 55, 94);
     const overall = rng.int(42, Math.min(60, potential - 8));
     const age = rng.int(16, 18);
     const position = rng.pick(YOUTH_POSITIONS);
@@ -687,13 +690,13 @@ function seasonMarket(prev: ManagerState, s: ManagerState): ManagerState {
  * par l'interface (le reducer). Les prêtés sont protégés des transferts IA.
  */
 export function advanceWeek(s: ManagerState, live?: Parameters<typeof playWeek>[1]): ManagerState {
-  const start = ensureMarket(s);
+  const start = ensureInfra(ensureMarket(s));
   const season = start.world.season;
   let next = playWeek(start, live);
   if (next.status === "sacked") return next;
   next = keepLoaneesWhereLoaned(start, next);
-  if (next.world.season !== season) return seasonMarket(start, next);
-  return weeklyMarket(start, next);
+  if (next.world.season !== season) return seasonClub(start, seasonMarket(start, next));
+  return weeklyClub(start, weeklyMarket(start, next));
 }
 
 /** Un prêté reste dans son club de prêt même si l'IA du monde le déplace. */

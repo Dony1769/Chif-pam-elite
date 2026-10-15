@@ -18,6 +18,7 @@ import type {
   ManagerState, Tactic,
 } from "./types";
 import { MANAGER_SAVE_VERSION } from "./types";
+import { attendance, facilitiesUpkeep, initialCapacity, referencePrice, staffBill } from "./clubMath";
 import { aiTacticFor, autoPickLineup, FORMATIONS, isAvailable, validateLineup } from "./tactics";
 import { finishMatch, initMatch, postMatchEffects, simulateToEnd } from "./matchSim";
 import type { LiveMatch } from "./matchSim";
@@ -439,29 +440,55 @@ function weeklyRecovery(w: WorldLiveState): WorldLiveState {
 
 // ─── Finances de la semaine ──────────────────────────────────────────────────
 
-function weeklyFinances(s: ManagerState, homeMatch: boolean, managedWon: boolean | null): { finances: ClubFinances; entries: LedgerEntry[] } {
+interface WeekFinance {
+  finances: ClubFinances;
+  entries: LedgerEntry[];
+  attendance: { spectators: number; fill: number; revenue: number } | null;
+}
+
+function weeklyFinances(s: ManagerState, homeMatch: boolean, managedWon: boolean | null): WeekFinance {
   const club = getManagedClub(s);
   const rep = s.world.clubReputations[club.id] ?? club.reputation;
   const W = club.wagesBudget;
   const season = s.world.season, week = s.world.currentWeek;
   const squad = getSquad(s);
+  const infra = s.infra;
   // Salaire contractuel quand il existe (marché), sinon estimation
   const formula = weeklyWages(squad, club);
   const wages = squad.reduce((a, p) => a + (s.market?.contracts[p.id]?.wage ?? formula[p.id] ?? 0), 0);
   const entries: LedgerEntry[] = [];
+  let att: WeekFinance["attendance"] = null;
 
   if (homeMatch) {
     const pos = getLeaguePosition(s);
-    const fill = clamp(0.5 + rep / 220 + (managedWon ? 0.04 : 0) - (pos > 5 ? 0.05 : 0), 0.3, 1);
-    entries.push({ season, week, category: "tickets", amount: Math.round(W * 1.25 * fill), label: `Billetterie (${Math.round(fill * 100)} % de remplissage)` });
+    if (infra) {
+      const n = (s.world.standings[club.leagueId] ?? []).length || 8;
+      att = attendance({
+        capacity: infra.stadium.capacity, price: infra.stadium.ticketPrice,
+        refPrice: referencePrice(W, initialCapacity(club.reputation)),
+        reputation: rep, position: pos, leagueSize: n, lastWon: managedWon,
+      });
+      entries.push({ season, week, category: "tickets", amount: att.revenue, label: `Billetterie : ${att.spectators.toLocaleString("fr-FR")} spectateurs (${Math.round(att.fill * 100)} %)` });
+    } else {
+      const fill = clamp(0.5 + rep / 220 + (managedWon ? 0.04 : 0) - (pos > 5 ? 0.05 : 0), 0.3, 1);
+      entries.push({ season, week, category: "tickets", amount: Math.round(W * 1.25 * fill), label: `Billetterie (${Math.round(fill * 100)} % de remplissage)` });
+    }
   }
   entries.push({ season, week, category: "tv", amount: Math.round(W * (club.tier === 1 ? 0.55 : 0.32)), label: "Droits TV" });
-  entries.push({ season, week, category: "sponsor", amount: Math.round(W * 0.35 * (rep / 80)), label: "Sponsors" });
+  if (infra) {
+    if (infra.sponsor) {
+      entries.push({ season, week, category: "sponsor", amount: infra.sponsor.weekly, label: `Sponsor maillot : ${infra.sponsor.name}` });
+      if (managedWon && infra.sponsor.winBonus > 0) entries.push({ season, week, category: "sponsor", amount: infra.sponsor.winBonus, label: "Prime sponsor (victoire)" });
+    }
+    entries.push({ season, week, category: "sponsor", amount: Math.round(W * 0.08 * (rep / 80)), label: "Partenaires locaux" });
+  } else {
+    entries.push({ season, week, category: "sponsor", amount: Math.round(W * 0.35 * (rep / 80)), label: "Sponsors" });
+  }
   if (managedWon) entries.push({ season, week, category: "prize", amount: Math.round(W * 0.15), label: "Prime de victoire" });
   entries.push({ season, week, category: "wages", amount: -wages, label: "Salaires des joueurs" });
-  entries.push({ season, week, category: "staff", amount: -Math.round(W * 0.12), label: "Staff technique" });
-  entries.push({ season, week, category: "facilities", amount: -Math.round(W * 0.08), label: "Entretien des installations" });
-  return { finances: addLedger(s.finances, entries), entries };
+  entries.push({ season, week, category: "staff", amount: -(infra ? staffBill(infra) : Math.round(W * 0.12)), label: "Staff technique" });
+  entries.push({ season, week, category: "facilities", amount: -(infra ? facilitiesUpkeep(infra, W) : Math.round(W * 0.08)), label: "Entretien des installations" });
+  return { finances: addLedger(s.finances, entries), entries, attendance: att };
 }
 
 // ─── Conseil d'administration ────────────────────────────────────────────────
@@ -488,7 +515,8 @@ function boardMonthlyReview(s: ManagerState): { board: BoardState; message: Inbo
   const n = (s.world.standings[getManagedClub(s).leagueId] ?? []).length;
   const pos = getLeaguePosition(s);
   const max = objectiveMaxPosition(s.board.objective, n);
-  let d = pos <= max ? 3 : pos - max >= 3 ? -7 : -3;
+  // Une place d'écart : le conseil patiente ; trois ou plus : il s'alarme
+  let d = pos <= max ? 3 : pos - max === 1 ? 0 : pos - max >= 3 ? -7 : -3;
   if (s.finances.balance < 0) d -= 3;
   const board = { ...s.board, confidence: clamp(s.board.confidence + d, 0, 100) };
   const tone = d > 0 ? "Le conseil est satisfait de la trajectoire." : "Le conseil s'inquiète des résultats.";
@@ -605,7 +633,7 @@ export function playWeek(s: ManagerState, live?: LiveMatch | null): ManagerState
     state = { ...state, board: boardAfterMatch(state, report) };
   }
   const fin = weeklyFinances(state, !!report && report.managedSide === "home", won);
-  state = { ...state, finances: fin.finances };
+  state = { ...state, finances: fin.finances, infra: state.infra && fin.attendance ? { ...state.infra, lastAttendance: fin.attendance } : state.infra };
 
   const review = boardMonthlyReview(state);
   state = { ...state, board: review.board };
