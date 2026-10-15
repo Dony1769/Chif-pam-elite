@@ -27,6 +27,8 @@ export interface Club {
   academyLevel: number;
   /** Philosophie de jeu */
   philosophy: "attacking" | "balanced" | "defensive" | "possession" | "counter";
+  /** Capacité réelle du stade (monde CP) */
+  stadiumCapacity?: number;
 }
 
 export interface League {

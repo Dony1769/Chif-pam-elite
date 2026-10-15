@@ -5,6 +5,7 @@
  */
 
 import type { WorldPlayer } from "../data/worldPlayers";
+import { fullName } from "../utils/names";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ function buildRival(wp: WorldPlayer, relation: RivalRelation, season: number): P
   };
   return {
     worldPlayerId: wp.id,
-    name: `${wp.firstName} ${wp.lastName}`,
+    name: `${fullName(wp)}`,
     clubId: wp.clubId,
     position: wp.position,
     relation,

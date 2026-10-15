@@ -21,6 +21,9 @@ import {
   addLedger, autoLineup, clamp, formatMoney, getManagedClub, getLeagueSchedule, getSquad, isSeasonOver, msg,
   playWeek, pushInbox, squadStrength, weeklyWages,
 } from "./engine";
+import { inventPlayer } from "../data/cp/cpWorld";
+import { WINTER_WINDOW, transferWindow } from "../domain/calendar";
+import { fullName as displayName } from "../utils/names";
 
 export const SQUAD_MIN = 16;
 export const SQUAD_MAX = 28;
@@ -35,7 +38,7 @@ export interface MarketResult {
 const fail = (state: ManagerState, message: string): MarketResult => ({ ok: false, state, message });
 const done = (state: ManagerState, message: string): MarketResult => ({ ok: true, state, message });
 
-const fullName = (p: WorldPlayer) => `${p.firstName} ${p.lastName}`;
+const fullName = (p: WorldPlayer) => `${displayName(p)}`;
 const weekIndex = (s: ManagerState) => s.world.season * 100 + s.world.currentWeek;
 
 // ─── Initialisation ──────────────────────────────────────────────────────────
@@ -82,6 +85,8 @@ function withMarket(s: ManagerState, patch: Partial<MarketState>): ManagerState 
 
 /** Mercato ouvert : 3 premières journées, 2 journées à la mi-saison, et l'intersaison. */
 export function isWindowOpen(s: ManagerState): boolean {
+  // Monde CP : mercato d'été (juillet → 1er septembre) et d'hiver (janvier)
+  if (s.world.dataset === "cp") return transferWindow(s.world.currentWeek) !== null;
   const sch = getLeagueSchedule(s);
   if (!sch || isSeasonOver(s)) return true;
   const md = sch.currentMatchday;
@@ -90,6 +95,12 @@ export function isWindowOpen(s: ManagerState): boolean {
 }
 
 export function windowLabel(s: ManagerState): string {
+  if (s.world.dataset === "cp") {
+    const w = transferWindow(s.world.currentWeek);
+    if (w === "summer") return "Mercato d'été ouvert (jusqu'au 1er septembre)";
+    if (w === "winter") return "Mercato d'hiver ouvert (janvier)";
+    return s.world.currentWeek < WINTER_WINDOW[0] ? "Mercato fermé, réouverture en janvier" : "Mercato fermé, réouverture le 1er juillet";
+  }
   if (isWindowOpen(s)) return "Mercato ouvert";
   const sch = getLeagueSchedule(s)!;
   const mid = Math.floor(sch.totalMatchdays / 2);
@@ -136,7 +147,7 @@ export function playerWillingness(s: ManagerState, p: WorldPlayer): { willing: b
   const myRep = s.world.clubReputations[club.id] ?? club.reputation;
   const hisRep = s.world.clubReputations[p.clubId] ?? myRep;
   if (p.overall >= strength + 12 && myRep < hisRep - 8) {
-    return { willing: false, reason: `${fullName(p)} estime que ${club.name} n'est pas assez ambitieux pour lui.` };
+    return { willing: false, reason: `${displayName(p)} estime que ${club.name} n'est pas assez ambitieux pour lui.` };
   }
   return { willing: true, reason: "" };
 }
@@ -171,14 +182,14 @@ export function scoutPlayer(s: ManagerState, playerId: string): MarketResult {
   const m = market(s);
   const p = s.world.players.find(x => x.id === playerId);
   if (!p) return fail(s, "Joueur introuvable.");
-  if (p.clubId === s.clubId || m.scouted[playerId]) return fail(s, `${fullName(p)} est déjà connu de vos scouts.`);
-  if (m.scouting.some(a => a.playerId === playerId)) return fail(s, `Un scout observe déjà ${fullName(p)}.`);
+  if (p.clubId === s.clubId || m.scouted[playerId]) return fail(s, `${displayName(p)} est déjà connu de vos scouts.`);
+  if (m.scouting.some(a => a.playerId === playerId)) return fail(s, `Un scout observe déjà ${displayName(p)}.`);
   if (m.scouting.length >= 3) return fail(s, "Vos 3 scouts sont déjà en mission.");
   const cost = scoutCost(s);
   if (s.finances.balance < cost) return fail(s, "Trésorerie insuffisante pour envoyer un scout.");
-  const finances = addLedger(s.finances, [{ season: s.world.season, week: s.world.currentWeek, category: "staff", amount: -cost, label: `Mission de scouting : ${fullName(p)}` }]);
+  const finances = addLedger(s.finances, [{ season: s.world.season, week: s.world.currentWeek, category: "staff", amount: -cost, label: `Mission de scouting : ${displayName(p)}` }]);
   return done(withMarket({ ...s, finances }, { scouting: [...m.scouting, { playerId, readyAt: weekIndex(s) + 1 }] }),
-    `Un scout part observer ${fullName(p)}. Rapport la semaine prochaine.`);
+    `Un scout part observer ${displayName(p)}. Rapport la semaine prochaine.`);
 }
 
 // ─── Recherche ───────────────────────────────────────────────────────────────
@@ -246,7 +257,7 @@ export function makeBid(s: ManagerState, playerId: string, fee: number): MarketR
   if (fee >= asking) {
     const deal: PendingDeal = { playerId, fromClubId: p.clubId, fee, wageDemand: wageDemand(s, p), attemptsLeft: MAX_NEGOTIATION_ATTEMPTS };
     return { ...done(withMarket(s, { pendingDeals: [...m.pendingDeals, deal] }),
-      `${clubName(s, p.clubId)} accepte ${formatMoney(fee)} pour ${fullName(p)}. Il reste à convaincre le joueur.`), outcome: "accepted" };
+      `${clubName(s, p.clubId)} accepte ${formatMoney(fee)} pour ${displayName(p)}. Il reste à convaincre le joueur.`), outcome: "accepted" };
   }
   if (fee >= asking * 0.85) {
     return { ...fail(s, `${clubName(s, p.clubId)} fait une contre-offre : ${formatMoney(asking)}.`), outcome: "counter", counter: asking };
@@ -263,7 +274,7 @@ export function approachFreeAgent(s: ManagerState, playerId: string): MarketResu
   if (getSquad(s).length >= SQUAD_MAX) return fail(s, `Effectif complet (${SQUAD_MAX} joueurs).`);
   if (m.pendingDeals.some(d => d.playerId === playerId)) return fail(s, "Discussion déjà en cours : proposez-lui un contrat.");
   const deal: PendingDeal = { playerId, fromClubId: null, fee: 0, wageDemand: wageDemand(s, p), attemptsLeft: MAX_NEGOTIATION_ATTEMPTS };
-  return done(withMarket(s, { pendingDeals: [...m.pendingDeals, deal] }), `${fullName(p)} est ouvert à la discussion.`);
+  return done(withMarket(s, { pendingDeals: [...m.pendingDeals, deal] }), `${displayName(p)} est ouvert à la discussion.`);
 }
 
 /**
@@ -296,12 +307,12 @@ export function offerContract(s: ManagerState, playerId: string, wage: number, s
     const left = deal.attemptsLeft - 1;
     if (left <= 0) {
       return fail(withMarket(s, { pendingDeals: m.pendingDeals.filter(d => d.playerId !== playerId) }),
-        `${fullName(p)} met fin aux discussions.`);
+        `${displayName(p)} met fin aux discussions.`);
     }
     return fail(withMarket(s, { pendingDeals: m.pendingDeals.map(d => (d.playerId === playerId ? { ...d, attemptsLeft: left } : d)) }),
-      `${fullName(p)} refuse : il demande ${formatMoney(demand)} par semaine. Encore ${left} tentative(s).`);
+      `${displayName(p)} refuse : il demande ${formatMoney(demand)} par semaine. Encore ${left} tentative(s).`);
   }
-  return done(completeSigning(s, p, deal, wage, seasons), `${fullName(p)} signe pour ${seasons} saison(s) à ${formatMoney(wage)} par semaine.`);
+  return done(completeSigning(s, p, deal, wage, seasons), `${displayName(p)} signe pour ${seasons} saison(s) à ${formatMoney(wage)} par semaine.`);
 }
 
 function completeSigning(s: ManagerState, p: WorldPlayer, deal: PendingDeal, wage: number, seasons: number): ManagerState {
@@ -321,12 +332,12 @@ function completeSigning(s: ManagerState, p: WorldPlayer, deal: PendingDeal, wag
   const record: WorldTransferRecord = {
     id: `mgr-in-${p.id}-s${season}w${week}`, season, week, type: isFree ? "free" : "transfer",
     playerId: p.id, playerName: fullName(p), fromClubId: deal.fromClubId ?? "free", toClubId: club.id,
-    fee: deal.fee, salary: wage, description: `${fullName(p)} rejoint ${club.name}${deal.fee ? ` pour ${formatMoney(deal.fee)}` : " libre"}.`,
+    fee: deal.fee, salary: wage, description: `${displayName(p)} rejoint ${club.name}${deal.fee ? ` pour ${formatMoney(deal.fee)}` : " libre"}.`,
   };
   let finances = s.finances;
   if (deal.fee > 0) {
     finances = addLedger({ ...finances, transferBudget: finances.transferBudget - deal.fee }, [
-      { season, week, category: "transfer_out", amount: -deal.fee, label: `Achat : ${fullName(p)}` },
+      { season, week, category: "transfer_out", amount: -deal.fee, label: `Achat : ${displayName(p)}` },
     ]);
   }
   let next: ManagerState = {
@@ -340,7 +351,7 @@ function completeSigning(s: ManagerState, p: WorldPlayer, deal: PendingDeal, wag
       scouted: { ...m.scouted, [p.id]: true },
     },
   };
-  next = pushInbox(next, msg(next, "squad", `Signature : ${fullName(p)}`, record.description));
+  next = pushInbox(next, msg(next, "squad", `Signature : ${displayName(p)}`, record.description));
   return next;
 }
 
@@ -356,7 +367,7 @@ export function listForTransfer(s: ManagerState, playerId: string, price: number
   const p = getSquad(s).find(x => x.id === playerId);
   if (!p) return fail(s, "Ce joueur n'est pas dans votre effectif.");
   if (!(price >= 1_000)) return fail(s, "Prix trop bas (minimum 1 k€).");
-  return done(withMarket(s, { transferList: { ...market(s).transferList, [playerId]: price } }), `${fullName(p)} est sur la liste des transferts à ${formatMoney(price)}.`);
+  return done(withMarket(s, { transferList: { ...market(s).transferList, [playerId]: price } }), `${displayName(p)} est sur la liste des transferts à ${formatMoney(price)}.`);
 }
 
 export function unlist(s: ManagerState, playerId: string): ManagerState {
@@ -388,11 +399,11 @@ export function acceptOffer(s: ManagerState, offerId: string): MarketResult {
   delete transferList[p.id];
   // 75 % de la vente revient au budget transferts
   const finances = addLedger({ ...s.finances, transferBudget: s.finances.transferBudget + Math.round(o.fee * 0.75) }, [
-    { season, week, category: "transfer_in", amount: o.fee, label: `Vente : ${fullName(p)}` },
+    { season, week, category: "transfer_in", amount: o.fee, label: `Vente : ${displayName(p)}` },
   ]);
   const record: WorldTransferRecord = {
     id: `mgr-out-${p.id}-s${season}w${week}`, season, week, type: "transfer", playerId: p.id, playerName: fullName(p),
-    fromClubId: club.id, toClubId: buyer.id, fee: o.fee, salary: 0, description: `${fullName(p)} quitte ${club.name} pour ${buyer.name} (${formatMoney(o.fee)}).`,
+    fromClubId: club.id, toClubId: buyer.id, fee: o.fee, salary: 0, description: `${displayName(p)} quitte ${club.name} pour ${buyer.name} (${formatMoney(o.fee)}).`,
   };
   let next: ManagerState = {
     ...s, finances,
@@ -404,7 +415,7 @@ export function acceptOffer(s: ManagerState, offerId: string): MarketResult {
       captainId: s.lineup.captainId === p.id ? null : s.lineup.captainId,
     },
   };
-  next = pushInbox(next, msg(next, "squad", `Vente : ${fullName(p)}`, record.description));
+  next = pushInbox(next, msg(next, "squad", `Vente : ${displayName(p)}`, record.description));
   return done(next, record.description);
 }
 
@@ -426,14 +437,14 @@ export function releasePlayer(s: ManagerState, playerId: string): MarketResult {
   const contracts = { ...m.contracts };
   delete contracts[playerId];
   const freed = { ...p, clubId: "free", leagueId: "", contractWeeksLeft: 0 };
-  const finances = addLedger(s.finances, [{ season: s.world.season, week: s.world.currentWeek, category: "wages", amount: -payoff, label: `Indemnité de départ : ${fullName(p)}` }]);
+  const finances = addLedger(s.finances, [{ season: s.world.season, week: s.world.currentWeek, category: "wages", amount: -payoff, label: `Indemnité de départ : ${displayName(p)}` }]);
   const next: ManagerState = {
     ...s, finances,
     world: { ...s.world, players: s.world.players.filter(x => x.id !== playerId) },
     market: { ...m, contracts, freeAgents: [...m.freeAgents, freed], offers: m.offers.filter(o => o.playerId !== playerId) },
     lineup: { starters: s.lineup.starters.filter(id => id !== playerId), bench: s.lineup.bench.filter(id => id !== playerId), captainId: s.lineup.captainId === playerId ? null : s.lineup.captainId },
   };
-  return done(next, `${fullName(p)} est libéré (indemnité ${formatMoney(payoff)}).`);
+  return done(next, `${displayName(p)} est libéré (indemnité ${formatMoney(payoff)}).`);
 }
 
 // ─── Prêts ───────────────────────────────────────────────────────────────────
@@ -460,7 +471,7 @@ export function loanOut(s: ManagerState, playerId: string): MarketResult {
     market: { ...m, loansOut: [...m.loansOut, { playerId, toClubId: dest.id, untilSeason: s.world.season }], offers: m.offers.filter(o => o.playerId !== playerId) },
     lineup: { starters: s.lineup.starters.filter(id => id !== playerId), bench: s.lineup.bench.filter(id => id !== playerId), captainId: s.lineup.captainId === playerId ? null : s.lineup.captainId },
   };
-  return done(next, `${fullName(p)} est prêté à ${dest.name} jusqu'à la fin de la saison. Son salaire est pris en charge.`);
+  return done(next, `${displayName(p)} est prêté à ${dest.name} jusqu'à la fin de la saison. Son salaire est pris en charge.`);
 }
 
 // ─── Contrats ────────────────────────────────────────────────────────────────
@@ -484,9 +495,9 @@ export function renewContract(s: ManagerState, playerId: string, wage: number, s
   if (seasons < 1 || seasons > 5) return fail(s, "Durée de contrat : entre 1 et 5 saisons.");
   if (currentWageBill(s) - c.wage + wage > s.finances.wageBudget) return fail(s, "Ce salaire ferait dépasser la masse salariale autorisée.");
   const demand = renewalDemand(s, playerId);
-  if (wage < demand * 0.95) return fail(s, `${fullName(p)} veut au moins ${formatMoney(demand)} par semaine.`);
+  if (wage < demand * 0.95) return fail(s, `${displayName(p)} veut au moins ${formatMoney(demand)} par semaine.`);
   return done(withMarket(s, { contracts: { ...m.contracts, [playerId]: { wage, seasonsLeft: seasons } } }),
-    `${fullName(p)} prolonge de ${seasons} saison(s) à ${formatMoney(wage)} par semaine.`);
+    `${displayName(p)} prolonge de ${seasons} saison(s) à ${formatMoney(wage)} par semaine.`);
 }
 
 // ─── Centre de formation ─────────────────────────────────────────────────────
@@ -507,7 +518,7 @@ export function generateYouthIntake(s: ManagerState): WorldPlayer[] {
     return makePlayer(`youth-${club.id}-s${s.world.season}-${i}`, rng, {
       clubId: "academy", leagueId: "", countryId: club.countryId, age, position, overall, potential,
       personality: rng.chance(0.15) ? "prodigy" : "journeyman",
-    });
+    }, s.world.dataset);
   });
 }
 
@@ -525,7 +536,7 @@ export function promoteYouth(s: ManagerState, youthId: string): MarketResult {
     world: { ...s.world, players: [...s.world.players, p] },
     market: { ...m, youth: m.youth.filter(x => x.id !== youthId), contracts: { ...m.contracts, [p.id]: { wage, seasonsLeft: 3 } } },
   };
-  return done(next, `${fullName(p)} (${p.age} ans) signe son premier contrat professionnel.`);
+  return done(next, `${displayName(p)} (${p.age} ans) signe son premier contrat professionnel.`);
 }
 
 export function releaseYouth(s: ManagerState, youthId: string): ManagerState {
@@ -549,11 +560,15 @@ export function generateFreeAgents(s: ManagerState): WorldPlayer[] {
       clubId: "free", leagueId: "", countryId: club.countryId, age, position, overall,
       potential: overall + (age < 27 ? rng.int(0, 4) : 0),
       personality: age >= 31 ? "veteran" : "journeyman",
-    });
+    }, s.world.dataset);
   });
 }
 
-function makePlayer(id: string, rng: ReturnType<typeof createRng>, o: Pick<WorldPlayer, "clubId" | "leagueId" | "countryId" | "age" | "position" | "overall" | "potential" | "personality">): WorldPlayer {
+function makePlayer(id: string, rng: ReturnType<typeof createRng>, o: Pick<WorldPlayer, "clubId" | "leagueId" | "countryId" | "age" | "position" | "overall" | "potential" | "personality">, dataset?: "fictional" | "cp"): WorldPlayer {
+  if (dataset === "cp") {
+    const p = inventPlayer({ id, clubId: o.clubId, leagueId: o.leagueId, countryId: o.countryId, pos: o.position, ovr: o.overall, age: o.age, pot: o.potential, seed: `${id}-${rng.int(0, 1e9)}` });
+    return { ...p, personality: o.personality };
+  }
   const base = Math.pow(Math.max(0, o.overall - 50), 2.3) * 1200;
   const ageF = o.age <= 22 ? 1.6 : o.age <= 27 ? 1.2 : o.age <= 31 ? 0.9 : 0.5;
   return {
@@ -612,7 +627,7 @@ function weeklyMarket(prev: ManagerState, s: ManagerState): ManagerState {
     for (const a of ready) {
       scouted[a.playerId] = true;
       const p = s.world.players.find(x => x.id === a.playerId);
-      if (p) messages.push(msg(s, "squad", `Rapport de scout : ${fullName(p)}`,
+      if (p) messages.push(msg(s, "squad", `Rapport de scout : ${displayName(p)}`,
         `${p.age} ans, ${p.position}. Note ${p.overall}, potentiel ${p.potential}. Prix demandé : ${formatMoney(askingPrice(s, p))}, salaire souhaité : ${formatMoney(wageDemand(s, p))}/sem.`));
     }
     m = { ...m, scouted, scouting: m.scouting.filter(a => a.readyAt > now) };
@@ -624,7 +639,7 @@ function weeklyMarket(prev: ManagerState, s: ManagerState): ManagerState {
   const fresh = generateIncomingOffers({ ...s, market: m });
   for (const o of fresh) {
     const p = getSquad(s).find(x => x.id === o.playerId)!;
-    messages.push(msg(s, "finance", `Offre pour ${fullName(p)}`, `${clubName(s, o.fromClubId)} propose ${formatMoney(o.fee)}. Offre valable 2 semaines.`));
+    messages.push(msg(s, "finance", `Offre pour ${displayName(p)}`, `${clubName(s, o.fromClubId)} propose ${formatMoney(o.fee)}. Offre valable 2 semaines.`));
   }
   m = { ...m, offers: [...m.offers, ...fresh] };
 
@@ -648,7 +663,7 @@ function seasonMarket(prev: ManagerState, s: ManagerState): ManagerState {
   let players = s.world.players.map(p => (returning.some(l => l.playerId === p.id) ? { ...p, clubId: club.id, leagueId: club.leagueId } : p));
   for (const l of returning) {
     const p = players.find(x => x.id === l.playerId);
-    if (p) messages.push(msg(s, "squad", `Retour de prêt : ${fullName(p)}`, `${fullName(p)} revient de ${clubName(s, l.toClubId)}.`));
+    if (p) messages.push(msg(s, "squad", `Retour de prêt : ${displayName(p)}`, `${displayName(p)} revient de ${clubName(s, l.toClubId)}.`));
   }
 
   // Une saison de contrat en moins ; à 0, départ libre
@@ -660,14 +675,14 @@ function seasonMarket(prev: ManagerState, s: ManagerState): ManagerState {
     const left = c.seasonsLeft - 1;
     if (left < 0) { leaving.push(p); continue; }
     contracts[p.id] = { ...c, seasonsLeft: left };
-    if (left === 0) messages.push(msg(s, "squad", `Dernière année de contrat : ${fullName(p)}`, `Sans prolongation, ${fullName(p)} partira libre en fin de saison.`));
+    if (left === 0) messages.push(msg(s, "squad", `Dernière année de contrat : ${displayName(p)}`, `Sans prolongation, ${displayName(p)} partira libre en fin de saison.`));
   }
   // Les contrats des prêtés courent toujours
   for (const l of m.loansOut.filter(x => x.untilSeason >= s.world.season)) if (m.contracts[l.playerId]) contracts[l.playerId] = m.contracts[l.playerId];
   if (leaving.length) {
     const ids = new Set(leaving.map(p => p.id));
     players = players.filter(p => !ids.has(p.id));
-    for (const p of leaving) messages.push(msg(s, "squad", `Départ libre : ${fullName(p)}`, `${fullName(p)} arrive en fin de contrat et quitte le club.`));
+    for (const p of leaving) messages.push(msg(s, "squad", `Départ libre : ${displayName(p)}`, `${displayName(p)} arrive en fin de contrat et quitte le club.`));
   }
 
   // Les jeunes non promus vieillissent ; à 20 ans ils quittent le centre

@@ -233,15 +233,18 @@ export function computePromotionRelegation(
   finalStanding: StandingRow[],
   clubCount: number,
   rng: ReturnType<typeof createRng>,
+  /** Clubs échangés entre D1 et D2 (3 par défaut, 2 en Allemagne et en France) */
+  swap = 3,
 ): PromotionRelegationResult {
   const n = finalStanding.length;
   if (n < 6) return { leagueId, promoted: [], relegated: [] };
 
-  // Relégation : 3 derniers
-  const relegated = finalStanding.slice(n - 3).map(r => r.clubId);
+  // Relégation : les `swap` derniers
+  const relegated = finalStanding.slice(n - swap).map(r => r.clubId);
 
   // Promotion directe : champion et vice-champion
   const promoted: string[] = [finalStanding[0].clubId, finalStanding[1].clubId];
+  if (swap <= 2) return { leagueId, promoted: promoted.slice(0, swap), relegated };
 
   // Barrages : 3e et 4e (le 3e est légèrement favorisé)
   const playoff3 = finalStanding[2];

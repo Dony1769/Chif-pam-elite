@@ -18,10 +18,13 @@ import type {
   ManagerState, Tactic,
 } from "./types";
 import { MANAGER_SAVE_VERSION } from "./types";
+import { CP_CLUB_IDS } from "../data/cp/clubs";
+import { SEASON_WEEKS } from "../domain/calendar";
 import { attendance, facilitiesUpkeep, initialCapacity, referencePrice, staffBill } from "./clubMath";
 import { aiTacticFor, autoPickLineup, FORMATIONS, isAvailable, validateLineup } from "./tactics";
 import { finishMatch, initMatch, postMatchEffects, simulateToEnd } from "./matchSim";
 import type { LiveMatch } from "./matchSim";
+import { fullName } from "../utils/names";
 
 const LEDGER_MAX = 200;
 const INBOX_MAX = 80;
@@ -57,10 +60,33 @@ export function getLeaguePosition(s: ManagerState): number {
   return i < 0 ? rows.length : i + 1;
 }
 
-export function isSeasonOver(s: ManagerState): boolean {
+/** Championnat du club terminé (toutes les journées jouées). */
+export function isLeagueOver(s: ManagerState): boolean {
   const sch = getLeagueSchedule(s);
   return !sch || sch.currentMatchday > sch.totalMatchdays;
 }
+
+/**
+ * Saison terminée : monde fictif → dernière journée jouée ; monde CP → fin de
+ * l'année sportive (30 juin), le championnat finissant fin mai.
+ */
+export function isSeasonOver(s: ManagerState): boolean {
+  if (s.world.dataset === "cp") return s.world.currentWeek > SEASON_WEEKS;
+  return isLeagueOver(s);
+}
+
+/** Journées du championnat du club prévues cette semaine (monde CP : 0, 1 ou 2). */
+export function managedMatchdaysThisWeek(s: ManagerState): number[] {
+  const sch = getLeagueSchedule(s);
+  if (!sch || sch.currentMatchday > sch.totalMatchdays) return [];
+  if (!sch.weekOf) return [sch.currentMatchday];
+  const out: number[] = [];
+  for (let md = sch.currentMatchday; md <= sch.totalMatchdays && sch.weekOf[md - 1] <= s.world.currentWeek; md++) out.push(md);
+  return out;
+}
+
+/** Le club joue-t-il cette semaine ? */
+export const hasMatchThisWeek = (s: ManagerState) => managedMatchdaysThisWeek(s).length > 0;
 
 // ─── Salaires ────────────────────────────────────────────────────────────────
 
@@ -164,8 +190,9 @@ export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.mi
 
 // ─── Création de partie ──────────────────────────────────────────────────────
 
-export function createManagerGame(opts: { seed: string; clubId: string; managerName: string; now?: number }): ManagerState {
-  const world = generateWorld(opts.seed);
+export function createManagerGame(opts: { seed: string; clubId: string; managerName: string; now?: number; dataset?: "fictional" | "cp" }): ManagerState {
+  // Le monde se déduit du club choisi : clubs « CP » réels ou monde fictif d'origine
+  const world = generateWorld(opts.seed, opts.dataset ?? (CP_CLUB_IDS.has(opts.clubId) ? "cp" : "fictional"));
   const club = world.clubs.find(c => c.id === opts.clubId);
   if (!club) throw new Error(`Club inconnu : ${opts.clubId}`);
   const tactic: Tactic = { ...aiTacticFor(club.philosophy) };
@@ -261,7 +288,7 @@ export function lineupIssues(s: ManagerState) {
   for (const id of s.lineup.starters) {
     if (unavailable.includes(id)) {
       const p = getSquad(s).find(x => x.id === id)!;
-      issues.push({ kind: "injured", message: `${p.firstName} ${p.lastName} est suspendu.`, playerId: id });
+      issues.push({ kind: "injured", message: `${fullName(p)} est suspendu.`, playerId: id });
     }
   }
   return issues;
@@ -273,7 +300,7 @@ export function lineupIssues(s: ManagerState) {
 export function prepareMatch(s: ManagerState, opts: { autoSubs?: boolean } = {}): LiveMatch | null {
   const fx = getNextFixture(s);
   const sch = getLeagueSchedule(s);
-  if (!fx || !sch || fx.matchday !== sch.currentMatchday) return null;
+  if (!fx || !sch || fx.matchday !== sch.currentMatchday || !hasMatchThisWeek(s)) return null;
 
   const isHome = fx.homeClubId === s.clubId;
   const oppId = isHome ? fx.awayClubId : fx.homeClubId;
@@ -486,7 +513,7 @@ function weeklyFinances(s: ManagerState, homeMatch: boolean, managedWon: boolean
       const n = (s.world.standings[club.leagueId] ?? []).length || 8;
       att = attendance({
         capacity: infra.stadium.capacity, price: infra.stadium.ticketPrice,
-        refPrice: referencePrice(W, initialCapacity(club.reputation)),
+        refPrice: referencePrice(W, club.stadiumCapacity ?? initialCapacity(club.reputation)),
         reputation: rep, position: pos, leagueSize: n, lastWon: managedWon,
       });
       entries.push({ season, week, category: "tickets", amount: att.revenue, label: `Billetterie : ${att.spectators.toLocaleString("fr-FR")} spectateurs (${Math.round(att.fill * 100)} %)` });
@@ -619,17 +646,38 @@ export function playWeek(s: ManagerState, live?: LiveMatch | null): ManagerState
   // Un direct n'est retenu que s'il correspond au match de la semaine
   const expected = getNextFixture(s);
   const sch0 = getLeagueSchedule(s);
-  const liveValid = !!live && !!expected && live.fixtureId === expected.id && expected.matchday === sch0?.currentMatchday;
+  const liveValid = !!live && !!expected && live.fixtureId === expected.id && expected.matchday === sch0?.currentMatchday && hasMatchThisWeek(s);
   const match = liveValid ? live! : prepareMatch(s);
   const messages: InboxMessage[] = [];
 
+  const weekReports: ManagerMatchReport[] = [];
+  const mds = managedMatchdaysThisWeek(s);
   if (match) {
     // Les suspensions purgées cette semaine sont décomptées après le match
     const r = recordMatch(state, match);
     state = r.state;
     report = r.report;
+    weekReports.push(r.report);
   }
-  state = playLeagueMatchday(state);
+  if (mds.length) state = playLeagueMatchday(state);
+  // Monde CP : journée supplémentaire en semaine (mercredi), simulée
+  if (mds.length > 1) {
+    const leagueId = getManagedClub(state).leagueId;
+    const firstMd = getLeagueSchedule(state)!.currentMatchday;
+    for (const md of mds.slice(1)) {
+      const at = (st: ManagerState, n: number): ManagerState => ({ ...st, world: { ...st.world, schedules: { ...st.world.schedules, [leagueId]: { ...st.world.schedules[leagueId], currentMatchday: n } } } });
+      state = at(state, md);
+      const extra = prepareMatch(state);
+      if (extra) {
+        const r = recordMatch(state, extra);
+        state = r.state;
+        report = r.report;
+        weekReports.push(r.report);
+      }
+      state = at(playLeagueMatchday(state), firstMd);
+    }
+  }
+  state = { ...state, weekReports };
 
   // Suspensions : un match purgé par semaine de championnat
   const suspensions: Record<string, number> = {};
@@ -667,7 +715,7 @@ export function playWeek(s: ManagerState, live?: LiveMatch | null): ManagerState
   // Infirmerie
   for (const p of getSquad(state)) {
     if (p.injury && p.injury.weeksRemaining > 0 && report?.events.some(e => e.type === "injury" && e.playerId === p.id)) {
-      messages.push(msg(state, "squad", `Blessure : ${p.firstName} ${p.lastName}`, `Indisponible environ ${p.injury.weeksRemaining} semaine(s).`));
+      messages.push(msg(state, "squad", `Blessure : ${fullName(p)}`, `Indisponible environ ${p.injury.weeksRemaining} semaine(s).`));
     }
   }
   for (const n of adv.newsItems.slice(0, 2)) messages.push(msg(state, "news", "Actualité du monde", n));

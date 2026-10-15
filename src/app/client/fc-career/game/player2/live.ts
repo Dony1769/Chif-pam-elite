@@ -20,6 +20,7 @@ import type { SubAttrs, SubKey } from "./subAttributes";
 import { SUB_LABEL, subsFromFace } from "./subAttributes";
 import type { OptionId, PlayStyleState } from "./playstyles";
 import { optionAvailable, psBonus } from "./playstyles";
+import { shortName } from "../utils/names";
 
 export type MomentKind = "box" | "wing" | "build" | "long" | "defend" | "keeper"
   | "air" | "setpiece" | "penalty" | "keepercross" | "gkbuild";
@@ -342,7 +343,7 @@ export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive
         const scorer = opp.pitch.filter((p): p is NonNullable<typeof p> => !!p && p.position !== "GK");
         const s = scorer.length ? scorer[rng.int(0, scorer.length - 1)] : null;
         outcome = "conceded";
-        ev({ type: "goal", side: them, playerId: s?.id, text: `BUT ! ${s ? `${s.firstName.charAt(0)}. ${s.lastName}` : "L'adversaire"} marque pour ${opp.name}. ${score()}.` });
+        ev({ type: "goal", side: them, playerId: s?.id, text: `BUT ! ${s ? `${shortName(s)}` : "L'adversaire"} marque pour ${opp.name}. ${score()}.` });
         text = "L'adversaire en profite et marque.";
       } else {
         outcome = "lost";

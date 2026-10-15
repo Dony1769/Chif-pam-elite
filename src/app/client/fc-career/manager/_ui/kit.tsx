@@ -5,6 +5,7 @@
 import React from "react";
 import type { Club } from "../../game/domain/club";
 import type { WorldPlayer } from "../../game/data/worldPlayers";
+import { fullName, shortName } from "../../game/utils/names";
 
 /** Écusson aux couleurs du club (fictif, généré). */
 export function Crest({ club, size = 36 }: { club: Pick<Club, "shortName" | "colors"> | undefined; size?: number }) {
@@ -54,7 +55,7 @@ export function Meter({ value, tone = "auto", label }: { value: number; tone?: "
 }
 
 export function playerName(p: Pick<WorldPlayer, "firstName" | "lastName">, short = false) {
-  return short ? `${p.firstName.charAt(0)}. ${p.lastName}` : `${p.firstName} ${p.lastName}`;
+  return short ? `${shortName(p)}` : `${fullName(p)}`;
 }
 
 export function Section({ title, aside, children, className }: { title?: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {

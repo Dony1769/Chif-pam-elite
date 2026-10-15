@@ -14,6 +14,7 @@ import { formatMoney } from "../game/manager/engine";
 import { loadPlayerCareer } from "../game/player2/storage";
 import { POS_FR } from "../manager/_ui/kit";
 import { me as v2Me, myClub as v2Club } from "../game/player2/engine";
+import { fullName } from "../game/utils/names";
 
 interface PlayerSummary {
   name: string;
@@ -67,7 +68,7 @@ export default function ModesPage() {
       if (v2.ok) {
         const p = v2Me(v2.state);
         setPlayer({
-          name: `${v2.state.profile.firstName} ${v2.state.profile.lastName} · ${v2Club(v2.state).shortName}`,
+          name: `${fullName(v2.state.profile)} · ${v2Club(v2.state).shortName}`,
           position: POS_FR[v2.state.profile.position] ?? v2.state.profile.position, overall: p.overall, potential: v2.state.profile.potential,
           age: p.age, season: v2.state.shadow.world.season,
         });

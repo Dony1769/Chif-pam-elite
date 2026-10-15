@@ -5,6 +5,7 @@
 
 import type { WorldPlayer, WorldPlayerPosition } from "../data/worldPlayers";
 import type { FormationId, Lineup, Mentality, PlayStyle, SlotLine, Tactic } from "./types";
+import { fullName } from "../utils/names";
 
 export interface FormationSlot {
   /** Poste idéal */
@@ -143,7 +144,7 @@ export function validateLineup(lineup: Lineup, squad: WorldPlayer[], formation: 
   for (const id of lineup.starters) {
     const p = squad.find(x => x.id === id);
     if (!p) { issues.push({ kind: "unknown", message: "Un titulaire ne fait plus partie de l'effectif." }); continue; }
-    if (!isAvailable(p)) issues.push({ kind: "injured", message: `${p.firstName} ${p.lastName} est blessé.`, playerId: p.id });
+    if (!isAvailable(p)) issues.push({ kind: "injured", message: `${fullName(p)} est blessé.`, playerId: p.id });
   }
   return issues;
 }

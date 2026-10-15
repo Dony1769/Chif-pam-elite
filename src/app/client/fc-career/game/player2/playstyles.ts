@@ -170,7 +170,7 @@ export function unlockPlayStyles(ps: PlayStyleState, s: SubAttrs, isGk: boolean,
   const gained: { id: PsId; plus: boolean }[] = [];
   for (const def of PLAYSTYLES) {
     if (!!def.gk !== isGk) continue;
-    if (!owned.includes(def.id) && meets(s, def.req) && tracked(ps, def) >= def.uses[0]) {
+    if (!owned.includes(def.id) && owned.length < MAX_PS_OWNED && meets(s, def.req) && tracked(ps, def) >= def.uses[0]) {
       owned.push(def.id); gained.push({ id: def.id, plus: false });
     }
     if (owned.includes(def.id) && !plus.includes(def.id) && plus.length < MAX_PS_PLUS && overall >= 75
@@ -200,17 +200,29 @@ export function recordSuccess(ps: PlayStyleState, option: OptionId, n = 1): Play
   return { ...ps, progress: { ...ps.progress, [option]: (ps.progress[option] ?? 0) + n } };
 }
 
+/** Nombre de PlayStyles d'un joueur selon sa note (comme dans FC : 1 à 8). */
+export const psCountFor = (overall: number) => (overall >= 88 ? 8 : overall >= 85 ? 7 : overall >= 82 ? 6 : overall >= 78 ? 5 : overall >= 74 ? 4 : overall >= 70 ? 3 : overall >= 65 ? 2 : 1);
+export const MAX_PS_OWNED = 10;
+
+const margin = (s: SubAttrs, req: Partial<Record<SubKey, number>>) => {
+  const e = Object.entries(req) as [SubKey, number][];
+  return e.length ? Math.min(...e.map(([k, v]) => (s[k] ?? 0) - v)) : 0;
+};
+
 /**
- * PlayStyles d'un joueur du monde d'après son profil (vrais joueurs ou inventés) :
- * ceux dont il dépasse les seuils ; PS+ si les seuils + sont atteints (3 max).
+ * PlayStyles d'un joueur du monde d'après son profil : ceux dont il dépasse
+ * le plus nettement les seuils, en nombre limité selon sa note ; PS+ pour
+ * les meilleurs (seuils + atteints, note ≥ 80, 3 au maximum).
  */
 export function playStylesFor(s: SubAttrs, isGk: boolean, overall: number): PlayStyleState {
-  const owned: PsId[] = [];
-  const plus: PsId[] = [];
-  for (const def of PLAYSTYLES) {
-    if (!!def.gk !== isGk) continue;
-    if (meets(s, def.req)) owned.push(def.id);
-    if (meets(s, def.plusReq) && overall >= 80 && plus.length < MAX_PS_PLUS) plus.push(def.id);
-  }
+  const eligible = PLAYSTYLES.filter(d => !!d.gk === isGk && meets(s, d.req))
+    .map(d => ({ d, m: margin(s, d.req) }))
+    .sort((a, b) => b.m - a.m)
+    .slice(0, isGk ? Math.min(4, psCountFor(overall)) : psCountFor(overall));
+  const owned = eligible.map(x => x.d.id);
+  const plus = overall >= 80
+    ? eligible.filter(x => meets(s, x.d.plusReq)).sort((a, b) => margin(s, b.d.plusReq) - margin(s, a.d.plusReq))
+      .slice(0, overall >= 87 ? 3 : overall >= 84 ? 2 : 1).map(x => x.d.id)
+    : [];
   return { owned, plus, progress: {} };
 }

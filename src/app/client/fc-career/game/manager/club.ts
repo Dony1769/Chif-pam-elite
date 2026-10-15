@@ -17,6 +17,7 @@ import {
   expansionCost, extraRecovery, facilityUpgradeCost, fasterHealChance, initialCapacity, referencePrice,
   staffWage, trainingGainChance,
 } from "./clubMath";
+import { fullName } from "../utils/names";
 
 export interface ClubResult {
   ok: boolean;
@@ -38,8 +39,8 @@ export function ensureInfra(s: ManagerState): ManagerState {
   const base: ClubInfra = s.infra ?? {
     stadium: {
       name: `Stade de ${club.name.replace(/^(FC|AS|SC)\s+|\s+(FC|SC)$/g, "")}`,
-      capacity: initialCapacity(club.reputation),
-      ticketPrice: referencePrice(W, initialCapacity(club.reputation)),
+      capacity: club.stadiumCapacity ?? initialCapacity(club.reputation),
+      ticketPrice: referencePrice(W, club.stadiumCapacity ?? initialCapacity(club.reputation)),
     },
     facilities: {
       training: club.tier === 1 ? 3 : 2,
@@ -111,7 +112,7 @@ export function generateSponsorOffers(s: ManagerState): SponsorOffer[] {
 
 export function ticketPriceBounds(s: ManagerState): { min: number; max: number; ref: number } {
   const club = getManagedClub(s);
-  const ref = referencePrice(club.wagesBudget, initialCapacity(club.reputation));
+  const ref = referencePrice(club.wagesBudget, club.stadiumCapacity ?? initialCapacity(club.reputation));
   return { min: Math.max(1, Math.round(ref * 0.3)), max: ref * 4, ref };
 }
 
@@ -241,7 +242,7 @@ export function weeklyClub(before: ManagerState, after: ManagerState): ManagerSt
     }
     if (next.overall < next.potential && !next.injury && rng.chance(trainingGainChance(inf, p.age, played.has(p.id)))) {
       next = { ...next, overall: next.overall + 1, marketValue: Math.round(next.marketValue * 1.08 / 10_000) * 10_000 };
-      progressed.push(`${p.firstName} ${p.lastName} (${next.overall})`);
+      progressed.push(`${fullName(p)} (${next.overall})`);
     }
     return next;
   });

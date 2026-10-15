@@ -7,6 +7,11 @@
 
 import { COUNTRIES, LEAGUES, CLUBS } from "../data/world";
 import { getAllWorldPlayers } from "../data/worldPlayers";
+import { CP_CLUBS, CP_COUNTRIES, CP_LEAGUES } from "../data/cp/clubs";
+import { NATIONS } from "../data/cp/nations";
+import { buildCpPlayers, CP_SEASON_YEAR } from "../data/cp/cpWorld";
+import { buildLeagueWeeks } from "./calendar";
+import type { Club, League } from "./club";
 import { generateWorldCoach } from "./worldCoach";
 import { createClubDirectorAI } from "./clubAI";
 import { createRng, seedFromString } from "../utils/random";
@@ -109,10 +114,10 @@ export function buildInitialStandings(clubIds: string[]): StandingRow[] {
 
 // ─── Génération des coachs de tout le monde ───────────────────────────────────
 
-function generateAllCoaches(seed: string, season: number): WorldCoach[] {
+function generateAllCoaches(seed: string, season: number, clubs: Club[] = CLUBS): WorldCoach[] {
   const coaches: WorldCoach[] = [];
 
-  for (const club of CLUBS) {
+  for (const club of clubs) {
     // Coach équipe première
     coaches.push(generateWorldCoach(
       club.id,
@@ -153,15 +158,15 @@ function generateAllCoaches(seed: string, season: number): WorldCoach[] {
 
 // ─── Génération des directeurs de club ───────────────────────────────────────
 
-function generateAllDirectors(seed: string): Record<string, import("./clubAI").ClubDirectorAI> {
+function generateAllDirectors(seed: string, clubs: Club[] = CLUBS, leagues: League[] = LEAGUES): Record<string, import("./clubAI").ClubDirectorAI> {
   const directors: Record<string, import("./clubAI").ClubDirectorAI> = {};
   const leagueSizes: Record<string, number> = {};
 
-  for (const league of LEAGUES) {
+  for (const league of leagues) {
     leagueSizes[league.id] = league.clubCount;
   }
 
-  for (const club of CLUBS) {
+  for (const club of clubs) {
     const leagueSize = leagueSizes[club.leagueId] ?? 8;
     directors[club.id] = createClubDirectorAI(
       club,
@@ -179,34 +184,39 @@ function generateAllDirectors(seed: string): Record<string, import("./clubAI").C
  * Génère le monde complet au démarrage d'une carrière.
  * Reproductible : le même seed produit toujours le même monde.
  */
-export function generateWorld(careerId: string): WorldLiveState {
+export type WorldDataset = "fictional" | "cp";
+
+/** Monde CP : chaque journée reçoit sa semaine du calendrier réel. */
+function withWeeks(sch: LeagueSchedule, league: League, cp: boolean): LeagueSchedule {
+  return cp ? { ...sch, weekOf: buildLeagueWeeks(sch.totalMatchdays, league.tier, league.countryId) } : sch;
+}
+
+export function generateWorld(careerId: string, dataset: WorldDataset = "fictional"): WorldLiveState {
   const seed = `fc-world-${careerId}`;
   const world = createEmptyWorldLiveState(seed);
+  const cp = dataset === "cp";
+  const clubs: Club[] = cp ? CP_CLUBS : CLUBS;
+  const leagues: League[] = cp ? CP_LEAGUES : LEAGUES;
 
-  world.countries = COUNTRIES;
-  world.leagues = LEAGUES;
-  world.clubs = CLUBS;
+  // Monde CP : les 5 pays des ligues + toutes les sélections nationales
+  world.countries = cp
+    ? [...CP_COUNTRIES, ...NATIONS.map(n => ({ id: n.id, name: n.name, code: n.id, flag: n.flag }))]
+    : COUNTRIES;
+  world.leagues = leagues;
+  world.clubs = clubs;
   world.season = 1;
   world.currentWeek = 1;
+  world.dataset = dataset;
+  if (cp) world.startYear = CP_SEASON_YEAR;
 
-  // Réputations initiales
-  for (const club of CLUBS) {
-    world.clubReputations[club.id] = club.reputation;
-  }
+  for (const club of clubs) world.clubReputations[club.id] = club.reputation;
+  world.clubDirectors = generateAllDirectors(seed, clubs, leagues);
+  world.players = cp ? buildCpPlayers(seed) : getAllWorldPlayers();
+  world.coaches = generateAllCoaches(seed, 1, clubs);
 
-  // Générer les directeurs
-  world.clubDirectors = generateAllDirectors(seed);
-
-  // Générer les joueurs monde
-  world.players = getAllWorldPlayers();
-
-  // Générer les coachs
-  world.coaches = generateAllCoaches(seed, 1);
-
-  // Générer les calendriers pour toutes les ligues
-  for (const league of LEAGUES) {
-    const clubIds = CLUBS.filter(c => c.leagueId === league.id).map(c => c.id);
-    world.schedules[league.id] = generateLeagueSchedule(league.id, clubIds, 1, seed);
+  for (const league of leagues) {
+    const clubIds = clubs.filter(c => c.leagueId === league.id).map(c => c.id);
+    world.schedules[league.id] = withWeeks(generateLeagueSchedule(league.id, clubIds, 1, seed), league, cp);
     world.standings[league.id] = buildInitialStandings(clubIds);
   }
 
@@ -230,7 +240,13 @@ export function advanceWorldSeason(
   seed: string,
 ): WorldLiveState {
   const nextSeason = world.season + 1;
-  const newWorld = { ...world, season: nextSeason, currentWeek: 1 };
+  // Historique borné : les statistiques des 3 dernières saisons, les résultats de la saison écoulée
+  // (sinon la sauvegarde et chaque semaine de simulation s'alourdissent d'année en année)
+  const newWorld = {
+    ...world, season: nextSeason, currentWeek: 1,
+    playerStats: world.playerStats.filter(x => x.season >= nextSeason - 3),
+    matchResults: world.matchResults.filter(r => (r as { season?: number }).season === undefined || (r as { season?: number }).season! >= world.season),
+  };
 
   // Appliquer promotions/relégations : swap des clubs entre divisions
   const newClubs = applyPromotionRelegation(world.clubs, world.leagues, promotionResults);
@@ -242,7 +258,7 @@ export function advanceWorldSeason(
 
   for (const league of world.leagues) {
     const clubIds = newClubs.filter(c => c.leagueId === league.id).map(c => c.id);
-    newSchedules[league.id] = generateLeagueSchedule(league.id, clubIds, nextSeason, seed);
+    newSchedules[league.id] = withWeeks(generateLeagueSchedule(league.id, clubIds, nextSeason, seed), league, world.dataset === "cp");
     newStandings[league.id] = buildInitialStandings(clubIds);
   }
 

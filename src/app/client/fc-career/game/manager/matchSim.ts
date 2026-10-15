@@ -14,6 +14,7 @@ import type { ManagerMatchReport, MatchEvent, Tactic } from "./types";
 import {
   FORMATIONS, computeTeamRatings, effectiveRating, styleMatchup, tacticalProfile,
 } from "./tactics";
+import { shortName } from "../utils/names";
 
 export const MAX_SUBS = 5;
 
@@ -93,7 +94,7 @@ export function initMatch(input: {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const name = (p: WorldPlayer) => `${p.firstName.charAt(0)}. ${p.lastName}`;
+const name = (p: WorldPlayer) => `${shortName(p)}`;
 
 /** Copie de travail : la minute modifie une copie, jamais l'état reçu. */
 function cloneTeam(t: LiveTeam): LiveTeam {

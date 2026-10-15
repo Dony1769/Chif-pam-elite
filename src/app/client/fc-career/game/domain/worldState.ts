@@ -48,6 +48,8 @@ export interface LeagueSchedule {
   fixtures: Fixture[];
   currentMatchday: number;
   totalMatchdays: number;
+  /** Monde CP : semaine (1-52) de chaque journée ; absente = une journée par semaine */
+  weekOf?: number[];
 }
 
 /** Transfert monde enregistré */
@@ -134,6 +136,11 @@ export interface WorldLiveState {
 
   /** Marqueur de "monde initialisé" */
   initialized: boolean;
+
+  /** Monde fictif d'origine ou monde CP (vrais pays, ligues, clubs) */
+  dataset?: "fictional" | "cp";
+  /** Monde CP : année civile du début de la saison 1 (2026 → saison 2026-27) */
+  startYear?: number;
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────

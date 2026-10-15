@@ -11,6 +11,7 @@ import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
 import { SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
 import { getLeaguePosition } from "../game/manager/engine";
 import { ROLE_LABEL } from "../game/player2/career";
+import { shortName } from "../game/utils/names";
 
 export default function PlayerHome() {
   const { state, run } = usePlayerGame();
@@ -31,7 +32,7 @@ export default function PlayerHome() {
       <div className="mg-col-8 mg-stack">
         <Section className="mg-card--accent">
           <div className="pc-hero">
-            <PlayerCard name={`${state.profile.firstName.charAt(0)}. ${state.profile.lastName}`} overall={p.overall} position={state.profile.position}
+            <PlayerCard name={`${shortName(state.profile)}`} overall={p.overall} position={state.profile.position}
               attrs={state.profile.attrs} club={club} potential={state.profile.potential} />
             <div className="pc-hero__info">
               <span className="mg-small">Cette semaine</span>

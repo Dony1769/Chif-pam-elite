@@ -6,7 +6,7 @@ import {
   ALL_SUBS, OUTFIELD_SUBS, faceOf, overallFromSubs, subsForTarget, subsFromFace, shiftSubs,
 } from "../../player2/subAttributes";
 import {
-  PLAYSTYLES, emptyPlayStyles, psBonus, optionAvailable, unlockPlayStyles, playStylesFor, MAX_PS_PLUS,
+  PLAYSTYLES, emptyPlayStyles, psBonus, optionAvailable, unlockPlayStyles, playStylesFor, MAX_PS_PLUS, MAX_PS_OWNED, psCountFor,
 } from "../../player2/playstyles";
 import {
   createPlayerCareer, starterClubs, coachDecision, me, mutateSubs, preparePlayerMatch, profileOverall,
@@ -134,7 +134,7 @@ describe("PlayStyles", () => {
     const progress = Object.fromEntries(["shoot", "pass", "dribble", "cross", "through", "longshot", "tackle", "intercept", "contain", "header", "aerial"].map(k => [k, 200]));
     const r = unlockPlayStyles({ ...emptyPlayStyles(), progress }, sub, false, 90);
     expect(r.ps.plus.length).toBe(MAX_PS_PLUS);
-    expect(r.ps.owned.length).toBeGreaterThan(10);
+    expect(r.ps.owned.length).toBe(MAX_PS_OWNED);
     expect(r.ps.owned.every(id => !PLAYSTYLES.find(p => p.id === id)!.gk)).toBe(true);
   });
 
@@ -178,8 +178,10 @@ describe("PlayStyles", () => {
   test("joueurs du monde : PlayStyles selon leur profil", () => {
     const sub = subsFromFace({ pac: 97, sho: 90, pas: 80, dri: 92, def: 36, phy: 76 }, "ST", "mbp");
     const ps = playStylesFor(sub, false, 91);
-    expect(ps.owned).toContain("rapid");
-    expect(ps.owned).toContain("quick_step");
+    expect(ps.owned.length).toBe(psCountFor(91));
+    expect(ps.owned.some(id => id === "rapid" || id === "quick_step")).toBe(true);
+    expect(ps.plus.length).toBeGreaterThanOrEqual(1);
+    expect(playStylesFor(subsFromFace({ pac: 66, sho: 60, pas: 64, dri: 64, def: 62, phy: 66 }, "CM", "avg"), false, 64).owned.length).toBeLessThanOrEqual(1);
   });
 });
 

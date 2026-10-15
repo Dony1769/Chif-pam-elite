@@ -11,6 +11,7 @@ import {
   isSeasonOver, lineupIssues, objectiveMaxPosition,
 } from "../game/manager/engine";
 import { currentWageBill, windowLabel } from "../game/manager/market";
+import { shortName } from "../game/utils/names";
 
 export default function ManagerHub() {
   const { state, run } = useGame();
@@ -80,7 +81,7 @@ export default function ManagerHub() {
             <p className="mg-small" style={{ marginTop: 8 }}>
               {last.events.filter(e => e.type === "goal").map(e => {
                 const p = state.world.players.find(x => x.id === e.playerId);
-                return `${p ? `${p.firstName.charAt(0)}. ${p.lastName}` : "?"} ${e.minute}'`;
+                return `${p ? `${shortName(p)}` : "?"} ${e.minute}'`;
               }).join(" · ") || "Aucun but."}
             </p>
           </Section>

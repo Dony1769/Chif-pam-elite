@@ -7,6 +7,7 @@
 import type { Club } from "./club";
 import type { WorldPlayer } from "../data/worldPlayers";
 import { createRng, seedFromString } from "../utils/random";
+import { fullName as displayName } from "../utils/names";
 
 /* ── Résultat de simulation de transferts monde ─────────────────── */
 
@@ -67,7 +68,7 @@ export function ageWorldPlayers(
       // Chance de retraite
       const retireChance = (newAge - 35) * 0.15;
       if (rng.chance(retireChance)) {
-        const fullName = `${p.firstName} ${p.lastName}`;
+        const fullName = `${displayName(p)}`;
         events.push({
           type: "retirement",
           playerId: p.id,
@@ -133,7 +134,7 @@ export function simulateWorldTransfers(
       updated[idx] = { ...updated[idx], clubId: toClub.id };
     }
 
-    const pFullName = `${player.firstName} ${player.lastName}`;
+    const pFullName = `${displayName(player)}`;
     events.push({
       type,
       playerId: player.id,
@@ -155,7 +156,7 @@ export function simulateWorldTransfers(
   const breakoutCount = Math.min(3, Math.floor(youngTalents.length * 0.15));
   const breakouts = youngTalents.sort(() => rng.float(-1, 1)).slice(0, breakoutCount);
   for (const talent of breakouts) {
-    const tFullName = `${talent.firstName} ${talent.lastName}`;
+    const tFullName = `${displayName(talent)}`;
     events.push({
       type: "youth_breakout",
       playerId: talent.id,

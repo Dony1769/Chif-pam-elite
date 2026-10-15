@@ -6,7 +6,7 @@
  */
 
 import type { WorldPlayer, WorldPlayerPosition } from "../data/worldPlayers";
-import type { InboxKind, InboxMessage, ManagerState } from "../manager/types";
+import type { InboxKind, InboxMessage, ManagerMatchReport, ManagerState } from "../manager/types";
 import {
   createManagerGame, getManagedClub, getNextFixture, getLeagueSchedule, playWeek, prepareMatch, squadStrength,
 } from "../manager/engine";
@@ -22,10 +22,12 @@ import {
 import type { OptionId } from "./playstyles";
 import { PS_BY_ID, emptyPlayStyles, unlockPlayStyles } from "./playstyles";
 import { simulateRest, startPlayerLive } from "./live";
+import { playerValue } from "../domain/playerValue";
 import type {
   Foot, PlayerCareerState, PlayerMatchSummary, PlayerProfile, SeasonLine, Selection, SquadRole, TrainingFocus,
 } from "./types";
 import { PLAYER2_SAVE_VERSION } from "./types";
+import { fullName, shortName } from "../utils/names";
 
 const INBOX_MAX = 80;
 const POS_LABEL: Record<WorldPlayerPosition, string> = {
@@ -84,8 +86,14 @@ export const profileOverall = (p: Pick<PlayerProfile, "sub" | "position">) => ov
  * Complète un profil créé avant les sous-attributs (sauvegardes antérieures) :
  * sous-attributs déduits des 6 caractéristiques, pied faible, gestes, PlayStyles.
  */
-export function upgradeProfile(s: PlayerCareerState): PlayerCareerState {
+export function upgradeProfile(s0: PlayerCareerState): PlayerCareerState {
+  let s = s0;
   const p = s.profile as PlayerProfile & Partial<Pick<PlayerProfile, "sub" | "subXp" | "weakFoot" | "skillMoves" | "specialXp" | "playStyles">>;
+  const wp = s.shadow.world.players.find(x => x.id === p.id);
+  if (wp && !wp.birthDay && s.shadow.world.dataset === "cp") {
+    const players = s.shadow.world.players.map(x => (x.id === p.id ? { ...x, birthDay: (seedFromString(p.id) % 365) + 1 } : x));
+    s = { ...s, shadow: { ...s.shadow, world: { ...s.shadow.world, players } } };
+  }
   if (p.sub && p.playStyles && p.specialXp && p.subXp && p.weakFoot) return s;
   const old = p.trainingFocus as string;
   const focus: TrainingFocus = (ATTR_KEYS as string[]).includes(old) ? `group:${old as AttrKey}` : (p.trainingFocus ?? keySubs(p.position)[0]);
@@ -132,8 +140,8 @@ export interface NewCareerInput {
 }
 
 /** Clubs proposés à un jeune de 17 ans : les plus modestes de chaque pays (D2). */
-export function starterClubs(seed: string): { id: string; name: string; leagueId: string; reputation: number }[] {
-  const sh = createManagerGame({ seed, clubId: "vlt-fc-meridian", managerName: "IA" });
+export function starterClubs(seed: string, dataset: "fictional" | "cp" = "fictional"): { id: string; name: string; leagueId: string; reputation: number }[] {
+  const sh = createManagerGame({ seed, clubId: dataset === "cp" ? "eng-ars" : "vlt-fc-meridian", managerName: "IA", dataset });
   return sh.world.clubs.filter(c => c.tier >= 2).map(c => ({ id: c.id, name: c.name, leagueId: c.leagueId, reputation: c.reputation }));
 }
 
@@ -152,10 +160,10 @@ export function createPlayerCareer(i: NewCareerInput): PlayerCareerState {
   const wp: WorldPlayer = {
     id, clubId: club.id, leagueId: club.leagueId, countryId: club.countryId,
     firstName: i.firstName.trim() || "Joueur", lastName: i.lastName.trim() || "Inconnu", nationality: i.nationality,
-    age: 17, position: i.position, overall: overallFromSubs(sub, i.position), potential, protected: true,
+    age: 17, position: i.position, overall: overallFromSubs(sub, i.position), potential, protected: true, birthDay: rng.int(1, 365),
     personality: "prodigy", traits: [], form: 60, fatigue: 0, morale: 75, injury: null,
     careerGoals: 0, careerAssists: 0, careerAppearances: 0, seasonStats: [],
-    marketValue: 150_000, contractWeeksLeft: 3 * 52,
+    marketValue: playerValue(shadow0.world.dataset, overallFromSubs(sub, i.position), 17, potential), contractWeeksLeft: 3 * 52,
   };
   const shadow: ManagerState = {
     ...shadow0,
@@ -184,7 +192,7 @@ export function createPlayerCareer(i: NewCareerInput): PlayerCareerState {
   };
   const withSel = coachDecision(syncWorldPlayer(base));
   return pushPlayerInbox(withSel, pmsg(withSel, "welcome", `Premier contrat pro à ${club.name}`,
-    `${wp.firstName} ${wp.lastName}, ${POS_LABEL[i.position]}, 17 ans. Contrat de 3 saisons. Le coach vous voit comme un espoir : gagnez votre place à l'entraînement et sur le terrain.`));
+    `${fullName(wp)}, ${POS_LABEL[i.position]}, 17 ans. Contrat de 3 saisons. Le coach vous voit comme un espoir : gagnez votre place à l'entraînement et sur le terrain.`));
 }
 
 // ─── Décision du coach ───────────────────────────────────────────────────────
@@ -331,9 +339,7 @@ export function preparePlayerMatch(s: PlayerCareerState): LiveMatch | null {
   return prepareMatch(decided.shadow, { autoSubs: true });
 }
 
-function summarize(s: PlayerCareerState, before: ManagerState, after: ManagerState): PlayerMatchSummary | null {
-  const report = after.lastMatch;
-  if (!report || report === before.lastMatch) return null;
+function summarize(s: PlayerCareerState, report: ManagerMatchReport): PlayerMatchSummary {
   const id = s.profile.id;
   const rating = report.ratings[id] ?? null;
   const goals = report.events.filter(e => e.type === "goal" && e.playerId === id).length;
@@ -357,7 +363,7 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
     const m = preparePlayerMatch(s);
     if (m) {
       const pl = simulateRest(startPlayerLive(m, {
-        id: s.profile.id, name: `${s.profile.firstName.charAt(0)}. ${s.profile.lastName}`, attrs: s.profile.attrs, position: s.profile.position,
+        id: s.profile.id, name: `${shortName(s.profile)}`, attrs: s.profile.attrs, position: s.profile.position,
         sub: s.profile.sub, ps: s.profile.playStyles, weakFoot: s.profile.weakFoot, skillMoves: s.profile.skillMoves,
       }));
       live = pl.match;
@@ -371,12 +377,14 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
   const after = playWeek(pinned, live);
   s = { ...s, shadow: { ...after, board: { ...after.board, confidence: 80 }, status: "active" } };
 
-  const sum = summarize(s, before, after);
+  const reports = after.weekReports ?? (after.lastMatch && after.lastMatch !== before.lastMatch ? [after.lastMatch] : []);
   const messages: InboxMessage[] = [];
-  if (sum) {
-    s = applyMatch(s, sum, messages);
-  } else if (getLeagueSchedule(before) && !getNextFixture(before)) {
-    // Intersaison : pas de match
+  let sum: PlayerMatchSummary | null = null;
+  for (const [k, report] of reports.entries()) {
+    // Le match en semaine (2e de la semaine) : le joueur y figure s'il a été aligné
+    const one = summarize(s, report);
+    s = applyMatch(s, one, messages);
+    if (k === 0 || (one.played && !sum?.played)) sum = one;
   }
 
   // Entraînement de la semaine

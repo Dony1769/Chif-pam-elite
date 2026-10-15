@@ -84,7 +84,9 @@ export function migrateLegacy(raw: unknown, now = Date.now()): PlayerCareerState
   const attrs = faceOf(sub, position);
 
   // Club : celui du contrat v1 s'il existe dans le monde, sinon un club de D2 accessible
-  const probe = createManagerGame({ seed, clubId: "vlt-fc-meridian", managerName: "IA", now });
+  // Club v1 du monde fictif : on garde ce monde ; sinon, le monde CP réel
+  const dataset = sum.clubId.startsWith("vlt-") || sum.clubId.startsWith("cor-") || sum.clubId.startsWith("sol-") || sum.clubId.startsWith("nor-") ? "fictional" : "cp";
+  const probe = createManagerGame({ seed, clubId: dataset === "cp" ? "eng-ars" : "vlt-fc-meridian", managerName: "IA", now, dataset });
   const known = probe.world.clubs.find(c => c.id === sum.clubId);
   const ovr = overallFromSubs(sub, position);
   const fallback = [...probe.world.clubs].filter(c => c.tier >= 2)

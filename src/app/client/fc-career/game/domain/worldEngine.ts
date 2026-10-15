@@ -18,11 +18,15 @@ import {
 import { evaluateClubSeason } from "./clubAI";
 import { simulateWorldTransfers } from "./worldTransfers";
 import { generateYouthPlayer, progressWorldPlayers } from "./playerProgression";
+import { inventPlayer } from "../data/cp/cpWorld";
+import { playerValue } from "./playerValue";
+import { weekDays } from "./calendar";
 import { advanceWorldSeason, buildInitialStandings, generateLeagueSchedule } from "./worldGenerator";
 import { computePromotionRelegation } from "./worldSimulator";
 import { createRng, seedFromString } from "../utils/random";
 import type { WorldPlayer } from "../data/worldPlayers";
 import { generateId } from "../utils/ids";
+import { fullName } from "../utils/names";
 
 // ─── Type de retour ───────────────────────────────────────────────────────────
 
@@ -53,11 +57,15 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
 
   // ── 1. Simuler les matchs de la journée dans chaque ligue ──────────────────
   for (const league of current.leagues) {
+   // Monde CP : toutes les journées prévues cette semaine (0, 1 ou 2) ; sinon une par semaine
+   const first = current.schedules[league.id];
+   if (!first) continue;
+   const days: number[] = [];
+   if (first.weekOf) {
+     for (let md = first.currentMatchday; md <= first.totalMatchdays && first.weekOf[md - 1] <= current.currentWeek; md++) days.push(md);
+   } else if (first.currentMatchday <= first.totalMatchdays) days.push(first.currentMatchday);
+   for (const matchday of days) {
     const schedule = current.schedules[league.id];
-    if (!schedule) continue;
-
-    const matchday = schedule.currentMatchday;
-    if (matchday > schedule.totalMatchdays) continue;
 
     const output = simulateMatchday({
       leagueId:   league.id,
@@ -137,6 +145,7 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
     }
     current = { ...current, playerStats: updatedPlayerStats };
   }
+   }
 
   // ── 2. Stocker les résultats récents (20 max) ─────────────────────────────
   current = {
@@ -145,6 +154,12 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
     recentResults: [...weekResults, ...current.recentResults].slice(0, 20),
     currentWeek:   current.currentWeek + 1,
   };
+
+  // Monde CP : anniversaires de la semaine (l'âge ne dépend plus de la fin de saison)
+  if (current.dataset === "cp" && current.startYear) {
+    const days = new Set(weekDays(current.startYear + current.season - 1, current.currentWeek - 1));
+    current = { ...current, players: current.players.map(p => (p.birthDay && p.clubId !== "retired" && days.has(p.birthDay) ? { ...p, age: p.age + 1 } : p)) };
+  }
 
   // ── 3. Évaluation des coachs (chaque 4 semaines) ──────────────────────────
   if (current.currentWeek % 4 === 0) {
@@ -190,12 +205,12 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
             week:        current.currentWeek,
             clubId:      coach.clubId!,
             outCoachId:  coach.id,
-            outCoachName:`${coach.firstName} ${coach.lastName}`,
+            outCoachName:`${fullName(coach)}`,
             inCoachId:   "",
             inCoachName: "Poste vacant",
             reason:      "resigned",
           });
-          newsItems.push(`${coach.firstName} ${coach.lastName} démissionne.`);
+          newsItems.push(`${fullName(coach)} démissionne.`);
           continue;
         }
 
@@ -234,12 +249,12 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
                 week:        current.currentWeek,
                 clubId:      coach.clubId!,
                 outCoachId:  coach.id,
-                outCoachName:`${coach.firstName} ${coach.lastName}`,
+                outCoachName:`${fullName(coach)}`,
                 inCoachId:   replacement.id,
-                inCoachName: `${replacement.firstName} ${replacement.lastName}`,
+                inCoachName: `${fullName(replacement)}`,
                 reason:      "fired",
               });
-              newsItems.push(`${coach.firstName} ${coach.lastName} limogé, ${replacement.firstName} ${replacement.lastName} nommé.`);
+              newsItems.push(`${fullName(coach)} limogé, ${fullName(replacement)} nommé.`);
             }
           }
         }
@@ -286,7 +301,8 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
     if (standing.length < 4) continue;
 
     // Top 2 promus (si ligue D2), bottom 3 relégués (si ligue D1)
-    const result = computePromotionRelegation(league.id, standing, standing.length, rng);
+    const swap = (league as { swap?: number }).swap ?? 3;
+    const result = computePromotionRelegation(league.id, standing, standing.length, rng, swap);
     promotionResults.push({
       leagueId: league.id,
       promoted:  result.promoted,
@@ -313,7 +329,7 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
   // retraités marqués par ageWorldPlayers restaient dans leur club (effectifs qui
   // gonflaient, niveau du monde +2 points par saison).
   const { updated: progressedPlayers, events: progressionEvents } = progressWorldPlayers(
-    current.players, current.season, endSeed);
+    current.players, current.season, endSeed, current.dataset === "cp");
   for (const ev of progressionEvents.filter(e => e.type === "retirement").slice(0, 3)) {
     newsItems.push(ev.description);
   }
@@ -365,7 +381,7 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
       const evaluation = evaluateClubSeason(club, director, position, totalClubs, coach);
 
       if (evaluation.actions.includes("renew_coach")) {
-        newsItems.push(`${club.shortName} renouvelle le contrat de ${coach.firstName} ${coach.lastName}.`);
+        newsItems.push(`${club.shortName} renouvelle le contrat de ${fullName(coach)}.`);
       }
     }
   }
@@ -373,7 +389,9 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
   // ── 5. Avancer la saison (régénère calendriers, standings) ───────────────
   current = {
     ...current,
-    players:         topUpSquads(transferredPlayers, current.clubs, current.season, rng),
+    // Valeurs marchandes recalculées après progression et vieillissement
+    players:         topUpSquads(transferredPlayers, current.clubs, current.season, rng)
+      .map(p => (p.clubId === "retired" ? p : { ...p, marketValue: playerValue(current.dataset, p.overall, p.age, p.potential) })),
     transferHistory: [...current.transferHistory, ...newTransfers],
   };
 
@@ -430,6 +448,14 @@ export function topUpSquads(
     while (missing-- > 0) {
       const counts = (pos: string) => out.filter(p => p.clubId === club.id && p.position === pos).length;
       const pos = TOPUP_POSITIONS.find(p => counts(p) === 0) ?? (counts("GK") < 2 ? "GK" : TOPUP_POSITIONS[(k++ % (TOPUP_POSITIONS.length - 1)) + 1]);
+      if (players.some(p => p.face)) {
+        // Monde CP : jeune du centre inventé à la nationalité du pays
+        out.push(inventPlayer({
+          id: `yt-${club.id}-s${season}-${missing}-${k}`, clubId: club.id, leagueId: club.leagueId, countryId: club.countryId,
+          pos, ovr: rng.int(50, 60), age: rng.int(17, 19), pot: rng.int(65, 82), seed: `topup-${club.id}-${season}-${missing}-${k}`,
+        }));
+        continue;
+      }
       const y = generateYouthPlayer(pos, club.id, season, rng);
       out.push({ ...y, leagueId: club.leagueId, countryId: club.countryId });
     }

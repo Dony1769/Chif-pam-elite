@@ -17,6 +17,7 @@ import type { MomentOption } from "../../game/player2/live";
 import { finishMatch } from "../../game/manager/matchSim";
 import { attrLabel } from "../../game/player2/attributes";
 import type { PlayerCareerState } from "../../game/player2/types";
+import { shortName } from "../../game/utils/names";
 
 const SPEEDS = [{ label: "Normal", ms: 260 }, { label: "Rapide", ms: 60 }];
 const ICON: Record<string, string> = { goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
@@ -39,7 +40,7 @@ export default function PlayerMatchPage() {
     preparedFor.current = state;
     const m = preparePlayerMatch(state);
     setLive(m ? startPlayerLive(m, {
-      id: state.profile.id, name: `${state.profile.firstName.charAt(0)}. ${state.profile.lastName}`, attrs: state.profile.attrs, position: state.profile.position,
+      id: state.profile.id, name: `${shortName(state.profile)}`, attrs: state.profile.attrs, position: state.profile.position,
       sub: state.profile.sub, ps: state.profile.playStyles, weakFoot: state.profile.weakFoot, skillMoves: state.profile.skillMoves,
     }) : null);
   }, [state, fx, live, setLive, eligible]);

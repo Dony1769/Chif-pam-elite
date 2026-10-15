@@ -11,6 +11,8 @@ import { isWindowOpen } from "../manager/market";
 import { aiTacticFor, autoPickLineup } from "../manager/tactics";
 import type { LiveMatch } from "../manager/matchSim";
 import { createRng, seedFromString } from "../utils/random";
+import { playerValue } from "../domain/playerValue";
+import { isInternationalBreak } from "../domain/calendar";
 import type { OptionId } from "./playstyles";
 import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } from "./types";
 import {
@@ -51,11 +53,8 @@ const withCareer = (s: PlayerCareerState, patch: Partial<CareerExtras>) => ({ ..
 /** Valeur marchande (même formule que les joueurs du monde) majorée par la réputation. */
 export function marketValue(s: PlayerCareerState): number {
   const p = me(s);
-  const base = Math.pow(Math.max(0, p.overall - 50), 2.3) * 1200;
-  const ageF = p.age <= 22 ? 1.6 : p.age <= 27 ? 1.2 : p.age <= 31 ? 0.9 : 0.5;
-  const potF = p.potential - p.overall >= 8 ? 1.3 : 1;
   const repF = 1 + s.profile.reputation / 200;
-  return Math.max(50_000, Math.round((base * ageF * potF * repF) / 10_000) * 10_000);
+  return Math.max(50_000, Math.round((playerValue(s.shadow.world.dataset, p.overall, p.age, p.potential) * repF) / 10_000) * 10_000);
 }
 
 /** Salaire qu'un club peut proposer : part de sa masse salariale selon le rôle. */
@@ -133,11 +132,11 @@ export function generateOffers(s: PlayerCareerState): ClubOffer[] {
 
   // Prêts : un joueur peu utilisé intéresse des clubs plus modestes
   const line = s.seasons.find(l => l.season === s.shadow.world.season);
-  const unused = (line?.apps ?? 0) <= Math.max(1, Math.floor((s.shadow.world.currentWeek - 1) / 3));
+  const unused = (line?.apps ?? 0) <= Math.max(1, Math.floor(gamesSoFar(s) / 3));
   // Plus il reste sans jouer, plus les clubs modestes se manifestent
-  const idleWeeks = Math.max(0, s.shadow.world.currentWeek - 1 - (line?.apps ?? 0) * 3);
+  const idleWeeks = Math.max(0, gamesSoFar(s) - (line?.apps ?? 0) * 3);
   const loanChance = Math.min(0.9, (askMore ? 0.6 : 0.3) + idleWeeks * 0.08);
-  if (!free && !C(s).loan && unused && s.shadow.world.currentWeek >= 2 && rng.chance(loanChance)) {
+  if (!free && !C(s).loan && unused && gamesSoFar(s) >= 1 && rng.chance(loanChance)) {
     const lower = pool.filter(c => squadStrength(s.shadow.world, c.id) <= ovr + 1 && squadStrength(s.shadow.world, c.id) >= ovr - 10)
       .sort((a, b) => squadStrength(s.shadow.world, b.id) - squadStrength(s.shadow.world, a.id));
     // Un prêt n'a de sens que là où le joueur sera titulaire à son poste
@@ -258,7 +257,11 @@ export function nationalRank(s: PlayerCareerState): number {
 }
 
 /** Trêve internationale toutes les 5 semaines de championnat. */
-const isInternationalWeek = (s: PlayerCareerState) => s.shadow.world.currentWeek % 5 === 0;
+const isInternationalWeek = (s: PlayerCareerState) => (s.shadow.world.dataset === "cp"
+  ? isInternationalBreak(s.shadow.world.currentWeek)
+  : s.shadow.world.currentWeek % 5 === 0);
+/** Journées de championnat déjà disputées par le club cette saison. */
+const gamesSoFar = (s: PlayerCareerState) => Math.max(0, (s.shadow.world.schedules[myClub(s).leagueId]?.currentMatchday ?? 1) - 1);
 
 function nationalWindow(s: PlayerCareerState): PlayerCareerState {
   const nat = C(s).national;
@@ -384,7 +387,7 @@ export function simulateCareerSeason(s0: PlayerCareerState, autoAccept = true, m
     s = advancePlayerWeek(s);
     // Comme un vrai joueur : après une demi-saison sans jouer, il demande à partir
     const line = s.seasons.find(l => l.season === s.shadow.world.season);
-    if (autoAccept && s.shadow.world.currentWeek === 7 && (line?.apps ?? 0) === 0 && !C(s).loan) s = requestTransfer(s, true).state;
+    if (autoAccept && gamesSoFar(s) >= 6 && (line?.apps ?? 0) === 0 && !C(s).loan && !C(s).transferRequested) s = requestTransfer(s, true).state;
     if (autoAccept && C(s).offers.length) {
       const cur = myClub(s);
       const best = [...C(s).offers].sort((a, b) => (s.shadow.world.clubs.find(c => c.id === b.clubId)!.reputation - s.shadow.world.clubs.find(c => c.id === a.clubId)!.reputation))[0];

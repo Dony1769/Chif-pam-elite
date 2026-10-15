@@ -6,6 +6,7 @@
 
 import type { Career } from "./career";
 import type { Player } from "./player";
+import { fullName as displayName } from "../utils/names";
 
 /* ── Records de carrière ─────────────────────────────────────────── */
 
@@ -314,7 +315,7 @@ export function computeCareerLegacy(
   const reputationScore = computeLegacyScore(stats, trophies, peakOverall, seasonsPlayed, peakPhase);
   const tier = legacyTierFromScore(reputationScore, seasonsPlayed);
 
-  const fullName = `${player.firstName} ${player.lastName}`;
+  const fullName = `${displayName(player)}`;
   const narrativeSummary = generateNarrativeSummary(
     fullName, stats, trophies, tier, peakOverall, seasonsPlayed, null
   );

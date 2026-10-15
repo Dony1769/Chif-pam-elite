@@ -253,6 +253,8 @@ export interface ManagerState {
   board: BoardState;
   inbox: InboxMessage[];
   lastMatch: ManagerMatchReport | null;
+  /** Matchs du club joués pendant la dernière semaine (monde CP : 2 en cas de match en semaine) */
+  weekReports?: ManagerMatchReport[];
   history: ManagerSeasonRecord[];
   createdAt: number;
   savedAt: number;

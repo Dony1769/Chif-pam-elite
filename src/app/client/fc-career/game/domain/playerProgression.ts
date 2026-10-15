@@ -8,9 +8,11 @@
  * Déterministe : même seed → même résultat.
  */
 
+import { regenFrom } from "../data/cp/cpWorld";
 import type { WorldPlayer } from "../data/worldPlayers";
 import { createRng, seedFromString } from "../utils/random";
 import { generateId } from "../utils/ids";
+import { fullName } from "../utils/names";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +109,7 @@ export function progressWorldPlayers(
   const updated: WorldPlayer[] = [];
   const events: ProgressionEvent[] = [];
   const retirees: string[] = [];
+  const retiredPlayers: WorldPlayer[] = [];
 
   for (const player of players) {
     // Un retraité reste archivé tel quel : il ne vieillit plus, ne reprend pas
@@ -123,11 +126,12 @@ export function progressWorldPlayers(
       events.push({
         type: "retirement",
         playerId: aged.id,
-        playerName: `${aged.firstName} ${aged.lastName}`,
-        description: `${aged.firstName} ${aged.lastName} prend sa retraite à ${aged.age} ans.`,
+        playerName: `${fullName(aged)}`,
+        description: `${fullName(aged)} prend sa retraite à ${aged.age} ans.`,
         ovralDelta: 0,
       });
       // Retirer du club (sans supprimer — archivé avec clubId "retired")
+      retiredPlayers.push(aged);
       updated.push({ ...aged, clubId: "retired" });
       continue;
     }
@@ -139,31 +143,36 @@ export function progressWorldPlayers(
     const ceiling = delta > 0 ? Math.max(aged.overall, aged.potential ?? 99) : 99;
     const newOverall = Math.min(ceiling, Math.max(40, aged.overall + delta));
 
-    const progressed: WorldPlayer = { ...aged, overall: newOverall };
+    // Monde CP : la carte suit la note (les caractéristiques fortes bougent le plus)
+    const d = newOverall - aged.overall;
+    const face = aged.face && d !== 0
+      ? Object.fromEntries(Object.entries(aged.face).map(([k, v]) => [k, Math.max(15, Math.min(99, v + (v >= aged.overall - 12 ? d : Math.round(d / 2))))])) as NonNullable<WorldPlayer["face"]>
+      : aged.face;
+    const progressed: WorldPlayer = { ...aged, overall: newOverall, face };
 
     // Événement notable
     if (delta >= 3) {
       events.push({
         type: "breakout",
         playerId: progressed.id,
-        playerName: `${progressed.firstName} ${progressed.lastName}`,
-        description: `${progressed.firstName} ${progressed.lastName} progresse fortement (+${delta} OVR).`,
+        playerName: `${fullName(progressed)}`,
+        description: `${fullName(progressed)} progresse fortement (+${delta} OVR).`,
         ovralDelta: delta,
       });
     } else if (delta <= -3) {
       events.push({
         type: "decline",
         playerId: progressed.id,
-        playerName: `${progressed.firstName} ${progressed.lastName}`,
-        description: `${progressed.firstName} ${progressed.lastName} décline (${delta} OVR).`,
+        playerName: `${fullName(progressed)}`,
+        description: `${fullName(progressed)} décline (${delta} OVR).`,
         ovralDelta: delta,
       });
     } else if (delta >= 2) {
       events.push({
         type: "growth",
         playerId: progressed.id,
-        playerName: `${progressed.firstName} ${progressed.lastName}`,
-        description: `${progressed.firstName} ${progressed.lastName} progresse (+${delta} OVR).`,
+        playerName: `${fullName(progressed)}`,
+        description: `${fullName(progressed)} progresse (+${delta} OVR).`,
         ovralDelta: delta,
       });
     }
@@ -176,6 +185,19 @@ export function progressWorldPlayers(
   const clubIds = [...new Set(players.filter(p => p.clubId && p.clubId !== "retired").map(p => p.clubId!))];
 
   for (let i = 0; i < retirees.length; i++) {
+    const old = retiredPlayers[i];
+    // Monde CP : régénéré (même nationalité, poste et profil) au club du retraité
+    if (old?.face) {
+      const clubId = old.clubId && old.clubId !== "free" ? old.clubId : clubIds[i % clubIds.length];
+      const youth = regenFrom(old, clubId, old.leagueId, (old.leagueId ?? "eng-1").split("-")[0], season);
+      newYouth.push(youth);
+      events.push({
+        type: "new_youth", playerId: youth.id, playerName: fullName(youth),
+        description: `${fullName(youth)} (${youth.position}, ${youth.age} ans), régénéré de ${fullName(old)}, rejoint le centre de formation.`,
+        ovralDelta: 0,
+      });
+      continue;
+    }
     const pos = YOUTH_POSITIONS[i % YOUTH_POSITIONS.length];
     const clubId = clubIds[i % clubIds.length] ?? "free";
     const youth = generateYouthPlayer(pos, clubId, season, rng);
@@ -183,8 +205,8 @@ export function progressWorldPlayers(
     events.push({
       type: "new_youth",
       playerId: youth.id,
-      playerName: `${youth.firstName} ${youth.lastName}`,
-      description: `${youth.firstName} ${youth.lastName} (${pos}, ${youth.age} ans) rejoint ${clubId}.`,
+      playerName: `${fullName(youth)}`,
+      description: `${fullName(youth)} (${pos}, ${youth.age} ans) rejoint ${clubId}.`,
       ovralDelta: 0,
     });
   }

@@ -13,6 +13,7 @@ import type { SubKey } from "../../game/player2/subAttributes";
 import { PLAYSTYLES, psProgress } from "../../game/player2/playstyles";
 import { avgRating, focusLabel, me, myClub, profileOverall, specialXpNeeded, xpNeeded } from "../../game/player2/engine";
 import type { TrainingFocus } from "../../game/player2/types";
+import { shortName } from "../../game/utils/names";
 
 const GK_GROUPS: Record<AttrKey, SubKey[]> = {
   pac: ["gkDiving"], sho: ["gkHandling"], pas: ["gkKicking"], dri: ["gkReflexes"], def: ["gkPositioning"], phy: ["acceleration", "sprintSpeed"],
@@ -42,7 +43,7 @@ export default function ProgressionPage() {
       <div className="mg-col-4 mg-stack">
         <Section>
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <PlayerCard name={`${pr.firstName.charAt(0)}. ${pr.lastName}`} overall={p.overall} position={pos}
+            <PlayerCard name={`${shortName(pr)}`} overall={p.overall} position={pos}
               attrs={pr.attrs} club={myClub(state)} potential={pr.potential} />
           </div>
           <dl className="mg-dl" style={{ marginTop: 14 }}>
