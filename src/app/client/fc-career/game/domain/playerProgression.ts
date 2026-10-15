@@ -99,6 +99,8 @@ export function progressWorldPlayers(
   players: WorldPlayer[],
   season: number,
   seed: string,
+  /** true quand ageWorldPlayers a déjà ajouté l'année (évite le double vieillissement) */
+  ageAlreadyApplied = false,
 ): ProgressionResult {
   const rng = createRng(seedFromString(`${seed}-progress-s${season}`));
 
@@ -108,7 +110,7 @@ export function progressWorldPlayers(
 
   for (const player of players) {
     // Vieillir
-    const aged: WorldPlayer = { ...player, age: player.age + 1 };
+    const aged: WorldPlayer = ageAlreadyApplied ? player : { ...player, age: player.age + 1 };
 
     // Retraite ?
     if (rng.chance(retirementChance(aged.age))) {

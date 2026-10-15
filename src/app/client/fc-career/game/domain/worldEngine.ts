@@ -317,8 +317,7 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
 
   // ── 2b. Progression / Déclin / Génération jeunes ─────────────────────────
   const { updated: progressedPlayers, events: progressionEvents } = progressWorldPlayers(
-    agedPlayers, current.season, endSeed
-  );
+    agedPlayers, current.season, endSeed, true);
   for (const ev of progressionEvents.filter(e => e.type === "breakout").slice(0, 3)) {
     newsItems.push(ev.description);
   }

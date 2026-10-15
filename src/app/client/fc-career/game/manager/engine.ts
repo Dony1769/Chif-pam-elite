@@ -386,9 +386,14 @@ function recordMatch(s: ManagerState, live: LiveMatch): { state: ManagerState; r
     }
     if (involvesManaged && p.clubId === s.clubId) {
       const rating = report.ratings[p.id];
+      const played = rating !== undefined;
       const moraleDelta = starterIds.has(p.id) ? outcome * 4 : -2;          // les non-alignés râlent un peu
-      const formDelta = rating !== undefined ? (rating - 6.5) * 6 : -1;
-      next = { ...next, morale: clamp(next.morale + moraleDelta, 5, 100), form: clamp(Math.round(next.form + formDelta), 5, 100) };
+      const formDelta = played ? (rating - 6.5) * 6 : -1;
+      // Sans jouer, forme et moral baissent mais gardent un plancher : un
+      // remplaçant doit pouvoir regagner sa place (sinon spirale sans retour)
+      const morale = played ? clamp(next.morale + moraleDelta, 5, 100) : Math.max(Math.min(next.morale, 35), next.morale + moraleDelta);
+      const form = played ? clamp(Math.round(next.form + formDelta), 5, 100) : Math.max(Math.min(next.form, 45), Math.round(next.form + formDelta));
+      next = { ...next, morale, form };
     }
     return next;
   });
