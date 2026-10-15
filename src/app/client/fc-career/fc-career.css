@@ -17,7 +17,34 @@
 .fcl .fcl-dialog-close{position:absolute;top:12px;right:12px}
 @keyframes fcl-fade{from{opacity:0}to{opacity:1}}
 .fcl{
- --background: oklch(.145 .005 260); --foreground: oklch(.95 .006 260); --card: oklch(.185 .006 260); --secondary: oklch(.23 .008 260); --accent: oklch(.27 .012 260); --muted-foreground: oklch(.62 .015 260); --primary: oklch(.91 .19 112); --primary-foreground: oklch(.18 .02 112); --border: oklch(.29 .009 260); --blue: oklch(.73 .13 246); --coral: oklch(.73 .16 28); --ice: oklch(.8 .055 210); --overlay: oklch(.08 0 0 / .85); --sidebar-bg: oklch(.12 .004 260); --photo-shade: linear-gradient(180deg, transparent 15%, oklch(.1 .006 260 / .12) 45%, oklch(.1 .006 260 / .96) 100%); --stadium-shade: linear-gradient(180deg, oklch(.13 .012 250 / .8), oklch(.13 .006 250 / .97)); --motion: cubic-bezier(.22,1,.36,1); --radius: 6px;
+ /* ── Football President DNA — bleu nuit profond + or prestige ── */
+ --background: #05081a;
+ --foreground: oklch(.92 .008 250);
+ --card: #0d1128;
+ --secondary: #141830;
+ --accent: #1c2240;
+ --muted-foreground: oklch(.55 .025 250);
+ --primary: oklch(.91 .19 112);
+ --primary-foreground: oklch(.12 .01 260);
+ --border: rgba(100,130,200,0.13);
+ --blue: oklch(.73 .13 246);
+ --coral: oklch(.73 .16 28);
+ --ice: oklch(.8 .055 210);
+ --overlay: oklch(.04 0 0 / .88);
+ --sidebar-bg: #020510;
+ --photo-shade: linear-gradient(180deg, transparent 15%, oklch(.06 .01 250 / .2) 45%, oklch(.05 .01 250 / .97) 100%);
+ --stadium-shade: linear-gradient(180deg, oklch(.07 .018 250 / .8), oklch(.06 .012 250 / .97));
+ --motion: cubic-bezier(.22,1,.36,1);
+ --radius: 6px;
+ /* ── Or prestige (FP signature) ─── */
+ --gold: #c9a227;
+ --gold-lt: #e8c84a;
+ --gold-glow: 0 0 24px rgba(201,162,39,.22);
+ --gold-10: rgba(201,162,39,.10);
+ --gold-20: rgba(201,162,39,.20);
+ /* ── Tokens glass FP ─── */
+ --glass-bg-fp: rgba(5,8,26,.75);
+ --glass-border-fp: rgba(100,130,200,.18);
 }
 .fcl *{ border-color: var(--border); }
 .fcl{ margin:0; background:var(--background); color:var(--foreground); font-family:'Manrope',sans-serif; font-size:13px; letter-spacing:0; }
@@ -737,4 +764,161 @@
 .fcl .endorsement-pill strong{ font-size: 11px; }
 .fcl .endorsement-pill span{ color: var(--muted-foreground); font-size: 8px; }
 
+/* ============================================================
+   FOOTBALL PRESIDENT DESIGN DNA — Ambiance Bleu Nuit + Or
+   Inspiré de footballpresident.fr : prestige, sombre, football
+   ============================================================ */
+
+/* Fond vivant FP — gradient bleu nuit avec halo or */
+.fcl .fp-living-bg{
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 40% at 20% 15%, rgba(30,45,100,.45), transparent),
+    radial-gradient(ellipse 40% 50% at 80% 80%, rgba(10,20,60,.5), transparent),
+    radial-gradient(ellipse 25% 30% at 50% 50%, rgba(201,162,39,.04), transparent),
+    #05081a;
+}
+
+/* Bandeau défilant style FP (ticker de sections) */
+.fcl .fp-ticker{
+  display: flex; gap: 0; overflow: hidden;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 8px 0; font-size: 9px; color: var(--muted-foreground);
+  letter-spacing: .06em; font-weight: 600;
+  background: rgba(5,8,26,.9);
+}
+.fcl .fp-ticker-inner{
+  display: flex; gap: 28px; animation: fp-ticker 30s linear infinite; white-space: nowrap;
+}
+@keyframes fp-ticker{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
+.fcl .fp-ticker-sep{ color: var(--gold); }
+
+/* Carte prestige — or sur bleu nuit (récompenses, trophées) */
+.fcl .fp-prestige-card{
+  background: linear-gradient(135deg, rgba(13,17,40,.95) 0%, rgba(30,25,10,.5) 100%);
+  border: 1px solid rgba(201,162,39,.30);
+  border-radius: 9px;
+  box-shadow: 0 0 28px rgba(201,162,39,.08), 0 8px 32px rgba(0,0,0,.5);
+  position: relative; overflow: hidden;
+}
+.fcl .fp-prestige-card::before{
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,162,39,.5), transparent);
+}
+
+/* Badge or prestige (awards, trophées) */
+.fcl .fp-gold-badge{
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--gold-10); border: 1px solid rgba(201,162,39,.35);
+  color: var(--gold-lt); font-size: 9px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px; letter-spacing: .03em;
+}
+
+/* Stat hero FP — grand nombre avec halo or */
+.fcl .fp-stat-hero{
+  font-family: 'Barlow', sans-serif; font-weight: 800;
+  font-size: clamp(36px, 6vw, 56px); line-height: 1;
+  letter-spacing: -0.03em; color: var(--foreground);
+}
+.fcl .fp-stat-hero.gold{ color: var(--gold-lt); }
+
+/* Icônes unicode style FP */
+.fcl .fp-icon{ color: var(--gold); font-style: normal; }
+.fcl .fp-icon.green{ color: var(--primary); }
+.fcl .fp-icon.blue{ color: var(--blue); }
+.fcl .fp-icon.coral{ color: var(--coral); }
+
+/* Ligne de section FP — titre + losange doré */
+.fcl .fp-section-label{
+  display: flex; align-items: center; gap: 7px;
+  font-size: 9px; font-weight: 700; letter-spacing: .06em;
+  color: var(--gold); text-transform: uppercase; margin-bottom: 14px;
+}
+.fcl .fp-section-label::before{ content: '✦'; font-style: normal; }
+
+/* Carte chiffres clés FP (comme leur landing 7 clubs / 396 matchs) */
+.fcl .fp-kpi-card{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.fcl .fp-kpi-card strong{ font: 700 28px/1 'Barlow',sans-serif; color: var(--foreground); }
+.fcl .fp-kpi-card span{ font-size: 9px; color: var(--muted-foreground); font-weight: 600; letter-spacing: .03em; }
+
+/* Nav style FP — indicateur doré pour actif */
+.fcl .nav-item.selected.fp-gold-active{
+  color: var(--gold-lt);
+  background: color-mix(in oklab, var(--gold) 8%, transparent);
+}
+.fcl .nav-item.selected.fp-gold-active .nav-dot{ background: var(--gold); }
+
+/* Bouton prestige or */
+.fcl .fp-btn-gold{
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-lt) 100%);
+  color: #05081a; font-weight: 700; border: none;
+  box-shadow: 0 4px 16px rgba(201,162,39,.25);
+  transition: box-shadow .2s, transform .18s var(--motion);
+}
+.fcl .fp-btn-gold:hover{
+  box-shadow: 0 6px 24px rgba(201,162,39,.38);
+  transform: translateY(-1px);
+}
+
+/* Barre de progression FP style — fine, dorée */
+.fcl .fp-progress-bar{ height: 3px; background: var(--secondary); border-radius: 2px; overflow: hidden; }
+.fcl .fp-progress-fill{ height: 100%; border-radius: 2px; transition: width .5s var(--motion); }
+.fcl .fp-progress-fill.gold{ background: linear-gradient(90deg, var(--gold), var(--gold-lt)); }
+.fcl .fp-progress-fill.green{ background: linear-gradient(90deg, var(--primary), oklch(.75 .18 145)); }
+
+/* Halo glow pour éléments spéciaux (premier dans le classement, etc.) */
+.fcl .fp-glow-gold{ box-shadow: 0 0 0 1px rgba(201,162,39,.3), 0 4px 20px rgba(201,162,39,.12); }
+.fcl .fp-glow-green{ box-shadow: 0 0 0 1px rgba(55,217,154,.2), 0 4px 20px rgba(55,217,154,.10); }
+
+/* Separateur style FP — losanges */
+.fcl .fp-separator{
+  display: flex; align-items: center; gap: 12px; margin: 18px 0;
+  font-size: 9px; color: var(--muted-foreground); letter-spacing: .06em;
+}
+.fcl .fp-separator::before, .fcl .fp-separator::after{
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* Carte classement FP */
+.fcl .fp-standing-row{
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-bottom: 1px solid var(--border);
+  font-size: 11px; transition: background .15s;
+}
+.fcl .fp-standing-row:hover{ background: var(--secondary); }
+.fcl .fp-standing-row.player-row{
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 20%, var(--border));
+}
+.fcl .fp-standing-row.leader-row{
+  background: color-mix(in oklab, var(--gold) 6%, transparent);
+  border-color: rgba(201,162,39,.20);
+}
+.fcl .fp-rank{ width: 22px; text-align: center; font: 600 13px 'Barlow',sans-serif; color: var(--muted-foreground); }
+.fcl .fp-rank.gold{ color: var(--gold-lt); font-weight: 800; }
+
+/* Fil d'actualité FP */
+.fcl .fp-news-item{
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.fcl .fp-news-icon{ color: var(--gold); font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+.fcl .fp-news-date{ font-size: 8px; color: var(--muted-foreground); margin-top: 4px; }
+
+/* Override global : fond absolu bleu nuit FP */
+.fcl.app-shell{ background: #05081a; }
+.fcl .sidebar{ background: #020510; border-right-color: rgba(100,130,200,.10); }
+
+/* Amélioration sidebar : bordure or subtile en haut */
+.fcl .brand{ position: relative; }
+.fcl .brand::after{
+  content: ''; display: block; height: 2px; margin-top: 18px;
+  background: linear-gradient(90deg, var(--gold), transparent);
+  opacity: .35; border-radius: 1px;
+}
 

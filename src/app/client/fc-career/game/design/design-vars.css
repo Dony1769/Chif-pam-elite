@@ -1,41 +1,49 @@
 /**
  * FC CAREER — Design System : Tokens
  * Palette officielle + surfaces + typographie + motion
+ * Inspiré de footballpresident.fr — ambiance bleu nuit profond + or prestige
  * Import en premier dans game.css
  */
 
 :root {
-  /* ── Palette FC Career ─────────────────────────────────────── */
-  --fc-navy:     #101820;   /* fond principal */
-  --fc-graphite: #19252D;   /* panneaux secondaires */
+  /* ── Palette FC Career — Football President DNA ────────────── */
+  --fc-navy:     #05081a;   /* fond principal — bleu nuit FP */
+  --fc-graphite: #0d1128;   /* panneaux secondaires */
   --fc-emerald:  #37D99A;   /* actions clés, progression */
-  --fc-offwhite: #F1F4F6;   /* texte principal */
+  --fc-gold:     #c9a227;   /* accent or prestige (FP signature) */
+  --fc-gold-lt:  #e8c84a;   /* or clair hover */
+  --fc-offwhite: #E8ECF0;   /* texte principal */
   --fc-amber:    #F5BD58;   /* objectifs, alertes */
   --fc-coral:    #F16B73;   /* erreurs, risques */
 
-  /* ── Surfaces (couches superposées) ───────────────────────── */
-  --fc-surface-0: #0C141B;  /* fond absolu (plus sombre que navy) */
-  --fc-surface-1: #101820;  /* fond principal = navy */
-  --fc-surface-2: #19252D;  /* panneaux = graphite */
-  --fc-surface-3: #1F2E38;  /* cartes sur panneaux */
-  --fc-surface-4: #263542;  /* éléments interactifs au repos */
+  /* ── Surfaces (couches superposées) — bleu nuit profond ────── */
+  --fc-surface-0: #020510;  /* fond absolu — nuit absolue */
+  --fc-surface-1: #05081a;  /* fond principal = navy FP */
+  --fc-surface-2: #0d1128;  /* panneaux = graphite FP */
+  --fc-surface-3: #141830;  /* cartes sur panneaux */
+  --fc-surface-4: #1c2240;  /* éléments interactifs au repos */
 
   /* ── Texte ─────────────────────────────────────────────────── */
-  --fc-text:         #F1F4F6;       /* principal */
-  --fc-text-2:       #A8B8C4;       /* secondaire */
-  --fc-text-3:       #5E7282;       /* tertiaire / labels */
-  --fc-text-inverse: #101820;       /* sur fond clair (emerald, amber) */
+  --fc-text:         #E8ECF0;       /* principal */
+  --fc-text-2:       #8E9DC0;       /* secondaire — bleuté */
+  --fc-text-3:       #4A5678;       /* tertiaire / labels */
+  --fc-text-inverse: #05081a;       /* sur fond clair (emerald, gold) */
 
-  /* ── Bordures ──────────────────────────────────────────────── */
-  --fc-border:      rgba(241,244,246,0.08);
-  --fc-border-mid:  rgba(241,244,246,0.14);
-  --fc-border-high: rgba(241,244,246,0.22);
+  /* ── Bordures — bleutées fines ─────────────────────────────── */
+  --fc-border:      rgba(100,130,200,0.10);
+  --fc-border-mid:  rgba(100,130,200,0.18);
+  --fc-border-high: rgba(100,130,200,0.28);
 
   /* ── Accents sémantiques ────────────────────────────────────── */
   --fc-success:  #37D99A;   /* = emerald */
   --fc-warning:  #F5BD58;   /* = amber */
   --fc-danger:   #F16B73;   /* = coral */
   --fc-info:     #5BA4CF;   /* bleu froid */
+
+  /* ── Or prestige avec opacité (FP signature) ───────────────── */
+  --fc-gold-10:  rgba(201,162,39,0.10);
+  --fc-gold-20:  rgba(201,162,39,0.20);
+  --fc-gold-glow: 0 0 24px rgba(201,162,39,0.22);
 
   /* ── Emerald avec opacité (fonds, lueurs) ──────────────────── */
   --fc-emerald-10:  rgba(55,217,154,0.10);
@@ -50,7 +58,7 @@
   --fc-coral-10: rgba(241,107,115,0.10);
   --fc-coral-20: rgba(241,107,115,0.20);
 
-  /* ── Typographie ───────────────────────────────────────────── */
+  /* ── Typographie — condensée, impactante (FP spirit) ──────── */
   --fc-font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
   --fc-font-body:    'Inter', system-ui, sans-serif;
 
