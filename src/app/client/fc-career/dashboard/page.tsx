@@ -39,7 +39,7 @@ import {
   type AcademyPostMatchEval,
 } from "../game/domain/academySchedule";
 import { createRng, seedFromString } from "../game/utils/random";
-import { decidePlayingTime } from "../game/domain/coach";
+import { decidePlayingTime, generateCoachMessage } from "../game/domain/coach";
 import { generateContractOffer } from "../game/domain/agent";
 
 /* ── Page racine ─────────────────────────────────────────────────── */
@@ -353,6 +353,24 @@ function DashboardContent() {
       goals: result.playerStats.goals,
       assists: result.playerStats.assists,
     });
+    // BUG D3/D4 FIX : Générer une conversation coach après chaque match pro
+    if (coach) {
+      const delta = result.playerRating >= 7.5 ? "good_performance"
+        : result.playerRating < 5.5 ? "bad_performance"
+        : "objective_progress";
+      const coachMsg = generateCoachMessage(delta, coach.trust, coach.playerRole, coach.seasonObjective);
+      dispatch({
+        type: "ADD_COACH_CONVERSATION",
+        conversation: {
+          id: `coach-conv-${career.season}-${career.week}`,
+          season: career.season,
+          week: career.week,
+          trigger: delta,
+          message: coachMsg,
+          effect: delta === "good_performance" ? { trust: 2 } : delta === "bad_performance" ? { trust: -1 } : undefined,
+        },
+      });
+    }
     // Marquer le match joué dans weekState
     dispatch({ type: "MARK_MATCH_PLAYED" });
 

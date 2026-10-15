@@ -291,6 +291,59 @@ describe("Objectif du coach — progression exacte", () => {
     expect(state.save!.coach!.seasonObjective.current).toBe(8.5);
     expect(state.save!.coach!.seasonObjective.completed).toBe(true);
   });
+
+  // BUG D2 FIX : l'objectif "rating" peut revenir à non-complété
+  it("Type 'rating' (D2) : completed peut redevenir false si note chute (pas bloqué)", () => {
+    const ratingCoachCompleted = {
+      ...baseSave.coach!,
+      seasonObjective: { description: "Note ≥ 7", type: "rating" as const, target: 7, current: 8.5, completed: true },
+    };
+    const stateCompleted = { ...loadedState, save: { ...baseSave, coach: ratingCoachCompleted } };
+    const state = gameReducer(stateCompleted, {
+      type: "APPLY_MATCH_TRUST_DELTA",
+      matchRating: 5.0, minutesPlayed: 90,
+    });
+    // La note du dernier match (5.0) remplace la précédente (8.5)
+    expect(state.save!.coach!.seasonObjective.current).toBe(5.0);
+    expect(state.save!.coach!.seasonObjective.completed).toBe(false);
+  });
+
+  // BUG D2 FIX : les objectifs cumulés (appearances/goals) ne régressent pas
+  it("Type 'appearances' (D2) : completed = true reste figé même si nouveau match", () => {
+    const completedCoach = {
+      ...baseSave.coach!,
+      seasonObjective: { description: "5 matchs", type: "appearances" as const, target: 5, current: 5, completed: true },
+    };
+    const stateCompleted = { ...loadedState, save: { ...baseSave, coach: completedCoach } };
+    const state = gameReducer(stateCompleted, {
+      type: "APPLY_MATCH_TRUST_DELTA",
+      matchRating: 7.5, minutesPlayed: 90, goals: 2,
+    });
+    expect(state.save!.coach!.seasonObjective.current).toBe(5); // figé
+    expect(state.save!.coach!.seasonObjective.completed).toBe(true); // reste true
+  });
+
+  // BUG D3/D4 FIX : ADD_COACH_CONVERSATION ajoute une conversation et met à jour la confiance
+  it("ADD_COACH_CONVERSATION ajoute la conversation et applique l'effet trust", () => {
+    const conv = {
+      id: "conv-test-1", season: 1, week: 3, trigger: "good_performance",
+      message: "Très bon match!", effect: { trust: 5 },
+    };
+    const state = gameReducer(loadedState, { type: "ADD_COACH_CONVERSATION", conversation: conv });
+    expect(state.save!.coach!.conversations).toHaveLength(1);
+    expect(state.save!.coach!.conversations[0].trigger).toBe("good_performance");
+    expect(state.save!.coach!.trust).toBe(55); // 50 + 5
+  });
+
+  it("ADD_COACH_CONVERSATION sans effet ne modifie pas la trust", () => {
+    const conv = {
+      id: "conv-test-2", season: 1, week: 5, trigger: "objective_progress",
+      message: "Tu progresses.", effect: undefined,
+    };
+    const state = gameReducer(loadedState, { type: "ADD_COACH_CONVERSATION", conversation: conv });
+    expect(state.save!.coach!.conversations).toHaveLength(1);
+    expect(state.save!.coach!.trust).toBe(50); // inchangé
+  });
 });
 
 // ── Tests : entraînement & condition ──────────────────────────────────────────

@@ -623,19 +623,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Mettre à jour l'objectif selon son type — lié à l'événement réel du match
       const obj = coach.seasonObjective;
       const played = action.minutesPlayed > 0;
-      const newCurrent = obj.completed ? obj.current
+      // BUG D2 FIX : l'objectif "rating" est la note du dernier match (pas cumulé)
+      // mais il ne doit PAS court-circuiter le guard obj.completed.
+      // De plus, completed ne doit pas rester true si la note chute sous le seuil.
+      const newCurrent = obj.type === "rating"
+        ? action.matchRating           // toujours la note du dernier match
+        : obj.completed ? obj.current  // objectifs cumulés : figé quand atteint
         : obj.type === "appearances" && played
           ? Math.min(obj.current + 1, obj.target)
         : obj.type === "goals"
           ? Math.min(obj.current + (action.goals ?? 0), obj.target)
         : obj.type === "assists"
           ? Math.min(obj.current + (action.assists ?? 0), obj.target)
-        : obj.type === "rating"
-          ? action.matchRating           // note du dernier match (pas cumulé)
         : obj.current;
+      // "rating" : completed = la note courante atteint l'objectif (peut redevenir false)
+      // autres types : completed = atteint, figé
       const newCompleted = obj.type === "rating"
         ? newCurrent >= obj.target
-        : newCurrent >= obj.target;
+        : newCurrent >= obj.target || obj.completed;
 
       return {
         ...state,
