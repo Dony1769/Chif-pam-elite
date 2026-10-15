@@ -194,6 +194,14 @@ function SidebarContent({
 
       <div className="fc-sidebar__footer">
         <Link
+          href="/client/fc-career/modes"
+          className="fc-nav-item"
+          style={{ color: "var(--fc-text-2)", fontSize: "var(--fc-text-xs)" }}
+          onClick={onClose}
+        >
+          ⇄ Changer de mode
+        </Link>
+        <Link
           href="/client/fc-career"
           className="fc-nav-item"
           style={{ color: "var(--fc-text-3)", fontSize: "var(--fc-text-xs)" }}

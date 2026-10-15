@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { checkAccessCode, markSessionUnlocked } from './utils/session';
-import { loadGame } from './utils/storage';
 
 export default function FcCareerAuthPage() {
   const [pin, setPin] = useState<string>('');
@@ -14,9 +13,8 @@ export default function FcCareerAuthPage() {
     e.preventDefault();
     if (checkAccessCode(pin)) {
       markSessionUnlocked();
-      const save = loadGame();
-      const next = save?.player ? '/client/fc-career/dashboard' : '/client/fc-career/create-player';
-      window.location.assign(next);
+      // Choix du mode : Carrière Joueur (principale) ou Carrière Manager
+      window.location.assign('/client/fc-career/modes');
     } else {
       setShaking(true);
       setError(true);
@@ -103,8 +101,8 @@ export default function FcCareerAuthPage() {
           borderRadius: '12px',
           boxShadow: '0 0 60px rgba(0,0,0,.7), 0 0 40px rgba(201,162,39,.06)',
           overflow: 'hidden',
+          animation: shaking ? 'fp-shake .5s ease' : undefined,
         }}
-        style-extra={{ animation: shaking ? 'fp-shake .5s ease' : undefined } as React.CSSProperties}
       >
         {/* Liseré or en haut */}
         <div style={{
