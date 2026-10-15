@@ -262,6 +262,26 @@ function DashboardContent() {
         dispatch({ type: "ADD_CONTRACT_OFFER", offer });
       }
 
+      // BUG B3 FIX : UPDATE_FANS pour les matchs académie
+      const academyWon = isHome ? scoreAcademy > scoreOpp : scoreOpp > scoreAcademy;
+      const academyFanDelta = academyWon ? (goals > 0 ? 2 : 1) : -1;
+      dispatch({ type: "UPDATE_FANS", fanRatingDelta: academyFanDelta, followersDelta: academyWon ? 10 : 0 });
+
+      // BUG B4 FIX : UPDATE_MEDIA pour les matchs académie
+      const academyMediaDelta = postEval.rating >= 8 ? 2 : postEval.rating >= 6.5 ? 1 : postEval.rating < 5 ? -1 : 0;
+      dispatch({
+        type: "UPDATE_MEDIA",
+        mediaRepDelta: academyMediaDelta,
+        conference: {
+          id: `press-academy-${career.season}-${career.week}`,
+          season: career.season,
+          week: career.week,
+          question: `Comment s'est passé ce match J${weekFixture.matchday} ?`,
+          answer: `Note ${postEval.rating.toFixed(1)}/10 — ${academyMediaDelta > 0 ? "Bonne prestation." : academyMediaDelta < 0 ? "On peut mieux faire." : "Match correct."}`,
+          impact: academyMediaDelta,
+        },
+      });
+
       setAcademyEval(postEval);
       setMatchResult(null);
       setSimulating(false);
@@ -350,6 +370,21 @@ function DashboardContent() {
       type: "UPDATE_FANS",
       fanRatingDelta,
       followersDelta,
+    });
+
+    // BUG B4 FIX : UPDATE_MEDIA pour les matchs pros
+    const proMediaDelta = result.playerRating >= 8.5 ? 3 : result.playerRating >= 7.5 ? 2 : result.playerRating >= 6.5 ? 1 : result.playerRating < 5.5 ? -2 : 0;
+    dispatch({
+      type: "UPDATE_MEDIA",
+      mediaRepDelta: proMediaDelta,
+      conference: {
+        id: `press-pro-${career.season}-${career.week}`,
+        season: career.season,
+        week: career.week,
+        question: `Comment évaluez-vous votre performance ce J${weekFixture.matchday} ?`,
+        answer: `Note ${result.playerRating.toFixed(1)}/10 — ${result.playerStats.goals} but(s), ${result.playerStats.assists} passe(s). ${proMediaDelta > 0 ? "Satisfait de ma prestation." : proMediaDelta < 0 ? "Déçu, je dois mieux faire." : "Match correct dans l'ensemble."}`,
+        impact: proMediaDelta,
+      },
     });
 
     setMatchResult(result);

@@ -10,6 +10,7 @@ import { computeOverall, positionFamily } from "../domain/player";
 import { clamp } from "../utils/validation";
 import type { SeasonSchedule } from "../domain/season";
 import { applyResultsToSchedule, updateStanding, simulateMatchday, computePromotionRelegation, updateClubReputation } from "../domain/worldSimulator";
+import type { StandingRow } from "../domain/club";
 import { generateAcademySchedule, buildInitialYouthLeagueStanding, YOUTH_LEAGUE_OPPONENTS, decideStartingStatus } from "../domain/academySchedule";
 import { seedFromString, createRng } from "../utils/random";
 import { computeTrustDelta, roleFromTrust } from "../domain/coach";
@@ -226,6 +227,57 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       );
       const updatedSponsorsAfterMatch = updateSponsorMissions(state.save.sponsors ?? [], missionCtx);
 
+      // ── BUG B2 FIX : mettre à jour le classement du club du joueur ──
+      // updateStanding() skip délibérément le club du joueur pour éviter le double-comptage
+      // avec simulateMatchday. On doit donc l'appliquer ici directement.
+      const playerClubId = player.contract.clubId;
+      const playerClub = state.save.world.clubs?.find(
+        (c: { id: string; leagueId?: string }) => c.id === playerClubId
+      ) as { id: string; leagueId?: string } | undefined;
+      let updatedStandings = { ...(state.save.world.standings ?? {}) };
+
+      if (playerClub?.leagueId) {
+        const leagueId = playerClub.leagueId;
+        const ACADEMY_COMP_IDS_MATCH = ["youth-league", "academy-cup"];
+        // Ne mettre à jour que les championnats pros (pas académie)
+        if (!ACADEMY_COMP_IDS_MATCH.includes(result.competitionId)) {
+          const currentRows = (updatedStandings[leagueId] ?? []) as StandingRow[];
+          const emptyStandingRow = (id: string): StandingRow => ({ clubId: id, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 });
+          // Appliquer manuellement : le club du joueur seulement
+          const rowsMap = new Map<string, StandingRow>(currentRows.map((r) => [r.clubId, { ...r }]));
+          const pRow: StandingRow = rowsMap.get(playerClubId) ?? emptyStandingRow(playerClubId);
+          const oppId = result.isHome ? result.opponentClubId : result.opponentClubId;
+          const pIsHome = result.isHome;
+          const pScore  = pIsHome ? result.scoreHome : result.scoreAway;
+          const oScore  = pIsHome ? result.scoreAway : result.scoreHome;
+
+          pRow.played++;
+          pRow.goalsFor     += pScore;
+          pRow.goalsAgainst += oScore;
+          if (pScore > oScore)      { pRow.won++;   pRow.points += 3; }
+          else if (pScore < oScore) { pRow.lost++; }
+          else                       { pRow.drawn++; pRow.points++; }
+          rowsMap.set(playerClubId, pRow);
+
+          // Opponent row (peut ne pas encore exister dans standings)
+          const oRow: StandingRow = rowsMap.get(oppId) ?? emptyStandingRow(oppId);
+          oRow.played++;
+          oRow.goalsFor     += oScore;
+          oRow.goalsAgainst += pScore;
+          if (oScore > pScore)      { oRow.won++;   oRow.points += 3; }
+          else if (oScore < pScore) { oRow.lost++; }
+          else                       { oRow.drawn++; oRow.points++; }
+          rowsMap.set(oppId, oRow);
+
+          // Trier par points puis goal difference
+          const sorted = Array.from(rowsMap.values()).sort((a, b) => {
+            if (b.points !== a.points) return b.points - a.points;
+            return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst);
+          });
+          updatedStandings = { ...updatedStandings, [leagueId]: sorted };
+        }
+      }
+
       return {
         ...state,
         save: {
@@ -239,7 +291,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...state.save.career,
             completedMatchIds: [...ids, result.matchId] as unknown as string[],
           },
-          world: { ...state.save.world, lastMatchResults: lastResults },
+          world: {
+            ...state.save.world,
+            lastMatchResults: lastResults,
+            standings: updatedStandings,
+          },
           sponsors: updatedSponsorsAfterMatch,
         },
         isDirty: true,
@@ -964,8 +1020,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // ── Mise à jour vestiaire ────────────────────────────────────
       const currentLockerRoom = save.lockerRoom ?? createInitialLockerRoom();
       // Récupérer le dernier résultat de match pour l'effet sur cohésion
+      // lastMatchResults est stocké avec le plus récent en tête (index 0)
       const lastMatchResult = weekState.matchPlayed && save.world.lastMatchResults.length > 0
-        ? save.world.lastMatchResults[save.world.lastMatchResults.length - 1]
+        ? save.world.lastMatchResults[0]
         : null;
       const lastMatchRating = lastMatchResult
         ? lastMatchResult.playerRating
