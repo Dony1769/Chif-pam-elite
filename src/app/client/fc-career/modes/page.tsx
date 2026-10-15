@@ -105,7 +105,7 @@ export default function ModesPage() {
         </Link>
 
         {/* ── Carrière Manager ─────────────────────────────────────────── */}
-        <div className="fcm-card fcm-card--manager" aria-label="Carrière Manager">
+        <Link href={manager ? "/client/fc-career/manager" : "/client/fc-career/manager/nouvelle"} className="fcm-card fcm-card--manager" aria-label="Carrière Manager">
           <div className="fcm-card__icon" aria-hidden>📋</div>
           <h2>Carrière Manager</h2>
           <p className="fcm-card__lead">
@@ -121,8 +121,8 @@ export default function ModesPage() {
               <div className="fcm-ovr fcm-ovr--money"><b>{formatMoney(manager.balance)}</b><small>trésorerie</small></div>
             </div>
           ) : null}
-          <span className="fcm-card__cta fcm-card__cta--soon">Écrans en construction</span>
-        </div>
+          <span className="fcm-card__cta fcm-card__cta--manager">{manager ? "Reprendre mon club" : "Choisir un club"}</span>
+        </Link>
       </div>
 
       <Link href="/client/fc-career" className="fcm-modes__back">Quitter</Link>
@@ -156,7 +156,9 @@ const CSS = `
 .fcm-ovr--money b{font-size:20px;color:#37D99A}
 .fcm-ovr small{font-size:11px;color:#8E9DC0}
 .fcm-card__cta{margin-top:auto;display:flex;align-items:center;justify-content:center;height:46px;border-radius:9px;background:linear-gradient(135deg,#c9a227,#e8c84a);color:#05081a;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:16px;text-transform:uppercase;letter-spacing:.04em}
-.fcm-card__cta--soon{background:rgba(100,130,200,.1);color:#8E9DC0;font-weight:700}
+.fcm-card__cta--manager{background:rgba(100,130,200,.12);color:#E8ECF0;border:1px solid rgba(100,130,200,.25)}
+.fcm-card--manager{transition:transform .2s,border-color .2s}.fcm-card--manager:hover{transform:translateY(-2px);border-color:rgba(100,130,200,.35)}
+.fcm-card--manager:focus-visible{outline:2px solid #e8c84a;outline-offset:3px}
 .fcm-modes__back{font-size:13px;color:#8E9DC0}
 @media (prefers-reduced-motion:reduce){.fcm-card--player{transition:none}.fcm-card--player:hover{transform:none}}
 `;

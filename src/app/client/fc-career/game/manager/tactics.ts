@@ -100,17 +100,17 @@ export function autoPickLineup(squad: WorldPlayer[], formation: FormationId): Li
   const used = new Set<string>();
   const starters: string[] = new Array(slots.length).fill("");
 
-  // GK d'abord, puis le reste dans l'ordre
-  const order = slots.map((s, i) => i).sort((a, b) => (slots[a].line === "GK" ? -1 : 0) - (slots[b].line === "GK" ? -1 : 0));
-  for (const i of order) {
-    let best: WorldPlayer | null = null;
-    let bestVal = -1;
-    for (const p of pool) {
-      if (used.has(p.id)) continue;
-      const v = effectiveRating(p, slots[i].pos);
-      if (v > bestVal) { bestVal = v; best = p; }
-    }
-    if (best) { starters[i] = best.id; used.add(best.id); }
+  // Attribution globale : toutes les paires (joueur, poste) triées par valeur,
+  // les meilleures d'abord. Évite qu'un poste rempli tôt prive un autre de son
+  // seul joueur naturel (défaut du remplissage poste par poste).
+  const pairs: { id: string; slot: number; v: number }[] = [];
+  for (const p of pool) slots.forEach((sl, i) => pairs.push({ id: p.id, slot: i, v: effectiveRating(p, sl.pos) }));
+  pairs.sort((a, b) => b.v - a.v);
+  for (const { id, slot } of pairs) {
+    if (used.has(id) || starters[slot]) continue;
+    starters[slot] = id;
+    used.add(id);
+    if (used.size === slots.length) break;
   }
 
   const bench = pool

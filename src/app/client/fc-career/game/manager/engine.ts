@@ -143,7 +143,8 @@ export function msg(s: ManagerState, kind: InboxKind, title: string, body: strin
 }
 
 export function pushInbox(s: ManagerState, ...m: InboxMessage[]): ManagerState {
-  return { ...s, inbox: [...m.reverse(), ...s.inbox].slice(0, INBOX_MAX) };
+  // Ordre naturel : le premier message fourni apparaît en tête
+  return { ...s, inbox: [...m, ...s.inbox].slice(0, INBOX_MAX) };
 }
 
 export function addLedger(f: ClubFinances, entries: LedgerEntry[]): ClubFinances {
@@ -208,9 +209,16 @@ export function formatMoney(v: number): string {
 // ─── Actions du manager ──────────────────────────────────────────────────────
 
 export function setTactic(s: ManagerState, tactic: Tactic): ManagerState {
-  // Les joueurs choisis restent titulaires ; on ne recompose que si le nombre de postes change
-  const sameShape = FORMATIONS[tactic.formation].length === s.lineup.starters.length;
-  return { ...s, tactic, lineup: sameShape ? s.lineup : autoPickLineup(availableSquad(s), tactic.formation) };
+  if (tactic.formation === s.tactic.formation) return { ...s, tactic };
+  // Nouvelle formation : les mêmes titulaires sont redistribués sur leurs meilleurs postes
+  const byId = new Map(getSquad(s).map(p => [p.id, p]));
+  const chosen = s.lineup.starters.map(id => byId.get(id)).filter((p): p is WorldPlayer => !!p);
+  if (chosen.length !== FORMATIONS[tactic.formation].length) {
+    return { ...s, tactic, lineup: autoPickLineup(availableSquad(s), tactic.formation) };
+  }
+  const placed = autoPickLineup(chosen, tactic.formation);
+  if (placed.starters.length !== chosen.length) return { ...s, tactic, lineup: autoPickLineup(availableSquad(s), tactic.formation) };
+  return { ...s, tactic, lineup: { ...s.lineup, starters: placed.starters, captainId: s.lineup.captainId } };
 }
 
 export function availableSquad(s: ManagerState): WorldPlayer[] {

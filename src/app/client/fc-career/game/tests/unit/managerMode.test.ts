@@ -347,6 +347,17 @@ describe("Reducer manager", () => {
     expect(s.inbox.every(m => m.read)).toBe(true);
   });
 
+  test("changement de formation : mêmes 11 titulaires, replacés à leurs meilleurs postes", () => {
+    const s0 = managerReducer(null, { type: "NEW_GAME", seed: SEED, clubId: "vlt-fc-meridian", managerName: "F", now: 0 })!;
+    const s1 = managerReducer(s0, { type: "SET_TACTIC", tactic: { ...s0.tactic, formation: "3-5-2" } })!;
+    expect([...s1.lineup.starters].sort()).toEqual([...s0.lineup.starters].sort());
+    expect(s1.lineup.captainId).toBe(s0.lineup.captainId);
+    // Le gardien reste dans les buts
+    const gkSlot = FORMATIONS["3-5-2"].findIndex(x => x.line === "GK");
+    const gk = getSquad(s1).find(p => p.id === s1.lineup.starters[gkSlot]);
+    expect(gk?.position).toBe("GK");
+  });
+
   test("actions sans partie : état nul conservé", () => {
     expect(managerReducer(null, { type: "PLAY_WEEK" })).toBeNull();
   });
