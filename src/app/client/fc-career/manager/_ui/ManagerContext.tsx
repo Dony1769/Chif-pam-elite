@@ -6,6 +6,7 @@
  * après chaque changement, garde le match en direct entre deux écrans.
  */
 
+import { hydrateGameStore, onWriteError } from "../../game/persistence/gameStore";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ManagerState } from "../../game/manager/types";
 import type { ManagerAction } from "../../game/manager/reducer";
@@ -49,16 +50,23 @@ export function ManagerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const r = loadManager();
-    if (r.ok) {
-      const loaded = managerStep(null, { type: "LOAD", state: r.state }).state;
-      stateRef.current = loaded;
-      setState(loaded);
-    } else if (r.reason !== "empty") {
-      setLoadProblem(r.reason);
-    }
-    setReady(true);
-  }, []);
+    let alive = true;
+    const off = onWriteError(() => notify(false, "Sauvegarde impossible (stockage plein). Votre dernière sauvegarde reste intacte."));
+    hydrateGameStore().then(info => {
+      if (!alive) return;
+      if (info.purgedNow) notify(true, "Toutes les anciennes sauvegardes ont été effacées : nouveau départ.");
+      const r = loadManager();
+      if (r.ok) {
+        const loaded = managerStep(null, { type: "LOAD", state: r.state }).state;
+        stateRef.current = loaded;
+        setState(loaded);
+      } else if (r.reason !== "empty") {
+        setLoadProblem(r.reason);
+      }
+      setReady(true);
+    });
+    return () => { alive = false; off(); };
+  }, [notify]);
 
   const run = useCallback((action: ManagerAction) => {
     const step = managerStep(stateRef.current, action);

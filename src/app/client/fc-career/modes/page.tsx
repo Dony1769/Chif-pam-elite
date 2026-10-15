@@ -6,6 +6,7 @@
  * Lecture seule des sauvegardes : cet écran n'écrit ni ne supprime rien.
  */
 
+import { hydrateGameStore } from "../game/persistence/gameStore";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadManager } from "../game/manager/storage";
@@ -58,27 +59,32 @@ export default function ModesPage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Carrière v2 (nouvelle) en priorité ; la v1 reste accessible à part
-    setLegacy(readPlayerSave());
-    const v2 = loadPlayerCareer();
-    if (v2.ok) {
-      const p = v2Me(v2.state);
-      setPlayer({
-        name: `${v2.state.profile.firstName} ${v2.state.profile.lastName} · ${v2Club(v2.state).shortName}`,
-        position: POS_FR[v2.state.profile.position] ?? v2.state.profile.position, overall: p.overall, potential: v2.state.profile.potential,
-        age: p.age, season: v2.state.shadow.world.season,
-      });
+    let alive = true;
+    function refresh() {
+      // Carrière v2 (nouvelle) en priorité ; la v1 reste accessible à part
+      setLegacy(readPlayerSave());
+      const v2 = loadPlayerCareer();
+      if (v2.ok) {
+        const p = v2Me(v2.state);
+        setPlayer({
+          name: `${v2.state.profile.firstName} ${v2.state.profile.lastName} · ${v2Club(v2.state).shortName}`,
+          position: POS_FR[v2.state.profile.position] ?? v2.state.profile.position, overall: p.overall, potential: v2.state.profile.potential,
+          age: p.age, season: v2.state.shadow.world.season,
+        });
+      }
+      const m = loadManager();
+      if (m.ok) {
+        const club = m.state.world.clubs.find(c => c.id === m.state.clubId);
+        setManager({
+          name: m.state.managerName, club: club?.name ?? "—",
+          season: m.state.world.season, week: m.state.world.currentWeek,
+          balance: m.state.finances.balance, sacked: m.state.status === "sacked",
+        });
+      }
+      setReady(true);
     }
-    const m = loadManager();
-    if (m.ok) {
-      const club = m.state.world.clubs.find(c => c.id === m.state.clubId);
-      setManager({
-        name: m.state.managerName, club: club?.name ?? "—",
-        season: m.state.world.season, week: m.state.world.currentWeek,
-        balance: m.state.finances.balance, sacked: m.state.status === "sacked",
-      });
-    }
-    setReady(true);
+    hydrateGameStore().then(() => { if (alive) refresh(); });
+    return () => { alive = false; };
   }, []);
 
   const playerHref = player ? "/client/fc-career/joueur" : "/client/fc-career/joueur/nouveau";
@@ -144,13 +150,14 @@ export default function ModesPage() {
           Ancienne carrière : {legacy.name || "ton joueur"} ({legacy.overall}) · continuer en version 1
         </Link>
       )}
+      <Link href="/client/fc-career/reglages" className="fcm-modes__back">Réglages et sauvegardes</Link>
       <Link href="/client/fc-career" className="fcm-modes__back">Quitter</Link>
     </main>
   );
 }
 
 const CSS = `
-.fcm-modes{min-height:100dvh;background:radial-gradient(ellipse 70% 50% at 20% 0%,rgba(66,200,255,.10),transparent),radial-gradient(ellipse 50% 40% at 90% 100%,rgba(185,255,57,.06),transparent),#0A0C0F;color:#DCE3EA;font-family:'Inter',system-ui,sans-serif;padding:48px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:center;gap:28px}
+.fcm-modes{min-height:100dvh;background:radial-gradient(ellipse 70% 50% at 20% 0%,rgba(66,200,255,.10),transparent),radial-gradient(ellipse 50% 40% at 90% 100%,rgba(185,255,57,.06),transparent),#0A0C0F;color:#DCE3EA;font-family:'Inter',system-ui,sans-serif;padding:72px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:center;gap:28px}
 .fcm-modes__head{text-align:center}
 .fcm-modes__kicker{font-family:Inter,system-ui,sans-serif;font-weight:800;font-size:13px;letter-spacing:.14em;color:#B9FF39;text-transform:uppercase;margin:0 0 6px}
 .fcm-modes__head h1{font-family:Inter,system-ui,sans-serif;font-weight:900;font-size:clamp(30px,6vw,46px);line-height:1;margin:0;text-transform:uppercase;text-wrap:balance}

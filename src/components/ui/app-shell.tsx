@@ -357,6 +357,9 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
   const router = useRouter();
   const isClient = role === "client";
   const showBackButton = isClient && pathname !== "/client/home";
+  // Pages du jeu FC Career : plein écran, sans la navigation du site (le jeu fournit
+  // sa propre navigation et un lien de retour vers /client/home).
+  const immersive = isClient && pathname.startsWith("/client/fc-career");
   const [authUser, setAuthUser] = useState<{ id: string } | null>(null);
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
 
@@ -407,6 +410,15 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
     }
     router.push("/client/home");
   };
+
+  if (immersive) {
+    return (
+      <div className="relative min-h-screen text-(--fg-1)" data-shell="immersive"
+        onClickCapture={redirectAnonymousAction} onSubmitCapture={redirectAnonymousAction}>
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div

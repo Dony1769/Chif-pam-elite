@@ -4,6 +4,7 @@
  * écrasée sans copie de secours : toute nouvelle partie archive l'ancienne d'abord.
  */
 
+import { gameStore } from "../persistence/gameStore";
 import type { ManagerState } from "./types";
 import { MANAGER_SAVE_KEY, MANAGER_SAVE_VERSION } from "./types";
 
@@ -15,11 +16,7 @@ export interface KeyValueStore {
 }
 
 function browserStore(): KeyValueStore | null {
-  try {
-    return typeof window !== "undefined" && window.localStorage ? window.localStorage : null;
-  } catch {
-    return null;
-  }
+  return gameStore();
 }
 
 /** Vérification structurelle minimale d'une sauvegarde manager. */

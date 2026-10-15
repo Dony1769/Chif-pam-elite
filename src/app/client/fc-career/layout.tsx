@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import FcCareerGuard from "./components/FcCareerGuard";
 import "./fc-career.css";
 import "./game/design/design-vars.css";
@@ -29,6 +30,8 @@ export default function FcCareerLayout({ children }: { children: React.ReactNode
         rel="stylesheet"
       />
       <div className="fcl-fonts">
+        {/* Retour à l'accueil du site (les modes v2 ont le leur dans leur barre) */}
+        <Link href="/client/home" className="fcl-home" aria-label="Retour à l'accueil ChifPam">‹ Accueil</Link>
         <FcCareerGuard>{children}</FcCareerGuard>
       </div>
     </>

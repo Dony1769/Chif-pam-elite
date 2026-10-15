@@ -2,21 +2,22 @@
 
 /** FC CAREER 27 — Carrière Joueur v2 : coquille (en-tête joueur, onglets, notifications). */
 
-import React, { useEffect, useRef } from "react";
+import React, { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "./PlayerContext";
 import { Crest } from "../../manager/_ui/kit";
+import { GameBar, GameNav } from "../../manager/_ui/GameNav";
 import { formatMoney } from "../../game/manager/engine";
 import { me, myClub } from "../../game/player2/engine";
 
 const BASE = "/client/fc-career/joueur";
 const TABS = [
-  { href: BASE, label: "Accueil" },
-  { href: `${BASE}/match`, label: "Match" },
-  { href: `${BASE}/progression`, label: "Progression" },
-  { href: `${BASE}/carriere`, label: "Carrière" },
-  { href: `${BASE}/messages`, label: "Messages" },
+  { href: BASE, label: "Accueil", icon: "home" },
+  { href: `${BASE}/match`, label: "Match", icon: "ball" },
+  { href: `${BASE}/progression`, label: "Progression", icon: "chart" },
+  { href: `${BASE}/carriere`, label: "Carrière", icon: "doc" },
+  { href: `${BASE}/messages`, label: "Messages", icon: "mail" },
 ];
 
 export function PlayerShell({ children }: { children: React.ReactNode }) {
@@ -26,16 +27,6 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
   const appRef = useRef<HTMLDivElement>(null);
 
   // Les onglets collent sous l'en-tête collant du site chifpam
-  useEffect(() => {
-    const host = document.querySelector<HTMLElement>("header.sticky");
-    const app = appRef.current;
-    if (!host || !app) return;
-    const update = () => app.style.setProperty("--mg-sticky-top", `${Math.round((parseFloat(getComputedStyle(host).top) || 0) + host.offsetHeight + 8)}px`);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(host);
-    return () => ro.disconnect();
-  }, []);
 
   let body: React.ReactNode = children;
   if (!ready) body = <div className="mg-center"><p className="mg-muted">Chargement de la carrière…</p></div>;
@@ -47,6 +38,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mg-app" ref={appRef}>
+      <GameBar />
       {state && club && p && !onNew && (
         <>
           <header className="mg-top" style={{ ["--club" as string]: club.colors.primary }}>
@@ -63,19 +55,8 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
               <div><dt>Économies</dt><dd>{formatMoney(state.career?.bank ?? 0)}</dd></div>
             </dl>
           </header>
-          <nav className="mg-tabs" aria-label="Sections de la carrière">
-            {TABS.map(t => {
-              const active = t.href === BASE ? pathname === BASE : pathname.startsWith(t.href);
-              return (
-                <Link key={t.href} href={t.href} className={`mg-tab${active ? " is-active" : ""}`} aria-current={active ? "page" : undefined}>
-                  {t.label}
-                  {t.label === "Messages" && unread > 0 && <span className="mg-tab__badge">{unread}</span>}
-                  {t.label === "Carrière" && (state.career?.offers.length ?? 0) > 0 && <span className="mg-tab__badge">{state.career!.offers.length}</span>}
-                </Link>
-              );
-            })}
-            <Link href="/client/fc-career/modes" className="mg-tab mg-tab--exit">Changer de mode</Link>
-          </nav>
+          <GameNav base={BASE} label="Sections de la carrière"
+            items={TABS.map(t => ({ ...t, badge: t.label === "Messages" ? unread : t.label === "Carrière" ? (state.career?.offers.length ?? 0) : undefined }))} />
         </>
       )}
       <main className="mg-main">{body}</main>

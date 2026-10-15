@@ -922,3 +922,14 @@
   opacity: .35; border-radius: 1px;
 }
 
+
+/* Bouton de retour vers /client/home (pages du jeu en plein écran) */
+.fcl-home {
+  position: fixed; z-index: 80; top: max(10px, env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px));
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 12px;
+  font: 600 13px/1 Inter, system-ui, sans-serif; color: #DCE3EA; text-decoration: none;
+  background: rgba(16, 20, 25, 0.86); border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.fcl-home:hover { border-color: rgba(185, 255, 57, 0.45); background: rgba(185, 255, 57, 0.08); }
+.fcl-fonts:has(.mg-app) .fcl-home { display: none; }

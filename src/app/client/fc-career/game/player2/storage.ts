@@ -4,6 +4,7 @@
  * La sauvegarde v1 (« fc-career-v2:save ») n'est jamais modifiée ici.
  */
 
+import { gameStore } from "../persistence/gameStore";
 import type { PlayerCareerState } from "./types";
 import { PLAYER2_SAVE_KEY, PLAYER2_SAVE_VERSION } from "./types";
 import type { KeyValueStore } from "../manager/storage";
@@ -12,6 +13,11 @@ export const PLAYER2_BACKUP_KEY = `${PLAYER2_SAVE_KEY}:backup`;
 export const LEGACY_SAVE_KEY = "fc-career-v2:save";
 
 function browserStore(): KeyValueStore | null {
+  return gameStore();
+}
+
+/** La sauvegarde v1 reste dans localStorage (lecture seule ici). */
+function legacyStore(): KeyValueStore | null {
   try {
     return typeof window !== "undefined" && window.localStorage ? window.localStorage : null;
   } catch {
@@ -68,7 +74,7 @@ export function archivePlayerSave(store: KeyValueStore | null = browserStore()):
 }
 
 /** Lecture seule de la sauvegarde v1 (pour proposer la migration). */
-export function readLegacySave(store: KeyValueStore | null = browserStore()): unknown | null {
+export function readLegacySave(store: KeyValueStore | null = legacyStore()): unknown | null {
   if (!store) return null;
   try {
     const raw = store.getItem(LEGACY_SAVE_KEY);

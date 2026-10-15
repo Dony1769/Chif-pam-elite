@@ -2,6 +2,7 @@
 
 /** FC CAREER 27 — Carrière Joueur v2 : état partagé de l'interface (chargement, actions, sauvegarde). */
 
+import { hydrateGameStore, onWriteError } from "../../game/persistence/gameStore";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PlayerCareerState } from "../../game/player2/types";
 import type { PlayerAction } from "../../game/player2/reducer";
@@ -40,14 +41,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const r = loadPlayerCareer();
-    if (r.ok) {
-      const loaded = playerStep(null, { type: "LOAD", state: r.state }).state;
-      ref.current = loaded;
-      setState(loaded);
-    } else if (r.reason !== "empty") setLoadProblem(r.reason);
-    setReady(true);
-  }, []);
+    let alive = true;
+    const off = onWriteError(() => notify(false, "Sauvegarde impossible (stockage plein). Votre dernière sauvegarde reste intacte."));
+    hydrateGameStore().then(info => {
+      if (!alive) return;
+      if (info.purgedNow) notify(true, "Toutes les anciennes sauvegardes ont été effacées : nouveau départ.");
+      const r = loadPlayerCareer();
+      if (r.ok) {
+        const loaded = playerStep(null, { type: "LOAD", state: r.state }).state;
+        ref.current = loaded;
+        setState(loaded);
+      } else if (r.reason !== "empty") setLoadProblem(r.reason);
+      setReady(true);
+    });
+    return () => { alive = false; off(); };
+  }, [notify]);
 
   const run = useCallback((action: PlayerAction) => {
     const step = playerStep(ref.current, action);

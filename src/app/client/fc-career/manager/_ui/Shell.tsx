@@ -2,25 +2,26 @@
 
 /** FC CAREER 27 — Mode Manager : coquille (en-tête club, onglets, notifications). */
 
-import React, { useEffect, useRef } from "react";
+import React, { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useManager } from "./ManagerContext";
 import { Crest } from "./kit";
+import { GameBar, GameNav } from "./GameNav";
 import { formatMoney, getManagedClub } from "../../game/manager/engine";
 import { isWindowOpen } from "../../game/manager/market";
 
 const BASE = "/client/fc-career/manager";
 const TABS = [
-  { href: BASE, label: "Accueil" },
-  { href: `${BASE}/effectif`, label: "Effectif" },
-  { href: `${BASE}/tactique`, label: "Tactique" },
-  { href: `${BASE}/match`, label: "Match" },
-  { href: `${BASE}/competition`, label: "Compétition" },
-  { href: `${BASE}/mercato`, label: "Mercato" },
-  { href: `${BASE}/finances`, label: "Finances" },
-  { href: `${BASE}/club`, label: "Club" },
-  { href: `${BASE}/messages`, label: "Messages" },
+  { href: BASE, label: "Accueil", icon: "home" },
+  { href: `${BASE}/effectif`, label: "Effectif", icon: "team" },
+  { href: `${BASE}/tactique`, label: "Tactique", icon: "board" },
+  { href: `${BASE}/match`, label: "Match", icon: "ball" },
+  { href: `${BASE}/competition`, label: "Compétition", icon: "trophy" },
+  { href: `${BASE}/mercato`, label: "Mercato", icon: "swap" },
+  { href: `${BASE}/finances`, label: "Finances", icon: "coin" },
+  { href: `${BASE}/club`, label: "Club", icon: "stadium" },
+  { href: `${BASE}/messages`, label: "Messages", icon: "mail" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -30,19 +31,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const appRef = useRef<HTMLDivElement>(null);
 
   // Les onglets collent sous l'en-tête collant du site chifpam (hauteur variable)
-  useEffect(() => {
-    const host = document.querySelector<HTMLElement>("header.sticky");
-    const app = appRef.current;
-    if (!host || !app) return;
-    const update = () => {
-      const top = parseFloat(getComputedStyle(host).top) || 0;
-      app.style.setProperty("--mg-sticky-top", `${Math.round(top + host.offsetHeight + 8)}px`);
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(host);
-    return () => ro.disconnect();
-  }, []);
 
   let body: React.ReactNode = children;
   if (!ready) body = <div className="mg-center"><p className="mg-muted">Chargement de la partie…</p></div>;
@@ -53,6 +41,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mg-app" ref={appRef}>
+      <GameBar />
       {state && club && !onNewGame && (
         <>
           <header className="mg-top" style={{ ["--club" as string]: club.colors.primary }}>
@@ -69,18 +58,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <div><dt>Mercato</dt><dd className={isWindowOpen(state) ? "is-open" : "is-closed"}>{isWindowOpen(state) ? "Ouvert" : "Fermé"}</dd></div>
             </dl>
           </header>
-          <nav className="mg-tabs" aria-label="Sections du mode manager">
-            {TABS.map(t => {
-              const active = t.href === BASE ? pathname === BASE : pathname.startsWith(t.href);
-              return (
-                <Link key={t.href} href={t.href} className={`mg-tab${active ? " is-active" : ""}`} aria-current={active ? "page" : undefined}>
-                  {t.label}
-                  {t.label === "Messages" && unread > 0 && <span className="mg-tab__badge">{unread}</span>}
-                </Link>
-              );
-            })}
-            <Link href="/client/fc-career/modes" className="mg-tab mg-tab--exit">Changer de mode</Link>
-          </nav>
+          <GameNav base={BASE} label="Sections du mode manager"
+            items={TABS.map(t => ({ ...t, badge: t.label === "Messages" ? unread : undefined }))} />
         </>
       )}
       <main className="mg-main">{body}</main>
