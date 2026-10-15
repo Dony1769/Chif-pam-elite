@@ -65,6 +65,49 @@ export interface PlayerMatchSummary {
   motm: boolean;
 }
 
+// ─── Carrière (Lot J3) ───────────────────────────────────────────────────────
+
+export interface ClubOffer {
+  id: string;
+  clubId: string;
+  kind: "transfer" | "loan" | "free";
+  fee: number;
+  wage: number;
+  seasons: number;
+  role: SquadRole;
+  /** Index absolu de semaine d'expiration (season*100+week) */
+  expiresAt: number;
+}
+
+export interface NationalTeamState {
+  countryId: string;
+  called: boolean;
+  caps: number;
+  goals: number;
+  /** Semaine (index absolu) du dernier rassemblement traité */
+  lastWindow: number;
+}
+
+export interface Award {
+  season: number;
+  id: "top_scorer" | "revelation" | "golden_star" | "league_title" | "promotion" | "assist_king";
+  label: string;
+}
+
+export interface CareerExtras {
+  /** Économies du joueur (€) */
+  bank: number;
+  offers: ClubOffer[];
+  /** Le joueur a demandé à partir (plus d'offres) */
+  transferRequested: boolean;
+  /** Prêt en cours : club propriétaire et saison de retour */
+  loan: { parentClubId: string; untilSeason: number; parentWage: number; parentSeasonsLeft: number } | null;
+  national: NationalTeamState;
+  awards: Award[];
+  /** Contrat arrivé à échéance : offres libres en attente */
+  freeAgentSince: number | null;
+}
+
 export interface PlayerCareerState {
   version: typeof PLAYER2_SAVE_VERSION;
   /** Club du joueur piloté par l'IA avec le moteur manager */
@@ -77,6 +120,8 @@ export interface PlayerCareerState {
   seasons: SeasonLine[];
   lastMatch: PlayerMatchSummary | null;
   inbox: InboxMessage[];
+  /** Carrière (Lot J3) — optionnel : complété au chargement des parties J1/J2 */
+  career?: CareerExtras;
   createdAt: number;
   savedAt: number;
   /** Migration depuis la carrière v1 */

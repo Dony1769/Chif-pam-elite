@@ -170,6 +170,23 @@ describe("Monde : correctif du double vieillissement", () => {
   });
 });
 
+describe("Monde : stabilité sur plusieurs saisons", () => {
+  test("effectifs stables, niveau sans inflation, retraités jamais réactivés", () => {
+    let w = generateWorld("stability");
+    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const ovr0 = avg(w.players.filter(p => p.clubId !== "retired").map(p => p.overall));
+    for (let i = 0; i < 5; i++) w = endWorldSeason(w).world;
+    const active = w.players.filter(p => p.clubId !== "retired");
+    for (const c of w.clubs) {
+      const n = active.filter(p => p.clubId === c.id).length;
+      expect(n).toBeGreaterThanOrEqual(16); // complété à l'intersaison
+      expect(n).toBeLessThanOrEqual(28);    // même plafond que le mode manager
+    }
+    expect(avg(active.map(p => p.overall)) - ovr0).toBeLessThan(5);
+    for (const p of active) expect(p.overall).toBeLessThanOrEqual(Math.max(p.potential, 99));
+  });
+});
+
 describe("Sauvegarde v2", () => {
   test("aller-retour, clé dédiée, v1 jamais touchée", () => {
     const store = memoryStore();

@@ -340,8 +340,9 @@ function closePlayerSeason(s: PlayerCareerState, endedSeason: number, messages: 
   messages.push(pmsg(s, "board", `Bilan de la saison ${endedSeason}`, line
     ? `${line.apps} match(s) dont ${line.starts} titularisation(s), ${line.goals} but(s), ${line.assists} passe(s) décisive(s), note moyenne ${avgRating(line).toFixed(2)}.`
     : "Aucun match joué cette saison."));
-  if (contract.seasonsLeft === 0) {
-    messages.push(pmsg(s, "finance", "Dernière année de contrat", "Votre contrat se termine à la fin de la saison prochaine. Votre agent peut négocier une prolongation ou chercher un nouveau club."));
+  // Convention : seasonsLeft inclut la saison en cours ; à 1, c'est la dernière
+  if (contract.seasonsLeft === 1) {
+    messages.push(pmsg(s, "finance", "Dernière année de contrat", "Votre contrat se termine à la fin de cette saison. Votre agent peut négocier une prolongation ou chercher un nouveau club."));
   }
   return syncWorldPlayer({ ...s, contract, profile: { ...s.profile, attrs } });
 }

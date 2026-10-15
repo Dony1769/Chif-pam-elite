@@ -66,7 +66,7 @@ function computeProgressionDelta(
   if (age < peak - 1) {
     // Phase de croissance
     const baseGrowth = Math.min(gap * 0.35, 4); // max +4 OVR/an
-    const noise = rng.float(-0.5, 1.0);
+    const noise = rng.float(-0.8, 0.8);
     return Math.max(0, baseGrowth + noise);
   } else if (age <= peak + 1) {
     // Plateau — légère variation
@@ -109,6 +109,9 @@ export function progressWorldPlayers(
   const retirees: string[] = [];
 
   for (const player of players) {
+    // Un retraité reste archivé tel quel : il ne vieillit plus, ne reprend pas
+    // sa retraite et ne génère pas de nouveau jeune (sinon effectifs qui gonflent)
+    if (player.clubId === "retired") { updated.push(player); continue; }
     // Vieillir
     const aged: WorldPlayer = ageAlreadyApplied ? player : { ...player, age: player.age + 1 };
 
@@ -130,7 +133,9 @@ export function progressWorldPlayers(
     // Calcul de la progression
     const rawDelta = computeProgressionDelta(aged, rng);
     const delta = Math.round(rawDelta); // entier pour l'OVR
-    const newOverall = Math.min(99, Math.max(40, aged.overall + delta));
+    // La progression s'arrête au potentiel ; le déclin peut descendre sous la note actuelle
+    const ceiling = delta > 0 ? Math.max(aged.overall, aged.potential ?? 99) : 99;
+    const newOverall = Math.min(ceiling, Math.max(40, aged.overall + delta));
 
     const progressed: WorldPlayer = { ...aged, overall: newOverall };
 
@@ -210,8 +215,9 @@ export function generateYouthPlayer(
   rng: ReturnType<typeof createRng>,
 ): WorldPlayer {
   const age = rng.int(17, 20);
-  const potential = rng.int(68, 84);
-  const overall = rng.int(Math.max(50, potential - 20), potential - 5);
+  // Un jeune de 17-20 ans débute modestement ; le potentiel fait la différence
+  const potential = rng.int(62, 84);
+  const overall = rng.int(44, Math.min(56, potential - 8));
   const firstName = rng.pick(FIRST_NAMES);
   const lastName = rng.pick(LAST_NAMES);
   void season;

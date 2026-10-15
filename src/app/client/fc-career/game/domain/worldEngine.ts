@@ -16,8 +16,8 @@ import {
   evaluateResignation,
 } from "./worldCoach";
 import { evaluateClubSeason } from "./clubAI";
-import { ageWorldPlayers, simulateWorldTransfers } from "./worldTransfers";
-import { progressWorldPlayers } from "./playerProgression";
+import { simulateWorldTransfers } from "./worldTransfers";
+import { generateYouthPlayer, progressWorldPlayers } from "./playerProgression";
 import { advanceWorldSeason, buildInitialStandings, generateLeagueSchedule } from "./worldGenerator";
 import { computePromotionRelegation } from "./worldSimulator";
 import { createRng, seedFromString } from "../utils/random";
@@ -307,17 +307,16 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
     }
   }
 
-  // ── 2. Vieillissement des joueurs ─────────────────────────────────────────
-  const { updated: agedPlayers, events: retirementEvents } = ageWorldPlayers(
-    current.players, current.season, rng
-  );
-  for (const ev of retirementEvents) {
+  // ── 2. Vieillissement, progression, retraites, jeunes ─────────────────────
+  // Une seule passe : l'ancienne combinaison ageWorldPlayers + progressWorldPlayers
+  // vieillissait et faisait progresser chaque joueur DEUX fois par saison, et les
+  // retraités marqués par ageWorldPlayers restaient dans leur club (effectifs qui
+  // gonflaient, niveau du monde +2 points par saison).
+  const { updated: progressedPlayers, events: progressionEvents } = progressWorldPlayers(
+    current.players, current.season, endSeed);
+  for (const ev of progressionEvents.filter(e => e.type === "retirement").slice(0, 3)) {
     newsItems.push(ev.description);
   }
-
-  // ── 2b. Progression / Déclin / Génération jeunes ─────────────────────────
-  const { updated: progressedPlayers, events: progressionEvents } = progressWorldPlayers(
-    agedPlayers, current.season, endSeed, true);
   for (const ev of progressionEvents.filter(e => e.type === "breakout").slice(0, 3)) {
     newsItems.push(ev.description);
   }
@@ -374,7 +373,7 @@ export function endWorldSeason(world: WorldLiveState): SeasonEndResult {
   // ── 5. Avancer la saison (régénère calendriers, standings) ───────────────
   current = {
     ...current,
-    players:         transferredPlayers,
+    players:         topUpSquads(transferredPlayers, current.clubs, current.season, rng),
     transferHistory: [...current.transferHistory, ...newTransfers],
   };
 
@@ -406,4 +405,34 @@ export function advanceWorldWeeks(world: WorldLiveState, weeks: number): WeekAdv
   }
 
   return { world: current, weekResults: allResults, newsItems: allNews };
+}
+
+// ─── Effectif minimum ────────────────────────────────────────────────────────
+
+const MIN_SQUAD = 16;
+const TOPUP_POSITIONS: WorldPlayer["position"][] = ["GK", "CB", "CM", "ST", "LB", "RB", "DM", "AM", "LW", "RW"];
+
+/**
+ * À l'intersaison, un club que les transferts ont vidé sous 16 joueurs
+ * complète avec des jeunes de son centre (priorité aux postes manquants).
+ */
+export function topUpSquads(
+  players: WorldPlayer[],
+  clubs: { id: string; leagueId: string; countryId: string }[],
+  season: number,
+  rng: ReturnType<typeof createRng>,
+): WorldPlayer[] {
+  const out = [...players];
+  for (const club of clubs) {
+    const squad = out.filter(p => p.clubId === club.id);
+    let missing = MIN_SQUAD - squad.length;
+    let k = 0;
+    while (missing-- > 0) {
+      const counts = (pos: string) => out.filter(p => p.clubId === club.id && p.position === pos).length;
+      const pos = TOPUP_POSITIONS.find(p => counts(p) === 0) ?? (counts("GK") < 2 ? "GK" : TOPUP_POSITIONS[(k++ % (TOPUP_POSITIONS.length - 1)) + 1]);
+      const y = generateYouthPlayer(pos, club.id, season, rng);
+      out.push({ ...y, leagueId: club.leagueId, countryId: club.countryId });
+    }
+  }
+  return out;
 }
