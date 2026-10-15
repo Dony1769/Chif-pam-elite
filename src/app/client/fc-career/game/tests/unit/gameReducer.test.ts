@@ -344,10 +344,17 @@ describe("Entraînement et fatigue", () => {
     expect(state.save!.wallet.balance).toBe(1700);
   });
 
-  it("COMMIT_WEEK avance la semaine et le matchday", () => {
-    const state = gameReducer(loadedState, { type: "COMMIT_WEEK" });
-    expect(state.save!.career.week).toBe(2);
-    expect(state.save!.career.matchday).toBe(2);
+  it("COMMIT_WEEK avance la semaine ; le matchday n'avance que si un match a été joué", () => {
+    // Cas 1 : aucun match joué → matchday reste identique
+    const stateNoMatch = gameReducer(loadedState, { type: "COMMIT_WEEK" });
+    expect(stateNoMatch.save!.career.week).toBe(2);
+    expect(stateNoMatch.save!.career.matchday).toBe(1); // matchday inchangé sans match
+
+    // Cas 2 : match joué → matchday progresse
+    const saveWithMatch = { ...baseSave, weekState: { trainingDone: true, trainingIntensity: "normal" as const, matchPlayed: true } };
+    const stateWithMatch = gameReducer({ ...loadedState, save: saveWithMatch }, { type: "COMMIT_WEEK" });
+    expect(stateWithMatch.save!.career.week).toBe(2);
+    expect(stateWithMatch.save!.career.matchday).toBe(2); // matchday avance après un match
   });
 
   it("La fatigue ne se réinitialise pas artificiellement au changement de semaine", () => {

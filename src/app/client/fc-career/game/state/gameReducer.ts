@@ -951,7 +951,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       const newWeek     = career.week + 1;
-      const newMatchday = career.matchday + 1;
+      // BUG C2 FIX : matchday n'avance que si un match a été joué cette semaine.
+      // Sans match, le joueur reste sur la même journée pour la trouver la semaine suivante.
+      const newMatchday = weekState.matchPlayed ? career.matchday + 1 : career.matchday;
       const wallet      = save.wallet;
 
       // ── Bonus sponsors actifs ────────────────────────────────────

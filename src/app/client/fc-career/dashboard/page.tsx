@@ -88,6 +88,18 @@ function DashboardContent() {
   const completedIds = new Set(Array.from((career.completedMatchIds ?? []) as unknown as string[]));
   const weekFixture  = allSeasonFixtures.find(f => f.matchday === career.matchday && !completedIds.has(f.id)) ?? null;
 
+  // BUG C1 FIX : fin de saison dynamique selon totalMatchdays du schedule courant
+  // L'académie a 38 semaines, les ligues pros ont (n-1)*2 journées (ex: 14 pour 8 clubs)
+  const ACADEMY_COMP_IDS_DASH = ["youth-league", "academy-cup"];
+  const playerClubForSchedule = save.world.clubs?.find(c => c.id === player.contract.clubId) as { leagueId?: string } | undefined;
+  const isAcademyPhase = career.phase === "academy";
+  const currentScheduleForEnd = seasonSchedules.find(s =>
+    isAcademyPhase
+      ? ACADEMY_COMP_IDS_DASH.includes(s.competitionId)
+      : (playerClubForSchedule?.leagueId ? s.competitionId === playerClubForSchedule.leagueId : !ACADEMY_COMP_IDS_DASH.includes(s.competitionId))
+  );
+  const totalSeasonWeeks = currentScheduleForEnd?.totalMatchdays ?? 38;
+
   // Simulation locale
   const [simulating, setSimulating]   = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
@@ -398,7 +410,7 @@ function DashboardContent() {
 
   /* — Terminer la semaine ----------------------------------------- */
   const handleCommitWeek = useCallback(() => {
-    if (career.week >= 38) {
+    if (career.week >= totalSeasonWeeks) {
       router.push("/client/fc-career/season-end");
       return;
     }
@@ -413,7 +425,7 @@ function DashboardContent() {
     setAcademyEval(null);
     const intensityLabel = { light: "Légère", normal: "Normale", intense: "Intense" }[weekState.trainingIntensity ?? "normal"];
     toast(`Semaine ${career.week} terminée — Entraînement ${intensityLabel}`, "success");
-  }, [career.week, weekState, dispatch, toast, router]);
+  }, [career.week, totalSeasonWeeks, weekState, dispatch, toast, router]);
 
   const canCommit = weekState.trainingDone;
 
