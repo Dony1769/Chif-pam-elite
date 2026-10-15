@@ -329,6 +329,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
   s = withCareer(s, { bank: C(s).bank + s.contract.wage + bonus });
 
   s = nationalWindow(s);
+  s = collectWorldAwards(s, season, start.shadow.world.currentWeek);
 
   if (s.shadow.world.season !== season) s = seasonChange(start, s);
 
@@ -356,9 +357,37 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
   return s;
 }
 
+/**
+ * Monde CP : récompenses remises cette semaine dans le monde (Ballon d'Or,
+ * Golden Boy, buteurs, équipe type, joueur du mois…) qui concernent le joueur.
+ */
+function collectWorldAwards(s: PlayerCareerState, season: number, week: number): PlayerCareerState {
+  if (s.shadow.world.dataset !== "cp") return s;
+  const id = s.profile.id;
+  const fresh = (s.shadow.world.awards ?? []).filter(a => a.atSeason === season && a.atWeek === week);
+  const won: Award[] = [];
+  const messages = [];
+  for (const a of fresh) {
+    const line = s.seasons.find(l => l.season === a.season);
+    const mine = a.playerId === id || (a.id === "league_title" && a.clubId === myClub(s).id && (line?.apps ?? 0) >= 5);
+    if (mine) {
+      won.push({ season: a.season, id: a.id, label: a.label });
+      messages.push(pmsg(s, "board", a.id === "ballon_dor" ? "BALLON D'OR CP !" : "Récompense", a.label));
+    } else if (a.ranking) {
+      const rank = a.ranking.findIndex(r => r.playerId === id);
+      if (rank >= 0) messages.push(pmsg(s, "board", `${a.id === "ballon_dor" ? "Ballon d'Or CP" : "Golden Boy"} : ${rank + 1}e`, `Vous terminez ${rank + 1}e du classement (${a.label}).`));
+    }
+  }
+  if (!won.length && !messages.length) return s;
+  const big = won.filter(a => a.id === "ballon_dor" || a.id === "golden_boy" || a.id === "golden_shoe").length;
+  const rep = clamp(s.profile.reputation + won.length * 2 + big * 8, 1, 100);
+  return pushPlayerInbox({ ...withCareer(s, { awards: [...C(s).awards, ...won] }), profile: { ...s.profile, reputation: rep } }, ...messages);
+}
+
 function seasonChange(prev: PlayerCareerState, s0: PlayerCareerState): PlayerCareerState {
   let s = s0;
-  const awards = seasonAwards(prev);
+  // Monde CP : les trophées viennent des cérémonies du monde (collectWorldAwards)
+  const awards = prev.shadow.world.dataset === "cp" ? [] : seasonAwards(prev);
   if (awards.length) {
     const rep = clamp(s.profile.reputation + awards.length * 4, 1, 100);
     s = { ...withCareer(s, { awards: [...C(s).awards, ...awards] }), profile: { ...s.profile, reputation: rep } };

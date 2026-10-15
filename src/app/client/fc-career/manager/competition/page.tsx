@@ -6,6 +6,8 @@ import React, { useState } from "react";
 import { useGame } from "../_ui/ManagerContext";
 import { Crest, Empty, Section, playerName } from "../_ui/kit";
 import { getManagedClub } from "../../game/manager/engine";
+import { AwardsPanel, LeadersPanel } from "../_ui/WorldPanels";
+import { fixtureDate, worldCalendar } from "../../game/domain/calendar";
 
 export default function CompetitionPage() {
   const { state } = useGame();
@@ -31,7 +33,7 @@ export default function CompetitionPage() {
   return (
     <div className="mg-stack">
       <div className="mg-pagehead">
-        <div><h1>Compétition</h1><p>Saison {state.world.season} · {league.name}</p></div>
+        <div><h1>Compétition</h1><p>{worldCalendar(state.world) ? `Saison ${worldCalendar(state.world)!.season}` : `Saison ${state.world.season}`} · {league.name}</p></div>
         <select className="mg-select" style={{ width: "auto" }} value={leagueId} onChange={e => { setLeagueId(e.target.value); setMd(null); }} aria-label="Championnat">
           {state.world.leagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
@@ -69,7 +71,7 @@ export default function CompetitionPage() {
                 <button type="button" className="mg-btn mg-btn--sm" disabled={matchday >= sch.totalMatchdays} onClick={() => setMd(matchday + 1)} aria-label="Journée suivante">›</button>
               </span>
             }>
-              <table className="mg-table">
+              <div className="mg-tablewrap"><table className="mg-table">
                 <tbody>
                   {sch.fixtures.filter(f => f.matchday === matchday).map(f => (
                     <tr key={f.id} className={f.homeClubId === club.id || f.awayClubId === club.id ? "is-me" : ""}>
@@ -79,7 +81,7 @@ export default function CompetitionPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </Section>
           )}
         </div>
@@ -87,7 +89,7 @@ export default function CompetitionPage() {
         <div className="mg-col-4 mg-stack">
           <Section title="Buteurs">
             {scorers.length === 0 ? <Empty>Aucun but marqué pour l&apos;instant.</Empty> : (
-              <table className="mg-table">
+              <div className="mg-tablewrap"><table className="mg-table">
                 <tbody>
                   {scorers.map((s, i) => {
                     const p = state.world.players.find(x => x.id === s.playerId);
@@ -100,11 +102,11 @@ export default function CompetitionPage() {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </Section>
           <Section title={`Calendrier ${club.shortName}`}>
-            <table className="mg-table">
+            <div className="mg-tablewrap"><table className="mg-table">
               <tbody>
                 {myFixtures.map(f => {
                   const home = f.homeClubId === club.id;
@@ -113,28 +115,35 @@ export default function CompetitionPage() {
                   const tag = res ? (res[0] > res[1] ? "mg-tag--green" : res[0] < res[1] ? "mg-tag--red" : "") : "";
                   return (
                     <tr key={f.id}>
-                      <td className="mg-small">J{f.matchday}</td>
+                      <td className="mg-small">J{f.matchday}{sch?.weekOf || state.world.schedules[club.leagueId]?.weekOf ? <><br />{fixtureDate(state.world, state.world.schedules[club.leagueId]?.weekOf, f.matchday)}</> : null}</td>
                       <td><span className="mg-pname"><Crest club={opp} size={16} />{opp?.shortName} <span className="mg-small">{home ? "dom." : "ext."}</span></span></td>
                       <td className="num">{res ? <span className={`mg-tag ${tag}`}>{res[0]}-{res[1]}</span> : "–"}</td>
                     </tr>
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </Section>
           {state.history.length > 0 && (
             <Section title="Palmarès du manager">
-              <table className="mg-table">
+              <div className="mg-tablewrap"><table className="mg-table">
                 <tbody>
                   {state.history.map(h => (
                     <tr key={h.season}><td>Saison {h.season}</td><td>{clubOf(h.clubId)?.shortName}</td><td className="num">{h.position}e</td><td>{h.objectiveMet ? <span className="mg-tag mg-tag--green">Objectif</span> : <span className="mg-tag mg-tag--red">Manqué</span>}</td></tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </Section>
           )}
         </div>
       </div>
+      {state.world.dataset === "cp" && (
+        <div className="mg-grid">
+          <div className="mg-col-6 mg-stack"><LeadersPanel world={state.world} leagueId={leagueId} /></div>
+          <div className="mg-col-6 mg-stack"><LeadersPanel world={state.world} leagueId="all" /></div>
+        </div>
+      )}
+      {state.world.dataset === "cp" && <AwardsPanel world={state.world} leagueId={leagueId} />}
     </div>
   );
 }

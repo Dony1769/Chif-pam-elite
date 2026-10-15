@@ -26,17 +26,20 @@ export default function NewPlayerPage() {
   const [seed, setSeed] = useState<string | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [nationality, setNationality] = useState("valtara");
+  const [nationality, setNationality] = useState("FRA");
+  const [leagueId, setLeagueId] = useState("eng-2");
   const [position, setPosition] = useState<WorldPlayerPosition>("ST");
   const [foot, setFoot] = useState<Foot>("right");
   const [clubId, setClubId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => { setSeed(seedFor(`fc27-joueur-${Date.now()}-${Math.random()}`)); }, []);
-  const world = useMemo(() => (seed ? generateWorld(seed) : null), [seed]);
-  const clubs = useMemo(() => (world ? world.clubs.filter(c => c.tier >= 2)
+  // Monde CP réel : les 10 championnats (Top 5, D1 et D2)
+  const world = useMemo(() => (seed ? generateWorld(seed, "cp") : null), [seed]);
+  const nations = useMemo(() => (world ? world.countries.filter(c => /^[A-Z]{3}$/.test(c.id)).sort((a, b) => a.name.localeCompare(b.name, "fr")) : []), [world]);
+  const clubs = useMemo(() => (world ? world.clubs.filter(c => c.leagueId === leagueId)
     .map(c => ({ club: c, strength: squadStrength(world, c.id), country: world.countries.find(k => k.id === c.countryId)?.name ?? "" }))
-    .sort((a, b) => a.strength - b.strength) : []), [world]);
+    .sort((a, b) => a.strength - b.strength) : []), [world, leagueId]);
   const existing = typeof window !== "undefined" ? loadPlayerCareer() : { ok: false as const, reason: "empty" as const };
   const hasSave = existing.ok || (!existing.ok && existing.reason === "corrupt") || !!state;
   const nameOk = firstName.trim().length >= 2 && lastName.trim().length >= 2;
@@ -91,7 +94,7 @@ export default function NewPlayerPage() {
           <label className="mg-field"><span>Nom</span><input id="pc-last" className="mg-input" maxLength={20} value={lastName} onChange={e => setLastName(e.target.value)} /></label>
           <label className="mg-field"><span>Nationalité</span>
             <select id="pc-nat" className="mg-select" value={nationality} onChange={e => setNationality(e.target.value)}>
-              {world.countries.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {nations.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
           <label className="mg-field"><span>Pied fort</span>
@@ -107,14 +110,19 @@ export default function NewPlayerPage() {
         </div>
       </div>
 
-      <div className="mg-pagehead"><div><h2 style={{ fontSize: 22, fontWeight: 900, textTransform: "uppercase" }}>Ton premier club</h2><p>Les clubs de deuxième division qui te proposent un contrat. Un effectif modeste, c&apos;est plus de temps de jeu.</p></div></div>
+      <div className="mg-pagehead"><div><h2 style={{ fontSize: 22, fontWeight: 900, textTransform: "uppercase" }}>Ton premier club</h2><p>Tous les clubs CP te proposent un contrat. En deuxième division, un effectif modeste : plus de temps de jeu. Dans un grand club, il faudra gagner ta place.</p></div></div>
+      <div className="mg-seg mg-seg--wrap" role="group" aria-label="Championnat">
+        {world.leagues.map(l => (
+          <button key={l.id} type="button" aria-pressed={l.id === leagueId} onClick={() => { setLeagueId(l.id); setClubId(null); }}>{l.name.replace(/^CP /, "")}</button>
+        ))}
+      </div>
       <div className="mg-clubs">
         {clubs.map(({ club, strength, country }) => (
           <button key={club.id} type="button" className="mg-clubpick" aria-pressed={club.id === clubId} onClick={() => { setClubId(club.id); setConfirm(false); }}>
             <Crest club={club} size={40} />
             <span className="mg-clubpick__body">
               <strong>{club.name}</strong>
-              <span>{country} · effectif <Ovr value={Math.round(strength)} small /></span>
+              <span>{country} · effectif <Ovr value={Math.round(strength)} small />{club.stadiumCapacity ? ` · ${club.stadiumCapacity.toLocaleString("fr-FR")} places` : ""}</span>
             </span>
           </button>
         ))}

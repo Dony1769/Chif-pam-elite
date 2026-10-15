@@ -8,8 +8,9 @@ import { useGame } from "./_ui/ManagerContext";
 import { Crest, Empty, Meter, Section } from "./_ui/kit";
 import {
   OBJECTIVE_LABEL, formatMoney, getLeaguePosition, getLeagueSchedule, getManagedClub, getNextFixture,
-  isSeasonOver, lineupIssues, objectiveMaxPosition,
+  hasMatchThisWeek, isLeagueOver, isSeasonOver, lineupIssues, objectiveMaxPosition,
 } from "../game/manager/engine";
+import { fixtureDate, worldCalendar } from "../game/domain/calendar";
 import { currentWageBill, windowLabel } from "../game/manager/market";
 import { shortName } from "../game/utils/names";
 
@@ -27,7 +28,11 @@ export default function ManagerHub() {
   const league = state.world.leagues.find(l => l.id === club.leagueId);
   const last = state.lastMatch;
   const sacked = state.status === "sacked";
-  const seasonOver = isSeasonOver(state);
+  // Monde CP : le championnat se termine fin mai, la saison le 30 juin
+  const seasonOver = state.world.dataset === "cp" ? isLeagueOver(state) : isSeasonOver(state);
+  const thisWeek = hasMatchThisWeek(state);
+  const cal = worldCalendar(state.world);
+  const fxDate = fx ? fixtureDate(state.world, sch?.weekOf, fx.matchday) : null;
 
   if (sacked) {
     return (
@@ -48,8 +53,21 @@ export default function ManagerHub() {
   return (
     <div className="mg-grid">
       <div className="mg-col-8 mg-stack">
-        <Section title={seasonOver ? "Fin de saison" : `Journée ${fx?.matchday ?? sch?.currentMatchday ?? "-"} · ${league?.name ?? ""}`} className="mg-card--accent">
-          {fx && !seasonOver ? (
+        <Section title={seasonOver ? "Fin de saison" : `Journée ${fx?.matchday ?? sch?.currentMatchday ?? "-"} · ${league?.name ?? ""}`} aside={fxDate ? <span className="mg-small">{fxDate}</span> : undefined} className="mg-card--accent">
+          {fx && !seasonOver && !thisWeek ? (
+            <div className="mg-stack">
+              <div className="mg-next">
+                <div className="mg-next__team"><Crest club={clubOf(fx.homeClubId)} size={52} /><strong>{clubOf(fx.homeClubId)?.name}</strong></div>
+                <div className="mg-next__vs">VS</div>
+                <div className="mg-next__team"><Crest club={clubOf(fx.awayClubId)} size={52} /><strong>{clubOf(fx.awayClubId)?.name}</strong></div>
+              </div>
+              <p className="mg-muted" style={{ margin: 0 }}>Pas de match cette semaine ({cal?.phase === "Intersaison" ? "préparation estivale" : "trêve"}). Prochain match : {fxDate}.</p>
+              <div className="mg-row">
+                <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "ADVANCE_TO_MATCH" })}>Aller au prochain match</button>
+                <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Semaine suivante</button>
+              </div>
+            </div>
+          ) : fx && !seasonOver ? (
             <>
               <div className="mg-next">
                 <div className="mg-next__team"><Crest club={clubOf(fx.homeClubId)} size={52} /><strong>{clubOf(fx.homeClubId)?.name}</strong></div>
@@ -65,8 +83,11 @@ export default function ManagerHub() {
             </>
           ) : (
             <div className="mg-stack">
-              <p className="mg-muted">Le championnat est terminé. {club.name} finit {pos}e. Passez à l&apos;intersaison pour le bilan du conseil, les promotions et la nouvelle saison.</p>
-              <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "PLAY_WEEK" })}>Passer à la saison suivante</button>
+              <p className="mg-muted">Le championnat est terminé. {club.name} finit {pos}e. {cal ? `Nous sommes le ${cal.date} : la saison ${cal.season} se clôt le 30 juin (bilan du conseil, montées et descentes), puis la préparation reprend.` : "Passez à l'intersaison pour le bilan du conseil, les promotions et la nouvelle saison."}</p>
+              <div className="mg-row">
+                <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: cal ? "ADVANCE_TO_MATCH" : "PLAY_WEEK" })}>{cal ? "Passer à la saison suivante" : "Passer à la saison suivante"}</button>
+                {cal && <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Semaine suivante</button>}
+              </div>
             </div>
           )}
         </Section>

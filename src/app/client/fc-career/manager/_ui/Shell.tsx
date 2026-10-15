@@ -10,6 +10,7 @@ import { Crest } from "./kit";
 import { GameBar, GameNav } from "./GameNav";
 import { formatMoney, getManagedClub } from "../../game/manager/engine";
 import { isWindowOpen } from "../../game/manager/market";
+import { worldCalendar } from "../../game/domain/calendar";
 
 const BASE = "/client/fc-career/manager";
 const TABS = [
@@ -37,6 +38,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   else if (!state && !onNewGame) body = <NoGame problem={loadProblem} />;
 
   const club = state ? getManagedClub(state) : undefined;
+  const cal = state ? worldCalendar(state.world) : null;
   const unread = state?.inbox.filter(m => !m.read).length ?? 0;
 
   return (
@@ -49,7 +51,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <Crest club={club} size={34} />
               <div className="mg-top__id">
                 <strong>{club.name}</strong>
-                <span>Saison {state.world.season} · semaine {state.world.currentWeek} · {state.managerName}</span>
+                <span>{cal ? `${cal.date} · saison ${cal.season}` : `Saison ${state.world.season} · semaine ${state.world.currentWeek}`} · {state.managerName}</span>
               </div>
             </div>
             <dl className="mg-top__kpis">

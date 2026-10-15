@@ -231,7 +231,9 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
   // Occasion
   const atkPower = rAtt.attack * profAtt.creation * urgency(side) * (homeHasBall ? HOME_ADVANTAGE : 1);
   const defPower = rDef.defense * profDef.resistance;
-  const chanceProb = 0.232 * (atkPower / defPower);
+  // L'écart de niveau est amplifié (exposant) : un favori domine nettement plus
+  // souvent qu'avec un simple rapport, sans changer le volume d'occasions à niveau égal
+  const chanceProb = 0.232 * Math.pow(atkPower / defPower, 1.9);
   if (rng.chance(Math.min(0.55, chanceProb))) {
     const slots = FORMATIONS[att.tactic.formation];
     const candidates = att.pitch.map((p, i) => ({ p, i })).filter((x): x is { p: WorldPlayer; i: number } => x.p !== null);
@@ -241,7 +243,7 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
       const gkRating = gk ? effectiveRating(gk, "GK") : 35;
       const shooterRating = effectiveRating(shooter.p, slots[shooter.i].pos);
       const duel = Math.max(0.6, Math.min(1.6, shooterRating / Math.max(30, gkRating)));
-      let xg = 0.11 * profAtt.chanceQuality * Math.pow(duel, 0.9) * rng.float(0.35, 1.9);
+      let xg = 0.11 * profAtt.chanceQuality * Math.pow(duel, 1.2) * rng.float(0.35, 1.9);
       xg = Math.max(0.02, Math.min(0.7, xg));
       att.shots += 1;
       att.xg += xg;

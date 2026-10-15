@@ -5,6 +5,7 @@
 
 import type { ManagerState, Tactic } from "./types";
 import type { LiveMatch } from "./matchSim";
+import { hasMatchThisWeek } from "./engine";
 import {
   autoLineup, createManagerGame, markRead, setCaptain, setTactic, swapPlayers,
 } from "./engine";
@@ -26,6 +27,7 @@ export type ManagerAction =
   | { type: "SWAP_PLAYERS"; a: string; b: string }
   | { type: "SET_CAPTAIN"; playerId: string }
   | { type: "PLAY_WEEK"; live?: LiveMatch | null }
+  | { type: "ADVANCE_TO_MATCH" }
   | { type: "MARK_READ"; id: string }
   | { type: "MARK_ALL_READ" }
   // Marché
@@ -74,6 +76,13 @@ export function managerStep(state: ManagerState | null, action: ManagerAction): 
     case "SWAP_PLAYERS":   return plain(swapPlayers(s, action.a, action.b));
     case "SET_CAPTAIN":    return plain(setCaptain(s, action.playerId));
     case "PLAY_WEEK":      return plain(advanceWeek(s, action.live));
+    case "ADVANCE_TO_MATCH": {
+      // Monde CP : enchaîne les semaines sans match (intersaison, trêves) jusqu'au prochain match
+      let cur = s, n = 0;
+      const season = s.world.season;
+      do { cur = advanceWeek(cur); n++; } while (n < 16 && cur.status === "active" && !hasMatchThisWeek(cur) && cur.world.season === season && (cur.market?.offers.length ?? 0) <= (s.market?.offers.length ?? 0));
+      return { state: cur, message: { ok: true, text: `${n} semaine${n > 1 ? "s" : ""} passée${n > 1 ? "s" : ""}.` } };
+    }
     case "MARK_READ":      return plain(markRead(s, action.id));
     case "MARK_ALL_READ":  return plain({ ...s, inbox: s.inbox.map(m => ({ ...m, read: true })) });
     case "BID":            return fromResult(makeBid(s, action.playerId, action.fee));

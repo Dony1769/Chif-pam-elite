@@ -380,8 +380,13 @@ function recordMatch(s: ManagerState, live: LiveMatch): { state: ManagerState; r
   const stats = [...w.playerStats];
   const bump = (playerId: string, clubId: string, g: number, a: number, appearance: boolean) => {
     const i = stats.findIndex(x => x.playerId === playerId && x.season === w.season && x.leagueId === leagueId);
-    if (i >= 0) stats[i] = { ...stats[i], goals: stats[i].goals + g, assists: stats[i].assists + a, appearances: stats[i].appearances + (appearance ? 1 : 0) };
-    else stats.push({ playerId, clubId, leagueId, season: w.season, goals: g, assists: a, appearances: appearance ? 1 : 0, yellowCards: 0, redCards: 0, avgRating: 6.5 });
+    // Note moyenne réelle : moyenne glissante des notes de match
+    const r = appearance ? report.ratings[playerId] : undefined;
+    if (i >= 0) {
+      const apps = stats[i].appearances + (appearance ? 1 : 0);
+      const avg = r !== undefined && apps > 0 ? (stats[i].avgRating * stats[i].appearances + r) / apps : stats[i].avgRating;
+      stats[i] = { ...stats[i], goals: stats[i].goals + g, assists: stats[i].assists + a, appearances: apps, avgRating: Math.round(avg * 100) / 100 };
+    } else stats.push({ playerId, clubId, leagueId, season: w.season, goals: g, assists: a, appearances: appearance ? 1 : 0, yellowCards: 0, redCards: 0, avgRating: r ?? 6.5 });
   };
   for (const side of ["home", "away"] as const) {
     const t = done[side];

@@ -9,6 +9,7 @@ import type { OptionId } from "./playstyles";
 import type { LiveMatch } from "../manager/matchSim";
 import type { NewCareerInput } from "./engine";
 import { createPlayerCareer, setTrainingFocus } from "./engine";
+import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
 import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, requestTransfer, retirePlayer } from "./career";
@@ -20,6 +21,7 @@ export type PlayerAction =
   | { type: "PLAY_WEEK"; live?: LiveMatch | null; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_FOCUS"; attr: AttrKey | TrainingFocus }
   | { type: "RETIRE" }
+  | { type: "ADVANCE_TO_MATCH" }
   | { type: "ACCEPT_OFFER"; offerId: string }
   | { type: "REJECT_OFFER"; offerId: string }
   | { type: "REQUEST_TRANSFER"; on: boolean }
@@ -49,6 +51,13 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
   switch (action.type) {
     case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
     case "RETIRE":           return fromResult(retirePlayer(s));
+    case "ADVANCE_TO_MATCH": {
+      // Semaines sans match (intersaison, trêves) enchaînées jusqu'au prochain match ou une offre
+      let cur = s, n = 0;
+      const season = s.shadow.world.season;
+      do { cur = advancePlayerWeek(cur); n++; } while (n < 16 && !cur.retired && !hasMatchThisWeek(cur.shadow) && cur.shadow.world.season === season && (cur.career?.offers.length ?? 0) === (s.career?.offers.length ?? 0));
+      return { state: cur, message: { ok: true, text: `${n} semaine${n > 1 ? "s" : ""} passée${n > 1 ? "s" : ""}.` } };
+    }
     case "SET_FOCUS":        return plain(setTrainingFocus(s, action.attr));
     case "ACCEPT_OFFER":     return fromResult(acceptOffer(s, action.offerId));
     case "REJECT_OFFER":     return plain(rejectOffer(s, action.offerId));

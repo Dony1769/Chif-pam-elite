@@ -26,28 +26,18 @@ interface ClubSnapshot {
  * Calcule la force effective d'un club (0-100) à partir de son effectif, coach et réputation.
  */
 function computeClubStrength(snapshot: ClubSnapshot, isHome: boolean): number {
-  const players = snapshot.players;
+  const players = snapshot.players.filter(p => !p.injury || p.injury.weeksRemaining <= 0);
   if (players.length === 0) {
-    return snapshot.reputation * 0.5; // fallback sans effectif
+    return snapshot.reputation * 0.75; // fallback sans effectif
   }
-
-  // Sélectionner les 11 meilleurs (sans GK si aucun disponible)
-  const sorted = [...players].sort((a, b) => b.overall - a.overall);
-  const starting11 = sorted.slice(0, Math.min(11, sorted.length));
-  const avgOvr = starting11.reduce((s, p) => s + p.overall, 0) / starting11.length;
-
-  // Bonus coach
-  let coachBonus = 0;
-  if (snapshot.coach) {
-    coachBonus = (snapshot.coach.skills.attack + snapshot.coach.skills.defense) / 200 * 10;
-  }
-
-  // Avantage domicile
-  const homeAdv = isHome ? 4 : 0;
-
-  // Pondération réputation (15%) + OVR (75%) + coach (10%)
-  const strength = avgOvr * 0.75 + snapshot.reputation * 0.15 + coachBonus + homeAdv;
-  return Math.min(99, Math.max(1, strength));
+  // Onze type : 1 gardien + les 10 meilleurs joueurs de champ
+  const gk = players.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall)[0];
+  const field = players.filter(p => p.position !== "GK").sort((a, b) => b.overall - a.overall).slice(0, 10);
+  const xi = gk ? [gk, ...field] : field;
+  const avgOvr = xi.reduce((t, p) => t + p.overall, 0) / Math.max(1, xi.length);
+  // Coach : jusqu'à +3 ; domicile : +2
+  const coachBonus = snapshot.coach ? ((snapshot.coach.skills.attack + snapshot.coach.skills.defense) / 200) * 3 : 0;
+  return Math.min(99, Math.max(1, avgOvr + coachBonus + (isHome ? 2 : 0)));
 }
 
 // ─── Génération du score depuis les forces ────────────────────────────────────
@@ -61,22 +51,36 @@ function generateScore(
   strengthDefense: number,
   rng: ReturnType<typeof createRng>,
 ): number {
-  // Lambda Poisson : buts attendus basé sur l'attaque vs la défense adverse
-  const attackRatio = strengthAttack / (strengthAttack + strengthDefense);
-  const lambda = 0.6 + attackRatio * 2.4; // entre 0.6 et 3.0
-
-  // Simulation Poisson simplifiée via méthode de Knuth
+  // Buts attendus : ~1,35 à niveau égal, ×2 tous les 10 points d'écart
+  const lambda = Math.max(0.2, Math.min(4.5, 1.35 * Math.exp((strengthAttack - strengthDefense) * 0.07)));
+  // Poisson (méthode de Knuth)
   let k = 0;
   let p = 1;
   const L = Math.exp(-lambda);
   do {
     k++;
     p *= rng.float(0, 1);
-  } while (p > L && k < 15); // cap à 14 buts (réalisme)
+  } while (p > L && k < 15);
   return k - 1;
 }
 
 // ─── Génération des buteurs ───────────────────────────────────────────────────
+
+const SCORE_W: Record<string, number> = { ST: 5, CF: 5, LW: 3, RW: 3, AM: 2.5, CM: 1.2, DM: 0.5, LB: 0.4, RB: 0.4, CB: 0.35, GK: 0 };
+const ASSIST_W: Record<string, number> = { AM: 3, LW: 3, RW: 3, CM: 2, ST: 1.5, CF: 1.5, LB: 1.2, RB: 1.2, DM: 0.8, CB: 0.3, GK: 0.05 };
+
+/** Les 16 joueurs les mieux notés et disponibles : ceux qui jouent réellement. */
+function matchSquad(players: WorldPlayer[]): WorldPlayer[] {
+  return players.filter(p => !p.injury || p.injury.weeksRemaining <= 0).sort((a, b) => b.overall - a.overall).slice(0, 16);
+}
+
+function weightedPick(pool: WorldPlayer[], w: (p: WorldPlayer) => number, rng: ReturnType<typeof createRng>): WorldPlayer | null {
+  const total = pool.reduce((t, p) => t + w(p), 0);
+  if (total <= 0) return null;
+  let r = rng.float(0, total);
+  for (const p of pool) { r -= w(p); if (r <= 0) return p; }
+  return pool[pool.length - 1];
+}
 
 function pickScorers(
   players: WorldPlayer[],
@@ -85,24 +89,12 @@ function pickScorers(
   clubId: string,
 ): { playerId: string; clubId: string }[] {
   if (goals === 0 || players.length === 0) return [];
-
-  // Probabilité de marquer pondérée par position et OVR
-  const attacking = players.filter(p =>
-    ["ST", "LW", "RW", "AM", "CF"].includes(p.position)
-  );
-  const pool = attacking.length > 0 ? attacking : players;
-
+  // Les attaquants et les meilleurs marquent davantage
+  const pool = matchSquad(players);
   const scorers: { playerId: string; clubId: string }[] = [];
   for (let i = 0; i < goals; i++) {
-    // Sélection pondérée par OVR
-    const totalWeight = pool.reduce((s, p) => s + p.overall, 0);
-    let r = rng.float(0, totalWeight);
-    let scorer = pool[0];
-    for (const p of pool) {
-      r -= p.overall;
-      if (r <= 0) { scorer = p; break; }
-    }
-    scorers.push({ playerId: scorer.id, clubId });
+    const p = weightedPick(pool, q => (SCORE_W[q.position] ?? 1) * Math.pow(q.overall / 70, 4), rng) ?? pool[0];
+    scorers.push({ playerId: p.id, clubId });
   }
   return scorers;
 }
@@ -201,20 +193,17 @@ export function simulateWorldMatch(input: WorldMatchInput): WorldMatchOutput {
     statUpdates.push({ playerId: s.playerId, clubId: away.clubId, leagueId, goals: 1, assists: 0 });
   }
   // Passes décisives (1 par but, si assez de joueurs)
-  for (let i = 0; i < homeGoals && home.players.length > 1; i++) {
-    const helpers = home.players.filter(p => !homeScorers.some(s => s.playerId === p.id));
-    if (helpers.length > 0) {
-      const assister = rng.pick(helpers);
-      statUpdates.push({ playerId: assister.id, clubId: home.clubId, leagueId, goals: 0, assists: 1 });
+  // Passes décisives : 3 buts sur 4, données plutôt par les créateurs
+  const assists = (scorers: { playerId: string }[], snap: typeof home) => {
+    const pool = matchSquad(snap.players);
+    for (const sc of scorers) {
+      if (!rng.chance(0.75)) continue;
+      const a = weightedPick(pool.filter(p => p.id !== sc.playerId), q => (ASSIST_W[q.position] ?? 1) * Math.pow(q.overall / 70, 3), rng);
+      if (a) statUpdates.push({ playerId: a.id, clubId: snap.clubId, leagueId, goals: 0, assists: 1 });
     }
-  }
-  for (let i = 0; i < awayGoals && away.players.length > 1; i++) {
-    const helpers = away.players.filter(p => !awayScorers.some(s => s.playerId === p.id));
-    if (helpers.length > 0) {
-      const assister = rng.pick(helpers);
-      statUpdates.push({ playerId: assister.id, clubId: away.clubId, leagueId, goals: 0, assists: 1 });
-    }
-  }
+  };
+  assists(homeScorers, home);
+  assists(awayScorers, away);
 
   return { result, updatedPlayerStats: statUpdates };
 }

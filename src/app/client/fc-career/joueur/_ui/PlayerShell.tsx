@@ -10,6 +10,7 @@ import { Crest } from "../../manager/_ui/kit";
 import { GameBar, GameNav } from "../../manager/_ui/GameNav";
 import { formatMoney } from "../../game/manager/engine";
 import { me, myClub } from "../../game/player2/engine";
+import { worldCalendar } from "../../game/domain/calendar";
 
 const BASE = "/client/fc-career/joueur";
 const TABS = [
@@ -18,6 +19,7 @@ const TABS = [
   { href: `${BASE}/progression`, label: "Progression", icon: "chart" },
   { href: `${BASE}/carriere`, label: "Carrière", icon: "doc" },
   { href: `${BASE}/messages`, label: "Messages", icon: "mail" },
+  { href: `${BASE}/monde`, label: "Compétitions", icon: "trophy" },
 ];
 
 export function PlayerShell({ children }: { children: React.ReactNode }) {
@@ -34,6 +36,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
 
   const club = state ? myClub(state) : undefined;
   const p = state ? me(state) : undefined;
+  const cal = state ? worldCalendar(state.shadow.world) : null;
   const unread = state?.inbox.filter(m => !m.read).length ?? 0;
 
   return (
@@ -46,7 +49,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
               <Crest club={club} size={34} />
               <div className="mg-top__id">
                 <strong>{state.profile.firstName} {state.profile.lastName}</strong>
-                <span>{club.name} · saison {state.shadow.world.season} · semaine {state.shadow.world.currentWeek} · {p.age} ans</span>
+                <span>{club.name} · {cal ? `${cal.date} · ${cal.season}` : `saison ${state.shadow.world.season} · semaine ${state.shadow.world.currentWeek}`} · {p.age} ans</span>
               </div>
             </div>
             <dl className="mg-top__kpis">

@@ -21,6 +21,7 @@ import { generateYouthPlayer, progressWorldPlayers } from "./playerProgression";
 import { inventPlayer } from "../data/cp/cpWorld";
 import { playerValue } from "./playerValue";
 import { weekDays } from "./calendar";
+import { runAwards } from "./worldAwards";
 import { advanceWorldSeason, buildInitialStandings, generateLeagueSchedule } from "./worldGenerator";
 import { computePromotionRelegation } from "./worldSimulator";
 import { createRng, seedFromString } from "../utils/random";
@@ -154,6 +155,11 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
     recentResults: [...weekResults, ...current.recentResults].slice(0, 20),
     currentWeek:   current.currentWeek + 1,
   };
+
+  // Monde CP : cérémonies de la semaine écoulée (joueur du mois, Ballon d'Or…)
+  const ceremony = runAwards(current, current.currentWeek - 1);
+  current = ceremony.world;
+  newsItems.push(...ceremony.news);
 
   // Monde CP : anniversaires de la semaine (l'âge ne dépend plus de la fin de saison)
   if (current.dataset === "cp" && current.startYear) {

@@ -106,3 +106,18 @@ export function buildLeagueWeeks(totalMatchdays: number, tier: number, countryId
 export function isMidweek(weekOf: number[], md: number): boolean {
   return md >= 2 && weekOf[md - 1] === weekOf[md - 2];
 }
+
+/** Libellés de date d'un monde CP : « sam. 15 août 2026 », « 2026-27 », phase de la saison. */
+export function worldCalendar(w: { dataset?: string; startYear?: number; season: number; currentWeek: number }) {
+  if (w.dataset !== "cp" || !w.startYear) return null;
+  const year = w.startYear + w.season - 1;
+  const week = Math.min(SEASON_WEEKS, w.currentWeek);
+  const phase = week < LEAGUE_FIRST_WEEK ? "Intersaison" : week > LEAGUE_LAST_WEEK ? "Fin de saison" : "Championnat";
+  return { year, week, season: seasonLabel(year), date: formatDate(matchDate(year, week)), phase, window: transferWindow(week) };
+}
+
+/** Date d'une journée de championnat (samedi, ou mercredi si match en semaine). */
+export function fixtureDate(w: { startYear?: number; season: number }, weekOf: number[] | undefined, matchday: number): string | null {
+  if (!w.startYear || !weekOf) return null;
+  return formatDate(matchDate(w.startYear + w.season - 1, weekOf[matchday - 1], isMidweek(weekOf, matchday)));
+}

@@ -141,6 +141,10 @@ export interface WorldLiveState {
   dataset?: "fictional" | "cp";
   /** Monde CP : année civile du début de la saison 1 (2026 → saison 2026-27) */
   startYear?: number;
+  /** Monde CP : palmarès individuel et collectif (Ballon d'Or, Golden Boy, buteurs…) */
+  awards?: import("./worldAwards").WorldAward[];
+  /** Monde CP : buts + passes au dernier « joueur du mois » */
+  awardSnap?: Record<string, number>;
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────

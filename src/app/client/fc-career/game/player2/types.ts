@@ -106,7 +106,8 @@ export interface NationalTeamState {
 
 export interface Award {
   season: number;
-  id: "top_scorer" | "revelation" | "golden_star" | "league_title" | "promotion" | "assist_king";
+  id: "top_scorer" | "revelation" | "golden_star" | "league_title" | "promotion" | "assist_king"
+    | import("../domain/worldAwards").AwardId;
   label: string;
 }
 

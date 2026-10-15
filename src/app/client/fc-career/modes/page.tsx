@@ -7,6 +7,7 @@
  */
 
 import { hydrateGameStore } from "../game/persistence/gameStore";
+import { worldCalendar } from "../game/domain/calendar";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadManager } from "../game/manager/storage";
@@ -23,6 +24,7 @@ interface PlayerSummary {
   potential: number;
   age: number;
   season: number;
+  label?: string;
 }
 
 interface ManagerSummary {
@@ -30,6 +32,7 @@ interface ManagerSummary {
   club: string;
   season: number;
   week: number;
+  label?: string;
   balance: number;
   sacked: boolean;
 }
@@ -70,7 +73,7 @@ export default function ModesPage() {
         setPlayer({
           name: `${fullName(v2.state.profile)} · ${v2Club(v2.state).shortName}`,
           position: POS_FR[v2.state.profile.position] ?? v2.state.profile.position, overall: p.overall, potential: v2.state.profile.potential,
-          age: p.age, season: v2.state.shadow.world.season,
+          age: p.age, season: v2.state.shadow.world.season, label: worldCalendar(v2.state.shadow.world)?.season,
         });
       }
       const m = loadManager();
@@ -78,7 +81,7 @@ export default function ModesPage() {
         const club = m.state.world.clubs.find(c => c.id === m.state.clubId);
         setManager({
           name: m.state.managerName, club: club?.name ?? "—",
-          season: m.state.world.season, week: m.state.world.currentWeek,
+          season: m.state.world.season, week: m.state.world.currentWeek, label: worldCalendar(m.state.world)?.date,
           balance: m.state.finances.balance, sacked: m.state.status === "sacked",
         });
       }
@@ -112,7 +115,7 @@ export default function ModesPage() {
             <div className="fcm-card__save">
               <div>
                 <strong>{player.name || "Ton joueur"}</strong>
-                <span>{player.position} · {player.age} ans · saison {player.season}</span>
+                <span>{player.position} · {player.age} ans · saison {player.label ?? player.season}</span>
               </div>
               <div className="fcm-ovr">
                 <b>{player.overall}</b>
@@ -137,7 +140,7 @@ export default function ModesPage() {
             <div className="fcm-card__save">
               <div>
                 <strong>{manager.club}</strong>
-                <span>{manager.name} · saison {manager.season}, semaine {manager.week}{manager.sacked ? " · licencié" : ""}</span>
+                <span>{manager.name} · {manager.label ?? `saison ${manager.season}, semaine ${manager.week}`}{manager.sacked ? " · licencié" : ""}</span>
               </div>
               <div className="fcm-ovr fcm-ovr--money"><b>{formatMoney(manager.balance)}</b><small>trésorerie</small></div>
             </div>

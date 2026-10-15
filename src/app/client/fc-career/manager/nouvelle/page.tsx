@@ -26,7 +26,8 @@ export default function NewManagerGame() {
   // Graine choisie côté navigateur uniquement (évite tout écart serveur/client)
   useEffect(() => { setSeed(seedFor(`fc27-${Date.now()}-${Math.random()}`)); }, []);
 
-  const world = useMemo(() => (seed ? generateWorld(seed) : null), [seed]);
+  // Monde CP réel : 10 championnats, 198 clubs
+  const world = useMemo(() => (seed ? generateWorld(seed, "cp") : null), [seed]);
   const leagues = world?.leagues ?? [];
   const activeLeague = leagueId || leagues[0]?.id || "";
   const clubs = useMemo(() => {
@@ -69,7 +70,7 @@ export default function NewManagerGame() {
         </label>
       </div>
 
-      <div className="mg-seg" role="group" aria-label="Championnat">
+      <div className="mg-seg mg-seg--wrap" role="group" aria-label="Championnat">
         {leagues.map(l => (
           <button key={l.id} type="button" aria-pressed={l.id === activeLeague} onClick={() => { setLeagueId(l.id); setClubId(null); }}>
             {l.name}

@@ -129,3 +129,30 @@ describe("Calendrier réel", () => {
     for (const l of CP_LEAGUES) expect(s.world.clubs.filter(c => c.leagueId === l.id)).toHaveLength(l.clubCount);
   });
 });
+
+describe("Récompenses du monde CP", () => {
+  test("buteurs, passeurs, équipe type, champion, Soulier d'Or, Ballon d'Or (30 nommés), Golden Boy, joueur du mois", () => {
+    let s = createManagerGame({ seed: "cp-awards", clubId: "ita-nap", managerName: "T" });
+    let guard = 0;
+    while (!(s.world.season === 2 && s.world.currentWeek > 25) && guard++ < 90) s = playWeek(autoLineup({ ...s, status: "active" }));
+    const aw = s.world.awards ?? [];
+    for (const l of CP_LEAGUES) {
+      expect(aw.filter(a => a.leagueId === l.id && a.season === 1 && a.id === "league_top_scorer")).toHaveLength(1);
+      expect(aw.filter(a => a.leagueId === l.id && a.season === 1 && a.id === "tots")).toHaveLength(11);
+      expect(aw.some(a => a.leagueId === l.id && a.id === "league_title")).toBe(true);
+      expect(aw.filter(a => a.leagueId === l.id && a.id === "potm").length).toBeGreaterThanOrEqual(8);
+    }
+    expect(aw.filter(a => a.id === "golden_shoe")).toHaveLength(1);
+    const bdo = aw.find(a => a.id === "ballon_dor")!;
+    expect(bdo.season).toBe(1);
+    expect(bdo.atWeek).toBe(17);
+    expect(bdo.ranking).toHaveLength(30);
+    expect(aw.some(a => a.id === "yachine")).toBe(true);
+    const gb = aw.filter(a => a.id === "golden_boy");
+    expect(gb).toHaveLength(2);
+    for (const g of gb) expect(s.world.players.find(p => p.id === g.playerId)!.age).toBeLessThanOrEqual(22);
+    // Le meilleur buteur d'une D1 doit être un joueur offensif crédible
+    const scorer = s.world.players.find(p => p.id === aw.find(a => a.id === "league_top_scorer" && a.leagueId === "eng-1")!.playerId)!;
+    expect(["ST", "LW", "RW", "AM"]).toContain(scorer.position);
+  });
+});

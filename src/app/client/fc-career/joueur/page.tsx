@@ -9,7 +9,8 @@ import { PlayerCard, PlayStyleChips, Stars } from "./_ui/PlayerCard";
 import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
 import { SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
-import { getLeaguePosition } from "../game/manager/engine";
+import { getLeaguePosition, hasMatchThisWeek } from "../game/manager/engine";
+import { fixtureDate, worldCalendar } from "../game/domain/calendar";
 import { ROLE_LABEL } from "../game/player2/career";
 import { shortName } from "../game/utils/names";
 
@@ -25,7 +26,10 @@ export default function PlayerHome() {
   const rows = state.shadow.world.standings[club.leagueId] ?? [];
   const pos = getLeaguePosition(state.shadow);
   const league = state.shadow.world.leagues.find(l => l.id === club.leagueId);
-  const canPlay = !!fx && (state.selection === "starter" || state.selection === "bench");
+  const thisWeek = hasMatchThisWeek(state.shadow);
+  const canPlay = !!fx && thisWeek && (state.selection === "starter" || state.selection === "bench");
+  const cal = worldCalendar(state.shadow.world);
+  const fxDate = fx ? fixtureDate(state.shadow.world, state.shadow.world.schedules[club.leagueId]?.weekOf, fx.matchday) : null;
 
   return (
     <div className="mg-grid">
@@ -42,9 +46,10 @@ export default function PlayerHome() {
                   <Crest club={clubOf(fx.homeClubId)} size={26} /><b>{clubOf(fx.homeClubId)?.shortName}</b>
                   <span className="mg-small">contre</span>
                   <b>{clubOf(fx.awayClubId)?.shortName}</b><Crest club={clubOf(fx.awayClubId)} size={26} />
-                  <span className="mg-small">· journée {fx.matchday}</span>
+                  <span className="mg-small">· journée {fx.matchday}{fxDate ? ` · ${fxDate}` : ""}</span>
                 </div>
-              ) : <p className="mg-muted">Intersaison : pas de match cette semaine.</p>}
+              ) : <p className="mg-muted">{cal ? `${cal.phase} : plus de match de championnat avant la saison prochaine.` : "Intersaison : pas de match cette semaine."}</p>}
+              {fx && !thisWeek && <p className="mg-small" style={{ margin: 0 }}>Pas de match cette semaine ({cal?.phase === "Intersaison" ? "préparation" : "trêve"}) : entraînement uniquement.</p>}
               <div className="mg-row mg-row--between">
                 <span className="mg-small">Confiance du coach</span>
                 <span className="mg-row"><Meter value={state.coachTrust} label="Confiance du coach" /><b>{state.coachTrust}</b></span>
@@ -67,6 +72,7 @@ export default function PlayerHome() {
                   ? <Link href="/client/fc-career/joueur/match" className="mg-btn mg-btn--gold">Continuer la carrière</Link>
                   : <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "PLAY_WEEK" })}>Continuer la carrière</button>}
                 {canPlay && <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Simuler la semaine</button>}
+                {!thisWeek && cal && <button type="button" className="mg-btn" onClick={() => run({ type: "ADVANCE_TO_MATCH" })}>Aller au prochain match</button>}
                 <Link href="/client/fc-career/joueur/progression" className="mg-btn mg-btn--ghost">Entraînement</Link>
               </div>
               )}
@@ -98,7 +104,7 @@ export default function PlayerHome() {
       </div>
 
       <div className="mg-col-4 mg-stack">
-        <Section title={`Saison ${state.shadow.world.season}`}>
+        <Section title={cal ? `Saison ${cal.season}` : `Saison ${state.shadow.world.season}`} aside={<Link href="/client/fc-career/joueur/monde" className="mg-link">Compétitions</Link>}>
           <div className="mg-kpis" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
             <div className="mg-kpi"><span>Matchs</span><b>{line.apps}</b></div>
             <div className="mg-kpi"><span>Buts</span><b>{line.goals}</b></div>

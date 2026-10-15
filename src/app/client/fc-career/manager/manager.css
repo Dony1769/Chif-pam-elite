@@ -517,3 +517,17 @@
 .mg-btn--danger:disabled { opacity: 0.45; cursor: not-allowed; }
 .mg-storage { height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
 .mg-storage i { display: block; height: 100%; background: var(--mg-accent); border-radius: 6px; }
+
+.mg-seg--wrap { flex-wrap: wrap; }
+
+/* Pastilles et palmarès (partagés Joueur / Manager) */
+.pc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-chip { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(185, 255, 57, 0.35); color: var(--mg-accent); }
+.pc-chip.is-plus { border-color: rgba(66, 200, 255, 0.5); color: var(--mg-cyan); }
+.pc-awards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.pc-award { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--mg-line); background: rgba(255, 255, 255, 0.02); min-width: 0; align-items: flex-start; }
+.pc-award.is-me { border-color: rgba(185, 255, 57, 0.5); background: var(--mg-accent-soft); }
+.pc-award__label { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mg-text-2); }
+.pc-award .mg-pname { flex-wrap: wrap; }
+.pc-me { color: var(--mg-accent); }
+.pc-subhead { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mg-text-2); margin: 16px 0 8px; }
