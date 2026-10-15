@@ -10,6 +10,8 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadManager } from "../game/manager/storage";
 import { formatMoney } from "../game/manager/engine";
+import { loadPlayerCareer } from "../game/player2/storage";
+import { me as v2Me, myClub as v2Club } from "../game/player2/engine";
 
 interface PlayerSummary {
   name: string;
@@ -50,11 +52,22 @@ function readPlayerSave(): PlayerSummary | null {
 
 export default function ModesPage() {
   const [player, setPlayer] = useState<PlayerSummary | null>(null);
+  const [legacy, setLegacy] = useState<PlayerSummary | null>(null);
   const [manager, setManager] = useState<ManagerSummary | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setPlayer(readPlayerSave());
+    // Carrière v2 (nouvelle) en priorité ; la v1 reste accessible à part
+    setLegacy(readPlayerSave());
+    const v2 = loadPlayerCareer();
+    if (v2.ok) {
+      const p = v2Me(v2.state);
+      setPlayer({
+        name: `${v2.state.profile.firstName} ${v2.state.profile.lastName} · ${v2Club(v2.state).shortName}`,
+        position: v2.state.profile.position, overall: p.overall, potential: v2.state.profile.potential,
+        age: p.age, season: v2.state.shadow.world.season,
+      });
+    }
     const m = loadManager();
     if (m.ok) {
       const club = m.state.world.clubs.find(c => c.id === m.state.clubId);
@@ -67,7 +80,7 @@ export default function ModesPage() {
     setReady(true);
   }, []);
 
-  const playerHref = player ? "/client/fc-career/dashboard" : "/client/fc-career/create-player";
+  const playerHref = player ? "/client/fc-career/joueur" : "/client/fc-career/joueur/nouveau";
 
   return (
     <main className="fcm-modes">
@@ -84,8 +97,8 @@ export default function ModesPage() {
           <div className="fcm-card__icon" aria-hidden>⚽</div>
           <h2>Carrière Joueur</h2>
           <p className="fcm-card__lead">
-            Crée ton joueur, passe par le centre de formation, signe ton premier contrat
-            et vise le Ballon d&apos;Or. Entraînement, agent, vestiaire, sélection, vie perso.
+            Crée ton joueur, gagne ta place, prends les décisions clés en match, négocie tes
+            contrats et vise l&apos;Étoile d&apos;Or. Transferts, prêts, sélection nationale.
           </p>
           {ready && player ? (
             <div className="fcm-card__save">
@@ -125,6 +138,11 @@ export default function ModesPage() {
         </Link>
       </div>
 
+      {ready && legacy && (
+        <Link href="/client/fc-career/dashboard" className="fcm-modes__legacy">
+          Ancienne carrière : {legacy.name || "ton joueur"} ({legacy.overall}) · continuer en version 1
+        </Link>
+      )}
       <Link href="/client/fc-career" className="fcm-modes__back">Quitter</Link>
     </main>
   );
@@ -160,5 +178,6 @@ const CSS = `
 .fcm-card--manager{transition:transform .2s,border-color .2s}.fcm-card--manager:hover{transform:translateY(-2px);border-color:rgba(100,130,200,.35)}
 .fcm-card--manager:focus-visible{outline:2px solid #e8c84a;outline-offset:3px}
 .fcm-modes__back{font-size:13px;color:#8E9DC0}
+.fcm-modes__legacy{font-size:13px;color:#c9a227;text-align:center;max-width:560px}
 @media (prefers-reduced-motion:reduce){.fcm-card--player{transition:none}.fcm-card--player:hover{transform:none}}
 `;

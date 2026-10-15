@@ -21,6 +21,10 @@ import type {
 import { PLAYER2_SAVE_VERSION } from "./types";
 
 const INBOX_MAX = 80;
+const POS_LABEL: Record<WorldPlayerPosition, string> = {
+  GK: "gardien", CB: "défenseur central", LB: "latéral gauche", RB: "latéral droit", DM: "milieu défensif",
+  CM: "milieu central", AM: "milieu offensif", LW: "ailier gauche", RW: "ailier droit", ST: "buteur",
+};
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 // ─── Lecture ─────────────────────────────────────────────────────────────────
@@ -137,7 +141,7 @@ export function createPlayerCareer(i: NewCareerInput): PlayerCareerState {
   };
   const withSel = coachDecision(base);
   return pushPlayerInbox(withSel, pmsg(withSel, "welcome", `Premier contrat pro à ${club.name}`,
-    `${wp.firstName} ${wp.lastName}, ${i.position}, 17 ans. Contrat de 3 saisons. Le coach vous voit comme un espoir : gagnez votre place à l'entraînement et sur le terrain.`));
+    `${wp.firstName} ${wp.lastName}, ${POS_LABEL[i.position]}, 17 ans. Contrat de 3 saisons. Le coach vous voit comme un espoir : gagnez votre place à l'entraînement et sur le terrain.`));
 }
 
 // ─── Décision du coach ───────────────────────────────────────────────────────

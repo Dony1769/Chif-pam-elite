@@ -1,0 +1,69 @@
+/* FC CAREER 27 — Carrière Joueur v2 : compléments au style du mode Manager (manager.css). */
+
+/* ── Carte joueur ─────────────────────────────────────────────── */
+.pc-card {
+  --tone: #c9a227; --tone-lt: #e8c84a;
+  position: relative; width: 210px; max-width: 100%; padding: 16px 16px 14px;
+  border-radius: 16px 16px 26px 26px; color: #0b0f22;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
+    linear-gradient(160deg, var(--tone-lt), var(--tone) 60%, color-mix(in srgb, var(--tone) 70%, #000));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+  display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
+}
+.pc-card--silver { --tone: #9aa6b8; --tone-lt: #dfe6ef; }
+.pc-card--bronze { --tone: #a86b3c; --tone-lt: #e2b083; }
+.pc-card::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 8px; height: 3px; border-radius: 2px; background: var(--club); opacity: 0.85; }
+.pc-card__top { display: flex; justify-content: space-between; align-items: flex-start; }
+.pc-card__ovr { display: flex; flex-direction: column; line-height: 0.9; }
+.pc-card__ovr b { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 46px; }
+.pc-card__ovr span { font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 17px; }
+.pc-card__club { padding: 3px 8px; border-radius: 6px; background: var(--club); color: #fff; font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 13px; }
+.pc-card__name { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 22px; text-transform: uppercase; line-height: 1; border-bottom: 1px solid rgba(11, 15, 34, 0.25); padding-bottom: 8px; overflow-wrap: anywhere; }
+.pc-card__attrs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }
+.pc-card__attrs div { display: flex; align-items: baseline; gap: 5px; }
+.pc-card__attrs b { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 19px; font-variant-numeric: tabular-nums; }
+.pc-card__attrs span { font-size: 11px; font-weight: 700; opacity: 0.75; }
+.pc-card__pot { font-size: 11px; font-weight: 700; opacity: 0.8; }
+.pc-card--compact { width: 150px; padding: 10px 12px; gap: 6px; }
+.pc-card--compact .pc-card__ovr b { font-size: 34px; }
+.pc-card--compact .pc-card__name { font-size: 16px; }
+.pc-card--compact .pc-card__attrs b { font-size: 15px; }
+
+/* ── Bandeau joueur ───────────────────────────────────────────── */
+.pc-hero { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+.pc-hero__info { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1 1 260px; }
+.pc-status { display: inline-flex; align-items: center; gap: 8px; font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 22px; text-transform: uppercase; }
+.pc-status--starter { color: var(--mg-green); }
+.pc-status--bench { color: var(--mg-amber); }
+.pc-status--out, .pc-status--injured, .pc-status--suspended { color: var(--mg-red); }
+
+/* ── Moment clé ───────────────────────────────────────────────── */
+.pc-moment {
+  border-radius: 14px; padding: 16px; border: 1px solid rgba(201, 162, 39, 0.55);
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.14), rgba(13, 17, 40, 0.95) 60%);
+  box-shadow: 0 0 50px rgba(201, 162, 39, 0.14); display: flex; flex-direction: column; gap: 12px;
+}
+.pc-moment__head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.pc-moment__head b { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 22px; text-transform: uppercase; color: var(--mg-gold-lt); }
+.pc-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.pc-option {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start; text-align: left; cursor: pointer;
+  padding: 12px; border-radius: 10px; border: 1px solid var(--mg-line-2); background: var(--mg-panel-2); color: var(--mg-text); min-width: 0;
+}
+.pc-option:hover { border-color: var(--mg-gold); }
+.pc-option b { font-size: 15px; }
+.pc-option span { font-size: 12px; color: var(--mg-text-2); }
+.pc-option .pc-chance { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 900; color: var(--mg-gold-lt); }
+.pc-decision { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--mg-line); }
+.pc-decision.is-ok b { color: var(--mg-green); }
+.pc-decision.is-ko b { color: var(--mg-red); }
+
+/* ── Progression ──────────────────────────────────────────────── */
+.pc-attr { display: grid; grid-template-columns: 110px 40px 1fr; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--mg-line); }
+.pc-attr b { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.pc-attr__bar { position: relative; height: 8px; border-radius: 4px; background: rgba(100, 130, 200, 0.15); overflow: hidden; }
+.pc-attr__bar i { position: absolute; inset: 0 auto 0 0; background: var(--mg-gold); border-radius: 4px; }
+.pc-attr__bar em { position: absolute; inset: 0 auto 0 0; background: rgba(55, 217, 154, 0.45); border-radius: 4px; }
+.pc-attr.is-focus { background: rgba(201, 162, 39, 0.06); }
+@media (max-width: 480px) { .pc-attr { grid-template-columns: 90px 34px 1fr; } }
