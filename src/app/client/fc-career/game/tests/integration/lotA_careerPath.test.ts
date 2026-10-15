@@ -16,8 +16,10 @@
 
 import { gameReducer, initialState, type GameState } from "../../state/gameReducer";
 import type { GameSaveV1 } from "../../persistence/saveSchema";
-import type { ContractOffer } from "../../domain/agent";
+import type { ContractOffer, AgentState } from "../../domain/agent";
+import { createInitialAgentState } from "../../domain/agent";
 import { computeSeasonEvaluation } from "../../domain/seasonEnd";
+import type { MatchResult, MatchStats } from "../../domain/match";
 
 /* ── Fixtures minimales ──────────────────────────────────────────────────── */
 
@@ -66,7 +68,7 @@ const baseNewCareerSave: GameSaveV1 = {
   wallet: { balance: 0, weeklyWage: 400, totalEarned: 0, totalSpent: 0 },
   world: {
     countries: [],
-    leagues: [{ id: "vlt-d1", name: "Valtara D1", countryId: "valtara", level: 1, tier: 1, totalMatchdays: 14 }],
+    leagues: [{ id: "vlt-d1", name: "Valtara D1", countryId: "valtara", tier: 1 as const, clubCount: 8 }],
     clubs: [
       { id: "academy-fresh", name: "Académie FC", shortName: "ACF", leagueId: "youth-league", reputation: 30, countryId: "valtara", tier: 4 as const, colors: { primary: "#00aa00", secondary: "#ffffff" }, wagesBudget: 5000, transferBudget: 0, academyLevel: 3, philosophy: "balanced" as const },
       { id: "club-pro-fresh", name: "FC Pro Valtara", shortName: "FPV", leagueId: "vlt-d1", reputation: 65, countryId: "valtara", tier: 1 as const, colors: { primary: "#003399", secondary: "#ffffff" }, wagesBudget: 80000, transferBudget: 3000000, academyLevel: 2, philosophy: "attacking" as const },
@@ -95,7 +97,7 @@ const baseNewCareerSave: GameSaveV1 = {
   },
   transferHistory: [],
   coach: {
-    id: "coach-acad", name: "Coach Académie", philosophy: "formation",
+    id: "coach-acad", name: "Coach Académie", philosophy: "offensif" as const,
     trust: 50, playerRole: "remplaçant" as const,
     conversations: [],
     seasonObjective: { description: "Disputer 3 matchs", type: "appearances", target: 3, current: 0, completed: false },
@@ -106,6 +108,10 @@ const baseNewCareerSave: GameSaveV1 = {
 
 function makeState(save: GameSaveV1): GameState {
   return { ...initialState, save, isLoading: false };
+}
+
+function makeAgentState(offers: ContractOffer[]): AgentState {
+  return { ...createInitialAgentState(), offers };
 }
 
 function makeProOffer(overrides?: Partial<ContractOffer>): ContractOffer {
@@ -119,6 +125,9 @@ function makeProOffer(overrides?: Partial<ContractOffer>): ContractOffer {
     transferFee: 0,
     isLoan: false,
     loanEndSeason: undefined,
+    season: 1,
+    week: 5,
+    message: "Nous vous proposons un contrat professionnel.",
     terms: {
       clubId: "club-pro-fresh",
       salary: 2000,
@@ -129,7 +138,7 @@ function makeProOffer(overrides?: Partial<ContractOffer>): ContractOffer {
       role: "squad",
     },
     status: "pending",
-    expiresWeek: 99,
+    expiresInWeeks: 99,
     ...overrides,
   };
 }
@@ -173,7 +182,7 @@ describe("Scénario 2 — Jouer un match : statistiques comptées une seule fois
     scoreHome: 2,
     scoreAway: 1,
     playerRating: 7.5,
-    playerStats: { goals: 1, assists: 0, minutesPlayed: 90, yellowCards: 0, redCards: 0 },
+    playerStats: { goals: 1, assists: 0, minutesPlayed: 90, yellowCards: 0, redCards: 0, shotsOnTarget: 2, shotsOffTarget: 1, saves: 0, tackles: 1, interceptions: 0, foulsCommitted: 0, keyPasses: 1, dribbles: 1 },
     events: [],
     paEarned: 2,
     objectivesCompleted: [],
@@ -218,10 +227,7 @@ describe("Scénarios 3+4 — Accepter offre pro : club, phase, contrat, coach, c
   const midSeasonSave: GameSaveV1 = {
     ...baseNewCareerSave,
     career: { ...baseNewCareerSave.career, week: 8, matchday: 3 },
-    agentState: {
-      offers: [makeProOffer()],
-      transfers: [],
-    },
+    agentState: makeAgentState([makeProOffer()]),
   };
   const s0 = makeState(midSeasonSave);
   const s1 = gameReducer(s0, { type: "RESPOND_CONTRACT_OFFER", offerId: "offer-pro-fresh", accepted: true });
@@ -240,7 +246,7 @@ describe("Scénarios 3+4 — Accepter offre pro : club, phase, contrat, coach, c
     expect(s1.save!.career.academy).toBeNull();
   });
   it("le coach change (pas le même ID qu'avant)", () => {
-    expect(s1.save!.coach.id).not.toBe("coach-acad");
+    expect(s1.save!.coach?.id).not.toBe("coach-acad");
   });
   it("le contrat endSeason est 4", () => {
     expect(s1.save!.player.contract.endSeason).toBe(4);
@@ -253,7 +259,7 @@ describe("Scénarios 3+4 — Accepter offre pro : club, phase, contrat, coach, c
 describe("Scénario 5 — Aucun match académie résiduel après transition pro", () => {
   const s0 = makeState({
     ...baseNewCareerSave,
-    agentState: { offers: [makeProOffer()], transfers: [] },
+    agentState: makeAgentState([makeProOffer()]),
   });
   const s1 = gameReducer(s0, { type: "RESPOND_CONTRACT_OFFER", offerId: "offer-pro-fresh", accepted: true });
 
@@ -277,7 +283,7 @@ describe("Scénario 6 — Reset week/matchday après transition pro", () => {
   const midSeasonSave: GameSaveV1 = {
     ...baseNewCareerSave,
     career: { ...baseNewCareerSave.career, week: 12, matchday: 5 },
-    agentState: { offers: [makeProOffer()], transfers: [] },
+    agentState: makeAgentState([makeProOffer()]),
   };
   const s0 = makeState(midSeasonSave);
   const s1 = gameReducer(s0, { type: "RESPOND_CONTRACT_OFFER", offerId: "offer-pro-fresh", accepted: true });
@@ -324,7 +330,7 @@ describe("Scénario 7 — Statistiques et historique après 1er match pro", () =
     scoreHome: 1,
     scoreAway: 0,
     playerRating: 7.0,
-    playerStats: { goals: 0, assists: 1, minutesPlayed: 85, yellowCards: 0, redCards: 0 },
+    playerStats: { goals: 0, assists: 1, minutesPlayed: 85, yellowCards: 0, redCards: 0, shotsOnTarget: 1, shotsOffTarget: 1, saves: 0, tackles: 2, interceptions: 1, foulsCommitted: 0, keyPasses: 2, dribbles: 1 },
     events: [],
     paEarned: 2,
     objectivesCompleted: [],
@@ -357,7 +363,7 @@ describe("Scénario 7 — Statistiques et historique après 1er match pro", () =
 describe("Scénario 8 — Cohérence après rechargement (sérialisation JSON)", () => {
   const s0 = makeState({
     ...baseNewCareerSave,
-    agentState: { offers: [makeProOffer()], transfers: [] },
+    agentState: makeAgentState([makeProOffer()]),
   });
   const s1 = gameReducer(s0, { type: "RESPOND_CONTRACT_OFFER", offerId: "offer-pro-fresh", accepted: true });
 
@@ -393,7 +399,7 @@ describe("Scénario 8 — Cohérence après rechargement (sérialisation JSON)",
 describe("Scénario 9a — Refus d'une offre : état inchangé", () => {
   const s0 = makeState({
     ...baseNewCareerSave,
-    agentState: { offers: [makeProOffer()], transfers: [] },
+    agentState: makeAgentState([makeProOffer()]),
   });
   const s1 = gameReducer(s0, { type: "RESPOND_CONTRACT_OFFER", offerId: "offer-pro-fresh", accepted: false });
 
@@ -437,12 +443,15 @@ describe("Scénario 9b — Promotion interne académie (youth → u18)", () => {
       role: "squad",
     },
     status: "pending",
-    expiresWeek: 99,
+    expiresInWeeks: 99,
+    season: 1,
+    week: 4,
+    message: "Promotion au niveau U18.",
   };
 
   const s0 = makeState({
     ...baseNewCareerSave,
-    agentState: { offers: [promoOffer], transfers: [] },
+    agentState: makeAgentState([promoOffer]),
   });
   const s1 = gameReducer(s0, { type: "RESPOND_CONTRACT_OFFER", offerId: "offer-promo-1", accepted: true });
 
