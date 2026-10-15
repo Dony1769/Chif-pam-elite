@@ -21,6 +21,9 @@ import {
 } from "../game/domain/seasonEnd";
 import type { EvaluationResult } from "../game/domain/seasonEnd";
 import { pageFade, stagger, itemFade } from "../game/design/animations";
+import { generateLeagueSchedule } from "../game/domain/worldGenerator";
+import { LEAGUES, CLUBS } from "../game/data/world";
+import type { SeasonSchedule } from "../game/domain/season";
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
@@ -185,10 +188,28 @@ export default function SeasonEndPage() {
   /* Calcul de l'évaluation une seule fois */
   useEffect(() => {
     if (!player || !career || !save || evalDone.current) return;
-    const currentSchedule = save.world.schedules.find(
-      (s) => s.season === career.season,
-    );
-    if (!currentSchedule) return;
+    // Pour les joueurs pro, trouver le schedule de leur ligue ; pour l'académie, youth-league ou academy-cup
+    const playerClub = save.world.clubs.find(c => c.id === player.contract.clubId);
+    const academyCompIds = ["youth-league", "academy-cup"];
+    const isAcademy = career.phase === "academy";
+    const currentSchedule = save.world.schedules.find((s) => {
+      if (s.season !== career.season) return false;
+      if (isAcademy) return academyCompIds.includes(s.competitionId);
+      // Pour pro : schedule de la ligue du club
+      return playerClub ? s.competitionId === playerClub.leagueId : true;
+    }) ?? save.world.schedules.find(s => s.season === career.season); // fallback
+    if (!currentSchedule) {
+      // Aucun schedule trouvé : on peut quand même évaluer sans schedule
+      evalDone.current = true;
+      const result = computeSeasonEvaluation({
+        player,
+        season: career.season,
+        schedule: { season: career.season, competitionId: "none", fixtures: [], currentMatchday: 0, totalMatchdays: 0 },
+        matchResults: save.world.lastMatchResults,
+      });
+      setEvaluation(result);
+      return;
+    }
     evalDone.current = true;
     const result = computeSeasonEvaluation({
       player,
@@ -273,9 +294,35 @@ export default function SeasonEndPage() {
       },
       world: {
         ...save.world,
-        schedules: setup.newSchedule
-          ? [...save.world.schedules, setup.newSchedule]
-          : save.world.schedules,
+        schedules: (() => {
+          const nextSeason = career.season + 1;
+          let schedules = save.world.schedules;
+          // Ajouter le schedule académie si promotion en académie
+          if (setup.newSchedule) {
+            schedules = [...schedules, setup.newSchedule as unknown as SeasonSchedule];
+          }
+          // Pour les joueurs pro (ou promus pros), générer les schedules de la saison suivante
+          // si ceux-ci n'existent pas encore.
+          const isProTransition = setup.newPhase === "professional" || setup.newPhase === "elite" || setup.newPhase === "legend";
+          if (isProTransition) {
+            const nextSeasonProExists = schedules.some(s => s.season === nextSeason && !["youth-league","academy-cup"].includes(s.competitionId));
+            if (!nextSeasonProExists) {
+              const proSchedules: SeasonSchedule[] = LEAGUES.map(league => {
+                const clubIds = CLUBS.filter(c => c.leagueId === league.id).map(c => c.id);
+                const ls = generateLeagueSchedule(league.id, clubIds, nextSeason, career.id);
+                return {
+                  season: nextSeason,
+                  competitionId: league.id,
+                  fixtures: ls.fixtures,
+                  currentMatchday: ls.currentMatchday,
+                  totalMatchdays: ls.totalMatchdays,
+                } as SeasonSchedule;
+              });
+              schedules = [...schedules, ...proSchedules];
+            }
+          }
+          return schedules;
+        })(),
       },
       meta: { ...save.meta, savedAt: Date.now() },
     };

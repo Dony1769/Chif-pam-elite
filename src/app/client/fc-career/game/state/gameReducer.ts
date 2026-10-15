@@ -773,6 +773,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             academy: newAcademy,
             completedMatchIds: newCompletedMatchIds,
             events: [...(currentCareer.events ?? []), transferEvent],
+            // Réinitialiser la semaine et la journée lors d'une transition pro/transfert
+            // pour que le Dashboard cherche matchday 1 dans le nouveau calendrier pro.
+            ...(offerType === "professional" || offerType === "transfer"
+              ? { week: 1, matchday: 1 }
+              : {}),
           },
           agentState: {
             ...agentState,

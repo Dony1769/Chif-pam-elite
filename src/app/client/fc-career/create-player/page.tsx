@@ -17,7 +17,8 @@ import { createEmptySave, writeSave } from "../game/persistence/saveRepository";
 import type { GameSaveV1 } from "../game/persistence/saveSchema";
 import { careerId }   from "../game/utils/ids";
 import type { Position } from "../game/domain/player";
-import { generateWorld } from "../game/domain/worldGenerator";
+import { generateWorld, generateLeagueSchedule } from "../game/domain/worldGenerator";
+import { COUNTRIES, LEAGUES, CLUBS } from "../game/data/world";
 
 /* ── Données formulaire ─────────────────────────────────────────── */
 
@@ -120,15 +121,43 @@ export default function CreatePlayerPage() {
       // Générer le monde vivant complet (déterministe depuis l'id carrière)
       const worldLiveState = generateWorld(id);
 
+      // Construire les schedules pro pour chaque ligue (saison 1)
+      // Ces schedules permettent au Dashboard, Calendrier et Monde de fonctionner
+      // même quand le joueur est encore en académie (simulation du monde vivant)
+      const proSchedules = LEAGUES.map(league => {
+        const clubIds = CLUBS.filter(c => c.leagueId === league.id).map(c => c.id);
+        const ls = generateLeagueSchedule(league.id, clubIds, 1, id);
+        return {
+          season: 1,
+          competitionId: league.id,
+          fixtures: ls.fixtures,
+          currentMatchday: ls.currentMatchday,
+          totalMatchdays: ls.totalMatchdays,
+        } as import("../game/domain/season").SeasonSchedule;
+      });
+
+      // Standings initiaux pour chaque ligue
+      const initialStandings: Record<string, import("../game/domain/club").StandingRow[]> = {};
+      for (const league of LEAGUES) {
+        const clubIds = CLUBS.filter(c => c.leagueId === league.id).map(c => c.id);
+        initialStandings[league.id] = clubIds.map(cid => ({
+          clubId: cid, position: 0, points: 0,
+          played: 0, won: 0, drawn: 0, lost: 0,
+          goalsFor: 0, goalsAgainst: 0, form: [],
+        }));
+      }
+
       const save = createEmptySave(
         id,
         player,
         career,
         { balance: 0, weeklyWage: 0, totalEarned: 0, totalSpent: 0 },
         {
-          countries: [], leagues: [], clubs: [],
-          standings: {},
-          schedules: [schedule],
+          countries: COUNTRIES,
+          leagues: LEAGUES,
+          clubs: CLUBS,
+          standings: initialStandings,
+          schedules: [schedule, ...proSchedules],
           lastMatchResults: [],
         },
       );
