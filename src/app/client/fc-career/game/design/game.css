@@ -61,7 +61,7 @@
   color: var(--fc-gold);
   text-transform: uppercase;
   line-height: 1;
-  text-shadow: 0 0 20px rgba(201,162,39,0.3);
+  text-shadow: 0 0 20px rgba(185,255,57,0.3);
 }
 
 .fc-sidebar__sub {
@@ -351,8 +351,8 @@
 .fc-badge--gold {
   background: var(--fc-gold-10);
   color: var(--fc-gold-lt);
-  border: 1px solid rgba(201,162,39,0.3);
-  text-shadow: 0 0 8px rgba(201,162,39,0.2);
+  border: 1px solid rgba(185,255,57,0.3);
+  text-shadow: 0 0 8px rgba(185,255,57,0.2);
 }
 
 .fc-player-card__meta {
@@ -455,7 +455,7 @@
 }
 .fc-btn--gold:hover:not(:disabled) {
   background: linear-gradient(135deg, var(--fc-gold-lt) 0%, var(--fc-gold) 100%);
-  box-shadow: 0 0 32px rgba(201,162,39,0.35);
+  box-shadow: 0 0 32px rgba(185,255,57,0.35);
 }
 
 /* Secondary */

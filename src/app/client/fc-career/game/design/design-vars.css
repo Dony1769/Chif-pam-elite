@@ -1,54 +1,54 @@
 /**
  * FC CAREER — Design System : Tokens
  * Palette officielle + surfaces + typographie + motion
- * Inspiré de footballpresident.fr — ambiance bleu nuit profond + or prestige
+ * Design system « Futuristic Football Glass UI » : noir graphite, vert électrique, cyan secondaire
  * Import en premier dans game.css
  */
 
 :root {
   /* ── Palette FC Career — Football President DNA ────────────── */
-  --fc-navy:     #05081a;   /* fond principal — bleu nuit FP */
-  --fc-graphite: #0d1128;   /* panneaux secondaires */
-  --fc-emerald:  #37D99A;   /* actions clés, progression */
-  --fc-gold:     #c9a227;   /* accent or prestige (FP signature) */
-  --fc-gold-lt:  #e8c84a;   /* or clair hover */
-  --fc-offwhite: #E8ECF0;   /* texte principal */
+  --fc-navy:     #0A0C0F;   /* fond principal — noir graphite (Glass UI) */
+  --fc-graphite: #101419;   /* fond secondaire */
+  --fc-emerald:  #B9FF39;   /* vert électrique : actions, sélections, progression */
+  --fc-gold:     #B9FF39;   /* accent principal unique (Glass UI) */
+  --fc-gold-lt:  #D6FF85;   /* survol */
+  --fc-offwhite: #DCE3EA;   /* texte principal */
   --fc-amber:    #F5BD58;   /* objectifs, alertes */
   --fc-coral:    #F16B73;   /* erreurs, risques */
 
   /* ── Surfaces (couches superposées) — bleu nuit profond ────── */
-  --fc-surface-0: #020510;  /* fond absolu — nuit absolue */
-  --fc-surface-1: #05081a;  /* fond principal = navy FP */
-  --fc-surface-2: #0d1128;  /* panneaux = graphite FP */
-  --fc-surface-3: #141830;  /* cartes sur panneaux */
-  --fc-surface-4: #1c2240;  /* éléments interactifs au repos */
+  --fc-surface-0: #07090B;  /* fond absolu */
+  --fc-surface-1: #0A0C0F;  /* fond principal */
+  --fc-surface-2: #101419;  /* fond secondaire */
+  --fc-surface-3: #151A20;  /* cartes et panneaux */
+  --fc-surface-4: #202830;  /* surfaces surélevées */
 
   /* ── Texte ─────────────────────────────────────────────────── */
-  --fc-text:         #E8ECF0;       /* principal */
-  --fc-text-2:       #8E9DC0;       /* secondaire — bleuté */
-  --fc-text-3:       #4A5678;       /* tertiaire / labels */
-  --fc-text-inverse: #05081a;       /* sur fond clair (emerald, gold) */
+  --fc-text:         #DCE3EA;       /* principal */
+  --fc-text-2:       #8D98A6;       /* secondaire */
+  --fc-text-3:       #5E6874;       /* tertiaire / labels */
+  --fc-text-inverse: #0A0C0F;       /* sur vert électrique */
 
   /* ── Bordures — bleutées fines ─────────────────────────────── */
-  --fc-border:      rgba(100,130,200,0.10);
-  --fc-border-mid:  rgba(100,130,200,0.18);
-  --fc-border-high: rgba(100,130,200,0.28);
+  --fc-border:      rgba(255,255,255,0.08);
+  --fc-border-mid:  rgba(255,255,255,0.12);
+  --fc-border-high: rgba(255,255,255,0.18);
 
   /* ── Accents sémantiques ────────────────────────────────────── */
-  --fc-success:  #37D99A;   /* = emerald */
+  --fc-success:  #B9FF39;   /* = vert électrique */
   --fc-warning:  #F5BD58;   /* = amber */
   --fc-danger:   #F16B73;   /* = coral */
-  --fc-info:     #5BA4CF;   /* bleu froid */
+  --fc-info:     #42C8FF;   /* cyan secondaire */
 
   /* ── Or prestige avec opacité (FP signature) ───────────────── */
-  --fc-gold-10:  rgba(201,162,39,0.10);
-  --fc-gold-20:  rgba(201,162,39,0.20);
-  --fc-gold-glow: 0 0 24px rgba(201,162,39,0.22);
+  --fc-gold-10:  rgba(185,255,57,0.10);
+  --fc-gold-20:  rgba(185,255,57,0.20);
+  --fc-gold-glow: 0 0 24px rgba(185,255,57,0.22);
 
   /* ── Emerald avec opacité (fonds, lueurs) ──────────────────── */
-  --fc-emerald-10:  rgba(55,217,154,0.10);
-  --fc-emerald-20:  rgba(55,217,154,0.20);
-  --fc-emerald-glow: 0 0 20px rgba(55,217,154,0.18);
+  --fc-emerald-10:  rgba(185,255,57,0.10);
+  --fc-emerald-20:  rgba(185,255,57,0.20);
+  --fc-emerald-glow: 0 0 20px rgba(185,255,57,0.18);
 
   /* ── Amber avec opacité ─────────────────────────────────────── */
   --fc-amber-10: rgba(245,189,88,0.10);
@@ -59,7 +59,7 @@
   --fc-coral-20: rgba(241,107,115,0.20);
 
   /* ── Typographie — condensée, impactante (FP spirit) ──────── */
-  --fc-font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --fc-font-display: 'Inter', system-ui, sans-serif;
   --fc-font-body:    'Inter', system-ui, sans-serif;
 
   /* Échelle de taille */

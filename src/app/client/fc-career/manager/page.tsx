@@ -74,7 +74,7 @@ export default function ManagerHub() {
           <Section title="Dernier match">
             <div className="mg-row mg-row--between">
               <div className="mg-row"><Crest club={clubOf(last.homeClubId)} size={26} /><b>{clubOf(last.homeClubId)?.shortName}</b></div>
-              <strong style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 28 }}>{last.home.goals} - {last.away.goals}</strong>
+              <strong style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>{last.home.goals} - {last.away.goals}</strong>
               <div className="mg-row"><b>{clubOf(last.awayClubId)?.shortName}</b><Crest club={clubOf(last.awayClubId)} size={26} /></div>
             </div>
             <p className="mg-small" style={{ marginTop: 8 }}>

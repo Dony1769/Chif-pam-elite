@@ -14,7 +14,7 @@ export function Crest({ club, size = 36 }: { club: Pick<Club, "shortName" | "col
     <svg width={size} height={size * 1.15} viewBox="0 0 40 46" role="img" aria-label={club.shortName} className="mg-crest">
       <path d="M20 1 L38 7 V22 C38 34 30 41 20 45 C10 41 2 34 2 22 V7 Z" fill={primary} stroke={secondary} strokeWidth="2" />
       <path d="M2 22 C2 34 10 41 20 45 V7 L2 7 Z" fill={secondary} opacity="0.18" />
-      <text x="20" y="27" textAnchor="middle" fontFamily="'Barlow Condensed', sans-serif" fontWeight="900" fontSize="12" fill={secondary}>
+      <text x="20" y="27" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif" fontWeight="800" fontSize="10.5" fill={secondary}>
         {club.shortName}
       </text>
     </svg>

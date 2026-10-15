@@ -53,9 +53,9 @@ export default function PlayerHome() {
               </div>
               <div className="mg-row">
                 {canPlay
-                  ? <Link href="/client/fc-career/joueur/match" className="mg-btn mg-btn--gold">Jouer le match</Link>
-                  : null}
-                <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>{fx ? (canPlay ? "Simuler la semaine" : "Passer la semaine") : "Passer à la suite"}</button>
+                  ? <Link href="/client/fc-career/joueur/match" className="mg-btn mg-btn--gold">Continuer la carrière</Link>
+                  : <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "PLAY_WEEK" })}>Continuer la carrière</button>}
+                {canPlay && <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Simuler la semaine</button>}
                 <Link href="/client/fc-career/joueur/progression" className="mg-btn mg-btn--ghost">Entraînement</Link>
               </div>
             </div>
@@ -66,7 +66,7 @@ export default function PlayerHome() {
           <Section title="Dernier match">
             <div className="mg-row mg-row--between">
               <div className="mg-row"><Crest club={clubOf(last.report.homeClubId)} size={24} /><b>{clubOf(last.report.homeClubId)?.shortName}</b></div>
-              <strong style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 28 }}>{last.report.home.goals} - {last.report.away.goals}</strong>
+              <strong style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>{last.report.home.goals} - {last.report.away.goals}</strong>
               <div className="mg-row"><b>{clubOf(last.report.awayClubId)?.shortName}</b><Crest club={clubOf(last.report.awayClubId)} size={24} /></div>
             </div>
             <p className="mg-small" style={{ marginBottom: 0 }}>
