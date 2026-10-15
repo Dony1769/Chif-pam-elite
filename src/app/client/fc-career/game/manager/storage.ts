@@ -46,7 +46,15 @@ export function loadManager(store: KeyValueStore | null = browserStore()): LoadR
     const parsed = JSON.parse(raw);
     if (!isValidManagerSave(parsed)) return { ok: false, reason: "corrupt" };
     // Champs ajoutés après coup : valeurs par défaut
-    return { ok: true, state: { ...parsed, suspensions: parsed.suspensions ?? {} } };
+    // Réparation douce : identifiants de messages en double renommés (rien n'est supprimé)
+    const seen = new Set<string>();
+    const inbox = parsed.inbox.map((m, i) => {
+      if (!seen.has(m.id)) { seen.add(m.id); return m; }
+      const id = `${m.id}-r${i}`;
+      seen.add(id);
+      return { ...m, id };
+    });
+    return { ok: true, state: { ...parsed, inbox, suspensions: parsed.suspensions ?? {} } };
   } catch {
     return { ok: false, reason: "corrupt" };
   }

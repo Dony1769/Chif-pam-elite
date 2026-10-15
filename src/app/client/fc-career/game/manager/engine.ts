@@ -143,8 +143,16 @@ export function msg(s: ManagerState, kind: InboxKind, title: string, body: strin
 }
 
 export function pushInbox(s: ManagerState, ...m: InboxMessage[]): ManagerState {
+  // Identifiants uniques garantis (plusieurs messages peuvent naître la même semaine)
+  const taken = new Set(s.inbox.map(x => x.id));
+  const fresh = m.map(x => {
+    let id = x.id, k = 2;
+    while (taken.has(id)) id = `${x.id}-${k++}`;
+    taken.add(id);
+    return id === x.id ? x : { ...x, id };
+  });
   // Ordre naturel : le premier message fourni apparaît en tête
-  return { ...s, inbox: [...m, ...s.inbox].slice(0, INBOX_MAX) };
+  return { ...s, inbox: [...fresh, ...s.inbox].slice(0, INBOX_MAX) };
 }
 
 export function addLedger(f: ClubFinances, entries: LedgerEntry[]): ClubFinances {

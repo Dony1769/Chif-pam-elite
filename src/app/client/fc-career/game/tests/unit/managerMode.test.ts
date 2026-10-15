@@ -321,6 +321,12 @@ describe("Semaine de manager", () => {
     expect(total).toBeGreaterThan(getManagedClub(s).wagesBudget * 0.8);
   });
 
+  test("identifiants de messages toujours uniques, même sur plusieurs saisons", () => {
+    const s = simulateSeason(simulateSeason(newGame()));
+    const ids = s.inbox.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   test("un manager licencié ne peut plus jouer", () => {
     const sacked: ManagerState = { ...newGame(), status: "sacked" };
     expect(playWeek(sacked)).toBe(sacked);
@@ -385,6 +391,19 @@ describe("Sauvegarde manager", () => {
       expect(r.state.clubId).toBe(s.clubId);
       expect(r.state.savedAt).toBe(123);
       expect(r.state.world.currentWeek).toBe(s.world.currentWeek);
+    }
+  });
+
+  test("chargement : messages en double renommés, aucun perdu", () => {
+    const store = memoryStore();
+    const s = newGame();
+    const dup = { ...s, inbox: [s.inbox[0], { ...s.inbox[0], title: "Autre" }] };
+    saveManager(dup, store, 1);
+    const r = loadManager(store);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.state.inbox).toHaveLength(2);
+      expect(new Set(r.state.inbox.map(m => m.id)).size).toBe(2);
     }
   });
 
