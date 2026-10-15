@@ -594,3 +594,90 @@ describe("Erreurs", () => {
     expect(s2.error).toBeNull();
   });
 });
+
+// ── Tests : Lot E — Fin de saison & monde évolutif ───────────────────────────
+
+describe("Lot E — Fin de saison & monde évolutif", () => {
+  // État avec standings pour tester END_SEASON
+  const saveWithStandings: typeof baseSave = {
+    ...baseSave,
+    world: {
+      ...baseSave.world,
+      standings: {
+        "league-001": [
+          { clubId: "club-001", played: 10, won: 7, drawn: 1, lost: 2, goalsFor: 20, goalsAgainst: 10, points: 22 },
+          { clubId: "club-002", played: 10, won: 3, drawn: 2, lost: 5, goalsFor: 12, goalsAgainst: 18, points: 11 },
+        ],
+      },
+    },
+  };
+
+  const endSeasonAction = {
+    type: "END_SEASON" as const,
+    setup: {
+      newPhase: "academy" as const,
+      newAcademyStage: "u18" as const,
+      newSchedule: null,
+      newAge: 17,
+    },
+    summary: {
+      season: 1, clubId: "club-001", phase: "academy" as const,
+      appearances: 5, goals: 2, assists: 1, avgRating: 7.2, trophies: [], highlights: [],
+    },
+    paBonus: 4,
+  };
+
+  it("E1 — END_SEASON renouvelle le coach (objectif reset, conversations vides)", () => {
+    const saveWithConvs = {
+      ...saveWithStandings,
+      coach: {
+        ...baseSave.coach!,
+        trust: 70,
+        conversations: [{ id: "c1", season: 1, week: 5, trigger: "good_performance", message: "Bien joué" }],
+        seasonObjective: { ...baseSave.coach!.seasonObjective, current: 4, completed: false },
+      },
+    };
+    const state = gameReducer({ ...loadedState, save: saveWithConvs }, endSeasonAction);
+    // Conversations réinitialisées
+    expect(state.save!.coach!.conversations).toHaveLength(0);
+    // Objectif réinitialisé (current = 0)
+    expect(state.save!.coach!.seasonObjective.current).toBe(0);
+    expect(state.save!.coach!.seasonObjective.completed).toBe(false);
+    // Trust hérité partiellement (70 * 0.5 = 35, + 40 base = 75 → clamp 100)
+    expect(state.save!.coach!.trust).toBeGreaterThan(40);
+    expect(state.save!.coach!.trust).toBeLessThanOrEqual(100);
+  });
+
+  it("E3 — END_SEASON réinitialise les standings à zéro pour la nouvelle saison", () => {
+    const state = gameReducer({ ...loadedState, save: saveWithStandings }, endSeasonAction);
+    const newStandings = state.save!.world.standings["league-001"];
+    expect(newStandings).toBeDefined();
+    // Chaque club repart à zéro
+    for (const row of newStandings) {
+      expect(row.played).toBe(0);
+      expect(row.points).toBe(0);
+      expect(row.won).toBe(0);
+    }
+    // Les IDs des clubs sont préservés
+    const clubIds = newStandings.map(r => r.clubId).sort();
+    expect(clubIds).toEqual(["club-001", "club-002"].sort());
+  });
+
+  it("E4 — END_SEASON réinitialise weekState", () => {
+    const saveWithMatch = {
+      ...saveWithStandings,
+      weekState: { trainingDone: true, trainingIntensity: "intense" as const, matchPlayed: true },
+    };
+    const state = gameReducer({ ...loadedState, save: saveWithMatch }, endSeasonAction);
+    expect(state.save!.weekState!.trainingDone).toBe(false);
+    expect(state.save!.weekState!.matchPlayed).toBe(false);
+    expect(state.save!.weekState!.trainingIntensity).toBeNull();
+  });
+
+  it("RETIRE passe la phase à 'retired' et réinitialise weekState", () => {
+    const state = gameReducer(loadedState, { type: "RETIRE" });
+    expect(state.save!.career.phase).toBe("retired");
+    expect(state.save!.weekState!.matchPlayed).toBe(false);
+    expect(state.isDirty).toBe(true);
+  });
+});

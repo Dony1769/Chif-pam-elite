@@ -25,6 +25,8 @@ import { createInitialPersonalLife, updatePersonalLifeWeekly, applyPersonalEvent
 import { createInitialNationalTeam, updateNationalTeamEndOfSeason } from "../domain/nationalTeam";
 import { advanceWorldWeek, endWorldSeason } from "../domain/worldEngine";
 import { computeSeasonAwards, mergeAwards } from "../domain/awards";
+import { buildInitialStandings } from "../domain/worldGenerator";
+import { createInitialCoach } from "../domain/coach";
 import { updateSponsorMissions, buildMissionContext } from "../domain/sponsors";
 
 const DEFAULT_WEEK_STATE = { trainingDone: false, trainingIntensity: null as null, matchPlayed: false };
@@ -444,6 +446,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       });
       const allAwards = mergeAwards(save.awards ?? [], newSeasonAwards);
 
+      // BUG E3 FIX : Réinitialiser les standings pour la nouvelle saison
+      const nextSeasonNumber = career.season + 1;
+      const newStandings: Record<string, StandingRow[]> = {};
+      for (const [leagueId, rows] of Object.entries(save.world.standings)) {
+        newStandings[leagueId] = buildInitialStandings(rows.map(r => r.clubId));
+      }
+
       // Nouveau calendrier
       const newSchedules: SeasonSchedule[] = setup.newSchedule
         ? [...save.world.schedules, setup.newSchedule]
@@ -491,7 +500,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...save.world,
             schedules: newSchedules,
             clubs: updatedClubs,
+            // BUG E3 FIX : standings réinitialisés pour la nouvelle saison
+            standings: newStandings,
+            lastMatchResults: [], // réinitialise les résultats pour la nouvelle saison
           },
+          // BUG E4 FIX : weekState réinitialisé pour la nouvelle saison
+          weekState: DEFAULT_WEEK_STATE,
+          // BUG E1 FIX : coach renouvelé en fin de saison (objectif reset, conversations effacées, trust partiellement conservé)
+          coach: (() => {
+            if (!save.coach) return save.coach;
+            const freshCoach = createInitialCoach(setup.newPhase, nextSeasonNumber);
+            // Conserver la moitié de la confiance acquise (continuité relationnelle)
+            const inheritedTrust = Math.round(save.coach.trust * 0.5);
+            return {
+              ...freshCoach,
+              trust: clamp(freshCoach.trust + inheritedTrust, 0, 100),
+              playerRole: roleFromTrust(clamp(freshCoach.trust + inheritedTrust, 0, 100)),
+            };
+          })(),
           worldPlayers: transferredPlayers,
           worldTransferHistory: [...((save as GameSaveV1 & { worldTransferHistory?: import("../domain/worldTransfers").WorldTransferEvent[] }).worldTransferHistory ?? []), ...ageEvents, ...transferEvents].slice(-100),
           agentState: {
@@ -766,7 +792,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       // 3. Nouveau coach correspondant à la phase cible
-      const { createInitialCoach } = require("../domain/coach");
       const newCoach = createInitialCoach(targetPhase, currentCareer.season);
 
       // 4. Mettre à jour / réinitialiser le planning selon le type de transition
@@ -1546,6 +1571,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         save: {
           ...state.save,
           worldLiveState: newWorld,
+        },
+        isDirty: true,
+      };
+    }
+
+    case "RETIRE": {
+      if (!state.save) return state;
+      return {
+        ...state,
+        save: {
+          ...state.save,
+          career: {
+            ...state.save.career,
+            phase: "retired",
+            completedMatchIds: [],
+          },
+          weekState: DEFAULT_WEEK_STATE,
         },
         isDirty: true,
       };

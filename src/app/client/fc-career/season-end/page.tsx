@@ -12,7 +12,6 @@ import { useGame }    from "../game/hooks/useGame";
 import { useToast }   from "../game/components/Toast";
 import { selectPlayer, selectCareer } from "../game/state/selectors";
 import type { GameSaveV1 } from "../game/persistence/saveSchema";
-import { writeSave }  from "../game/persistence/saveRepository";
 import {
   computeSeasonEvaluation,
   buildSeasonSummary,
@@ -21,9 +20,6 @@ import {
 } from "../game/domain/seasonEnd";
 import type { EvaluationResult } from "../game/domain/seasonEnd";
 import { pageFade, stagger, itemFade } from "../game/design/animations";
-import { generateLeagueSchedule } from "../game/domain/worldGenerator";
-import { LEAGUES, CLUBS } from "../game/data/world";
-import type { SeasonSchedule } from "../game/domain/season";
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
@@ -261,73 +257,11 @@ export default function SeasonEndPage() {
       });
     }
 
-    /* Construire la sauvegarde mise à jour et la persister */
-    const newAcademy = setup.newAcademyStage
-      ? { stage: setup.newAcademyStage, evaluationScore: 50, promotionThreshold: 80, weeksInStage: 0 }
-      : null;
-
-    const updatedSave = {
-      ...save,
-      player: {
-        ...player,
-        age: setup.newAge,
-        paPoints: player.paPoints + evaluation.paBonus,
-        progressionHistory: [
-          ...player.progressionHistory,
-          {
-            season: career.season,
-            overall: player.overall,
-            potential: player.potential,
-            paPoints: player.paPoints,
-          },
-        ],
-      },
-      career: {
-        ...career,
-        season: career.season + 1,
-        week: 1,
-        matchday: 1,
-        phase: setup.newPhase,
-        academy: newAcademy,
-        completedMatchIds: [] as unknown as string[],
-        seasonSummaries: [...career.seasonSummaries, summary],
-      },
-      world: {
-        ...save.world,
-        schedules: (() => {
-          const nextSeason = career.season + 1;
-          let schedules = save.world.schedules;
-          // Ajouter le schedule académie si promotion en académie
-          if (setup.newSchedule) {
-            schedules = [...schedules, setup.newSchedule as unknown as SeasonSchedule];
-          }
-          // Pour les joueurs pro (ou promus pros), générer les schedules de la saison suivante
-          // si ceux-ci n'existent pas encore.
-          const isProTransition = setup.newPhase === "professional" || setup.newPhase === "elite" || setup.newPhase === "legend";
-          if (isProTransition) {
-            const nextSeasonProExists = schedules.some(s => s.season === nextSeason && !["youth-league","academy-cup"].includes(s.competitionId));
-            if (!nextSeasonProExists) {
-              const proSchedules: SeasonSchedule[] = LEAGUES.map(league => {
-                const clubIds = CLUBS.filter(c => c.leagueId === league.id).map(c => c.id);
-                const ls = generateLeagueSchedule(league.id, clubIds, nextSeason, career.id);
-                return {
-                  season: nextSeason,
-                  competitionId: league.id,
-                  fixtures: ls.fixtures,
-                  currentMatchday: ls.currentMatchday,
-                  totalMatchdays: ls.totalMatchdays,
-                } as SeasonSchedule;
-              });
-              schedules = [...schedules, ...proSchedules];
-            }
-          }
-          return schedules;
-        })(),
-      },
-      meta: { ...save.meta, savedAt: Date.now() },
-    };
-
-    writeSave(updatedSave as Parameters<typeof writeSave>[0]);
+    // BUG E2 FIX : la double écriture via writeSave(updatedSave) est supprimée.
+    // END_SEASON dans le reducer produit l'état complet (promotions, standings reset,
+    // coach renouvelé, worldPlayers, etc.) et GameProvider persiste automatiquement
+    // via isDirty. Une écriture manuelle ici écraserait la sauvegarde avec une version
+    // incomplète.
 
     toast("Saison terminée — bonne suite !", "success");
     router.push("/client/fc-career/dashboard");
@@ -492,7 +426,7 @@ export default function SeasonEndPage() {
                   body: `${player.firstName} ${player.lastName} raccroche les crampons à ${player.age} ans. Une carrière de légende.`,
                 },
               });
-              writeSave({ ...save, career: { ...career, phase: "retired", completedMatchIds: [] as unknown as string[] } } as unknown as Parameters<typeof writeSave>[0]);
+              dispatch({ type: "RETIRE" });
               toast("Vous avez pris votre retraite. Merci pour tout !", "success");
               router.push("/client/fc-career/career");
             }}

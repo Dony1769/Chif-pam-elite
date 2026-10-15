@@ -122,6 +122,9 @@ export type GameAction =
   /** Clôt la saison du monde : promotions/relégations, vieillissement, transferts, saison suivante */
   | { type: "END_WORLD_SEASON" }
 
+  // Retraite
+  | { type: "RETIRE" }
+
   // Erreur
   | { type: "SET_ERROR"; message: string }
   | { type: "CLEAR_ERROR" };
