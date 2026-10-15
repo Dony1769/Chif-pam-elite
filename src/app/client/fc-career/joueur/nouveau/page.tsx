@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { generateWorld } from "../../game/domain/worldGenerator";
 import { seedFor, squadStrength } from "../../game/manager/engine";
 import type { WorldPlayerPosition } from "../../game/data/worldPlayers";
-import { archivePlayerSave, loadPlayerCareer } from "../../game/player2/storage";
+import { archivePlayerSave, loadPlayerCareer, readLegacySave } from "../../game/player2/storage";
+import { readLegacy } from "../../game/player2/migrate";
 import type { Foot } from "../../game/player2/types";
 import { usePlayer } from "../_ui/PlayerContext";
 import { Crest, Ovr, POS_FR } from "../../manager/_ui/kit";
@@ -39,6 +40,18 @@ export default function NewPlayerPage() {
   const existing = typeof window !== "undefined" ? loadPlayerCareer() : { ok: false as const, reason: "empty" as const };
   const hasSave = existing.ok || (!existing.ok && existing.reason === "corrupt") || !!state;
   const nameOk = firstName.trim().length >= 2 && lastName.trim().length >= 2;
+  const [legacyRaw, setLegacyRaw] = useState<unknown>(null);
+  useEffect(() => { setLegacyRaw(readLegacySave()); }, []);
+  const legacy = useMemo(() => readLegacy(legacyRaw), [legacyRaw]);
+  const [confirmImport, setConfirmImport] = useState(false);
+
+  function importLegacy() {
+    if (!legacyRaw) return;
+    if (hasSave && !confirmImport) { setConfirmImport(true); return; }
+    if (!archivePlayerSave()) { notify(false, "Impossible d'archiver la carrière v2 actuelle : import annulé pour ne rien perdre."); return; }
+    const r = run({ type: "IMPORT_LEGACY", raw: legacyRaw });
+    if (r?.ok) router.push("/client/fc-career/joueur");
+  }
 
   function start() {
     if (!seed || !clubId || !nameOk) return;
@@ -55,6 +68,22 @@ export default function NewPlayerPage() {
       <div className="mg-pagehead">
         <div><h1>Crée ton joueur</h1><p>17 ans, un premier contrat pro, tout reste à prouver.</p></div>
       </div>
+
+      {legacy && (
+        <div className="mg-card mg-card--accent mg-stack" aria-label="Importer ma carrière actuelle">
+          <div className="mg-row mg-row--between">
+            <div>
+              <strong style={{ fontSize: 17 }}>Continuer avec {legacy.name}</strong>
+              <p className="mg-small" style={{ margin: "2px 0 0" }}>
+                Votre carrière actuelle : {legacy.position} · {legacy.age} ans · note {legacy.overall} · {legacy.apps} match(s), {legacy.goals} but(s).
+                Elle est convertie dans la nouvelle version ; l&apos;originale reste intacte et jouable.
+              </p>
+            </div>
+            <button type="button" className="mg-btn mg-btn--gold" onClick={importLegacy}>{confirmImport ? "Confirmer l'import" : "Importer ma carrière"}</button>
+          </div>
+          {confirmImport && <p className="mg-warn">Une carrière v2 existe déjà : elle sera archivée en sauvegarde de secours avant l&apos;import.</p>}
+        </div>
+      )}
 
       <div className="mg-card mg-stack">
         <div className="mg-filters">

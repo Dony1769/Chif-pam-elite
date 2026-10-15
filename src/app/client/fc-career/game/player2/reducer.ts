@@ -8,11 +8,13 @@ import type { LiveMatch } from "../manager/matchSim";
 import type { NewCareerInput } from "./engine";
 import { createPlayerCareer, setTrainingFocus } from "./engine";
 import type { CareerResult } from "./career";
+import { migrateLegacy } from "./migrate";
 import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, requestTransfer } from "./career";
 
 export type PlayerAction =
   | { type: "NEW"; input: NewCareerInput }
   | { type: "LOAD"; state: PlayerCareerState }
+  | { type: "IMPORT_LEGACY"; raw: unknown; now?: number }
   | { type: "PLAY_WEEK"; live?: LiveMatch | null }
   | { type: "SET_FOCUS"; attr: AttrKey }
   | { type: "ACCEPT_OFFER"; offerId: string }
@@ -32,6 +34,12 @@ const fromResult = (r: CareerResult): PlayerStep => ({ state: r.state, message: 
 export function playerStep(state: PlayerCareerState | null, action: PlayerAction): PlayerStep {
   if (action.type === "NEW") return { state: ensureCareer(createPlayerCareer(action.input)), message: null };
   if (action.type === "LOAD") return { state: ensureCareer(action.state), message: null };
+  if (action.type === "IMPORT_LEGACY") {
+    const migrated = migrateLegacy(action.raw, action.now);
+    return migrated
+      ? { state: migrated, message: { ok: true, text: "Carrière importée : votre ancienne sauvegarde reste intacte." } }
+      : { state, message: { ok: false, text: "Sauvegarde v1 illisible : import impossible." } };
+  }
   if (!state) return { state, message: null };
   const s = ensureCareer(state);
   const plain = (next: PlayerCareerState): PlayerStep => ({ state: next, message: null });
