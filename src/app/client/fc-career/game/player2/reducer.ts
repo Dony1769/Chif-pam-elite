@@ -4,19 +4,22 @@
 
 import type { PlayerCareerState } from "./types";
 import type { AttrKey } from "./attributes";
+import type { TrainingFocus } from "./types";
+import type { OptionId } from "./playstyles";
 import type { LiveMatch } from "../manager/matchSim";
 import type { NewCareerInput } from "./engine";
 import { createPlayerCareer, setTrainingFocus } from "./engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
-import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, requestTransfer } from "./career";
+import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, requestTransfer, retirePlayer } from "./career";
 
 export type PlayerAction =
   | { type: "NEW"; input: NewCareerInput }
   | { type: "LOAD"; state: PlayerCareerState }
   | { type: "IMPORT_LEGACY"; raw: unknown; now?: number }
-  | { type: "PLAY_WEEK"; live?: LiveMatch | null }
-  | { type: "SET_FOCUS"; attr: AttrKey }
+  | { type: "PLAY_WEEK"; live?: LiveMatch | null; psGain?: Partial<Record<OptionId, number>> }
+  | { type: "SET_FOCUS"; attr: AttrKey | TrainingFocus }
+  | { type: "RETIRE" }
   | { type: "ACCEPT_OFFER"; offerId: string }
   | { type: "REJECT_OFFER"; offerId: string }
   | { type: "REQUEST_TRANSFER"; on: boolean }
@@ -44,7 +47,8 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
   const s = ensureCareer(state);
   const plain = (next: PlayerCareerState): PlayerStep => ({ state: next, message: null });
   switch (action.type) {
-    case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live));
+    case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
+    case "RETIRE":           return fromResult(retirePlayer(s));
     case "SET_FOCUS":        return plain(setTrainingFocus(s, action.attr));
     case "ACCEPT_OFFER":     return fromResult(acceptOffer(s, action.offerId));
     case "REJECT_OFFER":     return plain(rejectOffer(s, action.offerId));

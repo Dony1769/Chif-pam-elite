@@ -51,8 +51,8 @@ describe("Moments clés", () => {
       const pl = untilMoment(live(career(pos)));
       if (!pl.moment) continue;
       const k = pl.moment.kind;
-      if (pos === "GK") expect(k).toBe("keeper");
-      if (pos === "ST") expect(["box", "long"]).toContain(k);
+      if (pos === "GK") expect(["keeper", "keepercross", "gkbuild"]).toContain(k);
+      if (pos === "ST") expect(["box", "long", "air", "setpiece", "penalty"]).toContain(k);
       for (const o of pl.moment.options) {
         expect(o.chance).toBeGreaterThanOrEqual(0.08);
         expect(o.chance).toBeLessThanOrEqual(0.92);

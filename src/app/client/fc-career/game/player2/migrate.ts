@@ -8,7 +8,21 @@
 
 import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { createManagerGame, squadStrength } from "../manager/engine";
-import { fromLegacyAttributes, legacyPosition, overallOf } from "./attributes";
+import { fromLegacyAttributes, legacyPosition } from "./attributes";
+import type { SubAttrs, SubKey } from "./subAttributes";
+import { ALL_SUBS, faceOf, overallFromSubs, subsFromFace } from "./subAttributes";
+
+/** Les sous-attributs v1 portent presque les mêmes noms : on les reprend tels quels. */
+function subsFromLegacy(old: Record<string, number>, position: WorldPlayerPosition, seed: string): SubAttrs {
+  const base = subsFromFace(fromLegacyAttributes(old, position === "GK"), position, seed);
+  const alias: Partial<Record<SubKey, string>> = { positioning: "attPositioning", longShots: "longShot" };
+  const out = { ...base };
+  for (const k of ALL_SUBS) {
+    const v = old[alias[k] ?? k];
+    if (typeof v === "number" && v > 0) out[k] = clamp(Math.round(v), 1, 99);
+  }
+  return out;
+}
 import { coachDecision, createPlayerCareer, pmsg, pushPlayerInbox, syncWorldPlayer } from "./engine";
 import { ensureCareer } from "./career";
 import type { PlayerCareerState } from "./types";
@@ -65,13 +79,14 @@ export function migrateLegacy(raw: unknown, now = Date.now()): PlayerCareerState
   const v = raw as LegacyLike;
   const p = v.player!;
   const position: WorldPlayerPosition = legacyPosition(p.position ?? "CM");
-  const attrs = fromLegacyAttributes(p.attributes!, position === "GK");
   const seed = `migr-${sum.careerId}`;
+  const sub = subsFromLegacy(p.attributes!, position, seed);
+  const attrs = faceOf(sub, position);
 
   // Club : celui du contrat v1 s'il existe dans le monde, sinon un club de D2 accessible
   const probe = createManagerGame({ seed, clubId: "vlt-fc-meridian", managerName: "IA", now });
   const known = probe.world.clubs.find(c => c.id === sum.clubId);
-  const ovr = overallOf(attrs, position);
+  const ovr = overallFromSubs(sub, position);
   const fallback = [...probe.world.clubs].filter(c => c.tier >= 2)
     .sort((a, b) => Math.abs(squadStrength(probe.world, a.id) - ovr) - Math.abs(squadStrength(probe.world, b.id) - ovr))[0];
   const club = known ?? fallback;
@@ -93,7 +108,7 @@ export function migrateLegacy(raw: unknown, now = Date.now()): PlayerCareerState
   s = {
     ...s,
     shadow: { ...s.shadow, world: { ...s.shadow.world, players } },
-    profile: { ...s.profile, attrs, potential, reputation: clamp(p.reputation ?? s.profile.reputation, 1, 100) },
+    profile: { ...s.profile, attrs, sub, potential, reputation: clamp(p.reputation ?? s.profile.reputation, 1, 100) },
     contract: { ...s.contract, wage, seasonsLeft },
     coachTrust: 50,
     inbox: [],

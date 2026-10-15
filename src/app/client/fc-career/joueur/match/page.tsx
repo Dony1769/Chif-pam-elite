@@ -38,7 +38,10 @@ export default function PlayerMatchPage() {
     if (!stale && !notStarted) return;
     preparedFor.current = state;
     const m = preparePlayerMatch(state);
-    setLive(m ? startPlayerLive(m, { id: state.profile.id, name: `${state.profile.firstName.charAt(0)}. ${state.profile.lastName}`, attrs: state.profile.attrs, position: state.profile.position }) : null);
+    setLive(m ? startPlayerLive(m, {
+      id: state.profile.id, name: `${state.profile.firstName.charAt(0)}. ${state.profile.lastName}`, attrs: state.profile.attrs, position: state.profile.position,
+      sub: state.profile.sub, ps: state.profile.playStyles, weakFoot: state.profile.weakFoot, skillMoves: state.profile.skillMoves,
+    }) : null);
   }, [state, fx, live, setLive, eligible]);
 
   // Horloge : pause automatique sur un moment clé, à la mi-temps et à la fin
@@ -81,7 +84,7 @@ export default function PlayerMatchPage() {
   function validate() {
     if (!live) return;
     const done = live.match.finished ? live : simulateRest(live);
-    run({ type: "PLAY_WEEK", live: done.match });
+    run({ type: "PLAY_WEEK", live: done.match, psGain: done.psGain });
     setLive(null);
     router.push("/client/fc-career/joueur");
   }
@@ -107,7 +110,8 @@ export default function PlayerMatchPage() {
                 <button key={o.id} type="button" className="pc-option" onClick={() => choose(o)}>
                   <span className="pc-chance">{Math.round(o.chance * 100)} %</span>
                   <b>{o.label}</b>
-                  <span>{attrLabel(o.attr, state.profile.position)} {state.profile.attrs[o.attr]}</span>
+                  <span>{o.skill ?? attrLabel(o.attr, state.profile.position)} {o.level ?? state.profile.attrs[o.attr]}</span>
+                  {o.ps ? <span className="pc-psbadge">PlayStyle +{Math.round(o.ps * 100)} %</span> : null}
                 </button>
               ))}
             </div>

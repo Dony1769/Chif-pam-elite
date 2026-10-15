@@ -1,3 +1,4 @@
+import { profileOverall } from "../../player2/engine";
 /**
  * FC CAREER 27 — Tests de la migration v1 → v2 (Lot J5)
  * Les sauvegardes v1 sont construites avec la vraie fabrique de joueur v1.
@@ -46,7 +47,7 @@ describe("Migration v1 → v2", () => {
     expect(me(s).age).toBe(21);
     expect(myClub(s).id).toBe(D1);
     expect(me(s).clubId).toBe(D1);
-    expect(me(s).overall).toBe(overallOf(s.profile.attrs, "AM"));
+    expect(me(s).overall).toBe(profileOverall(s.profile));
     expect(s.profile.potential).toBeGreaterThanOrEqual(me(s).overall);
     expect(s.contract.wage).toBe(2400);
     expect(s.contract.seasonsLeft).toBe(2); // saisons 3 et 4

@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { Crest, Empty, MoneyInput, Section } from "../../manager/_ui/kit";
 import { formatMoney } from "../../game/manager/engine";
-import { careerTotals, myClub } from "../../game/player2/engine";
+import { careerTotals, me, myClub } from "../../game/player2/engine";
 import { ROLE_LABEL, clubWageCap, marketValue, nationalRank, renewalDemand } from "../../game/player2/career";
 import { isWindowOpen, windowLabel } from "../../game/manager/market";
 
@@ -21,6 +21,8 @@ export default function CareerPage() {
   const totals = careerTotals(state);
   const country = state.shadow.world.countries.find(k => k.id === c.national.countryId);
   const rank = nationalRank(state);
+  const [confirmRetire, setConfirmRetire] = useState(false);
+  const age = me(state).age;
 
   return (
     <div className="mg-grid">
@@ -107,6 +109,24 @@ export default function CareerPage() {
             <dt>Réputation</dt><dd>{Math.round(state.profile.reputation)}/100</dd>
             {state.legacy && <><dt>Importé de la v1</dt><dd>{state.legacy.apps} m · {state.legacy.goals} b</dd></>}
           </dl>
+        </Section>
+        <Section title="Fin de carrière">
+          {state.retired ? (
+            <p className="mg-muted" style={{ margin: 0 }}>Vous avez pris votre retraite à {state.retired.age} ans (saison {state.retired.season}).</p>
+          ) : confirmRetire ? (
+            <div className="mg-stack">
+              <p className="mg-warn" style={{ margin: 0 }}>Annoncer votre retraite met fin à la carrière. Ce choix est définitif.</p>
+              <div className="mg-row">
+                <button type="button" className="mg-btn mg-btn--ghost" onClick={() => setConfirmRetire(false)}>Annuler</button>
+                <button type="button" className="mg-btn mg-btn--danger" onClick={() => { run({ type: "RETIRE" }); setConfirmRetire(false); }}>Prendre ma retraite</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="mg-small" style={{ marginTop: 0 }}>{age >= 32 ? "Vous pouvez annoncer votre retraite quand vous le souhaitez." : `Possible à partir de 32 ans (vous en avez ${age}).`}</p>
+              <button type="button" className="mg-btn" disabled={age < 32} onClick={() => setConfirmRetire(true)}>Annoncer ma retraite</button>
+            </>
+          )}
         </Section>
       </div>
     </div>

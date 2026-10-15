@@ -16,13 +16,23 @@ import { computeTeamRatings } from "../manager/tactics";
 import type { MatchEvent } from "../manager/types";
 import { createRng, seedFromString } from "../utils/random";
 import type { AttrKey, Attrs } from "./attributes";
+import type { SubAttrs, SubKey } from "./subAttributes";
+import { SUB_LABEL, subsFromFace } from "./subAttributes";
+import type { OptionId, PlayStyleState } from "./playstyles";
+import { optionAvailable, psBonus } from "./playstyles";
 
-export type MomentKind = "box" | "wing" | "build" | "long" | "defend" | "keeper";
+export type MomentKind = "box" | "wing" | "build" | "long" | "defend" | "keeper"
+  | "air" | "setpiece" | "penalty" | "keepercross" | "gkbuild";
 
 export interface MomentOption {
-  id: "shoot" | "pass" | "dribble" | "cross" | "through" | "longshot" | "tackle" | "intercept" | "contain" | "dive" | "stand" | "rush";
+  id: OptionId;
   label: string;
   attr: AttrKey;
+  /** Sous-attribut principal sollicité et sa valeur (affichage) */
+  skill?: string;
+  level?: number;
+  /** Bonus PlayStyle appliqué */
+  ps?: number;
   /** Probabilité de réussite (0-1), affichée au joueur */
   chance: number;
   /** Probabilité de but si l'action réussit (attaque) ou d'en encaisser si elle échoue (défense) */
@@ -55,6 +65,12 @@ export interface PlayerLive {
   decisions: DecisionLog[];
   /** Nombre de moments déjà proposés (plafonné selon le poste) */
   momentsSeen: number;
+  sub?: SubAttrs;
+  ps?: PlayStyleState;
+  weakFoot?: number;
+  skillMoves?: number;
+  /** Réussites par action pendant ce match (progression des PlayStyles) */
+  psGain?: Partial<Record<OptionId, number>>;
 }
 
 /** Nombre moyen de moments clés par match selon le poste. */
@@ -65,8 +81,14 @@ export const MOMENTS_PER_MATCH: Record<WorldPlayerPosition, number> = {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
-export function startPlayerLive(match: LiveMatch, p: { id: string; name: string; attrs: Attrs; position: WorldPlayerPosition }): PlayerLive {
-  return { match, playerId: p.id, playerName: p.name, attrs: p.attrs, position: p.position, moment: null, decisions: [], momentsSeen: 0 };
+export function startPlayerLive(match: LiveMatch, p: {
+  id: string; name: string; attrs: Attrs; position: WorldPlayerPosition;
+  sub?: SubAttrs; ps?: PlayStyleState; weakFoot?: number; skillMoves?: number;
+}): PlayerLive {
+  return {
+    match, playerId: p.id, playerName: p.name, attrs: p.attrs, position: p.position, moment: null, decisions: [], momentsSeen: 0,
+    sub: p.sub, ps: p.ps, weakFoot: p.weakFoot, skillMoves: p.skillMoves, psGain: {},
+  };
 }
 
 const mySide = (pl: PlayerLive) => pl.match.managedSide;
@@ -86,62 +108,136 @@ function chanceOf(attr: number, versus: number, base = 0.5): number {
   return r2(clamp(base + (attr - versus) * 0.012, 0.08, 0.92));
 }
 
+type Mix = Partial<Record<SubKey, number>>;
+const SHOTS: OptionId[] = ["shoot", "longshot", "finesse", "chip", "acrobatic", "header", "lowdriven", "powershot", "trivela", "freekick", "penalty"];
+const isKeeperKind = (k: MomentKind) => k === "keeper" || k === "keepercross";
+const isDefensiveKind = (k: MomentKind) => k === "defend" || isKeeperKind(k);
+
 function buildMoment(pl: PlayerLive, minute: number, kind: MomentKind): KeyMoment {
-  const a = pl.attrs;
+  const sub = pl.sub ?? subsFromFace(pl.attrs, pl.position, pl.playerId);
   const o = opposition(pl);
-  const opt = (id: MomentOption["id"], label: string, attr: AttrKey, versus: number, payoff: number, base = 0.5): MomentOption =>
-    ({ id, label, attr, chance: chanceOf(a[attr], versus, base), payoff });
+  const wf = pl.weakFoot ?? 3, sm = pl.skillMoves ?? 3;
+  const opts: MomentOption[] = [];
+  const add = (id: OptionId, label: string, attr: AttrKey, mix: Mix, versus: number, payoff: number, base = 0.5) => {
+    if (!optionAvailable(pl.ps, id)) return;
+    const entries = Object.entries(mix) as [SubKey, number][];
+    const total = entries.reduce((t, [, w]) => t + w, 0) || 1;
+    const value = entries.reduce((t, [k, w]) => t + (sub[k] ?? 50) * w, 0) / total;
+    const main = entries.sort((a, b) => b[1] - a[1])[0][0];
+    let chance = chanceOf(value, versus, base);
+    // Pied faible : une partie des frappes part du mauvais pied
+    if (SHOTS.includes(id) && id !== "header") chance -= (5 - wf) * 0.01;
+    if (id === "dribble" || id === "flair") chance += (sm - 3) * 0.015;
+    const bonus = psBonus(pl.ps, id);
+    chance = r2(clamp(chance + bonus, 0.05, 0.95));
+    opts.push({ id, label, attr, skill: SUB_LABEL[main], level: sub[main], ps: bonus || undefined, chance, payoff });
+  };
+  let text = "";
   switch (kind) {
     case "box":
-      return { minute, kind, text: "Ballon dans la surface, un défenseur au contact.", options: [
-        opt("shoot", "Frapper", "sho", o.keeper, 0.13, 0.48),
-        opt("dribble", "Éliminer son défenseur", "dri", o.defense, 0.1, 0.45),
-        opt("pass", "Servir un partenaire démarqué", "pas", o.defense, 0.09, 0.55),
-      ] };
+      text = "Ballon dans la surface, un défenseur au contact.";
+      add("shoot", "Frapper", "sho", { finishing: 0.6, positioning: 0.2, composure: 0.2 }, o.keeper, 0.13, 0.48);
+      add("finesse", "Enrouler au second poteau", "sho", { finishing: 0.5, curve: 0.5 }, o.keeper, 0.15, 0.44);
+      add("lowdriven", "Frappe rasante appuyée", "sho", { shotPower: 0.5, finishing: 0.5 }, o.keeper, 0.14, 0.46);
+      add("chip", "Piquer au-dessus du gardien", "sho", { finishing: 0.4, composure: 0.6 }, o.keeper, 0.16, 0.38);
+      add("dribble", "Éliminer son défenseur", "dri", { dribbling: 0.5, agility: 0.3, ballControl: 0.2 }, o.defense, 0.1, 0.45);
+      add("pass", "Servir un partenaire démarqué", "pas", { shortPassing: 0.6, vision: 0.4 }, o.defense, 0.09, 0.55);
+      break;
+    case "air":
+      text = "Corner : le ballon arrive au point de penalty.";
+      add("header", "Reprendre de la tête", "sho", { headingAccuracy: 0.6, jumping: 0.25, strength: 0.15 }, o.defense, 0.17, 0.44);
+      add("acrobatic", "Retourné acrobatique", "sho", { volleys: 0.6, agility: 0.4 }, o.keeper, 0.2, 0.3);
+      add("pass", "Remiser de la tête", "pas", { headingAccuracy: 0.6, vision: 0.4 }, o.defense, 0.08, 0.5);
+      break;
     case "wing":
-      return { minute, kind, text: "Lancé dans le couloir, de l'espace devant vous.", options: [
-        opt("cross", "Centrer", "pas", o.defense, 0.1, 0.52),
-        opt("dribble", "Repiquer dans l'axe", "dri", o.defense, 0.1, 0.45),
-        opt("shoot", "Frapper en angle fermé", "sho", o.keeper, 0.08, 0.4),
-      ] };
+      text = "Lancé dans le couloir, de l'espace devant vous.";
+      add("cross", "Centrer", "pas", { crossing: 0.7, curve: 0.3 }, o.defense, 0.1, 0.52);
+      add("dribble", "Repiquer dans l'axe", "dri", { dribbling: 0.6, acceleration: 0.4 }, o.defense, 0.1, 0.45);
+      add("shoot", "Frapper en angle fermé", "sho", { finishing: 0.7, shotPower: 0.3 }, o.keeper, 0.08, 0.4);
+      add("trivela", "Frappe de l'extérieur du pied", "sho", { curve: 0.5, longShots: 0.5 }, o.keeper, 0.12, 0.38);
+      add("longthrow", "Longue touche dans la surface", "phy", { strength: 0.7, shotPower: 0.3 }, o.defense, 0.07, 0.5);
+      break;
     case "build":
-      return { minute, kind, text: "Le ballon arrive au milieu, l'adversaire est désorganisé.", options: [
-        opt("through", "Passe en profondeur", "pas", o.defense, 0.1, 0.45),
-        opt("dribble", "Percer balle au pied", "dri", o.midfield, 0.07, 0.48),
-        opt("pass", "Jouer simple et garder le ballon", "pas", o.midfield - 15, 0.02, 0.6),
-      ] };
+      text = "Le ballon arrive au milieu, l'adversaire est désorganisé.";
+      add("through", "Passe en profondeur", "pas", { vision: 0.6, shortPassing: 0.4 }, o.defense, 0.1, 0.45);
+      add("longball", "Ouverture lobée", "pas", { longPassing: 0.7, vision: 0.3 }, o.defense, 0.11, 0.42);
+      add("outside", "Passe de l'extérieur du pied", "pas", { vision: 0.5, curve: 0.5 }, o.defense, 0.12, 0.4);
+      add("dribble", "Percer balle au pied", "dri", { dribbling: 0.5, ballControl: 0.3, agility: 0.2 }, o.midfield, 0.07, 0.48);
+      add("flair", "Geste technique (sombrero)", "dri", { dribbling: 0.5, agility: 0.5 }, o.midfield, 0.09, 0.42);
+      add("pass", "Jouer simple et garder le ballon", "pas", { shortPassing: 0.7, composure: 0.3 }, o.midfield - 15, 0.02, 0.6);
+      break;
     case "long":
-      return { minute, kind, text: "Espace à 25 mètres, la défense recule.", options: [
-        opt("longshot", "Frappe lointaine", "sho", o.keeper + 8, 0.1, 0.4),
-        opt("through", "Glisser entre les lignes", "pas", o.defense, 0.09, 0.45),
-        opt("pass", "Temporiser", "pas", o.midfield - 15, 0.02, 0.62),
-      ] };
+      text = "Espace à 25 mètres, la défense recule.";
+      add("longshot", "Frappe lointaine", "sho", { longShots: 0.7, shotPower: 0.3 }, o.keeper + 8, 0.1, 0.4);
+      add("powershot", "Frappe en force", "sho", { shotPower: 0.6, longShots: 0.4 }, o.keeper + 6, 0.13, 0.36);
+      add("through", "Glisser entre les lignes", "pas", { vision: 0.6, shortPassing: 0.4 }, o.defense, 0.09, 0.45);
+      add("pass", "Temporiser", "pas", { shortPassing: 0.7, composure: 0.3 }, o.midfield - 15, 0.02, 0.62);
+      break;
+    case "setpiece":
+      text = "Coup franc à 22 mètres, légèrement excentré.";
+      add("freekick", "Tenter le coup franc direct", "pas", { freeKick: 0.6, curve: 0.4 }, o.keeper + 10, 0.2, 0.38);
+      add("cross", "Brosser dans la surface", "pas", { crossing: 0.5, curve: 0.5 }, o.defense, 0.1, 0.5);
+      add("pass", "Combinaison à deux", "pas", { shortPassing: 0.7, vision: 0.3 }, o.defense, 0.05, 0.55);
+      break;
+    case "penalty":
+      text = "Penalty ! Vous prenez le ballon.";
+      add("penalty", "Placer au ras du poteau", "sho", { penalties: 0.7, composure: 0.3 }, o.keeper - 20, 1, 0.62);
+      add("shoot", "Frapper en force", "sho", { penalties: 0.4, shotPower: 0.6 }, o.keeper - 20, 1, 0.58);
+      add("chip", "Panenka", "sho", { composure: 0.7, penalties: 0.3 }, o.keeper - 20, 1, 0.5);
+      break;
     case "defend":
-      return { minute, kind, text: "Un attaquant adverse fonce vers la surface.", options: [
-        opt("tackle", "Tacler", "def", o.attack, 0.18, 0.52),
-        opt("intercept", "Couper la trajectoire", "pac", o.attack, 0.16, 0.5),
-        opt("contain", "Temporiser et fermer l'angle", "phy", o.attack, 0.1, 0.58),
-      ] };
+      text = "Un attaquant adverse fonce vers la surface.";
+      add("tackle", "Tacler debout", "def", { standingTackle: 0.7, defAwareness: 0.3 }, o.attack, 0.18, 0.52);
+      add("slide", "Tacle glissé", "def", { slidingTackle: 0.8, aggression: 0.2 }, o.attack, 0.2, 0.48);
+      add("intercept", "Couper la trajectoire", "def", { interceptions: 0.6, reactions: 0.2, acceleration: 0.2 }, o.attack, 0.16, 0.5);
+      add("block", "Se jeter pour contrer", "def", { defAwareness: 0.5, reactions: 0.5 }, o.attack, 0.12, 0.5);
+      add("contain", "Temporiser et fermer l'angle", "def", { defAwareness: 0.6, strength: 0.2, acceleration: 0.2 }, o.attack, 0.1, 0.58);
+      if (pl.position === "CB" || pl.position === "DM") add("aerial", "Duel aérien", "phy", { jumping: 0.4, headingAccuracy: 0.3, strength: 0.3 }, o.attack, 0.14, 0.54);
+      break;
     case "keeper":
-      return { minute, kind, text: "Face-à-face : l'attaquant arrive seul devant vous.", options: [
-        opt("dive", "Plonger au bon moment", "pac", o.attack, 0.28, 0.52),
-        opt("stand", "Rester grand, fermer l'angle", "def", o.attack, 0.25, 0.54),
-        opt("rush", "Sortir dans ses pieds", "phy", o.attack, 0.3, 0.48),
-      ] };
+      text = "Face-à-face : l'attaquant arrive seul devant vous.";
+      add("dive", "Plonger au bon moment", "pac", { gkDiving: 0.6, gkReflexes: 0.4 }, o.attack, 0.28, 0.52);
+      add("stand", "Rester grand, fermer l'angle", "def", { gkPositioning: 0.6, gkReflexes: 0.4 }, o.attack, 0.25, 0.54);
+      add("rush", "Sortir dans ses pieds", "def", { gkPositioning: 0.4, acceleration: 0.3, composure: 0.3 }, o.attack, 0.3, 0.48);
+      add("footsave", "Arrêt du pied", "dri", { gkReflexes: 0.8, agility: 0.2 }, o.attack, 0.22, 0.55);
+      break;
+    case "keepercross":
+      text = "Centre adverse tendu dans votre surface.";
+      add("claim", "Capter le centre", "sho", { gkHandling: 0.7, jumping: 0.3 }, o.attack, 0.2, 0.55);
+      add("rush", "Sortir aux poings", "sho", { gkHandling: 0.5, jumping: 0.5 }, o.attack, 0.22, 0.5);
+      add("stand", "Rester sur sa ligne", "def", { gkPositioning: 0.7, gkReflexes: 0.3 }, o.attack, 0.18, 0.5);
+      break;
+    case "gkbuild":
+      text = "Ballon capté : à vous de relancer.";
+      add("pass", "Relance courte", "pas", { gkKicking: 0.7, composure: 0.3 }, o.midfield - 15, 0.02, 0.62);
+      add("quickthrow", "Relance rapide à la main", "pas", { gkKicking: 0.6, strength: 0.4 }, o.midfield, 0.06, 0.5);
+      break;
   }
+  return { minute, kind, text, options: opts };
 }
 
 function kindsFor(pos: WorldPlayerPosition): MomentKind[] {
   switch (pos) {
-    case "GK": return ["keeper"];
-    case "CB": return ["defend", "defend", "defend", "build"];
+    case "GK": return ["keeper", "keeper", "keepercross", "gkbuild"];
+    case "CB": return ["defend", "defend", "defend", "build", "air"];
     case "LB": case "RB": return ["defend", "defend", "wing"];
     case "DM": return ["defend", "build", "build"];
     case "CM": return ["build", "build", "long", "defend"];
     case "AM": return ["build", "long", "box"];
     case "LW": case "RW": return ["wing", "wing", "box"];
-    case "ST": return ["box", "box", "box", "long"];
+    case "ST": return ["box", "box", "box", "long", "air"];
   }
+}
+
+/** Situation du moment : coups de pied arrêtés pour les tireurs désignés, sinon selon le poste. */
+function pickKind(pl: PlayerLive, rng: ReturnType<typeof createRng>): MomentKind {
+  const sub = pl.sub;
+  if (sub && pl.position !== "GK") {
+    const deadBall = pl.ps?.owned.includes("dead_ball") ?? false;
+    if (sub.penalties >= 68 && rng.chance(0.045)) return "penalty";
+    if ((sub.freeKick >= 70 || deadBall) && rng.chance(0.08)) return "setpiece";
+  }
+  return rng.pick(kindsFor(pl.position));
 }
 
 /** Avance d'une minute ; peut ouvrir un moment clé (le match est alors en pause). */
@@ -150,11 +246,11 @@ export function stepPlayerLive(pl: PlayerLive): PlayerLive {
   const match = simulateMinute(pl.match);
   let next: PlayerLive = { ...pl, match };
   if (match.finished || !onPitch(next)) return next;
-  const quota = MOMENTS_PER_MATCH[pl.position];
+  const quota = MOMENTS_PER_MATCH[pl.position] + (pl.ps?.owned.includes("relentless") ? 1 : 0);
   if (next.momentsSeen >= quota + 2) return next;
   const rng = createRng(seedFromString(`${match.seed}-moment-${match.minute}-${pl.playerId}`));
   if (rng.chance(quota / 88)) {
-    const kind = rng.pick(kindsFor(pl.position));
+    const kind = pickKind(next, rng);
     next = { ...next, moment: buildMoment(next, match.minute, kind), momentsSeen: next.momentsSeen + 1 };
   }
   return next;
@@ -184,9 +280,10 @@ export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive
   let outcome: DecisionLog["outcome"];
   let text: string;
 
-  const defensive = mo.kind === "defend" || mo.kind === "keeper";
+  const defensive = isDefensiveKind(mo.kind);
+  const psGain = success ? { ...(pl.psGain ?? {}), [option.id]: ((pl.psGain ?? {})[option.id] ?? 0) + 1 } : (pl.psGain ?? {});
   if (!defensive) {
-    const direct = option.id === "shoot" || option.id === "longshot" || option.id === "dribble";
+    const direct = SHOTS.includes(option.id) || option.id === "dribble" || option.id === "flair";
     if (success) {
       bonus(option.id === "pass" ? 0.03 : 0.08);
       const goal = rng.chance(option.payoff);
@@ -197,7 +294,11 @@ export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive
         team.goals += 1;
         if (direct) {
           outcome = "goal";
-          ev({ type: "goal", side: me, playerId: pl.playerId, assistId: mate?.id, text: `BUT ! ${pl.playerName} marque${mate ? ` après un service de ${mate.lastName}` : ""}. ${score()}.` });
+          const solo = mo.kind === "penalty" || mo.kind === "setpiece" || option.id === "dribble" || option.id === "flair";
+          ev({ type: "goal", side: me, playerId: pl.playerId, assistId: solo ? undefined : mate?.id,
+            text: mo.kind === "penalty" ? `BUT ! ${pl.playerName} transforme le penalty. ${score()}.`
+              : mo.kind === "setpiece" ? `BUT ! Coup franc magnifique de ${pl.playerName}. ${score()}.`
+              : `BUT ! ${pl.playerName} marque${!solo && mate ? ` après un service de ${mate.lastName}` : ""}. ${score()}.` });
           text = `But ! Votre ${option.label.toLowerCase()} fait mouche.`;
         } else {
           outcome = "assist";
@@ -217,16 +318,19 @@ export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive
     } else {
       bonus(option.id === "pass" ? -0.03 : -0.08);
       outcome = "lost";
-      text = option.id === "shoot" || option.id === "longshot" ? "Frappe non cadrée." : "Ballon perdu, l'adversaire récupère.";
-      if (option.id === "shoot" || option.id === "longshot") { team.shots += 1; team.xg += option.payoff * 0.5; }
+      const shot = SHOTS.includes(option.id);
+      text = mo.kind === "penalty" ? "Penalty manqué !" : shot ? "Frappe non cadrée." : "Ballon perdu, l'adversaire récupère.";
+      if (shot) { team.shots += 1; team.xg += Math.min(0.8, option.payoff) * 0.5; }
+      if (mo.kind === "penalty") ev({ type: "chance", side: me, playerId: pl.playerId, text: `Penalty manqué par ${pl.playerName}.` });
     }
   } else {
     if (success) {
-      bonus(mo.kind === "keeper" ? 0.25 : 0.15);
-      outcome = mo.kind === "keeper" ? "saved" : "stopped";
-      if (mo.kind === "keeper") { team.saves += 1; m[them].shots += 1; m[them].shotsOnTarget += 1; }
-      ev({ type: "save", side: me, playerId: pl.playerId, text: mo.kind === "keeper" ? `Parade décisive de ${pl.playerName} !` : `Intervention décisive de ${pl.playerName}.` });
-      text = mo.kind === "keeper" ? "Arrêt décisif !" : "Vous stoppez l'action.";
+      const gk = isKeeperKind(mo.kind);
+      bonus(gk ? 0.25 : 0.15);
+      outcome = gk ? "saved" : "stopped";
+      if (gk) { team.saves += 1; m[them].shots += 1; m[them].shotsOnTarget += 1; }
+      ev({ type: "save", side: me, playerId: pl.playerId, text: gk ? `Parade décisive de ${pl.playerName} !` : `Intervention décisive de ${pl.playerName}.` });
+      text = gk ? (mo.kind === "keepercross" ? "Centre maîtrisé !" : "Arrêt décisif !") : "Vous stoppez l'action.";
     } else {
       bonus(-0.1);
       const opp = m[them];
@@ -248,12 +352,12 @@ export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive
   }
 
   const log: DecisionLog = { minute: mo.minute, kind: mo.kind, option: option.id, success, outcome, text };
-  return { ...pl, match: m, moment: null, decisions: [...pl.decisions, log] };
+  return { ...pl, match: m, moment: null, decisions: [...pl.decisions, log], psGain };
 }
 
 /** Choix automatique : meilleure espérance (réussite × gain, ou risque évité en défense). */
 export function bestOption(mo: KeyMoment): MomentOption {
-  const value = (o: MomentOption) => (mo.kind === "defend" || mo.kind === "keeper" ? o.chance + (1 - o.payoff) * 0.3 : o.chance * (0.4 + o.payoff));
+  const value = (o: MomentOption) => (isDefensiveKind(mo.kind) ? o.chance + (1 - o.payoff) * 0.3 : o.chance * (0.4 + Math.min(1, o.payoff)));
   return [...mo.options].sort((a, b) => value(b) - value(a))[0];
 }
 

@@ -69,6 +69,22 @@ export interface WorldPlayer {
   marketValue: number;
   /** Contrat — semaines restantes */
   contractWeeksLeft: number;
+  /** Joueur contrôlé par l'utilisateur : le monde ne le met pas à la retraite */
+  protected?: boolean;
+  /** Carte : VIT, TIR, PAS, DRI, DÉF, PHY (vrais joueurs et joueurs générés du monde CP) */
+  face?: { pac: number; sho: number; pas: number; dri: number; def: number; phy: number };
+  /** Pied faible et gestes techniques (1-5) */
+  weakFoot?: number;
+  skillMoves?: number;
+  /** PlayStyles (identifiants) et PlayStyles+ */
+  playStyles?: string[];
+  playStylesPlus?: string[];
+  /** Pied fort */
+  foot?: "left" | "right";
+  /** Régénéré de ce joueur retraité */
+  regenOf?: string;
+  /** Jour de l'anniversaire dans l'année (1-365) */
+  birthDay?: number;
 }
 
 // ─── Générateur RNG déterministe (LCG simple) ────────────────────────────────

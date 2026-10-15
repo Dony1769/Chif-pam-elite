@@ -5,7 +5,8 @@
 import React from "react";
 import Link from "next/link";
 import { usePlayerGame } from "./_ui/PlayerContext";
-import { PlayerCard } from "./_ui/PlayerCard";
+import { PlayerCard, PlayStyleChips, Stars } from "./_ui/PlayerCard";
+import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
 import { SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
 import { getLeaguePosition } from "../game/manager/engine";
@@ -51,6 +52,15 @@ export default function PlayerHome() {
                 <span className="mg-small">Rôle · contrat</span>
                 <b>{ROLE_LABEL[state.contract.role]} · {state.contract.seasonsLeft} saison(s)</b>
               </div>
+              <div className="mg-row mg-row--between">
+                <span className="mg-small">Pied faible · gestes</span>
+                <span className="mg-row"><Stars n={state.profile.weakFoot} label="Pied faible" /><Stars n={state.profile.skillMoves} label="Gestes techniques" /></span>
+              </div>
+              <PlayStyleChips owned={state.profile.playStyles.owned} plus={state.profile.playStyles.plus}
+                names={Object.fromEntries(Object.values(PS_BY_ID).map(d => [d.id, d.name]))} />
+              {state.retired ? (
+                <p className="mg-warn">Carrière terminée à {state.retired.age} ans. Votre palmarès reste consultable ; une nouvelle carrière archivera celle-ci.</p>
+              ) : (
               <div className="mg-row">
                 {canPlay
                   ? <Link href="/client/fc-career/joueur/match" className="mg-btn mg-btn--gold">Continuer la carrière</Link>
@@ -58,6 +68,7 @@ export default function PlayerHome() {
                 {canPlay && <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Simuler la semaine</button>}
                 <Link href="/client/fc-career/joueur/progression" className="mg-btn mg-btn--ghost">Entraînement</Link>
               </div>
+              )}
             </div>
           </div>
         </Section>

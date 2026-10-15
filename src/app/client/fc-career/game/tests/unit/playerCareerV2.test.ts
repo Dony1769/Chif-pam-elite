@@ -1,3 +1,4 @@
+import { profileOverall } from "../../player2/engine";
 /**
  * FC CAREER 27 — Tests de la Carrière Joueur v2 (Lot J1)
  */
@@ -67,7 +68,7 @@ describe("Création", () => {
     const p = me(s);
     expect(p.age).toBe(17);
     expect(p.clubId).toBe(club.id);
-    expect(p.overall).toBe(overallOf(s.profile.attrs, "ST"));
+    expect(p.overall).toBe(profileOverall(s.profile));
     expect(s.profile.potential).toBeGreaterThanOrEqual(76);
     expect(getSquad(s.shadow).some(x => x.id === p.id)).toBe(true);
     expect(s.inbox[0].title).toMatch(/Premier contrat pro/);
@@ -104,7 +105,7 @@ describe("Coach et semaine", () => {
     expect(s1.lastMatch!.rating).toBeGreaterThan(0);
     expect(s1.inbox.some(m => m.kind === "match")).toBe(true);
     // Le joueur est bien celui du monde, sa note vient du profil
-    expect(me(s1).overall).toBe(overallOf(s1.profile.attrs, "ST"));
+    expect(me(s1).overall).toBe(profileOverall(s1.profile));
   });
 
   test("le coach IA n'est jamais licencié, la carrière continue", () => {

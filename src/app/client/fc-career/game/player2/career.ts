@@ -11,10 +11,10 @@ import { isWindowOpen } from "../manager/market";
 import { aiTacticFor, autoPickLineup } from "../manager/tactics";
 import type { LiveMatch } from "../manager/matchSim";
 import { createRng, seedFromString } from "../utils/random";
-import { overallOf } from "./attributes";
+import type { OptionId } from "./playstyles";
 import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } from "./types";
 import {
-  avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, pushPlayerInbox, syncWorldPlayer,
+  avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -31,7 +31,8 @@ const done = (state: PlayerCareerState, message: string): CareerResult => ({ ok:
 
 // ─── Initialisation ──────────────────────────────────────────────────────────
 
-export function ensureCareer(s: PlayerCareerState): PlayerCareerState {
+export function ensureCareer(s0: PlayerCareerState): PlayerCareerState {
+  const s = upgradeProfile(s0);
   if (s.career) return s;
   const countries = s.shadow.world.countries.map(c => c.id);
   const countryId = countries.includes(s.profile.nationality) ? s.profile.nationality : myClub(s).countryId;
@@ -202,6 +203,22 @@ export function requestTransfer(s0: PlayerCareerState, on: boolean): CareerResul
   return done(next, on ? "Votre agent fait savoir que vous voulez partir. Le coach n'apprécie pas, mais les offres vont arriver." : "Vous restez concentré sur votre club.");
 }
 
+// ─── Fin de carrière ─────────────────────────────────────────────────────────
+
+/** Le joueur annonce sa retraite (à partir de 32 ans, ou plus tôt s'il n'a plus de club). */
+export function retirePlayer(s0: PlayerCareerState): CareerResult {
+  const s = ensureCareer(s0);
+  if (s.retired) return fail(s, "Votre carrière est déjà terminée.");
+  const age = me(s).age;
+  if (age < 32) return fail(s, "La retraite est possible à partir de 32 ans.");
+  const players = s.shadow.world.players.map(p => (p.id === s.profile.id ? { ...p, clubId: "retired", protected: false } : p));
+  const next: PlayerCareerState = {
+    ...s, retired: { season: s.shadow.world.season, week: s.shadow.world.currentWeek, age },
+    shadow: { ...s.shadow, world: { ...s.shadow.world, players } },
+  };
+  return done(pushPlayerInbox(next, pmsg(next, "board", "Fin de carrière", `Vous raccrochez les crampons à ${age} ans. Merci pour tout.`)), `Retraite annoncée à ${age} ans.`);
+}
+
 // ─── Contrat ─────────────────────────────────────────────────────────────────
 
 /** Salaire demandé pour prolonger : rôle actuel, réputation, saisons restantes. */
@@ -297,10 +314,11 @@ export function seasonAwards(prev: PlayerCareerState): Award[] {
  * Semaine de carrière : match (via playPlayerWeek) puis salaire, offres,
  * sélection, fin de prêt / de contrat et récompenses.
  */
-export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null): PlayerCareerState {
+export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, psGain?: Partial<Record<OptionId, number>>): PlayerCareerState {
   const start = ensureCareer(s0);
+  if (start.retired) return start;
   const season = start.shadow.world.season;
-  let s = ensureCareer(playPlayerWeek(start, live));
+  let s = ensureCareer(playPlayerWeek(start, live, psGain));
 
   // Salaire + primes de match
   const sum = s.lastMatch !== start.lastMatch ? s.lastMatch : null;
@@ -348,7 +366,7 @@ function seasonChange(prev: PlayerCareerState, s0: PlayerCareerState): PlayerCar
     const parent = s.shadow.world.clubs.find(c => c.id === loan.parentClubId)!;
     s = moveTo(s, parent, { wage: loan.parentWage, seasons: Math.max(0, loan.parentSeasonsLeft - 1), role: roleAt(s, parent.id) });
     s = withCareer(s, { loan: null });
-    s = pushPlayerInbox(s, pmsg(s, "squad", `Retour à ${parent.name}`, `Fin du prêt. Note globale : ${overallOf(s.profile.attrs, s.profile.position)}. Le coach va juger vos progrès.`));
+    s = pushPlayerInbox(s, pmsg(s, "squad", `Retour à ${parent.name}`, `Fin du prêt. Note globale : ${profileOverall(s.profile)}. Le coach va juger vos progrès.`));
   }
   // Contrat échu (fin de la dernière saison, y compris pendant un prêt) : joueur libre 3 semaines
   if (!C(s).loan && s.contract.seasonsLeft <= 0 && C(s).freeAgentSince === null) {

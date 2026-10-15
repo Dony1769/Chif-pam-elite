@@ -115,6 +115,8 @@ export function progressWorldPlayers(
     // Vieillir
     const aged: WorldPlayer = ageAlreadyApplied ? player : { ...player, age: player.age + 1 };
 
+    // Le joueur de l'utilisateur : vieillit, mais sa carrière lui appartient
+    if (aged.protected) { updated.push(aged); continue; }
     // Retraite ?
     if (rng.chance(retirementChance(aged.age))) {
       retirees.push(aged.id);

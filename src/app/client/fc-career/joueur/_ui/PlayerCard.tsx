@@ -35,3 +35,18 @@ export function PlayerCard({ name, overall, position, attrs, club, potential, co
     </div>
   );
 }
+
+export function Stars({ n, label }: { n: number; label: string }) {
+  return <span className="pc-stars" aria-label={`${label} : ${n} sur 5`}>{"★".repeat(n)}<i>{"★".repeat(Math.max(0, 5 - n))}</i></span>;
+}
+
+/** Pastilles des PlayStyles obtenus (PS+ en premier). */
+export function PlayStyleChips({ owned, plus, names }: { owned: string[]; plus: string[]; names: Record<string, string> }) {
+  if (!owned.length) return null;
+  const sorted = [...owned].sort((a, b) => Number(plus.includes(b)) - Number(plus.includes(a)));
+  return (
+    <div className="pc-chips" aria-label="PlayStyles">
+      {sorted.map(id => <span key={id} className={`pc-chip${plus.includes(id) ? " is-plus" : ""}`}>{names[id] ?? id}{plus.includes(id) ? "+" : ""}</span>)}
+    </div>
+  );
+}

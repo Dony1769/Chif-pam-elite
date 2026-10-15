@@ -9,6 +9,11 @@
 
 import type { ManagerMatchReport, ManagerState, InboxMessage } from "../manager/types";
 import type { AttrKey, Attrs } from "./attributes";
+import type { SubAttrs, SubKey } from "./subAttributes";
+import type { PlayStyleState } from "./playstyles";
+
+/** Ce que travaille le joueur : un sous-attribut, une famille, ou un geste spécial. */
+export type TrainingFocus = SubKey | `group:${AttrKey}` | "weakFoot" | "skillMoves";
 import type { WorldPlayerPosition } from "../data/worldPlayers";
 
 export const PLAYER2_SAVE_VERSION = 1;
@@ -24,11 +29,22 @@ export interface PlayerProfile {
   nationality: string;
   foot: Foot;
   position: WorldPlayerPosition;
+  /** Les 6 grandes caractéristiques, CALCULÉES depuis `sub` */
   attrs: Attrs;
+  /** 29 sous-attributs de joueur de champ + 5 de gardien */
+  sub: SubAttrs;
   potential: number;
-  /** Expérience accumulée par caractéristique (100+ → +1 point) */
+  /** Ancienne expérience par caractéristique (v1 du profil, conservée) */
   xp: Attrs;
-  trainingFocus: AttrKey;
+  /** Expérience par sous-attribut (seuil xpNeeded → +1) */
+  subXp: Partial<Record<SubKey, number>>;
+  trainingFocus: TrainingFocus;
+  /** Pied faible et gestes techniques : 1 à 5 étoiles */
+  weakFoot: number;
+  skillMoves: number;
+  /** Expérience des entraînements spéciaux (pied faible, gestes) */
+  specialXp: { weakFoot: number; skillMoves: number };
+  playStyles: PlayStyleState;
   /** Réputation sportive 0-100 */
   reputation: number;
 }
@@ -124,6 +140,8 @@ export interface PlayerCareerState {
   career?: CareerExtras;
   createdAt: number;
   savedAt: number;
+  /** Fin de carrière annoncée par le joueur */
+  retired?: { season: number; week: number; age: number };
   /** Migration depuis la carrière v1 */
   legacy?: {
     careerId: string;
