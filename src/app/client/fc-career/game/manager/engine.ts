@@ -134,23 +134,23 @@ export function realisticObjective(w: WorldLiveState, clubId: string): ClubSeaso
 
 // ─── Utilitaires d'état ──────────────────────────────────────────────────────
 
-function msg(s: ManagerState, kind: InboxKind, title: string, body: string): InboxMessage {
+export function msg(s: ManagerState, kind: InboxKind, title: string, body: string): InboxMessage {
   return {
     id: `msg-s${s.world.season}-w${s.world.currentWeek}-${s.inbox.length}-${kind}`,
     season: s.world.season, week: s.world.currentWeek, kind, title, body, read: false,
   };
 }
 
-function pushInbox(s: ManagerState, ...m: InboxMessage[]): ManagerState {
+export function pushInbox(s: ManagerState, ...m: InboxMessage[]): ManagerState {
   return { ...s, inbox: [...m.reverse(), ...s.inbox].slice(0, INBOX_MAX) };
 }
 
-function addLedger(f: ClubFinances, entries: LedgerEntry[]): ClubFinances {
+export function addLedger(f: ClubFinances, entries: LedgerEntry[]): ClubFinances {
   const delta = entries.reduce((a, e) => a + e.amount, 0);
   return { ...f, balance: f.balance + delta, ledger: [...entries, ...f.ledger].slice(0, LEDGER_MAX) };
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 // ─── Création de partie ──────────────────────────────────────────────────────
 
@@ -173,7 +173,8 @@ export function createManagerGame(opts: { seed: string; clubId: string; managerN
     lineup: autoPickLineup(squad, tactic.formation),
     suspensions: {},
     finances: {
-      balance: Math.round(club.transferBudget * 0.6),
+      // La trésorerie couvre le budget transferts avec une réserve pour les salaires
+      balance: Math.round(club.transferBudget * 1.4),
       transferBudget: club.transferBudget,
       wageBudget: club.wagesBudget,
       ledger: [],
@@ -444,7 +445,9 @@ function weeklyFinances(s: ManagerState, homeMatch: boolean, managedWon: boolean
   const W = club.wagesBudget;
   const season = s.world.season, week = s.world.currentWeek;
   const squad = getSquad(s);
-  const wages = Object.values(weeklyWages(squad, club)).reduce((a, b) => a + b, 0);
+  // Salaire contractuel quand il existe (marché), sinon estimation
+  const formula = weeklyWages(squad, club);
+  const wages = squad.reduce((a, p) => a + (s.market?.contracts[p.id]?.wage ?? formula[p.id] ?? 0), 0);
   const entries: LedgerEntry[] = [];
 
   if (homeMatch) {
@@ -522,7 +525,8 @@ function closeSeason(s: ManagerState): ManagerState {
   // Sanction proportionnelle à l'écart avec l'objectif
   const gap = pos - objectiveMaxPosition(s.board.objective, n);
   const confidence = clamp(s.board.confidence + (objectiveMet ? 15 : -Math.min(30, 8 * gap)), 0, 100);
-  finances = { ...finances, transferBudget: Math.round(newClub.transferBudget * (objectiveMet ? 1.15 : 0.85)) };
+  // Budget accordé par le conseil, jamais supérieur à 80 % de la trésorerie disponible
+  finances = { ...finances, transferBudget: Math.max(0, Math.min(Math.round(newClub.transferBudget * (objectiveMet ? 1.15 : 0.85)), Math.round(finances.balance * 0.8))) };
 
   let next: ManagerState = {
     ...s, world, finances, suspensions: {},

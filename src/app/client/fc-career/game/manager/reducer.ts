@@ -1,12 +1,19 @@
 /**
  * FC CAREER 27 — Mode Manager : reducer pur (state, action) → state.
+ * Les actions du marché renvoient aussi un message pour l'interface (lastMessage).
  */
 
 import type { ManagerState, Tactic } from "./types";
 import type { LiveMatch } from "./matchSim";
 import {
-  autoLineup, createManagerGame, markRead, playWeek, setCaptain, setTactic, swapPlayers,
+  autoLineup, createManagerGame, markRead, setCaptain, setTactic, swapPlayers,
 } from "./engine";
+import type { MarketResult } from "./market";
+import {
+  acceptOffer, advanceWeek, approachFreeAgent, cancelDeal, ensureMarket, listForTransfer, loanOut,
+  makeBid, offerContract, promoteYouth, rejectOffer, releasePlayer, releaseYouth, renewContract,
+  scoutPlayer, unlist,
+} from "./market";
 
 export type ManagerAction =
   | { type: "NEW_GAME"; seed: string; clubId: string; managerName: string; now?: number }
@@ -17,23 +24,67 @@ export type ManagerAction =
   | { type: "SET_CAPTAIN"; playerId: string }
   | { type: "PLAY_WEEK"; live?: LiveMatch | null }
   | { type: "MARK_READ"; id: string }
-  | { type: "MARK_ALL_READ" };
+  | { type: "MARK_ALL_READ" }
+  // Marché
+  | { type: "BID"; playerId: string; fee: number }
+  | { type: "APPROACH_FREE"; playerId: string }
+  | { type: "OFFER_CONTRACT"; playerId: string; wage: number; seasons: number }
+  | { type: "CANCEL_DEAL"; playerId: string }
+  | { type: "LIST_PLAYER"; playerId: string; price: number }
+  | { type: "UNLIST_PLAYER"; playerId: string }
+  | { type: "ACCEPT_OFFER"; offerId: string }
+  | { type: "REJECT_OFFER"; offerId: string }
+  | { type: "RELEASE_PLAYER"; playerId: string }
+  | { type: "LOAN_OUT"; playerId: string }
+  | { type: "RENEW_CONTRACT"; playerId: string; wage: number; seasons: number }
+  | { type: "SCOUT"; playerId: string }
+  | { type: "PROMOTE_YOUTH"; youthId: string }
+  | { type: "RELEASE_YOUTH"; youthId: string };
 
-export function managerReducer(state: ManagerState | null, action: ManagerAction): ManagerState | null {
+/** Résultat d'une action : nouvel état + message éventuel à afficher. */
+export interface ManagerStep {
+  state: ManagerState | null;
+  message: { ok: boolean; text: string } | null;
+}
+
+const fromResult = (r: MarketResult): ManagerStep => ({ state: r.state, message: { ok: r.ok, text: r.message } });
+
+export function managerStep(state: ManagerState | null, action: ManagerAction): ManagerStep {
   switch (action.type) {
     case "NEW_GAME":
-      return createManagerGame({ seed: action.seed, clubId: action.clubId, managerName: action.managerName, now: action.now });
+      return { state: ensureMarket(createManagerGame({ seed: action.seed, clubId: action.clubId, managerName: action.managerName, now: action.now })), message: null };
     case "LOAD":
-      return action.state;
+      return { state: ensureMarket(action.state), message: null };
   }
-  if (!state) return state;
+  if (!state) return { state, message: null };
+  const s = ensureMarket(state);
+  const plain = (next: ManagerState): ManagerStep => ({ state: next, message: null });
   switch (action.type) {
-    case "SET_TACTIC":    return setTactic(state, action.tactic);
-    case "AUTO_LINEUP":   return autoLineup(state);
-    case "SWAP_PLAYERS":  return swapPlayers(state, action.a, action.b);
-    case "SET_CAPTAIN":   return setCaptain(state, action.playerId);
-    case "PLAY_WEEK":     return playWeek(state, action.live);
-    case "MARK_READ":     return markRead(state, action.id);
-    case "MARK_ALL_READ": return { ...state, inbox: state.inbox.map(m => ({ ...m, read: true })) };
+    case "SET_TACTIC":     return plain(setTactic(s, action.tactic));
+    case "AUTO_LINEUP":    return plain(autoLineup(s));
+    case "SWAP_PLAYERS":   return plain(swapPlayers(s, action.a, action.b));
+    case "SET_CAPTAIN":    return plain(setCaptain(s, action.playerId));
+    case "PLAY_WEEK":      return plain(advanceWeek(s, action.live));
+    case "MARK_READ":      return plain(markRead(s, action.id));
+    case "MARK_ALL_READ":  return plain({ ...s, inbox: s.inbox.map(m => ({ ...m, read: true })) });
+    case "BID":            return fromResult(makeBid(s, action.playerId, action.fee));
+    case "APPROACH_FREE":  return fromResult(approachFreeAgent(s, action.playerId));
+    case "OFFER_CONTRACT": return fromResult(offerContract(s, action.playerId, action.wage, action.seasons));
+    case "CANCEL_DEAL":    return plain(cancelDeal(s, action.playerId));
+    case "LIST_PLAYER":    return fromResult(listForTransfer(s, action.playerId, action.price));
+    case "UNLIST_PLAYER":  return plain(unlist(s, action.playerId));
+    case "ACCEPT_OFFER":   return fromResult(acceptOffer(s, action.offerId));
+    case "REJECT_OFFER":   return plain(rejectOffer(s, action.offerId));
+    case "RELEASE_PLAYER": return fromResult(releasePlayer(s, action.playerId));
+    case "LOAN_OUT":       return fromResult(loanOut(s, action.playerId));
+    case "RENEW_CONTRACT": return fromResult(renewContract(s, action.playerId, action.wage, action.seasons));
+    case "SCOUT":          return fromResult(scoutPlayer(s, action.playerId));
+    case "PROMOTE_YOUTH":  return fromResult(promoteYouth(s, action.youthId));
+    case "RELEASE_YOUTH":  return plain(releaseYouth(s, action.youthId));
   }
+}
+
+/** Forme reducer classique (sans message) — compatible useReducer. */
+export function managerReducer(state: ManagerState | null, action: ManagerAction): ManagerState | null {
+  return managerStep(state, action).state;
 }

@@ -120,6 +120,63 @@ export interface InboxMessage {
 
 export type ManagerStatus = "active" | "sacked";
 
+// ─── Marché (Lot M2) ─────────────────────────────────────────────────────────
+
+export interface PlayerContract {
+  /** Salaire hebdomadaire (€) */
+  wage: number;
+  /** Saisons restantes (0 = part libre en fin de saison) */
+  seasonsLeft: number;
+}
+
+/** Offre d'un club IA pour un joueur du club géré */
+export interface IncomingOffer {
+  id: string;
+  playerId: string;
+  fromClubId: string;
+  fee: number;
+  /** Index absolu de semaine d'expiration (season*100+week) */
+  expiresAt: number;
+}
+
+/** Accord de transfert conclu avec le club vendeur, en attente du contrat joueur */
+export interface PendingDeal {
+  playerId: string;
+  fromClubId: string | null; // null = joueur libre
+  fee: number;
+  wageDemand: number;
+  /** Nombre de tentatives de négociation restantes */
+  attemptsLeft: number;
+}
+
+export interface ScoutAssignment {
+  playerId: string;
+  readyAt: number; // index absolu de semaine
+}
+
+export interface LoanOut {
+  playerId: string;
+  toClubId: string;
+  untilSeason: number;
+}
+
+export interface MarketState {
+  contracts: Record<string, PlayerContract>;
+  /** Joueurs mis sur la liste des transferts : prix demandé */
+  transferList: Record<string, number>;
+  offers: IncomingOffer[];
+  pendingDeals: PendingDeal[];
+  scouted: Record<string, true>;
+  scouting: ScoutAssignment[];
+  loansOut: LoanOut[];
+  /** Joueurs sans club, signables à tout moment */
+  freeAgents: import("../data/worldPlayers").WorldPlayer[];
+  /** Jeunes du centre de formation (hors effectif tant qu'ils ne sont pas promus) */
+  youth: import("../data/worldPlayers").WorldPlayer[];
+  /** Saison pour laquelle le centre et le marché libre ont été générés */
+  generatedSeason: number;
+}
+
 export interface ManagerSeasonRecord {
   season: number;
   clubId: string;
@@ -141,6 +198,8 @@ export interface ManagerState {
   /** Matchs de suspension restants : playerId → nombre */
   suspensions: Record<string, number>;
   finances: ClubFinances;
+  /** Marché des transferts — optionnel : complété au chargement des parties M1 */
+  market?: MarketState;
   board: BoardState;
   inbox: InboxMessage[];
   lastMatch: ManagerMatchReport | null;

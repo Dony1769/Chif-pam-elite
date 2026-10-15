@@ -189,12 +189,12 @@ export function progressWorldPlayers(
 
 // ─── Génération d'un jeune joueur ─────────────────────────────────────────────
 
-const FIRST_NAMES = [
+export const FIRST_NAMES = [
   "Mateo", "Lucas", "Noah", "Liam", "Ethan", "Omar", "Yusuf", "Karim",
   "Diego", "Rafael", "Enzo", "Theo", "Felix", "Noel", "Soren", "Emil",
   "Kiran", "Aiden", "Marcus", "Elias", "Nathan", "Hugo", "Axel", "Leon",
 ];
-const LAST_NAMES = [
+export const LAST_NAMES = [
   "Silva", "Santos", "Ferreira", "Costa", "Pereira", "Oliveira", "Souza",
   "Lopez", "Garcia", "Martinez", "Rodrigues", "Fernandez", "Morales",
   "Dubois", "Müller", "Weber", "Fischer", "Becker", "Schneider", "Braun",
