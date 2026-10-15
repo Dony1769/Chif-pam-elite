@@ -86,7 +86,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <main className="mg-main">{body}</main>
       <div className="mg-toasts" aria-live="polite">
         {toasts.map(t => (
-          <div key={t.id} className={`mg-toast ${t.ok ? "is-ok" : "is-err"}`}>{t.text}</div>
+          <div key={t.id} data-toast-id={t.id} className={`mg-toast ${t.ok ? "is-ok" : "is-err"}`} role={t.ok ? "status" : "alert"}>{t.text}</div>
         ))}
       </div>
     </div>

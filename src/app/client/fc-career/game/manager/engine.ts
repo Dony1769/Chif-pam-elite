@@ -603,7 +603,11 @@ export function playWeek(s: ManagerState, live?: LiveMatch | null): ManagerState
 
   let state = s;
   let report: ManagerMatchReport | null = null;
-  const match = live ?? prepareMatch(s);
+  // Un direct n'est retenu que s'il correspond au match de la semaine
+  const expected = getNextFixture(s);
+  const sch0 = getLeagueSchedule(s);
+  const liveValid = !!live && !!expected && live.fixtureId === expected.id && expected.matchday === sch0?.currentMatchday;
+  const match = liveValid ? live! : prepareMatch(s);
   const messages: InboxMessage[] = [];
 
   if (match) {

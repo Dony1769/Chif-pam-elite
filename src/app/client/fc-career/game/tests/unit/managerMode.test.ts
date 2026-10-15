@@ -250,6 +250,15 @@ describe("Semaine de manager", () => {
     expect(s1.lastMatch?.away.goals).toBe(live.away.goals);
   });
 
+  test("un direct qui ne correspond pas au match de la semaine est ignoré", () => {
+    const s0 = newGame();
+    const stale = simulateToEnd(prepareMatch(s0)!);
+    const s1 = playWeek(s0); // journée 1 jouée sans le direct
+    const s2 = playWeek(s1, stale); // le direct de la journée 1 ne doit pas compter pour la 2
+    expect(s2.lastMatch?.matchday).toBe(2);
+    expect(s2.lastMatch?.fixtureId).not.toBe(stale.fixtureId);
+  });
+
   test("billetterie uniquement les semaines à domicile", () => {
     let s = newGame();
     for (let i = 0; i < 4; i++) {

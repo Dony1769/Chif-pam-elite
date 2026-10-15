@@ -195,7 +195,7 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
   for (const side of ["home", "away"] as const) {
     const t = m[side];
     const cost = tacticalProfile(t.tactic).fatigueCost / 90;
-    for (const p of t.pitch) if (p) t.fatigue[p.id] = Math.min(100, (t.fatigue[p.id] ?? 0) + cost * 2.2);
+    for (const p of t.pitch) if (p) t.fatigue[p.id] = Math.min(100, (t.fatigue[p.id] ?? 0) + cost * 1.5);
   }
 
   const rH = ratingsOf(m.home);
@@ -228,7 +228,7 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
   // Occasion
   const atkPower = rAtt.attack * profAtt.creation * urgency(side) * (homeHasBall ? HOME_ADVANTAGE : 1);
   const defPower = rDef.defense * profDef.resistance;
-  const chanceProb = 0.25 * (atkPower / defPower);
+  const chanceProb = 0.232 * (atkPower / defPower);
   if (rng.chance(Math.min(0.55, chanceProb))) {
     const slots = FORMATIONS[att.tactic.formation];
     const candidates = att.pitch.map((p, i) => ({ p, i })).filter((x): x is { p: WorldPlayer; i: number } => x.p !== null);
