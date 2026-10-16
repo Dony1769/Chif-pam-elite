@@ -2,8 +2,8 @@
  * CP Premier League 2026-27 — notes et cartes officielles EA SPORTS FC 27
  * (pages « teams-ratings » d'ea.com, effectifs après le mercato d'été 2026).
  * Ligne : POSTE EA|Nom complet|NAT|année de naissance|note|6 cases de la carte
- * (gardien : PLO,PRI,PIE,RÉF,VIT,PLA). Année de naissance : connaissance générale,
- * « ? » si inconnue (âge déduit à la génération).
+ * (gardien : PLO,PRI,PIE,RÉF,VIT,PLA). « ? » : année inconnue (reprise des
+ * anciennes listes si le joueur y figure, sinon déduite à la génération).
  */
 export const FC27_ENG1: Record<string, string> = {
   "eng-ars": `

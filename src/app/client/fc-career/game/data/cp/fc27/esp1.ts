@@ -6,35 +6,6 @@
  * anciennes listes si le joueur y figure, sinon déduite à la génération).
  */
 export const FC27_ESP1: Record<string, string> = {
-  "esp-ala": `
-ST|Toni Martínez|ESP|?|78|75,80,62,72,31,79
-CDM|Antonio Blanco|ESP|?|78|49,59,74,73,76,68
-GK|Sivera|ESP|?|77|77,76,77,80,57,76
-ST|Lucas Boyé|ARG|?|77|69,76,67,78,54,81
-CB|Nahuel Tenaglia|ARG|?|77|69,44,65,74,78,79
-RB|Jonny|ESP|?|76|72,53,72,74,76,69
-CM|Denis Suárez|ESP|?|74|63,70,77,75,64,57
-LM|Aleñá|ESP|?|74|67,69,74,74,58,64
-CDM|Ander Guevara|ESP|?|74|41,63,70,71,71,70
-LW|Abde Rebbach|ALG|?|73|79,71,69,75,55,71
-CM|Pablo Ibáñez|ESP|?|73|69,64,70,73,68,67
-CDM|Carlos Protesoni|URU|?|73|65,49,66,69,72,71
-CB|Nicolás Valentini|ARG|?|73|69,35,59,62,75,73
-RM|Ángel Pérez|ESP|?|72|88,63,63,72,67,71
-RW|Miguel Rodríguez|ESP|?|72|81,67,67,73,55,66
-LB|Yusi|MAR|?|70|79,45,63,69,66,59
-GK|Adrián Rodríguez|ARG|?|68|75,60,50,75,30,62
-CB|Ville Koski|FIN|?|68|60,28,48,48,69,69
-CM|Mikel Rodríguez|ESP|?|67|71,62,67,70,53,64
-ST|Mariano|DOM|?|67|64,69,60,66,43,62
-GK|Owono|EQG|?|67|68,67,66,66,28,65
-CM|Selu Diallo|GUI|?|64|77,61,61,68,59,78
-RM|Hugo Novoa|ESP|?|64|79,60,59,67,50,54
-ST|Aitor Mañas|ESP|?|64|56,64,47,61,30,57
-CB|Xanet Oláiz|ESP|?|63|63,35,44,48,64,63
-CM|Tomás Mendes|ESP|?|62|62,54,54,63,50,64
-RB|Carlos Ballestero|ESP|?|61|75,36,46,58,59,68
-`,
   "esp-ath": `
 GK|Unai Simón|ESP|?|85|84,81,76,85,49,82
 LW|Nico Williams|ESP|?|84|93,77,79,86,37,67
@@ -102,92 +73,59 @@ GK|Salvi Esquivel|ESP|?|64|63,63,60,63,15,62
 CB|Dani Martinez|ESP|?|63|65,34,52,53,62,63
 ST|Miguel Cubo|ESP|?|63|66,63,53,61,26,60
 `,
-  "esp-bar": `
-RW|Lamine Yamal|ESP|?|90|86,84,87,93,38,61
-CDM|Rodri|ESP|?|90|62,78,86,81,85,81
-CM|Pedri|ESP|?|90|76,75,89,91,77,75
-LW|Raphinha|BRA|?|88|91,86,85,87,54,76
-CB|Pau Cubarsí|ESP|?|86|78,44,69,77,85,81
-GK|Joan García|ESP|?|86|85,85,80,88,46,84
-CM|Frenkie de Jong|NED|?|86|77,70,85,84,77,77
-CAM|Fermín|ESP|?|85|81,84,80,84,63,72
-CB|Eric García|ESP|?|85|79,58,77,76,86,82
-RB|Jules Koundé|FRA|?|85|82,53,74,78,83,83
-CAM|Dani Olmo|ESP|?|84|74,79,82,85,51,59
-LB|João Cancelo|POR|?|83|84,72,84,85,77,72
-CM|Gavi|ESP|?|83|76,66,78,85,68,70
-LW|Anthony Gordon|ENG|?|82|91,78,77,82,50,71
-LB|Balde|ESP|?|82|90,52,75,79,77,69
-RM|Karim Adeyemi|GER|?|82|95,80,72,82,36,69
-GK|Wojciech Szczęsny|POL|?|81|78,79,74,81,36,82
-CB|Gerard Martín|ESP|?|79|74,53,75,70,80,79
-CB|Andreas Christensen|DEN|?|79|72,32,67,69,81,71
-CDM|Marc Bernal|ESP|?|78|71,62,73,77,73,79
-CDM|Marc Casadó|ESP|?|78|59,64,72,77,76,63
-RW|Roony Bardghji|SWE|?|74|76,71,70,78,27,58
-RB|Héctor Fort|ESP|?|72|84,60,66,70,67,66
-RB|Xavi Espart|ESP|?|67|77,46,64,66,64,56
-LW|Jesse Eugen Bisiwu|BEL|?|67|86,62,59,72,32,59
-CB|Álvaro Cortés|ESP|?|66|64,35,54,54,67,65
-ST|Hamza Abdelkarim|EGY|?|65|75,62,52,63,23,69
-RW|Toni Fernández|ESP|?|65|74,60,58,67,23,49
-CM|Guille Fernández|ESP|?|64|67,61,58,65,55,63
+  "esp-osa": `
+ST|Ante Budimir|CRO|?|82|65,83,63,74,36,81
+GK|Sergio Herrera|ESP|?|79|79,79,75,80,47,77
+CB|Enzo Boyomo|CMR|?|79|77,38,59,57,78,86
+RB|Valentin Rosier|FRA|?|78|80,60,72,77,75,76
+CM|Moncayola|ESP|?|77|63,70,76,76,73,76
+GK|Aitor Fernández|ESP|?|77|77,74,68,80,56,76
+RM|Rubén García|ESP|?|77|73,75,79,77,47,53
+CB|Catena|ESP|?|77|58,39,61,54,77,78
+LB|Abel Bretones|ESP|?|76|77,68,71,71,72,80
+CAM|Aimar Oroz|ESP|?|76|67,73,76,78,65,67
+RB|Diego Rico|ESP|?|76|69,57,76,71,75,76
+CM|Moi Gómez|ESP|?|76|59,71,78,77,66,62
+CDM|Lucas Torró|ESP|?|76|45,64,68,67,75,76
+ST|Raúl García|ESP|?|75|68,76,63,70,29,70
+LW|Raúl Moro|ESP|?|75|84,66,70,78,27,51
+RW|Dubasin|ESP|?|74|78,73,69,73,36,64
+CB|Herrando|ESP|?|74|45,37,57,65,75,73
+CDM|Iker Muñoz|ESP|?|73|54,64,66,70,71,70
+LW|Kike Barja|ESP|?|73|74,69,70,73,37,59
+CB|Osambela|ESP|?|66|62,55,57,64,65,70
+CB|Rockson Yeboah|GHA|?|65|73,36,43,52,62,72
+RB|Arguibide|ESP|?|63|70,49,58,63,59,58
+CDM|Mauro Echegoyen|ESP|?|63|65,48,55,59,61,63
 `,
-  "esp-bet": `
-CAM|Isco|ESP|?|83|57,78,85,86,59,60
-CM|Fornals|ESP|?|81|66,75,83,80,74,72
-RW|Antony|BRA|?|81|85,81,79,82,48,71
-LW|Abde|MAR|?|81|89,75,73,84,37,70
-CAM|Giovani Lo Celso|ARG|?|80|74,77,82,81,67,68
-ST|Cucho Hernández|COL|?|79|81,78,75,81,45,78
-CB|Bartra|ESP|?|79|67,59,70,71,80,76
-CB|Diego Llorente|ESP|?|79|59,41,63,68,81,76
-CB|Natan|BRA|?|79|66,33,59,66,79,80
-CDM|Marc Roca|ESP|?|78|55,66,75,74,76,73
-ST|Troy Parrott|IRL|?|78|74,78,66,77,45,74
-RM|Aitor Ruibal|ESP|?|77|80,76,73,75,69,70
-GK|Álvaro Valles|ESP|?|77|77,76,77,79,41,77
-LB|Fran García|ESP|?|77|87,50,69,75,71,74
-CM|Fidalgo|MEX|?|77|77,67,77,80,60,65
-RB|Héctor Bellerín|ESP|?|76|78,54,70,74,72,65
-GK|Diego Conde|ESP|?|76|74,74,68,77,43,75
-LM|Riquelme|ESP|?|76|80,72,73,76,50,58
-CB|Valentín Gómez|ARG|?|76|78,33,64,71,76,76
-CDM|Nelson Deossa|COL|?|75|77,76,72,74,73,78
-LB|Junior Firpo|DOM|?|74|76,61,70,70,72,73
-CDM|Facundo Bernal|URU|?|74|70,59,69,70,70,76
-CAM|Iker Losada|ESP|?|72|69,71,70,73,40,58
-RW|Pablo García|ESP|?|70|79,70,66,71,43,67
-RB|Ángel Ortiz|ESP|?|70|81,49,64,68,64,64
-ST|Gonzalo Petit|URU|?|69|52,69,60,67,28,59
-GK|Manu González|ESP|?|64|63,60,60,68,24,60
-`,
-  "esp-cel": `
-RW|Iago Aspas|ESP|?|81|72,84,81,83,37,62
-ST|Borja Iglesias|ESP|?|80|62,83,71,74,40,77
-CM|Aleix Febas|ESP|?|79|74,68,78,82,70,71
-CB|Marcos Alonso|ESP|?|79|54,74,81,74,80,77
-CM|Ilaix Moriba|GUI|?|78|72,71,73,76,76,79
-GK|Ionuț Andrei Radu|ROU|?|78|79,77,75,80,53,76
-CB|Carl Starfelt|SWE|?|78|73,31,58,69,78,80
-LB|Javi Galán|ESP|?|77|77,57,75,77,74,72
-RB|Javi Rueda|ESP|?|76|88,64,71,74,70,67
-CM|Matías Vecino|URU|?|76|53,73,74,76,77,73
-LW|Williot Swedberg|SWE|?|76|74,71,75,78,61,62
-RB|Álvaro Núñez|ESP|?|76|75,51,75,74,72,74
-RB|Carreira|ESP|?|76|76,58,73,76,71,66
-CB|Javi Rodríguez|ESP|?|76|73,50,68,71,76,76
-LM|Hugo Álvarez|ESP|?|75|69,68,73,76,62,59
-GK|Altay Bayındır|TUR|?|75|77,72,70,77,30,75
-ST|Ferran Jutglà|ESP|?|75|75,76,66,77,29,77
-CM|Miguel Román|ESP|?|74|63,62,75,71,70,65
-ST|Pablo Durán|ESP|?|74|71,75,65,73,36,67
-RM|Carles Pérez|ESP|?|72|75,72,69,74,37,61
-GK|Iván Villar|ESP|?|72|70,70,70,73,32,70
-RW|Jones El-Abdellaoui|MAR|?|72|86,66,64,72,30,60
-CB|Abdoulaye Faye|SEN|?|71|76,34,52,64,71,72
-CB|Yoel Lago|ESP|?|71|61,26,57,58,72,71
-RM|Hugo González|ESP|?|68|68,67,66,68,36,54
+  "esp-ala": `
+ST|Toni Martínez|ESP|?|78|75,80,62,72,31,79
+CDM|Antonio Blanco|ESP|?|78|49,59,74,73,76,68
+GK|Sivera|ESP|?|77|77,76,77,80,57,76
+ST|Lucas Boyé|ARG|?|77|69,76,67,78,54,81
+CB|Nahuel Tenaglia|ARG|?|77|69,44,65,74,78,79
+RB|Jonny|ESP|?|76|72,53,72,74,76,69
+CM|Denis Suárez|ESP|?|74|63,70,77,75,64,57
+LM|Aleñá|ESP|?|74|67,69,74,74,58,64
+CDM|Ander Guevara|ESP|?|74|41,63,70,71,71,70
+LW|Abde Rebbach|ALG|?|73|79,71,69,75,55,71
+CM|Pablo Ibáñez|ESP|?|73|69,64,70,73,68,67
+CDM|Carlos Protesoni|URU|?|73|65,49,66,69,72,71
+CB|Nicolás Valentini|ARG|?|73|69,35,59,62,75,73
+RM|Ángel Pérez|ESP|?|72|88,63,63,72,67,71
+RW|Miguel Rodríguez|ESP|?|72|81,67,67,73,55,66
+LB|Yusi|MAR|?|70|79,45,63,69,66,59
+GK|Adrián Rodríguez|ARG|?|68|75,60,50,75,30,62
+CB|Ville Koski|FIN|?|68|60,28,48,48,69,69
+CM|Mikel Rodríguez|ESP|?|67|71,62,67,70,53,64
+ST|Mariano|DOM|?|67|64,69,60,66,43,62
+GK|Owono|EQG|?|67|68,67,66,66,28,65
+CM|Selu Diallo|GUI|?|64|77,61,61,68,59,78
+RM|Hugo Novoa|ESP|?|64|79,60,59,67,50,54
+ST|Aitor Mañas|ESP|?|64|56,64,47,61,30,57
+CB|Xanet Oláiz|ESP|?|63|63,35,44,48,64,63
+CM|Tomás Mendes|ESP|?|62|62,54,54,63,50,64
+RB|Carlos Ballestero|ESP|?|61|75,36,46,58,59,68
 `,
   "esp-dep": `
 ST|Pierre-Emerick Aubameyang|GAB|?|79|82,81,71,78,36,63
@@ -252,32 +190,36 @@ ST|Adam Boayar|MAR|?|64|71,64,48,64,27,53
 RM|Álex Sánchez|ESP|?|62|66,54,61,63,38,38
 RW|Rafa Núñez|DOM|?|61|59,59,60,64,35,44
 `,
-  "esp-esp": `
-GK|Marko Dmitrović|SRB|?|79|78,79,78,80,37,78
-CAM|Edu Expósito|ESP|?|77|65,74,80,78,73,69
-LW|Puado|ESP|?|77|78,77,71,77,51,74
-CDM|Urko González|ESP|?|76|63,45,67,68,76,75
-CB|Leandro Cabrera|URU|?|76|46,45,60,55,77,81
-CAM|Cala|ESP|?|75|77,74,75,76,62,67
-LB|Quilindschy Hartman|NED|?|75|76,55,75,74,71,73
-LM|Pere Milla|ESP|?|75|73,75,73,74,55,70
-CDM|Pol Lozano|ESP|?|75|64,60,72,68,72,71
-RB|Omar El Hilali|MAR|?|75|82,41,65,67,72,77
-ST|Kike García|ESP|?|75|45,78,66,69,44,73
-CB|Unai Núñez|ESP|?|75|62,24,51,51,75,76
-ST|Roberto Fernández|ESP|?|74|77,74,65,71,53,78
-RW|Tyrhys Dolan|ENG|?|74|81,67,72,76,55,64
-RW|Jofre|ESP|?|73|80,71,70,73,41,61
-RM|Javi Hernández|ESP|?|73|73,71,72,75,37,53
-CDM|Gabriel Moscardo|BRA|?|72|64,52,62,71,70,78
-ST|Marcos Fernández|ESP|?|72|73,72,62,72,32,74
-RB|Rubén Sánchez|ESP|?|71|83,60,64,68,65,70
-CB|Vanja Drkušić|SVN|?|71|71,32,50,48,69,76
-CB|Clemens Riedel|GER|?|70|60,30,58,58,70,70
-CDM|Rafa Bauza|ESP|?|68|63,63,66,65,66,68
-LB|Roger Hinojo|ESP|?|68|78,44,63,66,63,63
-GK|Fortuño|ESP|?|65|63,64,64,65,42,65
-GK|Llorenç Serred|ESP|?|62|62,61,59,62,34,60
+  "esp-bar": `
+RW|Lamine Yamal|ESP|?|90|86,84,87,93,38,61
+CDM|Rodri|ESP|?|90|62,78,86,81,85,81
+CM|Pedri|ESP|?|90|76,75,89,91,77,75
+LW|Raphinha|BRA|?|88|91,86,85,87,54,76
+CB|Pau Cubarsí|ESP|?|86|78,44,69,77,85,81
+GK|Joan García|ESP|?|86|85,85,80,88,46,84
+CM|Frenkie de Jong|NED|?|86|77,70,85,84,77,77
+CAM|Fermín|ESP|?|85|81,84,80,84,63,72
+CB|Eric García|ESP|?|85|79,58,77,76,86,82
+RB|Jules Koundé|FRA|?|85|82,53,74,78,83,83
+CAM|Dani Olmo|ESP|?|84|74,79,82,85,51,59
+LB|João Cancelo|POR|?|83|84,72,84,85,77,72
+CM|Gavi|ESP|?|83|76,66,78,85,68,70
+LW|Anthony Gordon|ENG|?|82|91,78,77,82,50,71
+LB|Balde|ESP|?|82|90,52,75,79,77,69
+RM|Karim Adeyemi|GER|?|82|95,80,72,82,36,69
+GK|Wojciech Szczęsny|POL|?|81|78,79,74,81,36,82
+CB|Gerard Martín|ESP|?|79|74,53,75,70,80,79
+CB|Andreas Christensen|DEN|?|79|72,32,67,69,81,71
+CDM|Marc Bernal|ESP|?|78|71,62,73,77,73,79
+CDM|Marc Casadó|ESP|?|78|59,64,72,77,76,63
+RW|Roony Bardghji|SWE|?|74|76,71,70,78,27,58
+RB|Héctor Fort|ESP|?|72|84,60,66,70,67,66
+RB|Xavi Espart|ESP|?|67|77,46,64,66,64,56
+LW|Jesse Eugen Bisiwu|BEL|?|67|86,62,59,72,32,59
+CB|Álvaro Cortés|ESP|?|66|64,35,54,54,67,65
+ST|Hamza Abdelkarim|EGY|?|65|75,62,52,63,23,69
+RW|Toni Fernández|ESP|?|65|74,60,58,67,23,49
+CM|Guille Fernández|ESP|?|64|67,61,58,65,55,63
 `,
   "esp-get": `
 GK|David Soria|ESP|?|80|82,79,74,80,41,79
@@ -370,31 +312,6 @@ GK|Carlos López|ESP|?|62|62,60,60,65,36,60
 CB|Moussa Diarra|MLI|?|61|52,35,49,45,59,63
 GK|Andrés Céspedes|ESP|?|58|59,58,48,57,26,56
 `,
-  "esp-osa": `
-ST|Ante Budimir|CRO|?|82|65,83,63,74,36,81
-GK|Sergio Herrera|ESP|?|79|79,79,75,80,47,77
-CB|Enzo Boyomo|CMR|?|79|77,38,59,57,78,86
-RB|Valentin Rosier|FRA|?|78|80,60,72,77,75,76
-CM|Moncayola|ESP|?|77|63,70,76,76,73,76
-GK|Aitor Fernández|ESP|?|77|77,74,68,80,56,76
-RM|Rubén García|ESP|?|77|73,75,79,77,47,53
-CB|Catena|ESP|?|77|58,39,61,54,77,78
-LB|Abel Bretones|ESP|?|76|77,68,71,71,72,80
-CAM|Aimar Oroz|ESP|?|76|67,73,76,78,65,67
-RB|Diego Rico|ESP|?|76|69,57,76,71,75,76
-CM|Moi Gómez|ESP|?|76|59,71,78,77,66,62
-CDM|Lucas Torró|ESP|?|76|45,64,68,67,75,76
-ST|Raúl García|ESP|?|75|68,76,63,70,29,70
-LW|Raúl Moro|ESP|?|75|84,66,70,78,27,51
-RW|Dubasin|ESP|?|74|78,73,69,73,36,64
-CB|Herrando|ESP|?|74|45,37,57,65,75,73
-CDM|Iker Muñoz|ESP|?|73|54,64,66,70,71,70
-LW|Kike Barja|ESP|?|73|74,69,70,73,37,59
-CB|Osambela|ESP|?|66|62,55,57,64,65,70
-CB|Rockson Yeboah|GHA|?|65|73,36,43,52,62,72
-RB|Arguibide|ESP|?|63|70,49,58,63,59,58
-CDM|Mauro Echegoyen|ESP|?|63|65,48,55,59,61,63
-`,
   "esp-rac": `
 RM|Sergio Canales|ESP|?|78|77,76,80,77,63,70
 CM|Iván Martín|ESP|?|77|70,71,78,78,69,63
@@ -448,6 +365,89 @@ CB|Pelayo Fernández|ESP|?|64|43,44,56,50,64,71
 ST|Etienne Eto'o|CMR|?|63|69,63,58,62,24,59
 CM|Samu Becerra|ESP|?|61|67,54,61,64,54,54
 CB|De las Sías|ESP|?|59|52,45,43,48,58,64
+`,
+  "esp-cel": `
+RW|Iago Aspas|ESP|?|81|72,84,81,83,37,62
+ST|Borja Iglesias|ESP|?|80|62,83,71,74,40,77
+CM|Aleix Febas|ESP|?|79|74,68,78,82,70,71
+CB|Marcos Alonso|ESP|?|79|54,74,81,74,80,77
+CM|Ilaix Moriba|GUI|?|78|72,71,73,76,76,79
+GK|Ionuț Andrei Radu|ROU|?|78|79,77,75,80,53,76
+CB|Carl Starfelt|SWE|?|78|73,31,58,69,78,80
+LB|Javi Galán|ESP|?|77|77,57,75,77,74,72
+RB|Javi Rueda|ESP|?|76|88,64,71,74,70,67
+CM|Matías Vecino|URU|?|76|53,73,74,76,77,73
+LW|Williot Swedberg|SWE|?|76|74,71,75,78,61,62
+RB|Álvaro Núñez|ESP|?|76|75,51,75,74,72,74
+RB|Carreira|ESP|?|76|76,58,73,76,71,66
+CB|Javi Rodríguez|ESP|?|76|73,50,68,71,76,76
+LM|Hugo Álvarez|ESP|?|75|69,68,73,76,62,59
+GK|Altay Bayındır|TUR|?|75|77,72,70,77,30,75
+ST|Ferran Jutglà|ESP|?|75|75,76,66,77,29,77
+CM|Miguel Román|ESP|?|74|63,62,75,71,70,65
+ST|Pablo Durán|ESP|?|74|71,75,65,73,36,67
+RM|Carles Pérez|ESP|?|72|75,72,69,74,37,61
+GK|Iván Villar|ESP|?|72|70,70,70,73,32,70
+RW|Jones El-Abdellaoui|MAR|?|72|86,66,64,72,30,60
+CB|Abdoulaye Faye|SEN|?|71|76,34,52,64,71,72
+CB|Yoel Lago|ESP|?|71|61,26,57,58,72,71
+RM|Hugo González|ESP|?|68|68,67,66,68,36,54
+`,
+  "esp-esp": `
+GK|Marko Dmitrović|SRB|?|79|78,79,78,80,37,78
+CAM|Edu Expósito|ESP|?|77|65,74,80,78,73,69
+LW|Puado|ESP|?|77|78,77,71,77,51,74
+CDM|Urko González|ESP|?|76|63,45,67,68,76,75
+CB|Leandro Cabrera|URU|?|76|46,45,60,55,77,81
+CAM|Cala|ESP|?|75|77,74,75,76,62,67
+LB|Quilindschy Hartman|NED|?|75|76,55,75,74,71,73
+LM|Pere Milla|ESP|?|75|73,75,73,74,55,70
+CDM|Pol Lozano|ESP|?|75|64,60,72,68,72,71
+RB|Omar El Hilali|MAR|?|75|82,41,65,67,72,77
+ST|Kike García|ESP|?|75|45,78,66,69,44,73
+CB|Unai Núñez|ESP|?|75|62,24,51,51,75,76
+ST|Roberto Fernández|ESP|?|74|77,74,65,71,53,78
+RW|Tyrhys Dolan|ENG|?|74|81,67,72,76,55,64
+RW|Jofre|ESP|?|73|80,71,70,73,41,61
+RM|Javi Hernández|ESP|?|73|73,71,72,75,37,53
+CDM|Gabriel Moscardo|BRA|?|72|64,52,62,71,70,78
+ST|Marcos Fernández|ESP|?|72|73,72,62,72,32,74
+RB|Rubén Sánchez|ESP|?|71|83,60,64,68,65,70
+CB|Vanja Drkušić|SVN|?|71|71,32,50,48,69,76
+CB|Clemens Riedel|GER|?|70|60,30,58,58,70,70
+CDM|Rafa Bauza|ESP|?|68|63,63,66,65,66,68
+LB|Roger Hinojo|ESP|?|68|78,44,63,66,63,63
+GK|Fortuño|ESP|?|65|63,64,64,65,42,65
+GK|Llorenç Serred|ESP|?|62|62,61,59,62,34,60
+`,
+  "esp-bet": `
+CAM|Isco|ESP|?|83|57,78,85,86,59,60
+CM|Fornals|ESP|?|81|66,75,83,80,74,72
+RW|Antony|BRA|?|81|85,81,79,82,48,71
+LW|Abde|MAR|?|81|89,75,73,84,37,70
+CAM|Giovani Lo Celso|ARG|?|80|74,77,82,81,67,68
+ST|Cucho Hernández|COL|?|79|81,78,75,81,45,78
+CB|Bartra|ESP|?|79|67,59,70,71,80,76
+CB|Diego Llorente|ESP|?|79|59,41,63,68,81,76
+CB|Natan|BRA|?|79|66,33,59,66,79,80
+CDM|Marc Roca|ESP|?|78|55,66,75,74,76,73
+ST|Troy Parrott|IRL|?|78|74,78,66,77,45,74
+RM|Aitor Ruibal|ESP|?|77|80,76,73,75,69,70
+GK|Álvaro Valles|ESP|?|77|77,76,77,79,41,77
+LB|Fran García|ESP|?|77|87,50,69,75,71,74
+CM|Fidalgo|MEX|?|77|77,67,77,80,60,65
+RB|Héctor Bellerín|ESP|?|76|78,54,70,74,72,65
+GK|Diego Conde|ESP|?|76|74,74,68,77,43,75
+LM|Riquelme|ESP|?|76|80,72,73,76,50,58
+CB|Valentín Gómez|ARG|?|76|78,33,64,71,76,76
+CDM|Nelson Deossa|COL|?|75|77,76,72,74,73,78
+LB|Junior Firpo|DOM|?|74|76,61,70,70,72,73
+CDM|Facundo Bernal|URU|?|74|70,59,69,70,70,76
+CAM|Iker Losada|ESP|?|72|69,71,70,73,40,58
+RW|Pablo García|ESP|?|70|79,70,66,71,43,67
+RB|Ángel Ortiz|ESP|?|70|81,49,64,68,64,64
+ST|Gonzalo Petit|URU|?|69|52,69,60,67,28,59
+GK|Manu González|ESP|?|64|63,60,60,68,24,60
 `,
   "esp-rma": `
 ST|Kylian Mbappé|FRA|?|91|96,91,80,92,29,76

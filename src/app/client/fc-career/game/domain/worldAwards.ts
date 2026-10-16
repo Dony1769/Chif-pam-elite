@@ -147,14 +147,22 @@ export function runAwards(w0: WorldLiveState, week: number): { world: WorldLiveS
       out.push({ id: "league_top_assist", season, ...at, leagueId: league.id, playerId: passer.p.id, clubId: passer.p.clubId, value: passer.st!.assists, label: `Meilleur passeur de ${league.name} (${passer.st!.assists} passes)` });
       out.push({ id: "league_pots", season, ...at, leagueId: league.id, playerId: pots.p.id, clubId: pots.p.clubId, label: `Joueur de la saison de ${league.name}` });
       // Équipe type : 4-3-3
-      const pick = (positions: string[], k: number, taken: Set<string>) => [...L].filter(l => positions.includes(l.p.position) && !taken.has(l.p.id))
-        .sort((a, b) => score(b, md) - score(a, md)).slice(0, k);
+      // Chaque poste a des remplaçants si aucun joueur du poste n'a joué (ex. pas d'ailier gauche titulaire)
       const taken = new Set<string>();
+      const pick = (positions: string[][], k: number) => {
+        const got: typeof L = [];
+        for (const group of positions) {
+          if (got.length >= k) break;
+          const c = L.filter(l => group.includes(l.p.position) && !taken.has(l.p.id)).sort((a, b) => score(b, md) - score(a, md)).slice(0, k - got.length);
+          for (const l of c) { taken.add(l.p.id); got.push(l); }
+        }
+        return got;
+      };
       const xi = [
-        ...pick(["GK"], 1, taken), ...pick(["CB"], 2, taken), ...pick(["LB"], 1, taken), ...pick(["RB"], 1, taken),
-        ...pick(["DM", "CM", "AM"], 3, taken), ...pick(["LW"], 1, taken), ...pick(["RW"], 1, taken), ...pick(["ST"], 1, taken),
+        ...pick([["GK"]], 1), ...pick([["CB"], ["DM"]], 2), ...pick([["LB"], ["CB", "RB"]], 1), ...pick([["RB"], ["CB", "LB"]], 1),
+        ...pick([["DM", "CM", "AM"]], 3), ...pick([["LW"], ["AM", "RW"], ["ST"]], 1), ...pick([["RW"], ["AM", "LW"], ["ST"]], 1), ...pick([["ST"], ["LW", "RW", "AM"]], 1),
       ];
-      for (const l of xi) { taken.add(l.p.id); out.push({ id: "tots", season, ...at, leagueId: league.id, playerId: l.p.id, clubId: l.p.clubId, label: `Équipe type de la saison · ${league.name}` }); }
+      for (const l of xi) { out.push({ id: "tots", season, ...at, leagueId: league.id, playerId: l.p.id, clubId: l.p.clubId, label: `Équipe type de la saison · ${league.name}` }); }
       const champion = [...(w.standings[league.id] ?? [])].sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst))[0];
       if (champion) out.push({ id: "league_title", season, ...at, leagueId: league.id, clubId: champion.clubId, label: `${clubName(w, champion.clubId)} champion de ${league.name}` });
       if (league.tier === 1) news.push(`${nameOf(scorer.p)} termine meilleur buteur de ${league.name} avec ${scorer.st!.goals} buts.`);

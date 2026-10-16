@@ -74,6 +74,13 @@ function matchSquad(players: WorldPlayer[]): WorldPlayer[] {
   return players.filter(p => !p.injury || p.injury.weeksRemaining <= 0).sort((a, b) => b.overall - a.overall).slice(0, 16);
 }
 
+/** Onze de départ : le meilleur gardien et les dix meilleurs joueurs de champ disponibles. */
+function startingXI(players: WorldPlayer[]): WorldPlayer[] {
+  const fit = players.filter(p => !p.injury || p.injury.weeksRemaining <= 0).sort((a, b) => b.overall - a.overall);
+  const gk = fit.find(p => p.position === "GK");
+  return [...(gk ? [gk] : []), ...fit.filter(p => p.position !== "GK").slice(0, 10)];
+}
+
 function weightedPick(pool: WorldPlayer[], w: (p: WorldPlayer) => number, rng: ReturnType<typeof createRng>): WorldPlayer | null {
   const total = pool.reduce((t, p) => t + w(p), 0);
   if (total <= 0) return null;
@@ -184,26 +191,28 @@ export function simulateWorldMatch(input: WorldMatchInput): WorldMatchOutput {
     scorers:      allScorers,
   };
 
-  // Stats des buteurs (1 but each, possibilité d'assist au prochain)
-  const statUpdates: WorldMatchOutput["updatedPlayerStats"] = [];
-  for (const s of homeScorers) {
-    statUpdates.push({ playerId: s.playerId, clubId: home.clubId, leagueId, goals: 1, assists: 0 });
-  }
-  for (const s of awayScorers) {
-    statUpdates.push({ playerId: s.playerId, clubId: away.clubId, leagueId, goals: 1, assists: 0 });
-  }
-  // Passes décisives (1 par but, si assez de joueurs)
+  // Stats : une ligne par joueur et par match (titulaires + buteurs/passeurs entrés en jeu)
+  const tally = new Map<string, { playerId: string; clubId: string; leagueId: string; goals: number; assists: number }>();
+  const add = (playerId: string, clubId: string, g: number, a: number) => {
+    const t = tally.get(playerId) ?? { playerId, clubId, leagueId, goals: 0, assists: 0 };
+    t.goals += g; t.assists += a;
+    tally.set(playerId, t);
+  };
+  for (const snap of [home, away]) for (const p of startingXI(snap.players)) add(p.id, snap.clubId, 0, 0);
+  for (const s of homeScorers) add(s.playerId, home.clubId, 1, 0);
+  for (const s of awayScorers) add(s.playerId, away.clubId, 1, 0);
   // Passes décisives : 3 buts sur 4, données plutôt par les créateurs
   const assists = (scorers: { playerId: string }[], snap: typeof home) => {
     const pool = matchSquad(snap.players);
     for (const sc of scorers) {
       if (!rng.chance(0.75)) continue;
       const a = weightedPick(pool.filter(p => p.id !== sc.playerId), q => (ASSIST_W[q.position] ?? 1) * Math.pow(q.overall / 70, 3), rng);
-      if (a) statUpdates.push({ playerId: a.id, clubId: snap.clubId, leagueId, goals: 0, assists: 1 });
+      if (a) add(a.id, snap.clubId, 0, 1);
     }
   };
   assists(homeScorers, home);
   assists(awayScorers, away);
+  const statUpdates: WorldMatchOutput["updatedPlayerStats"] = [...tally.values()];
 
   return { result, updatedPlayerStats: statUpdates };
 }

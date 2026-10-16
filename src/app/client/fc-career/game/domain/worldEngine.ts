@@ -116,13 +116,14 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
       },
     };
 
-    // Stats joueurs
+    // Stats joueurs (index par joueur pour rester rapide avec ~5 000 joueurs)
     const updatedPlayerStats = [...current.playerStats];
+    const statIndex = new Map<string, number>();
+    updatedPlayerStats.forEach((s, i) => { if (s.season === current.season) statIndex.set(`${s.playerId}|${s.leagueId}`, i); });
     for (const u of output.playerStatUpdates) {
-      const idx = updatedPlayerStats.findIndex(
-        s => s.playerId === u.playerId && s.season === current.season && s.leagueId === u.leagueId
-      );
-      if (idx >= 0) {
+      const key = `${u.playerId}|${u.leagueId}`;
+      const idx = statIndex.get(key);
+      if (idx !== undefined) {
         updatedPlayerStats[idx] = {
           ...updatedPlayerStats[idx],
           goals:       updatedPlayerStats[idx].goals + u.goals,
@@ -130,6 +131,7 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
           appearances: updatedPlayerStats[idx].appearances + 1,
         };
       } else {
+        statIndex.set(key, updatedPlayerStats.length);
         updatedPlayerStats.push({
           playerId:    u.playerId,
           clubId:      u.clubId,

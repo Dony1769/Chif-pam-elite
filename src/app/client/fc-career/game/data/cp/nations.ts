@@ -18,7 +18,7 @@ export const NATIONS: Nation[] = [
   N("SVN", "Slovénie", "🇸🇮", "UEFA"), N("HUN", "Hongrie", "🇭🇺", "UEFA"), N("UKR", "Ukraine", "🇺🇦", "UEFA"),
   N("TUR", "Turquie", "🇹🇷", "UEFA"), N("GRE", "Grèce", "🇬🇷", "UEFA"), N("SCO", "Écosse", "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "UEFA"),
   N("WAL", "Pays de Galles", "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "UEFA"), N("IRL", "Irlande", "🇮🇪", "UEFA"), N("NIR", "Irlande du Nord", "🇬🇧", "UEFA"),
-  N("ISL", "Islande", "🇮🇸", "UEFA"), N("FIN", "Finlande", "🇫🇮", "UEFA"), N("ALB", "Albanie", "🇦🇱", "UEFA"),
+  N("MDA", "Moldavie", "🇲🇩", "UEFA"), N("ISL", "Islande", "🇮🇸", "UEFA"), N("FIN", "Finlande", "🇫🇮", "UEFA"), N("ALB", "Albanie", "🇦🇱", "UEFA"),
   N("KOS", "Kosovo", "🇽🇰", "UEFA"), N("MKD", "Macédoine du Nord", "🇲🇰", "UEFA"), N("BIH", "Bosnie-Herzégovine", "🇧🇦", "UEFA"),
   N("MNE", "Monténégro", "🇲🇪", "UEFA"), N("ROU", "Roumanie", "🇷🇴", "UEFA"), N("BUL", "Bulgarie", "🇧🇬", "UEFA"),
   N("GEO", "Géorgie", "🇬🇪", "UEFA"), N("ARM", "Arménie", "🇦🇲", "UEFA"), N("ISR", "Israël", "🇮🇱", "UEFA"),
@@ -41,16 +41,20 @@ export const NATIONS: Nation[] = [
   N("TOG", "Togo", "🇹🇬", "CAF"), N("GAM", "Gambie", "🇬🇲", "CAF"), N("MTN", "Mauritanie", "🇲🇷", "CAF"),
   N("COM", "Comores", "🇰🇲", "CAF"), N("MAD", "Madagascar", "🇲🇬", "CAF"), N("EQG", "Guinée équatoriale", "🇬🇶", "CAF"),
   N("KEN", "Kenya", "🇰🇪", "CAF"), N("ZIM", "Zimbabwe", "🇿🇼", "CAF"), N("CTA", "Centrafrique", "🇨🇫", "CAF"),
+  N("BDI", "Burundi", "🇧🇮", "CAF"), N("LBY", "Libye", "🇱🇾", "CAF"), N("MOZ", "Mozambique", "🇲🇿", "CAF"),
+  N("NIG", "Niger", "🇳🇪", "CAF"), N("SLE", "Sierra Leone", "🇸🇱", "CAF"), N("TAN", "Tanzanie", "🇹🇿", "CAF"),
   N("HAI", "Haïti", "🇭🇹", "CONCACAF"),
   // CONCACAF
   N("USA", "États-Unis", "🇺🇸", "CONCACAF"), N("MEX", "Mexique", "🇲🇽", "CONCACAF"), N("CAN", "Canada", "🇨🇦", "CONCACAF"),
   N("JAM", "Jamaïque", "🇯🇲", "CONCACAF"), N("CRC", "Costa Rica", "🇨🇷", "CONCACAF"), N("PAN", "Panama", "🇵🇦", "CONCACAF"),
   N("HON", "Honduras", "🇭🇳", "CONCACAF"), N("GLP", "Guadeloupe", "🇬🇵", "CONCACAF"), N("MTQ", "Martinique", "🇲🇶", "CONCACAF"),
-  N("SUR", "Suriname", "🇸🇷", "CONCACAF"), N("CUW", "Curaçao", "🇨🇼", "CONCACAF"),
+  N("SUR", "Suriname", "🇸🇷", "CONCACAF"), N("CUW", "Curaçao", "🇨🇼", "CONCACAF"), N("DOM", "Rép. dominicaine", "🇩🇴", "CONCACAF"),
   // AFC / OFC
   N("JPN", "Japon", "🇯🇵", "AFC"), N("KOR", "Corée du Sud", "🇰🇷", "AFC"), N("AUS", "Australie", "🇦🇺", "AFC"),
   N("IRN", "Iran", "🇮🇷", "AFC"), N("KSA", "Arabie saoudite", "🇸🇦", "AFC"), N("QAT", "Qatar", "🇶🇦", "AFC"),
   N("UZB", "Ouzbékistan", "🇺🇿", "AFC"), N("IRQ", "Irak", "🇮🇶", "AFC"), N("CHN", "Chine", "🇨🇳", "AFC"),
+  N("IDN", "Indonésie", "🇮🇩", "AFC"), N("JOR", "Jordanie", "🇯🇴", "AFC"), N("PHI", "Philippines", "🇵🇭", "AFC"),
+  N("THA", "Thaïlande", "🇹🇭", "AFC"),
   N("NZL", "Nouvelle-Zélande", "🇳🇿", "OFC"),
 ];
 
