@@ -1,0 +1,726 @@
+/**
+ * CP Championship 2026-27 — notes et cartes officielles EA SPORTS FC 27
+ * (pages « teams-ratings » d'ea.com, effectifs après le mercato d'été 2026).
+ * Ligne : POSTE EA|Nom complet|NAT|année de naissance|note|6 cases de la carte
+ * (gardien : PLO,PRI,PIE,RÉF,VIT,PLA). « ? » : année inconnue (reprise des
+ * anciennes listes si le joueur y figure, sinon déduite à la génération).
+ */
+export const FC27_ENG2: Record<string, string> = {
+  "eng-bir": `
+RM|Carlos Vicente|ESP|?|76|79,72,74,75,40,64
+ST|Luis Vázquez|ARG|?|73|68,73,61,69,43,79
+ST|Marvin Ducksch|GER|?|73|55,75,75,73,33,69
+CB|Christoph Klarer|AUT|?|73|64,37,51,61,74,77
+RB|Tomoki Iwata|JPN|?|72|75,64,67,69,69,77
+CDM|Paik Seung Ho|KOR|?|72|64,67,70,74,66,75
+CM|Max Bird|ENG|?|72|67,63,69,70,68,70
+LB|Kristoffer Lund|USA|?|72|85,54,66,68,65,68
+CB|Phil Neumann|GER|?|72|79,35,61,66,72,79
+LM|Demarai Gray|JAM|?|72|80,69,65,77,38,58
+RM|Patrick Roberts|ENG|?|72|81,65,66,78,28,43
+CB|Dael Fry|ENG|?|72|60,29,56,59,72,73
+RB|Bright Osayi-Samuel|NGA|?|71|83,58,63,72,65,75
+CDM|Marc Leonard|SCO|?|71|71,64,71,69,65,67
+CDM|Jhon Solís|COL|?|71|58,62,64,66,68,77
+LB|Alex Cochrane|ENG|?|71|72,45,66,68,67,68
+RB|Ethan Laird|ENG|?|70|85,54,62,69,64,72
+GK|James Beadle|ENG|?|70|70,69,68,71,46,70
+CAM|Kanya Fujimoto|JPN|?|70|77,65,69,72,54,45
+ST|August Priske|DEN|?|70|76,69,57,65,41,73
+ST|Jay Stansfield|ENG|?|70|78,71,61,69,30,69
+LB|Lee Buchanan|ENG|?|70|73,41,59,66,67,61
+CB|Jack Robinson|ENG|?|70|48,41,61,61,70,73
+CM|Taylor Gardner-Hickman|ENG|?|68|72,62,68,68,64,63
+GK|Ryan Allsop|ENG|?|68|66,67,72,69,42,66
+RM|Scott Wright|SCO|?|68|89,59,61,71,29,47
+GK|Brad Mayo|ENG|?|55|54,53,55,54,28,53
+`,
+  "eng-bbr": `
+CAM|Todd Cantwell|ENG|?|73|69,69,73,75,43,56
+CDM|Sam Morsy|EGY|?|71|50,60,66,67,69,75
+CAM|Ryoya Morishita|JPN|?|70|73,59,68,73,63,63
+RB|Ryan Alebiosu|NGA|?|70|86,43,61,68,63,76
+RM|Dapo Afolayan|ENG|?|70|78,69,64,72,44,67
+ST|Yuki Ohashi|JPN|?|70|70,70,61,69,36,70
+CB|Sean McLoughlin|IRL|?|70|51,32,55,58,69,76
+CM|Moussa Baradji|FRA|?|69|66,66,65,68,68,72
+GK|Aynsley Pears|ENG|?|69|71,66,67,71,45,67
+GK|Balázs Tóth|HUN|?|69|70,67,65,70,31,67
+ST|Andri Lucas Guðjohnsen|ISL|?|69|76,66,53,68,29,70
+LB|Yuri Ribeiro|POR|?|68|73,51,65,67,65,66
+LM|Mathias Jørgensen|DEN|?|68|81,67,61,68,33,67
+CM|Adam Forshaw|ENG|?|68|45,62,69,67,65,68
+CB|Lewis Miller|AUS|?|68|67,45,59,61,66,75
+CB|Hayden Carter|ENG|?|68|70,40,56,58,67,77
+CB|Scott Wharton|ENG|?|68|52,32,52,60,68,75
+LB|Dion De Neve|BEL|?|67|80,61,62,67,60,58
+LB|Harry Pickering|ENG|?|67|73,52,63,65,63,71
+CDM|Sidnei Tavares|CPV|?|67|66,56,65,66,63,67
+ST|Augustus Kargbo|SLE|?|67|82,67,55,69,20,56
+RM|Jayden Fevrier|ENG|?|66|91,56,58,66,51,78
+CM|Axel Henriksson|SWE|?|66|69,62,63,66,57,75
+CB|Connor O'Riordan|IRL|?|65|53,33,48,50,64,76
+CM|Kristi Montgomery|SCO|?|64|73,47,62,67,62,62
+CB|Tom Atcheson|NIR|?|64|55,34,48,52,65,65
+CB|George Pratt|ENG|?|63|60,26,40,51,63,66
+CB|Matthew Litherland|ENG|?|62|59,27,49,53,61,64
+CDM|Jake Garrett|ENG|?|61|64,53,57,62,58,64
+ST|Igor Tyjon|ENG|?|58|69,59,46,60,22,51
+`,
+  "eng-bol": `
+RM|Larrazabal|ESP|?|74|80,67,68,73,66,79
+LM|Samuel Iling-Junior|ENG|?|72|80,64,68,75,56,59
+CDM|Josh Sheehan|WAL|?|68|78,57,68,70,62,63
+RB|Luca Stephenson|ENG|?|68|73,59,62,64,66,67
+CB|Lewis Brunt|ENG|?|68|78,49,58,64,66,74
+CB|Ben Davies|ENG|?|68|57,39,57,62,68,70
+CB|Eoin Toal|NIR|?|68|58,31,46,52,66,78
+CDM|Ethan Erhahon|SCO|?|67|74,59,63,66,64,73
+CAM|Rúben Rodrigues|POR|?|67|69,65,66,68,57,67
+CDM|Xavier Simons|ENG|?|67|69,55,62,64,64,74
+CM|David Watson|SCO|?|67|60,64,63,65,62,66
+ST|Ryan Hardie|SCO|?|67|82,66,51,67,27,65
+CB|Akin Famewo|ENG|?|67|68,29,50,57,65,79
+ST|Sam Dalby|ENG|?|67|68,65,52,61,25,70
+CB|Chris Forino|LCA|?|67|69,24,43,47,66,78
+ST|John McAtee|ENG|?|66|79,64,62,67,38,60
+CAM|Joel Randall|ENG|?|66|79,62,64,68,33,53
+LM|Kyliane Dong|FRA|?|66|74,61,57,70,23,46
+RB|Cyrus Christie|IRL|?|65|63,57,63,64,64,68
+GK|Jack Bonham|IRL|?|65|66,62,65,65,43,64
+LB|Max Conway|ENG|?|65|72,42,58,65,58,62
+LM|Thierry Gale|BRB|?|65|81,59,57,69,26,40
+GK|David Harrington|WAL|?|60|60,60,59,60,21,59
+RM|Charlie Warren|ENG|?|57|71,57,51,57,27,57
+GK|Nathan Broome|ENG|?|57|56,58,57,58,36,54
+CAM|Toby Ritchie|ENG|?|55|66,51,54,56,43,51
+GK|Luke Hutchinson|ENG|?|55|56,52,53,58,29,52
+`,
+  "eng-bri": `
+CB|Rob Dickie|ENG|?|73|53,45,54,57,73,79
+CM|Jason Knight|IRL|?|72|71,64,70,72,67,72
+CM|Tomi Horvat|SVN|?|72|74,70,73,75,55,69
+CAM|Scott Twine|ENG|?|72|76,71,72,73,55,53
+CB|Rob Atkinson|ENG|?|72|60,25,49,58,72,79
+ST|Emil Riis|DEN|?|71|72,73,54,67,28,70
+CB|Luke McNally|IRL|?|71|52,35,53,60,71,74
+CM|Adam Randell|ENG|?|70|72,65,68,71,67,73
+LB|Cameron Pring|ENG|?|70|79,48,61,67,66,71
+RM|Jed Wallace|ENG|?|70|72,67,69,71,45,62
+CB|George Tanner|ENG|?|70|70,49,61,66,70,70
+ST|Dom Ballard|ENG|?|70|78,71,54,68,28,63
+CDM|Joe Williams|ENG|?|69|52,57,67,68,68,67
+RM|Yū Hirakawa|JPN|?|69|82,59,64,73,37,51
+CAM|Sam Greenwood|ENG|?|68|70,68,69,69,52,68
+CDM|Gibson Yah|NED|?|68|72,44,65,66,64,78
+ST|Lorent Tolaj|SUI|?|68|76,68,57,65,39,78
+CB|Noah Eile|SWE|?|68|73,27,47,62,66,74
+GK|Sam Tickle|ENG|?|66|66,65,64,66,34,65
+LM|Sam Bell|ENG|?|66|78,64,57,67,23,60
+GK|Brad Collins|ENG|?|65|66,63,66,66,43,65
+CB|Lisav Eissat|ROU|?|65|65,35,53,55,65,68
+RB|Rio Cardines|TRI|?|62|69,48,60,61,56,58
+LB|Seb Naylor|ENG|?|60|76,49,53,61,54,55
+GK|Lewis Thomas|WAL|?|59|59,58,57,60,57,58
+LM|Elijah Morrison|ENG|?|58|72,51,52,62,28,42
+CM|Leo Pecover|ENG|?|56|69,52,56,61,49,49
+`,
+  "eng-bur": `
+CDM|Josh Cullen|IRL|?|77|53,63,75,74,74,69
+RB|Kyle Walker|ENG|?|76|81,63,72,71,73,76
+ST|Zian Flemming|NED|?|76|66,79,71,72,55,82
+CM|Hannibal|TUN|?|75|68,63,74,76,69,77
+GK|Grégoire Coudert|FRA|?|75|74,72,69,77,34,73
+CB|Anel Ahmedhodžić|BIH|?|75|69,41,59,60,75,80
+RM|Marcus Edwards|ENG|?|75|80,68,70,80,30,44
+RB|Connor Roberts|WAL|?|74|72,61,71,72,71,67
+LB|Lucas Pires|BRA|?|74|76,49,69,72,70,71
+ST|Zeki Amdouni|SUI|?|74|67,76,69,76,46,60
+CB|Bashir Humphreys|ENG|?|74|69,43,66,68,74,74
+LM|Jacob Bruun Larsen|DEN|?|73|75,71,70,74,55,66
+CDM|Josh Laurent|ENG|?|72|69,61,64,70,71,80
+RB|Oliver Sonne|PER|?|72|78,49,65,69,66,67
+ST|Lyle Foster|RSA|?|72|78,71,61,70,36,72
+LM|Mike Trésor|BEL|?|72|78,67,72,75,38,47
+ST|Armando Broja|ALB|?|72|66,72,54,71,30,70
+CB|Jordan Beyer|GER|?|72|65,34,61,65,72,65
+CB|Joe Worrall|ENG|?|72|40,25,51,45,73,70
+CDM|Ugo Raghouber|FRA|?|71|70,61,65,72,68,70
+ST|Andréas Hountondji|BEN|?|71|82,69,58,72,22,68
+CB|Hjalmar Ekdal|SWE|?|71|52,33,53,62,72,72
+GK|Max Weiß|GER|?|70|72,68,68,72,35,67
+CB|Max Alleyne|ENG|?|70|70,34,58,66,70,72
+CAM|Aaron Ramsey|ENG|?|69|72,63,67,70,50,60
+ST|Ashley Barnes|ENG|?|69|40,72,67,66,46,68
+ST|Dastan Satpayev|KAZ|?|68|83,67,60,69,27,64
+RB|Shurandy Sambo|CUW|?|66|71,45,59,66,61,69
+LM|Jaydon Banel|NED|?|66|90,62,58,69,29,48
+ST|Michael Obafemi|IRL|?|65|72,65,55,67,23,66
+RM|Enock Agyei|BEL|?|63|77,57,57,66,24,47
+GK|Ben Amos|ENG|?|62|60,65,67,60,46,61
+LM|Lluc Castell|ESP|?|62|75,59,56,66,32,43
+`,
+  "eng-car": `
+GK|Nathan Trott|ENG|?|70|70,67,68,70,49,68
+RB|Perry Ng|ENG|?|70|68,60,65,65,66,75
+CAM|Rubin Colwill|WAL|?|69|66,68,69,69,54,70
+CAM|Jack Moylan|IRL|?|69|73,68,66,68,46,64
+LM|Chris Willock|ENG|?|69|78,66,63,71,29,56
+CB|Will Fish|ENG|?|69|61,34,51,55,68,77
+CDM|Alex Robertson|AUS|?|68|70,63,68,72,63,63
+CDM|David Turnbull|SCO|?|68|53,69,71,68,62,65
+RM|Ollie Tanner|ENG|?|68|74,62,67,68,55,57
+CB|Calum Chambers|ENG|?|68|50,57,65,64,68,70
+ST|Callum Robinson|IRL|?|68|78,68,63,70,32,62
+CB|Dylan Lawlor|WAL|?|68|72,45,53,63,66,72
+LB|Joel Bagan|IRL|?|68|67,44,61,63,65,68
+CB|Gabriel Osho|NGA|?|68|67,30,54,62,67,75
+ST|Yousef Salech|DEN|?|68|65,67,48,62,26,80
+ST|Isaak Davies|WAL|?|67|82,66,56,68,25,58
+CAM|Joel Colwill|WAL|?|66|74,60,63,69,57,61
+RB|Ronan Kpakio|WAL|?|66|79,44,59,66,59,60
+RM|Cian Ashford|WAL|?|66|77,63,60,66,26,59
+ST|Kion Etete|ENG|?|64|68,61,45,60,32,76
+GK|Harry Tyrer|ENG|?|64|65,61,62,65,16,62
+CDM|Eli King|WAL|?|63|57,53,60,61,59,66
+LB|Calum Scanlon|ENG|?|63|75,43,56,63,58,60
+GK|Matthew Turner|WAL|?|62|62,60,61,62,22,61
+CM|Dakarai Mafico|WAL|?|55|67,48,53,59,50,49
+CM|Rob Tankiewicz|WAL|?|54|62,52,53,58,48,37
+`,
+  "eng-cha": `
+CB|Lloyd Jones|ENG|?|73|53,36,48,50,71,83
+CB|Kayne Ramsay|ENG|?|70|79,51,62,68,69,72
+CM|Sonny Carey|ENG|?|70|65,70,66,69,61,66
+CB|Amari'i Bell|JAM|?|70|75,50,60,67,70,74
+GK|Thomas Kaminski|BEL|?|70|69,70,68,70,46,69
+GK|Arthur Okonkwo|NGA|?|70|69,68,68,70,44,70
+LM|Karlan Grant|ENG|?|70|82,70,63,71,33,67
+RB|Joe Rankin-Costello|ENG|?|69|73,59,64,67,66,70
+CM|Greg Docherty|SCO|?|68|67,62,64,68,66,77
+CDM|Conor Coventry|IRL|?|68|66,53,65,67,65,72
+LM|Tyreece Campbell|JAM|?|68|91,63,60,69,35,64
+LM|Millenic Alli|IRL|?|68|85,65,58,70,30,67
+CDM|Nathaniel Chalobah|ENG|?|68|51,61,65,63,67,66
+ST|Charlie Kelman|USA|?|68|80,68,53,67,32,70
+ST|Matt Godden|ENG|?|68|64,69,56,65,31,65
+CM|Harvey Knibbs|ENG|?|67|70,68,64,67,61,74
+RB|Danny McNamara|IRL|?|67|70,42,59,64,64,65
+RM|Rob Apter|SCO|?|67|81,61,61,69,43,47
+CB|Reece Burke|ENG|?|67|60,36,53,60,66,73
+LB|Josh Edwards|SCO|?|66|72,53,59,62,61,69
+ST|Miles Leaburn|ENG|?|66|68,65,50,61,28,76
+LB|Ivan Mesík|SVK|?|65|72,41,57,60,63,75
+GK|Will Mannion|ENG|?|65|63,67,64,64,37,65
+CM|Timothy Noor Ouma|KEN|?|64|76,57,61,63,63,69
+ST|Daniel Kanu|SLE|?|64|78,64,51,64,32,66
+ST|Micah Mbick|ENG|?|64|72,62,51,64,29,69
+CB|Collins Sichenje|KEN|?|64|61,32,48,55,63,71
+RB|Nathan Asiimwe|UGA|?|63|74,40,54,60,57,73
+CB|Billy Koumetio|FRA|?|62|58,32,43,44,60,71
+GK|Tiernan Brooks|IRL|?|60|60,57,60,60,38,58
+CM|Ibrahim Fullah|ENG|?|59|74,54,57,65,45,55
+`,
+  "eng-der": `
+ST|Carlton Morris|ENG|?|74|69,74,59,70,34,77
+GK|Jacob Widell Zetterström|SWE|?|73|75,72,65,75,38,68
+CB|Matt Clarke|ENG|?|73|48,37,54,62,74,79
+CDM|Lewis Travis|ENG|?|72|63,59,65,68,69,78
+CAM|Sammie Szmodics|IRL|?|72|74,72,68,74,51,62
+CDM|Alex Mowatt|ENG|?|72|50,69,73,69,65,71
+CAM|Filip Bilbija|GER|?|72|65,70,70,73,32,67
+CB|Sondre Langås|NOR|?|71|86,38,57,64,68,85
+CAM|Bobby Clark|ENG|?|71|68,61,69,73,51,59
+ST|Patrick Agyemang|USA|?|71|78,69,53,68,27,74
+LB|Derry John Murkin|ENG|?|70|85,49,63,67,61,77
+RB|Joe Ward|ENG|?|70|79,56,68,69,62,61
+LB|Charlie Taylor|ENG|?|70|54,52,67,68,72,70
+CB|Dion Sanderson|ENG|?|70|66,40,55,58,69,75
+LM|Ryan Hedges|WAL|?|69|76,64,64,70,58,67
+CDM|Oscar Luigi Fraulo|DEN|?|69|68,61,66,69,62,70
+ST|Rhian Brewster|ENG|?|69|77,69,56,70,32,62
+RB|Max Johnston|SCO|?|68|81,41,61,63,62,72
+ST|Lars-Jørgen Salvesen|NOR|?|68|67,66,53,61,38,81
+LM|Corey Blackett-Taylor|ENG|?|67|88,61,58,71,51,59
+CM|Kenzo Goudmijn|NED|?|67|72,57,66,72,61,54
+GK|Josh Vickers|ENG|?|67|66,67,65,67,42,65
+LB|Craig Forsyth|SCO|?|66|38,57,64,61,69,66
+RB|Ryan Nyambe|NAM|?|65|77,35,56,63,62,74
+GK|Richard O'Donnell|ENG|?|64|63,64,63,64,52,63
+CM|Owen Eames|ENG|?|56|66,52,55,59,52,53
+CAM|Cruz Allen|WAL|?|56|67,48,55,59,34,51
+`,
+  "eng-lin": `
+LB|Adam Reach|ENG|?|70|70,65,68,69,66,68
+CB|Andrei Coubiș|ROU|?|70|61,36,47,52,68,80
+CB|Sonny Bradley|ENG|?|70|37,29,46,46,69,82
+RB|Tendayi Darikwa|ZIM|?|69|76,56,62,65,65,78
+RM|Reeco Hackett|LCA|?|69|79,66,64,68,52,70
+CDM|Conor McGrandles|SCO|?|69|64,56,63,64,63,77
+LB|Callum Elder|AUS|?|69|62,45,64,64,66,71
+GK|George Wickens|ENG|?|69|68,68,66,68,32,68
+CB|Tom Hamer|ENG|?|68|71,50,57,61,65,84
+CDM|Tom Bayliss|ENG|?|67|76,61,65,68,63,69
+LM|Ben House|SCO|?|67|71,66,60,66,47,80
+CDM|Ivan Varfolomeev|UKR|?|67|67,50,60,64,64,70
+ST|Rob Street|ENG|?|67|72,64,60,65,36,75
+CDM|Yunus Emre Konak|TUR|?|67|65,48,61,64,64,69
+LB|Josh Honohan|IRL|?|66|79,51,54,64,63,72
+ST|Freddie Draper|ENG|?|66|64,64,57,63,35,77
+CB|Ryley Towler|ENG|?|66|67,36,52,58,64,73
+ST|James Collins|IRL|?|66|49,66,55,62,41,76
+LM|Dominic Jefferies|WAL|?|65|80,58,60,64,59,66
+ST|Mason Melia|IRL|?|65|76,63,59,65,27,68
+ST|Isaac Olaofe|ENG|?|65|91,61,50,65,20,70
+GK|Joe Gauci|AUS|?|65|66,64,59,67,30,63
+CB|Adam Jackson|ENG|?|65|47,34,45,52,64,70
+CB|Deji Elerewe|ENG|?|64|70,29,46,56,63,74
+GK|Jamie Pardington|ENG|?|56|56,55,55,56,19,55
+CB|Charlie Parks|ENG|?|53|57,28,36,44,52,58
+`,
+  "eng-mid": `
+CDM|Sebastian Berhalter|USA|?|76|71,65,77,70,69,78
+LM|Max Arfsten|USA|?|75|77,66,67,79,63,72
+GK|Radek Vítek|CZE|?|75|75,72,74,76,46,74
+CDM|Aidan Morris|USA|?|74|73,53,62,71,70,84
+RM|Morgan Whittaker|ENG|?|74|77,73,68,74,38,67
+RB|Callum Brittain|ENG|?|73|79,52,67,71,66,75
+CB|Luke Ayling|ENG|?|73|53,58,65,69,74,74
+LM|Riley McGree|AUS|?|72|77,67,69,73,63,73
+CB|Adilson Malanda|FRA|?|72|77,36,53,60,72,79
+CB|Alfie Jones|CAN|?|72|64,40,59,59,71,78
+LB|Neto Borges|BRA|?|71|67,50,65,67,68,78
+ST|Tommy Conway|SCO|?|71|81,69,59,71,35,65
+CB|Ashley Phillips|ENG|?|71|66,40,56,60,71,76
+LM|Jeremy Sarmiento|ECU|?|70|79,65,65,74,37,58
+CB|George Edmundson|ENG|?|70|68,35,51,57,69,80
+ST|David Strelec|SVK|?|70|68,69,56,68,34,65
+ST|Will Lankshear|ENG|?|70|66,70,53,66,29,72
+ST|Kyle Joseph|SCO|?|69|75,66,60,68,52,78
+GK|Sol Brynn|ENG|?|69|69,68,67,69,33,69
+LM|Myles Peart-Harris|ENG|?|68|68,62,65,67,57,71
+LB|Alex Bangura|SLE|?|68|93,37,55,68,60,76
+CAM|Leo Castledine|ENG|?|68|74,64,67,70,50,57
+CDM|Abdoulaye Kanté|CIV|?|68|63,44,59,66,66,70
+GK|Jon McLaughlin|SCO|?|66|65,67,67,66,51,64
+LM|Micah Hamilton|ENG|?|64|80,62,58,69,29,49
+CM|Law McCabe|ENG|?|60|71,51,59,63,54,59
+LB|George McCormick|ENG|?|57|66,42,51,56,52,54
+ST|Cruz Ibeh|ENG|?|57|69,56,42,55,21,58
+`,
+  "eng-mil": `
+CB|Tristan Crama|FRA|?|75|68,51,63,67,75,82
+RM|Femi Azeez|NGA|?|75|78,70,73,75,41,68
+CB|Jake Cooper|ENG|?|74|48,32,48,52,73,84
+CB|Caleb Taylor|ENG|?|73|58,40,51,56,72,80
+LB|Alfie Doughty|ENG|?|72|78,58,71,69,67,68
+CDM|Casper De Norre|BEL|?|72|64,65,68,72,68,72
+RM|Camiel Neghli|ALG|?|71|80,70,67,70,50,66
+CM|Mathis Servais|BEL|?|71|63,63,69,72,53,61
+RB|Ryan Leonard|ENG|?|70|69,63,65,66,68,75
+GK|Max Crocombe|NZL|?|70|69,70,66,68,47,70
+LB|Zak Sturge|ENG|?|70|73,47,62,67,66,72
+ST|Taïryk Arconte|FRA|?|70|78,70,63,71,29,70
+ST|Mihailo Ivanović|SRB|?|70|72,70,56,68,40,70
+RM|Mark Sykes|IRL|?|69|72,63,64,69,63,68
+CAM|Luke Cundle|ENG|?|69|71,63,68,70,54,55
+GK|Lukas Jensen|DEN|?|69|69,68,64,69,24,69
+ST|Lyndon Dykes|SCO|?|69|66,68,52,64,29,83
+ST|Josh Coburn|ENG|?|69|55,69,52,64,25,71
+CB|Danny Batth|ENG|?|68|30,23,42,41,68,78
+RB|Jordi Osei-Tutu|ENG|?|66|90,58,59,68,58,63
+CDM|Derek Mazou-Sacko|FRA|?|66|66,55,63,66,64,65
+RM|Ra'ees Bangura-Williams|ENG|?|66|80,60,62,67,34,51
+LM|Kyrell Lisbie|ENG|?|65|89,62,57,65,28,61
+CM|Jenson Metcalfe|ENG|?|64|64,56,61,64,59,63
+CM|Daniel Kelly|SCO|?|63|69,60,58,65,58,65
+CB|Elkan Baggott|IDN|?|63|53,24,40,46,62,72
+GK|George Evans|ENG|?|62|62,62,62,60,29,61
+GK|Joel Coleman|ENG|?|60|58,59,57,60,42,58
+RM|Jack Howland|ENG|?|58|74,52,52,60,36,51
+ST|Zak Lovelace|ENG|?|58|87,57,48,60,25,48
+ST|Ajay Matthews|ENG|?|58|68,57,47,58,30,52
+`,
+  "eng-nor": `
+CDM|Kenny McLean|SCO|?|73|57,68,70,70,68,76
+LM|Anthony Musaba|NED|?|73|90,66,64,77,34,67
+ST|Mathias Kvistgaarden|DEN|?|72|87,71,61,74,48,68
+LM|Ali Ahmed|CAN|?|72|83,61,67,73,61,64
+GK|Vladan Kovacević|BIH|?|72|72,70,70,73,38,71
+LB|Darlin Yongwa|CMR|?|72|84,40,61,67,66,71
+CDM|Pelle Mattsson|DEN|?|72|55,54,65,67,69,75
+RB|Jack Stacey|ENG|?|71|70,55,64,69,68,73
+CB|Harry Darling|ENG|?|71|68,45,59,62,71,78
+ST|Mohamed Touré|AUS|?|70|89,69,57,68,33,75
+RM|Andre Brooks|JAM|?|70|74,64,66,72,48,59
+CDM|Mirko Topić|SRB|?|70|65,48,61,61,70,75
+RB|Kellen Fisher|ENG|?|70|73,37,60,65,67,74
+CB|Jakov Medić|CRO|?|70|61,50,58,57,67,81
+CDM|Sam Field|ENG|?|70|55,54,60,65,71,68
+CB|José Córdoba|PAN|?|70|76,31,54,63,69,76
+ST|Jovon Makama|ENG|?|70|77,69,51,65,26,79
+CB|Ruairi McConville|NIR|?|70|62,32,50,51,70,72
+CAM|Anis Ben Slimane|TUN|?|69|65,66,66,71,58,73
+CM|Amankwah Forson|GHA|?|69|87,62,69,75,57,47
+LM|Oscar Schwartau|DEN|?|69|76,64,62,72,40,66
+CM|Paris Maghoma|ENG|?|68|67,61,65,74,59,66
+CM|Liam Gibbs|ENG|?|68|66,57,65,68,65,66
+LB|Ben Chrisene|ENG|?|68|72,55,63,66,63,66
+ST|Ante Crnac|CRO|?|68|77,69,52,68,28,72
+LM|Papa Amadou Diallo|SEN|?|68|79,67,60,70,23,52
+GK|Daniel Grimshaw|ENG|?|67|69,62,69,69,45,65
+CDM|Jacob Wright|ENG|?|67|64,54,67,64,63,66
+LB|Lucien Mahovo|ENG|?|64|78,44,57,60,59,63
+GK|Vicente Reyes|CHI|?|64|64,62,63,64,38,63
+CB|Bruno Alves|BRA|?|63|57,32,49,55,63,63
+ST|Errol Mundle-Smith|ENG|?|61|78,60,48,64,20,51
+CAM|Gabriel Forsyth|SCO|?|60|72,52,57,63,41,50
+CAM|Elliot Myles|WAL|?|58|84,46,53,60,33,46
+`,
+  "eng-por": `
+LM|Josh Murphy|ENG|?|73|91,69,68,73,38,61
+CDM|Ebou Adams|GAM|?|71|71,59,61,65,70,82
+RB|Terry Devlin|NIR|?|71|73,59,63,66,68,77
+GK|Nicolas Schmid|AUT|?|71|71,69,68,71,44,70
+RM|Adrian Segečić|CRO|?|70|81,71,65,72,36,57
+CB|Conor Shaughnessy|IRL|?|70|62,49,60,59,69,78
+CB|Regan Poole|WAL|?|70|68,41,56,60,69,78
+CM|Rocco Shein|EST|?|69|76,63,64,69,63,67
+LM|Keshi Anderson|ENG|?|69|79,63,65,70,54,63
+CAM|John Swift|ENG|?|69|58,69,70,71,58,62
+LB|Connor Ogilvie|ENG|?|69|70,46,62,64,66,77
+ST|Colby Bishop|ENG|?|69|66,68,60,64,42,83
+RB|Zak Swanson|ENG|?|69|71,49,64,65,66,67
+ST|Marko Milovanović|SRB|?|69|58,70,51,65,31,77
+RM|Abu Kamara|ENG|?|68|86,63,59,70,39,59
+GK|Daniel Bielica|POL|?|68|69,67,65,67,38,68
+CDM|Marlon Pack|ENG|?|68|33,62,70,65,65,75
+CB|Josh Knight|ENG|?|67|55,52,54,58,67,73
+CM|Luke Le Roux|RSA|?|66|62,59,61,67,63,70
+GK|Josef Bursik|ENG|?|66|65,64,65,68,40,64
+CB|Benjamin Arthur|ENG|?|66|63,33,50,54,65,70
+CM|Odin Bailey|ENG|?|65|82,60,64,68,56,61
+LB|Jacob Farrell|AUS|?|65|68,45,55,60,64,74
+CB|Madiodio Dia|SEN|?|65|56,28,44,54,64,70
+CM|Márk Kosznovszky|HUN|?|64|68,57,63,65,58,63
+RM|Ryan Kavuma-McQueen|ENG|?|64|81,62,59,67,32,61
+CB|Hayden Matthews|AUS|?|64|68,26,47,51,64,70
+GK|Ben Killip|ENG|?|63|63,62,60,64,43,63
+ST|Thomas Waddingham|AUS|?|63|77,61,47,60,37,67
+RM|Franco Umeh|IRL|?|62|82,60,55,62,54,65
+LM|Harvey Blair|ENG|?|62|85,55,54,64,27,55
+RM|Eoin Kenny|NIR|?|60|61,60,52,62,35,62
+RM|Luke Brooke-Smith|NZL|?|58|81,57,51,59,40,72
+ST|Tayo Singerr|ENG|?|55|67,54,41,55,19,51
+`,
+  "eng-pre": `
+GK|Daniel Iversen|DEN|?|73|74,70,61,77,45,70
+CAM|Alfie Devine|ENG|?|72|77,67,71,73,54,66
+CM|Ali McCann|NIR|?|71|67,60,67,70,71,76
+CAM|Callum Lang|ENG|?|71|79,70,66,72,49,72
+CDM|Léo Leroy|FRA|?|71|52,60,71,71,65,71
+ST|Milutin Osmajić|MNE|?|71|83,72,55,62,37,79
+CB|Lewis Gibson|ENG|?|71|59,39,59,62,71,75
+CB|Jordan Storey|ENG|?|71|52,34,54,57,72,75
+LB|Thierry Small|ENG|?|70|87,60,64,71,62,77
+RB|Harry Clarke|ENG|?|70|78,57,60,65,66,79
+CB|Andrew Hughes|WAL|?|70|56,42,62,60,70,78
+CB|Liam Lindsay|SCO|?|70|38,38,50,51,71,78
+LM|Delano Burgzorg|SUR|?|69|81,65,57,73,30,71
+CB|Odel Offiah|ENG|?|69|84,33,53,64,68,73
+ST|Jusef Erabi|SWE|?|69|81,67,49,67,26,78
+RB|Brad Potts|ENG|?|68|69,65,66,65,63,77
+CM|Jordan Thompson|NIR|?|68|67,59,69,69,63,68
+LB|Andrija Vukčević|MNE|?|68|83,52,62,63,63,69
+RB|Pol Valentín|ESP|?|68|84,39,60,69,61,68
+CAM|Andrew Moran|IRL|?|68|75,59,67,71,45,57
+GK|Lee Nicholls|ENG|?|66|65,67,58,66,41,65
+CAM|Max Wilson|NIR|?|55|67,49,52,57,35,51
+`,
+  "eng-qpr": `
+CDM|Nicolas Madsen|DEN|?|73|57,68,74,72,68,71
+LM|Ilias Chair|MAR|?|73|77,66,71,76,32,50
+CDM|Glen Kamara|FIN|?|72|73,57,68,75,68,70
+LB|Dennis Cirkin|LVA|?|72|74,56,67,69,69,62
+CDM|Jonathan Varane|FRA|?|72|63,50,65,69,70,79
+CB|Jimmy Dunne|IRL|?|72|61,46,63,65,72,80
+RB|Tariq Lamptey|GHA|?|72|82,44,65,75,68,44
+ST|Richard Kone|CIV|?|70|81,69,55,68,40,79
+ST|Rumarn Burrell|JAM|?|70|91,69,54,67,21,66
+CB|Ronnie Edwards|ENG|?|70|69,35,55,63,71,74
+LM|Koki Saito|JPN|?|70|78,63,65,74,24,51
+CB|Jake Clarke-Salter|ENG|?|70|60,33,53,50,71,73
+RM|Harvey Vale|IRL|?|69|75,65,67,69,57,58
+LM|Paul Smyth|NIR|?|69|91,61,61,71,40,54
+RM|Kwame Poku|GHA|?|69|86,63,63,72,44,49
+GK|Pierce Charles|NIR|?|69|68,66,75,68,31,66
+LB|Boy Kemper|NED|?|69|64,39,58,64,66,74
+GK|Calum Ward|ENG|?|69|68,67,67,67,20,70
+RB|Amadou Mbengue|SEN|?|68|85,37,53,58,66,75
+RM|Karamoko Dembélé|ENG|?|68|80,63,64,72,43,42
+CB|Liam Morrison|SCO|?|68|51,31,48,55,68,68
+CM|Kieran Morgan|ENG|?|66|67,60,65,67,58,62
+ST|Rayan Kolli|ALG|?|65|77,65,59,67,26,52
+RB|Kealey Adamson|AUS|?|64|73,45,56,61,59,70
+LB|Ziyad Larkeche|FRA|?|63|77,42,56,63,58,56
+ST|Alfie Lloyd|ENG|?|63|82,60,45,63,17,67
+ST|Justin Obikwu|TRI|?|61|83,59,46,58,31,70
+CM|Isak Alemayehu|SWE|?|60|68,55,57,67,48,53
+`,
+  "eng-shu": `
+GK|Michael Cooper|ENG|?|72|72,70,73,73,54,71
+GK|Ivo Grbić|CRO|?|70|70,69,68,71,32,67
+GK|Adam Davies|WAL|?|68|69,65,65,69,40,67
+RB|Femi Seriki|ENG|?|70|87,47,61,68,63,71
+RB|Jamie Shackleton|ENG|?|69|77,49,65,72,64,68
+LB|Harrison Burrows|ENG|?|72|75,64,72,72,66,68
+LB|Sam McCallum|ENG|?|70|78,55,63,66,67,70
+LB|Rhys Norrington-Davies|WAL|?|68|67,44,61,64,65,66
+CB|Matt Doherty|IRL|?|73|54,63,69,69,74,72
+CB|Japhet Tanganga|ENG|?|72|70,34,61,66,71,77
+CB|Mark McGuinness|IRL|?|70|52,35,50,58,69,77
+CB|Nils Zatterstrom|SWE|?|64|70,34,49,55,60,77
+CB|Jamal Baptiste|ENG|?|63|68,34,46,54,62,68
+CDM|Kalvin Phillips|ENG|?|72|52,65,72,70,71,65
+CDM|Sydie Peck|ENG|?|71|68,59,68,70,66,72
+CDM|Jaïro Riedewald|NED|?|71|52,61,72,68,70,70
+CDM|Joe Rothwell|ENG|?|70|73,65,70,71,69,67
+CM|Oliver Arblaster|ENG|?|70|65,61,69,71,65,71
+CAM|Callum O'Hare|ENG|?|73|73,65,71,77,62,68
+CAM|Tahith Chong|CUW|?|70|77,65,70,71,54,62
+RM|Romelle Donovan|ENG|?|67|77,62,62,71,29,43
+ST|Patrick Bamford|ENG|?|71|66,71,66,68,36,70
+ST|Tyrese Campbell|ENG|?|70|79,71,60,69,33,71
+ST|Tom Cannon|IRL|?|70|78,70,58,70,28,65
+ST|Ryan Oné|SCO|?|63|75,61,51,60,21,66
+`,
+  "eng-sou": `
+GK|Aaron Ramsdale|ENG|?|77|77,76,80,79,54,74
+RB|Yukinari Sugawara|JPN|?|75|71,54,73,72,71,71
+GK|Daniel Peretz|ISR|?|75|74,75,73,77,35,71
+CB|Taylor Harwood-Bellis|ENG|?|75|65,43,62,66,75,79
+ST|Cyle Larin|CAN|?|75|70,75,66,70,28,77
+LM|Léo Scienza|BRA|?|75|80,70,71,78,28,53
+CAM|Finn Azaz|IRL|?|74|73,72,73,74,57,68
+LB|Ryan Manning|IRL|?|74|70,63,72,71,68,67
+CDM|Flynn Downes|ENG|?|74|63,59,69,72,70,76
+CM|Caspar Jander|GER|?|73|70,55,72,73,66,72
+RB|James Bree|ENG|?|73|67,52,67,66,71,78
+LB|Welington|BRA|?|72|77,52,67,70,68,64
+RM|Tom Fellows|ENG|?|72|82,64,69,72,46,64
+RB|Mads Roerslev|DEN|?|72|68,45,68,69,70,67
+LM|Samuel Edozie|ENG|?|72|84,62,65,75,28,56
+CB|Jack Stephens|ENG|?|72|42,42,61,63,73,71
+CB|Nathan Wood|ENG|?|72|71,24,48,55,71,74
+RM|Ben Brereton Díaz|CHI|?|71|78,71,65,70,41,72
+LM|Lewis Dobbin|ENG|?|71|85,67,62,73,41,59
+ST|Cameron Archer|ENG|?|71|82,71,59,72,25,65
+CM|Kuryu Matsuki|JPN|?|70|73,65,67,72,63,71
+ST|Damion Downs|USA|?|70|75,68,53,64,24,67
+CB|Joshua Quarshie|GER|?|69|81,33,48,52,68,76
+GK|Gavin Bazunu|IRL|?|68|68,67,68,68,47,67
+LB|Juan Larios|ESP|?|68|84,36,60,69,64,54
+ST|Divin Mubama|ENG|?|68|72,66,49,65,28,71
+CM|Cameron Bragg|SCO|?|66|67,57,65,68,58,59
+GK|George Long|ENG|?|66|67,66,66,67,31,64
+CAM|Romeo Akachukwu|IRL|?|60|72,53,54,61,48,67
+CDM|Barnaby Williams|ENG|?|57|68,44,51,58,55,56
+`,
+  "eng-sto": `
+LM|Sorba Thomas|WAL|?|75|87,71,74,73,48,70
+GK|Viktor Johansson|SWE|?|74|75,71,70,77,40,73
+RB|Ethan Galbraith|NIR|?|72|73,64,70,74,66,66
+RB|Ben Johnson|ENG|?|72|69,48,64,68,72,69
+ST|George Hirst|SCO|?|72|72,71,55,66,43,74
+CB|Ben Wilmot|ENG|?|72|52,39,56,59,72,76
+RM|Million Manhoef|NED|?|71|82,67,65,74,56,71
+CM|Svante Ingelsson|SWE|?|70|77,65,68,71,64,84
+RB|Junior Tchamadeu|CMR|?|70|86,54,60,68,62,74
+CAM|Bae Jun Ho|KOR|?|70|74,62,69,74,36,55
+CB|Bosun Lawal|IRL|?|69|73,60,64,66,67,80
+CDM|Tomáš Rigo|SVK|?|69|64,63,68,68,65,68
+CDM|Djibril Soumaré|SEN|?|69|57,56,60,64,68,72
+LB|Aaron Cresswell|ENG|?|69|40,59,72,69,74,60
+CDM|Ben Pearson|ENG|?|69|52,50,60,66,65,74
+CB|Maksym Talovierov|UKR|?|69|58,38,51,56,68,78
+CB|Luke Graham|SCO|?|69|62,33,54,61,71,68
+LB|Éric Bocat|FRA|?|68|77,52,65,67,62,67
+ST|Róbert Boženík|SVK|?|68|74,68,62,65,34,74
+ST|Sam Gallagher|ENG|?|68|63,69,57,63,45,77
+ST|Lamine Cissé|FRA|?|68|81,67,61,72,27,59
+GK|Josh Griffiths|ENG|?|68|68,66,66,68,30,66
+CB|Ben Gibson|ENG|?|67|40,28,48,46,67,75
+GK|Frank Fielding|ENG|?|63|61,62,59,65,34,63
+RM|Ato Ampah|GHA|?|62|77,56,57,63,33,50
+CB|Freddie Anderson|USA|?|58|52,25,47,51,56,64
+`,
+  "eng-swa": `
+ST|Žan Vipotnik|SVN|?|76|67,79,60,70,23,70
+LB|Josh Tymon|ENG|?|73|75,57,70,70,67,72
+GK|Lawrence Vigouroux|CHI|?|73|75,70,70,75,47,70
+LM|Joseph Opoku|GHA|?|73|75,70,70,73,42,62
+CB|Cameron Burgess|AUS|?|73|48,37,57,54,73,81
+CDM|Gonçalo Franco|POR|?|72|65,64,69,72,67,73
+CAM|Elijah Just|NZL|?|72|81,69,67,74,48,58
+ST|Ross Stewart|SCO|?|72|68,72,58,64,30,70
+CB|Ben Cabango|WAL|?|72|60,28,47,52,72,77
+CAM|Leo Walta|FIN|?|71|68,71,71,72,60,65
+CDM|Marko Stamenić|NZL|?|71|65,59,66,70,67,75
+LM|Eom Ji Sung|KOR|?|71|85,64,63,73,36,65
+LM|Zeidane Inoussa|SWE|?|70|84,66,64,72,36,66
+RM|Ronald|BRA|?|70|85,64,63,71,36,57
+ST|Adam Idah|IRL|?|70|80,69,57,66,23,78
+CM|Melker Widell|SWE|?|68|71,61,67,70,58,66
+RB|Josh Key|ENG|?|68|81,50,60,67,61,71
+CDM|Jay Fulton|SCO|?|68|52,58,64,66,66,71
+RB|Filip Lissah|CZE|?|68|68,44,58,67,66,66
+CB|Stephen Welsh|SCO|?|68|63,31,57,62,67,70
+LM|Moussa Yeo|MLI|?|67|73,62,64,70,53,45
+GK|Andy Fisher|ENG|?|66|66,64,68,67,34,65
+ST|Florian Bianchini|FRA|?|65|83,64,60,67,30,57
+GK|Paul Farman|ENG|?|63|63,58,63,64,43,64
+`,
+  "eng-wat": `
+CM|Imrân Louza|MAR|?|74|59,69,73,74,65,67
+CM|Martín Payero|ARG|?|73|66,67,72,77,66,70
+CM|Edoardo Bove|ITA|?|72|60,69,70,74,73,62
+GK|Federico Ravaglia|ITA|?|72|74,67,70,76,37,72
+LB|Marc Bola|ENG|?|72|83,42,58,67,68,73
+RB|Jeremy Ngakia|COD|?|71|72,49,62,68,68,64
+LB|Jordan Zemura|ZIM|?|71|70,55,66,71,67,50
+CM|Edo Kayembe|COD|?|70|71,67,69,70,67,78
+RB|Omar Traoré|GER|?|70|76,54,61,69,66,69
+RM|Othmane Maamma|MAR|?|70|75,63,64,74,29,67
+CB|Mattie Pollock|ENG|?|70|51,27,49,50,71,78
+CDM|Hector Kyprianou|CYP|?|69|63,59,60,64,67,75
+RM|Kwadwo Baah|GER|?|68|88,63,60,70,31,65
+LM|Rocco Vata|IRL|?|68|85,65,61,71,32,53
+CB|Kévin Keben|CMR|?|68|64,32,51,56,68,71
+ST|Luca Kjerrumgaard|DEN|?|68|68,67,52,62,22,70
+ST|Mamadou Doumbia|MLI|?|67|66,66,50,63,22,70
+GK|Daniel Bachmann|AUT|?|66|66,65,61,66,45,65
+ST|Iker Bravo|ESP|?|66|63,67,59,70,26,59
+GK|Sam Walker|ENG|?|65|65,63,62,65,42,63
+RM|Amin Nabizada|ENG|?|60|69,56,57,63,25,38
+RM|Jack Grieves|ENG|?|59|73,57,55,59,49,61
+RB|Albert Eames|ENG|?|58|67,36,50,57,55,56
+RM|Michael Adu-Poku|ENG|?|57|80,53,50,56,18,63
+`,
+  "eng-wba": `
+CM|Felix Horn Myhre|NOR|?|73|72,67,72,74,68,72
+LM|Mikey Johnston|IRL|?|72|86,69,64,76,29,48
+CAM|Isaac Price|NIR|?|71|66,67,69,70,64,70
+LB|Callum Styles|HUN|?|71|68,62,67,71,66,66
+CB|Chris Mepham|WAL|?|71|46,37,54,59,72,72
+CB|Nat Phillips|ENG|?|71|48,30,50,51,70,76
+GK|Max O'Leary|IRL|?|70|70,68,68,72,43,69
+CDM|Rabby Nzingoula|FRA|?|70|68,49,56,66,70,74
+CDM|Jayson Molumby|IRL|?|70|58,54,65,68,64,66
+CB|Krystian Bielik|POL|?|70|52,45,62,60,69,77
+CDM|Ousmane Diakité|MLI|?|69|68,57,63,63,66,78
+ST|Aune Selland Heggebø|NOR|?|69|68,69,55,68,25,78
+CB|George Campbell|USA|?|69|76,34,45,62,67,78
+LB|Conor Townsend|ENG|?|68|64,46,64,67,68,63
+RB|Nolan Galves|FRA|?|68|79,37,65,60,62,68
+GK|Matt Ingram|ENG|?|67|68,65,66,69,44,66
+ST|Barney Stewart|SCO|?|67|62,66,54,60,32,66
+CAM|Jimmy-Jay Morgan|ENG|?|65|77,63,58,66,21,60
+CAM|Tammer Bany|JOR|?|63|69,63,56,64,24,60
+CAM|Ollie Bostock|WAL|?|60|70,55,57,62,41,48
+CM|Harry Whitwell|ENG|?|58|64,53,57,60,54,58
+RB|Alex Williams|WAL|?|56|63,39,51,55,52,53
+GK|Joe Wallis|NZL|?|55|55,54,54,55,26,54
+`,
+  "eng-whu": `
+CDM|Edson Álvarez|MEX|?|77|66,58,68,72,78,82
+CM|Arne Engels|BEL|?|74|73,71,75,70,68,75
+CAM|Divine Mukasa|ENG|?|69|68,67,69,70,58,60
+CB|Kaelan Casey|ENG|?|63|55,34,43,48,63,66
+CB|Ezra Mayers|ENG|?|60|67,28,39,44,59,66
+CB|Maximilian Kilman|ENG|?|74|54,42,65,63,74,75
+CB|Jean-Clair Todibo|FRA|?|76|74,47,62,66,76,75
+CDM|Lewis Orford|ENG|?|61|61,46,59,59,57,61
+CDM|Mohamadou Kanté|FRA|?|63|65,43,55,61,61,67
+CDM|Soungoutou Magassa|FRA|?|73|54,49,66,64,72,73
+CDM|Tomáš Souček|CZE|?|76|38,72,69,65,77,78
+CM|James Ward-Prowse|ENG|?|74|40,74,80,73,67,55
+GK|Alphonse Areola|FRA|?|75|75,74,72,76,44,75
+GK|Mads Hermansen|DEN|?|74|75,73,75,75,49,73
+LB|El Hadji Malick Diouf|SEN|?|78|79,67,73,75,74,75
+LB|Oliver Scarles|ENG|?|71|69,48,65,68,70,64
+LM|Keiber Lamadrid|VEN|?|70|71,64,68,71,55,63
+LM|Manor Solomon|ISR|?|76|84,72,72,79,43,41
+LM|Maxwel Cornet|CIV|?|73|82,74,69,74,66,56
+RB|Joël Veltman|NED|?|77|63,50,68,71,79,75
+RB|Kyle Walker-Peters|ENG|?|76|76,47,68,76,73,64
+RM|Jarrod Bowen|ENG|?|83|75,81,78,82,46,71
+ST|Joël Piroe|SUR|?|74|64,76,65,72,29,66
+ST|Pablo|POR|?|73|69,73,64,71,36,69
+ST|Taty Castellanos|ARG|?|78|72,78,71,77,45,73
+CB|Konstantinos Mavropanos|GRE|?|78|71,56,54,58,78,79
+`,
+  "eng-wol": `
+CB|Ladislav Krejčí|CZE|?|78|71,68,68,68,76,84
+CDM|André|BRA|?|78|57,58,74,77,74,72
+ST|Raúl Jiménez|MEX|?|78|54,79,73,73,46,75
+RB|Kieran Trippier|ENG|?|77|54,63,82,74,78,66
+CM|Marshall Munetsi|ZIM|?|76|65,71,70,70,74,78
+CB|Santiago Bueno|URU|?|76|50,31,56,56,77,77
+GK|José Sá|POR|?|75|76,74,70,76,51,73
+LB|Hugo Bueno|ESP|?|75|73,56,74,78,70,68
+CB|Toti|POR|?|75|77,47,65,66,75,76
+CM|Jean-Ricner Bellegarde|HAI|?|74|79,64,72,79,70,63
+CAM|Mateus Mané|POR|?|74|77,70,74,76,51,64
+GK|Sam Johnstone|ENG|?|74|75,73,68,75,41,73
+LW|Rodrigo Gomes|POR|?|74|79,69,67,76,58,51
+ST|Saša Kalajdžić|AUT|?|74|50,72,69,68,45,64
+CM|Jordan James|WAL|?|73|60,69,70,72,66,70
+LB|David Møller Wolfe|NOR|?|73|75,53,66,69,67,73
+ST|Hwang Hee Chan|KOR|?|73|74,74,69,74,39,67
+ST|Adam Armstrong|ENG|?|73|73,74,66,73,35,68
+RW|Fer López|ESP|?|73|67,68,74,74,39,53
+CB|Yerson Mosquera|COL|?|73|81,30,50,53,72,76
+RB|Jackson Tchatchoua|CMR|?|72|94,59,60,69,66,76
+CDM|Tommy Doyle|ENG|?|72|65,66,73,74,67,62
+LM|Rafiki Saïd|COM|?|72|84,69,62,75,25,66
+RB|Ki-Jana Hoever|NED|?|71|72,55,67,70,67,70
+CDM|Boubacar Traoré|MLI|?|71|64,53,68,71,66,73
+CB|Nasser Djiga|BFA|?|70|67,27,48,57,70,73
+RB|Pedro Lima|BRA|?|68|75,48,67,71,65,57
+RW|Tom Edozie|ENG|?|65|77,62,57,66,36,50
+LM|Tawanda Chirewa|ZIM|?|64|80,56,58,68,39,55
+LW|Enso González|PAR|?|63|77,52,58,69,35,38
+`,
+  "eng-wre": `
+CAM|Josh Windass|ENG|?|73|82,73,69,74,35,66
+CDM|Ben Sheaf|ENG|?|73|54,56,71,71,72,73
+GK|Anthony Patterson|ENG|?|73|73,71,72,75,30,70
+CB|Callum Doyle|ENG|?|73|58,44,67,67,73,76
+LB|Liberato Cacace|NZL|?|72|71,60,67,71,69,73
+CM|Lewis O'Brien|ENG|?|72|63,62,66,75,68,72
+CDM|Ben Whiteman|ENG|?|72|57,63,70,67,69,75
+LM|Nathan Broadhead|WAL|?|72|75,72,69,73,37,67
+ST|Kieffer Moore|WAL|?|72|63,70,56,66,45,81
+CB|Dominic Hyam|SCO|?|72|51,32,54,58,73,76
+LB|George Thomason|ENG|?|70|61,61,68,69,67,72
+CM|George Dobson|ENG|?|70|52,59,68,68,68,77
+GK|Danny Ward|WAL|?|70|71,69,68,69,46,68
+CDM|Matty James|ENG|?|70|50,62,71,65,67,69
+CB|Conor Coady|ENG|?|70|40,56,70,63,72,65
+CB|Zak Vyner|KEN|?|70|68,38,56,62,70,72
+CB|Max Cleworth|ENG|?|70|66,29,56,63,69,75
+CM|Oliver Rathbone|ENG|?|69|81,64,64,70,64,76
+RB|Danny Imray|ENG|?|69|83,56,62,67,62,74
+RB|Ryan Longman|ENG|?|68|77,66,62,68,62,73
+ST|Davis Keillor-Dunn|ENG|?|68|79,68,63,71,39,64
+ST|Sam Smith|ENG|?|68|72,66,57,65,42,75
+CB|Dan Scarr|ENG|?|68|51,40,46,51,67,77
+CM|Elliot Lee|ENG|?|67|67,66,65,68,60,68
+ST|Bailey Cadamarteri|JAM|?|65|76,63,51,63,32,63
+LB|Sebastian Revan|ENG|?|64|66,44,55,62,60,60
+GK|Callum Burton|ENG|?|62|63,61,60,63,43,59
+CM|Harry Ashfield|WAL|?|58|62,52,55,57,50,56
+CB|Aaron James|ENG|?|55|67,27,38,46,55,64
+CM|Alex Moore|ENG|?|53|66,45,53,56,47,51
+`,
+};
