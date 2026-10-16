@@ -7,6 +7,7 @@ import { useGame } from "../_ui/ManagerContext";
 import { Crest, Empty, Section, playerName } from "../_ui/kit";
 import { getManagedClub } from "../../game/manager/engine";
 import { AwardsPanel, LeadersPanel } from "../_ui/WorldPanels";
+import { CupsPanel, TrophiesPanel } from "../_ui/CupsPanel";
 import { fixtureDate, worldCalendar } from "../../game/domain/calendar";
 
 export default function CompetitionPage() {
@@ -143,7 +144,9 @@ export default function CompetitionPage() {
           <div className="mg-col-6 mg-stack"><LeadersPanel world={state.world} leagueId="all" /></div>
         </div>
       )}
+      {state.world.dataset === "cp" && <CupsPanel world={state.world} me={club.id} />}
       {state.world.dataset === "cp" && <AwardsPanel world={state.world} leagueId={leagueId} />}
+      {state.world.dataset === "cp" && <TrophiesPanel world={state.world} me={club.id} />}
     </div>
   );
 }

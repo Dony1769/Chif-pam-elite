@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { Crest, Section } from "../../manager/_ui/kit";
 import { AwardsPanel, LeadersPanel } from "../../manager/_ui/WorldPanels";
+import { CupsPanel, TrophiesPanel } from "../../manager/_ui/CupsPanel";
 import { myClub } from "../../game/player2/engine";
 import { worldCalendar } from "../../game/domain/calendar";
 
@@ -55,7 +56,9 @@ export default function WorldPage() {
           <LeadersPanel world={w} leagueId={scope === "all" ? "all" : leagueId} highlight={state.profile.id} />
         </div>
       </div>
+      <CupsPanel world={w} me={club.id} nation={state.profile.nationality} />
       <AwardsPanel world={w} leagueId={leagueId} highlight={state.profile.id} />
+      <TrophiesPanel world={w} me={club.id} nation={state.profile.nationality} />
     </div>
   );
 }

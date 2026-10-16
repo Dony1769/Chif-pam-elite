@@ -49,13 +49,16 @@ const MONTH_OF_WEEK: Record<number, string> = { 9: "août", 14: "septembre", 18:
 
 const MAX_AWARDS = 600;
 
-interface Line { p: WorldPlayer; st: WorldPlayerSeasonStats | null; leagueId: string; tier: number; pos: number; n: number }
+interface Line { p: WorldPlayer; st: WorldPlayerSeasonStats | null; leagueId: string; tier: number; pos: number; n: number; cup: number; titles: number }
 
 /** Lignes de saison (stats agrégées par joueur et par ligue principale). */
 function seasonLines(w: WorldLiveState, season: number): Line[] {
   const byPlayer = new Map<string, WorldPlayerSeasonStats>();
+  const leagueIds = new Set(w.leagues.map(l => l.id));
+  const cupContrib = new Map<string, number>();
   for (const st of w.playerStats) {
     if (st.season !== season) continue;
+    if (!leagueIds.has(st.leagueId)) { cupContrib.set(st.playerId, (cupContrib.get(st.playerId) ?? 0) + st.goals * 1.1 + st.assists * 0.85); continue; }
     const cur = byPlayer.get(st.playerId);
     if (!cur) byPlayer.set(st.playerId, { ...st });
     else byPlayer.set(st.playerId, {
@@ -72,13 +75,20 @@ function seasonLines(w: WorldLiveState, season: number): Line[] {
     const i = sorted.findIndex(r => r.clubId === clubId);
     return { pos: i < 0 ? rows.length : i + 1, n: rows.length || 20 };
   };
+  // Titres de la saison (coupes d'Europe, coupe nationale, tournoi des sélections)
+  const TITLE_BONUS: Record<string, number> = { ucl: 10, uel: 5, euro: 8, wc: 10 };
+  const titleBy = new Map<string, number>();
+  for (const t of w.trophies ?? []) {
+    if (t.season !== season) continue;
+    titleBy.set(t.winner, (titleBy.get(t.winner) ?? 0) + (TITLE_BONUS[t.compId] ?? 3));
+  }
   const out: Line[] = [];
   for (const p of w.players) {
     if (p.clubId === "retired" || p.clubId === "free") continue;
     const st = byPlayer.get(p.id) ?? null;
     const leagueId = st?.leagueId ?? p.leagueId;
     const { pos, n } = rankIn(leagueId, st?.clubId ?? p.clubId);
-    out.push({ p, st, leagueId, tier: leagueTier.get(leagueId) ?? 2, pos, n });
+    out.push({ p, st, leagueId, tier: leagueTier.get(leagueId) ?? 2, pos, n, cup: cupContrib.get(p.id) ?? 0, titles: (titleBy.get(p.clubId) ?? 0) + (titleBy.get(p.nationality) ?? 0) });
   }
   return out;
 }
@@ -94,7 +104,7 @@ function score(l: Line, matchdays: number): number {
   const rating = ((st?.avgRating ?? 6.5) - 6.5) * 12;
   const team = l.pos === 1 ? 9 : l.pos <= 4 ? 5 : l.pos <= l.n / 2 ? 2 : 0;
   const division = l.tier === 1 ? 0 : -18;
-  return Math.round((l.p.overall * 1.25 + contrib + rating + team + division) * (0.35 + 0.65 * presence) * 10) / 10;
+  return Math.round((l.p.overall * 1.25 + contrib + l.cup * 0.8 + l.titles + rating + team + division) * (0.35 + 0.65 * presence) * 10) / 10;
 }
 
 const leagueMatchdays = (w: WorldLiveState, leagueId: string) => w.schedules[leagueId]?.totalMatchdays ?? 38;

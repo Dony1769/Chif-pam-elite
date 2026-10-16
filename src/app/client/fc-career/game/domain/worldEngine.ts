@@ -22,6 +22,7 @@ import { inventPlayer } from "../data/cp/cpWorld";
 import { playerValue } from "./playerValue";
 import { weekDays } from "./calendar";
 import { runAwards } from "./worldAwards";
+import { runCompetitions } from "./competitions";
 import { advanceWorldSeason, buildInitialStandings, generateLeagueSchedule } from "./worldGenerator";
 import { computePromotionRelegation } from "./worldSimulator";
 import { createRng, seedFromString } from "../utils/random";
@@ -149,6 +150,11 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
     current = { ...current, playerStats: updatedPlayerStats };
   }
    }
+
+  // Monde CP : coupes nationales, coupes d'Europe et tournois des sélections
+  const cups = runCompetitions(current, current.currentWeek);
+  current = cups.world;
+  newsItems.push(...cups.news);
 
   // ── 2. Stocker les résultats récents (20 max) ─────────────────────────────
   current = {

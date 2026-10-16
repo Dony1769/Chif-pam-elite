@@ -13,7 +13,7 @@ import type { Fixture } from "./season";
 
 // ─── Types internes ───────────────────────────────────────────────────────────
 
-interface ClubSnapshot {
+export interface ClubSnapshot {
   clubId: string;
   players: WorldPlayer[];
   coach: WorldCoach | null;

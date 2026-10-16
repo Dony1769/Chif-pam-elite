@@ -21,8 +21,9 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
   const [kind, setKind] = useState<"goals" | "assists">("goals");
   const rows = useMemo(() => {
     const agg = new Map<string, { id: string; clubId: string; goals: number; assists: number; apps: number }>();
+    const leagueIds = new Set(world.leagues.map(l => l.id));
     for (const st of world.playerStats) {
-      if (st.season !== world.season || (leagueId !== "all" && st.leagueId !== leagueId)) continue;
+      if (st.season !== world.season || (leagueId === "all" ? !leagueIds.has(st.leagueId) : st.leagueId !== leagueId)) continue;
       const cur = agg.get(st.playerId) ?? { id: st.playerId, clubId: st.clubId, goals: 0, assists: 0, apps: 0 };
       agg.set(st.playerId, { ...cur, goals: cur.goals + st.goals, assists: cur.assists + st.assists, apps: cur.apps + st.appearances });
     }

@@ -145,6 +145,12 @@ export interface WorldLiveState {
   awards?: import("./worldAwards").WorldAward[];
   /** Monde CP : buts + passes au dernier « joueur du mois » */
   awardSnap?: Record<string, number>;
+  /** Monde CP : coupes nationales, coupes d'Europe CP et tournois des sélections de la saison */
+  competitions?: import("./competitions").Competition[];
+  /** Monde CP : palmarès des compétitions à élimination */
+  trophies?: import("./competitions").TrophyRecord[];
+  /** Monde CP : clubs qualifiés pour les coupes d'Europe de la saison suivante */
+  continentalNext?: { forSeason: number; ucl: string[]; uel: string[] };
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
