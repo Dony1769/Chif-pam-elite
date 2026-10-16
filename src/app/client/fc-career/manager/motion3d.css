@@ -1,0 +1,191 @@
+/*
+ * FC CAREER 27 — Couche « Orbital » : nuit cobalt, solides parfaits en 3D (Stage3D),
+ * surfaces en dalles épaisses (2,5D), boutons-touches qui s'enfoncent, onde au clic,
+ * inclinaison 3D au survol, titres condensés en Hubot Sans.
+ * Chargée après manager.css : elle ne redéfinit que les jetons et la matière.
+ */
+
+.mg-app {
+  --mg-bg: #040A2A;
+  --mg-bg-2: #071240;
+  --mg-panel: #0B1650;
+  --mg-panel-2: #12206A;
+  --mg-glass: rgba(10, 20, 78, 0.62);
+  --mg-glass-strong: rgba(7, 14, 58, 0.82);
+  --mg-line: rgba(160, 190, 255, 0.14);
+  --mg-line-2: rgba(170, 200, 255, 0.26);
+  --mg-text: #EEF2FF;
+  --mg-text-2: #A7B4E6;
+  --mg-text-3: #6F7FC0;
+  --mg-cyan: #5CE1FF;
+  --mg-blue: #4B7BFF;
+  /* Dalle : face, tranche et ombre portée */
+  --slab-face: linear-gradient(165deg, rgba(40, 66, 190, 0.55) 0%, rgba(13, 24, 96, 0.72) 42%, rgba(6, 12, 58, 0.82) 100%);
+  --slab-edge: #050B33;
+  --slab-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 -1px 0 rgba(0, 0, 0, 0.35) inset,
+                 0 6px 0 -1px var(--slab-edge), 0 7px 0 -1px rgba(120, 160, 255, 0.18),
+                 0 24px 40px -12px rgba(0, 0, 20, 0.85);
+  --mg-display: var(--font-hubot), 'Inter', system-ui, sans-serif;
+  --mg-body: var(--font-mona), 'Inter', system-ui, sans-serif;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  background: transparent;
+  font-family: var(--mg-body);
+}
+.mg-app::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(92, 140, 255, 0.28), transparent 70%),
+    radial-gradient(ellipse 90% 60% at 50% 120%, rgba(30, 60, 220, 0.35), transparent 70%),
+    linear-gradient(180deg, rgba(4, 10, 42, 0.15), rgba(4, 10, 42, 0.55));
+}
+.mg-app::after { opacity: 0.35; }
+
+/* Scène 3D fixe derrière tout le jeu */
+.mg-stage { position: fixed; inset: 0; z-index: -2; pointer-events: none; }
+.mg-stage canvas { width: 100% !important; height: 100% !important; }
+.mg-stage--flat {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(120, 160, 255, 0.35) 0 6%, transparent 7%),
+    radial-gradient(circle at 82% 30%, rgba(185, 255, 57, 0.18) 0 4%, transparent 5%),
+    radial-gradient(ellipse at 50% 0%, #1a35b8 0%, #040a2a 65%);
+}
+
+/* ── Typographie ─────────────────────────────────────────────── */
+.mg-app h1, .mg-app h2, .mg-app h3,
+.mg-top__id strong, .mg-kpi b, .mg-top__kpis dd, .pc-status, .pc-card__ovr b, .pc-card__name, .mg-score__goals {
+  font-family: var(--mg-display);
+  font-stretch: 75%;
+}
+.mg-pagehead h1 {
+  font-size: clamp(38px, 8vw, 72px); font-weight: 900; letter-spacing: -0.01em; line-height: 0.88;
+  background: linear-gradient(180deg, #FFFFFF 30%, #9DB6FF 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 6px 18px rgba(60, 110, 255, 0.45));
+}
+.mg-top__id strong { font-size: 28px; font-weight: 900; letter-spacing: 0.01em; }
+.pc-status { font-size: 40px; font-weight: 900; letter-spacing: 0.01em; text-shadow: 0 0 28px currentColor; }
+.mg-card__head h2 { font-family: var(--mg-display); font-stretch: 100%; font-size: 13px; letter-spacing: 0.14em; color: var(--mg-text-2); }
+
+/* ── En-tête et onglets ──────────────────────────────────────── */
+.mg-top {
+  background: linear-gradient(100deg, color-mix(in srgb, var(--club) 45%, transparent) 0%, rgba(8, 16, 70, 0.55) 45%, rgba(8, 16, 70, 0.25) 100%);
+  backdrop-filter: blur(10px); border-bottom: 1px solid var(--mg-line);
+}
+.mg-tabs { background: rgba(4, 10, 42, 0.78); backdrop-filter: blur(14px) saturate(1.4); }
+.mg-tab { transition: color var(--mg-dur), transform 160ms var(--spring); }
+.mg-tab.is-active { color: #fff; border-bottom-color: var(--mg-accent); text-shadow: 0 0 16px rgba(185, 255, 57, 0.6); }
+.mg-tab:active { transform: translateY(2px) scale(0.97); }
+
+/* ── Dalles (cartes) ─────────────────────────────────────────── */
+.mg-app .mg-card {
+  background: var(--slab-face);
+  border: 1px solid var(--mg-line-2);
+  border-radius: 20px;
+  box-shadow: var(--slab-shadow);
+  backdrop-filter: blur(14px) saturate(1.3);
+  transition: transform 260ms var(--mg-ease), box-shadow 260ms var(--mg-ease);
+}
+@media (hover: hover) {
+  .mg-app .mg-card:hover { transform: translateY(-3px); box-shadow: var(--slab-shadow), 0 30px 60px -18px rgba(40, 90, 255, 0.45); }
+}
+.mg-app .mg-card--accent {
+  border-color: rgba(185, 255, 57, 0.45);
+  background: linear-gradient(165deg, rgba(185, 255, 57, 0.16) 0%, rgba(20, 40, 150, 0.6) 35%, rgba(6, 12, 58, 0.85) 100%);
+  box-shadow: var(--slab-shadow), 0 0 70px -10px rgba(185, 255, 57, 0.28);
+}
+
+/* Tuiles de chiffres : petits blocs en relief */
+.mg-app .mg-kpi {
+  border-radius: 14px; border: 1px solid var(--mg-line-2);
+  background: linear-gradient(180deg, rgba(70, 100, 255, 0.28), rgba(10, 20, 80, 0.7));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 4px 0 -1px var(--slab-edge), 0 14px 24px -12px rgba(0, 0, 0, 0.8);
+}
+.mg-app .mg-kpi b { font-size: 34px; line-height: 1; color: #fff; }
+
+/* ── Boutons-touches : tranche visible, enfoncement au clic ─── */
+.mg-app .mg-btn {
+  position: relative; overflow: hidden; isolation: isolate;
+  border-radius: 14px; border: 1px solid var(--mg-line-2);
+  background: linear-gradient(180deg, rgba(80, 112, 255, 0.45), rgba(20, 36, 140, 0.75));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 5px 0 var(--slab-edge), 0 12px 20px -8px rgba(0, 0, 0, 0.7);
+  transform: translateY(0);
+  transition: transform 140ms var(--spring), box-shadow 140ms var(--mg-ease), filter 160ms;
+}
+.mg-app .mg-btn:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+.mg-app .mg-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 1px 0 var(--slab-edge), 0 4px 10px -6px rgba(0, 0, 0, 0.7);
+}
+.mg-app .mg-btn--gold, .mg-app .mg-btn--green {
+  color: #061000; border: none;
+  background: linear-gradient(180deg, #E4FF8A 0%, #B9FF39 45%, #8FD61A 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 6px 0 #4E7F06, 0 18px 30px -10px rgba(185, 255, 57, 0.55);
+  font-family: var(--mg-display); font-stretch: 85%; font-weight: 900; letter-spacing: 0.04em;
+}
+.mg-app .mg-btn--gold:active:not(:disabled), .mg-app .mg-btn--green:active:not(:disabled) {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 0 #4E7F06, 0 6px 14px -6px rgba(185, 255, 57, 0.5);
+}
+.mg-app .mg-btn--gold::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.55) 48%, transparent 66%);
+  transform: translateX(-120%); animation: mg-sheen 3.6s var(--mg-ease) infinite;
+}
+@keyframes mg-sheen { 0%, 55% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
+
+.mg-app .mg-seg { background: rgba(4, 10, 42, 0.6); border-radius: 12px; }
+.mg-app .mg-seg button { transition: transform 140ms var(--spring), background var(--mg-dur); position: relative; overflow: hidden; }
+.mg-app .mg-seg button[aria-pressed="true"] { background: linear-gradient(180deg, rgba(92, 140, 255, 0.6), rgba(30, 50, 170, 0.8)); color: #fff; box-shadow: 0 3px 0 var(--slab-edge); }
+.mg-app .mg-seg button:active { transform: translateY(2px); }
+.mg-app .pc-option { position: relative; overflow: hidden; background: linear-gradient(180deg, rgba(70, 100, 255, 0.3), rgba(10, 20, 80, 0.75)); box-shadow: 0 4px 0 var(--slab-edge); transition: transform 140ms var(--spring), box-shadow 140ms; }
+.mg-app .pc-option:active { transform: translateY(3px) scale(0.99); box-shadow: 0 1px 0 var(--slab-edge); }
+
+/* Onde lumineuse au clic */
+.mg-ripple {
+  position: absolute; border-radius: 50%; pointer-events: none; z-index: 2;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, rgba(160, 200, 255, 0.25) 35%, transparent 65%);
+  transform: scale(0); animation: mg-ripple 620ms var(--mg-ease) forwards;
+}
+@keyframes mg-ripple { to { transform: scale(1); opacity: 0; } }
+
+/* ── Tableaux ────────────────────────────────────────────────── */
+.mg-app .mg-table tr { transition: background 160ms; }
+.mg-app .mg-table tr.is-me td { background: color-mix(in srgb, var(--club) 26%, rgba(40, 70, 220, 0.25)); }
+.mg-app .mg-table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--mg-accent); }
+.mg-app .mg-select { border-radius: 12px; background: rgba(8, 16, 70, 0.8); border: 1px solid var(--mg-line-2); box-shadow: 0 3px 0 var(--slab-edge); }
+
+/* ── Inclinaison 3D (data-tilt) et carte joueur holographique ─ */
+[data-tilt] {
+  transform-style: preserve-3d;
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 500ms var(--mg-ease);
+  will-change: transform;
+}
+[data-tilt].is-tilting { transition: transform 80ms linear; }
+.pc-card {
+  box-shadow: 0 2px 0 rgba(255, 255, 255, 0.5) inset, 0 8px 0 -2px color-mix(in srgb, var(--tone) 55%, #000),
+              0 30px 60px -10px rgba(0, 0, 0, 0.75), 0 0 80px -20px var(--tone);
+}
+.pc-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; mix-blend-mode: overlay;
+  background:
+    radial-gradient(circle at var(--mx, 30%) var(--my, 20%), rgba(255, 255, 255, 0.75), transparent 45%),
+    linear-gradient(115deg, transparent 20%, rgba(120, 220, 255, 0.35) 40%, rgba(255, 120, 230, 0.3) 55%, transparent 75%);
+  opacity: 0.55; transition: opacity 300ms;
+}
+[data-tilt].is-tilting.pc-card::before { opacity: 0.95; }
+.pc-card > * { transform: translateZ(28px); }
+.pc-card__ovr b { font-size: 56px; }
+
+/* Entrée des dalles : une seule séquence au chargement de la page */
+@media (prefers-reduced-motion: no-preference) {
+  .mg-main > * { animation: mg-rise 520ms var(--mg-ease) both; }
+  .mg-main > *:nth-child(2) { animation-delay: 60ms; }
+  .mg-main > *:nth-child(3) { animation-delay: 120ms; }
+  .mg-main > *:nth-child(4) { animation-delay: 180ms; }
+  .mg-main > *:nth-child(n + 5) { animation-delay: 240ms; }
+}
+@keyframes mg-rise { from { opacity: 0; transform: translateY(18px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-tilt], .mg-app .mg-btn, .mg-app .mg-card { transition: none; transform: none !important; }
+  .mg-ripple, .mg-app .mg-btn--gold::after { animation: none; display: none; }
+}

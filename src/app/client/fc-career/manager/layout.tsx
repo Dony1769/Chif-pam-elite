@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { fontVars } from "./_ui/fonts";
 import { ManagerProvider } from "./_ui/ManagerContext";
 import { Shell } from "./_ui/Shell";
 import "./manager.css";
+import "./motion3d.css";
 
 export const metadata: Metadata = {
   title: "FC Career 27 - Carrière Manager",
@@ -10,8 +12,10 @@ export const metadata: Metadata = {
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   return (
+    <div className={fontVars}>
     <ManagerProvider>
       <Shell>{children}</Shell>
     </ManagerProvider>
+    </div>
   );
 }

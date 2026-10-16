@@ -16,7 +16,7 @@ export function PlayerCard({ name, overall, position, attrs, club, potential, co
   const short = position === "GK" ? GK_ATTR_SHORT : ATTR_SHORT;
   const tier = overall >= 80 ? "gold" : overall >= 70 ? "silver" : "bronze";
   return (
-    <div className={`pc-card pc-card--${tier}${compact ? " pc-card--compact" : ""}`} style={{ ["--club" as string]: club?.colors.primary ?? "#B9FF39" }}
+    <div data-tilt className={`pc-card pc-card--${tier}${compact ? " pc-card--compact" : ""}`} style={{ ["--club" as string]: club?.colors.primary ?? "#B9FF39" }}
       role="img" aria-label={`${name}, ${POS_FR[position] ?? position}, note ${overall}`}>
       <div className="pc-card__top">
         <div className="pc-card__ovr">

@@ -2,6 +2,7 @@
 
 /** FC CAREER 27 — Carrière Joueur v2 : coquille (en-tête joueur, onglets, notifications). */
 
+import { Backdrop } from "../../manager/_ui/Backdrop";
 import React, { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -41,6 +42,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mg-app" ref={appRef}>
+      <Backdrop club={club?.colors.primary} />
       <GameBar />
       {state && club && p && !onNew && (
         <>

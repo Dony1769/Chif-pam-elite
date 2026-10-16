@@ -2,6 +2,7 @@
 
 /** FC CAREER 27 — Mode Manager : coquille (en-tête club, onglets, notifications). */
 
+import { Backdrop } from "./Backdrop";
 import React, { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -43,6 +44,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mg-app" ref={appRef}>
+      <Backdrop club={club?.colors.primary} />
       <GameBar />
       {state && club && !onNewGame && (
         <>
