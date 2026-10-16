@@ -3,7 +3,7 @@
  */
 
 import { generateWorld } from "../../domain/worldGenerator";
-import { alterName, cpValue, parseLines, regenFrom, REAL_ROSTERS } from "../../data/cp/cpWorld";
+import { alterName, cpValue, parseFc27, parseLines, regenFrom, REAL_ROSTERS } from "../../data/cp/cpWorld";
 import { CP_CLUBS, CP_LEAGUES } from "../../data/cp/clubs";
 import {
   buildLeagueWeeks, FIFA_WEEKS, formatDate, matchDate, seasonLabel, seasonStart, transferWindow, weekDays,
@@ -30,7 +30,7 @@ describe("Monde CP", () => {
     expect(alterName("", "Pedri")).toEqual({ firstName: "", lastName: "Pedra" });
     const star = world.players.find(p => p.lastName === "Haalend")!;
     expect(star.clubId).toBe("eng-mci");
-    expect(star.overall).toBe(90);
+    expect(star.overall).toBe(91); // note officielle FC 27
     expect(star.face?.sho).toBe(92);
     expect(star.playStyles!.length).toBeGreaterThanOrEqual(5);
     expect(world.players.some(p => p.firstName === "Erling" && p.lastName === "Haaland")).toBe(false);
@@ -52,6 +52,25 @@ describe("Monde CP", () => {
     expect(gk.face.def).toBe(89); // placement
     expect(gk.face.phy).toBe(47); // vitesse
     expect(parseLines("CM|X|Y|ESP|2000|0|0|0,0,0,0,0,0|0|0|R")).toHaveLength(0);
+  });
+
+  test("FC 27 : postes EA convertis, nom complet découpé, âge repris ou déduit", () => {
+    const [a, b, c] = parseFc27("CDM|Declan Rice|ENG|1999|88|72,75,86,81,85,84\nLM|Kevin|BRA|?|76|82,70,70,82,33,58\nGK|Jan Oblak|SVN|?|88|85,90,79,87,46,86");
+    expect(a).toMatchObject({ pos: "DM", first: "Declan", last: "Rice", yob: 1999, ovr: 88 });
+    expect(b).toMatchObject({ pos: "LW", first: "", last: "Kevin" });
+    expect(2026 - b.yob).toBeGreaterThanOrEqual(21);
+    expect(c.face.def).toBe(86); // placement du gardien
+  });
+
+  test("saison 2026-27 : promus et relégués de 2026", () => {
+    const league = (id: string) => world.clubs.find(c => c.id === id)?.leagueId;
+    expect(league("eng-cov")).toBe("eng-1");
+    expect(league("eng-whu")).toBe("eng-2");
+    expect(league("esp-rac")).toBe("esp-1");
+    expect(league("ita-ver")).toBe("ita-2");
+    expect(league("ger-s04")).toBe("ger-1");
+    expect(league("fra-fcn")).toBe("fra-2");
+    expect(league("eng-lei")).toBeUndefined();
   });
 
   test("valeurs à l'échelle réelle", () => {

@@ -17,6 +17,7 @@ import { ITA1 } from "./players/ita1";
 import { GER1 } from "./players/ger1";
 import { FRA1 } from "./players/fra1";
 import { D2 } from "./players/d2";
+import { FC27_ROSTERS } from "./fc27";
 import { faceOf, overallFromSubs, subsForTarget, subsFromFace } from "../../player2/subAttributes";
 import { playStylesFor } from "../../player2/playstyles";
 import { createRng, seedFromString } from "../../utils/random";
@@ -109,6 +110,79 @@ export function parseLines(block: string): RealLine[] {
 
 export const REAL_ROSTERS: Record<string, string> = { ...ENG1, ...ESP1, ...ITA1, ...GER1, ...FRA1, ...D2 };
 
+// ─── Listes officielles FC 27 ────────────────────────────────────────────────
+
+const EA_POS: Record<string, WorldPlayerPosition> = {
+  GK: "GK", CB: "CB", LB: "LB", LWB: "LB", RB: "RB", RWB: "RB", CDM: "DM", CM: "CM", CAM: "AM",
+  LM: "LW", LW: "LW", RM: "RW", RW: "RW", CF: "ST", ST: "ST",
+};
+const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z ]/g, "").trim();
+let legacyIndex: Map<string, RealLine> | null = null;
+/** Anciennes listes indexées par nom complet : on y reprend année de naissance, potentiel, pied faible, gestes. */
+function legacy(): Map<string, RealLine> {
+  if (legacyIndex) return legacyIndex;
+  legacyIndex = new Map();
+  for (const block of Object.values(REAL_ROSTERS)) {
+    for (const l of parseLines(block)) {
+      legacyIndex.set(norm(`${l.first} ${l.last}`), l);
+      if (!l.first) legacyIndex.set(norm(l.last), l);
+    }
+  }
+  return legacyIndex;
+}
+const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
+
+/** Âge plausible quand l'année de naissance est inconnue (selon la note). */
+function guessAge(ovr: number, h: number): number {
+  const [lo, hi] = ovr >= 80 ? [24, 31] : ovr >= 72 ? [21, 31] : ovr >= 65 ? [19, 30] : [17, 22];
+  return lo + (h % (hi - lo + 1));
+}
+function guessPot(ovr: number, age: number, h: number): number {
+  if (age <= 20) return Math.min(94, ovr + clamp((23 - age) * 3 + (h % 5), 4, 18));
+  if (age <= 23) return Math.min(94, ovr + 2 + (h % 6));
+  if (age <= 26) return ovr + (h % 4);
+  return ovr;
+}
+
+/** Lignes « POSTE EA|Nom complet|NAT|année|note|6 cases ». */
+export function parseFc27(block: string): RealLine[] {
+  const out: RealLine[] = [];
+  const idx = legacy();
+  for (const raw of block.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const [eaPos, name, nat, yobS, ovrS, faces] = line.split("|");
+    const pos = EA_POS[eaPos];
+    const ovr = Number(ovrS);
+    if (!pos || !ovr || !faces) continue;
+    const f = faces.split(",").map(Number);
+    const face: Face = pos === "GK"
+      ? { pac: f[0], sho: f[1], pas: f[2], dri: f[3], def: f[5], phy: f[4] }
+      : { pac: f[0], sho: f[1], pas: f[2], dri: f[3], def: f[4], phy: f[5] };
+    const words = name.trim().split(/\s+/);
+    const first = words.length > 1 ? words[0] : "";
+    const last = words.length > 1 ? words.slice(1).join(" ") : words[0];
+    const old = idx.get(norm(name));
+    const h = hash(name);
+    const yob = Number(yobS) || old?.yob || CP_SEASON_YEAR - guessAge(ovr, h);
+    const age = CP_SEASON_YEAR - yob;
+    const wide = ["LB", "LW"].includes(pos);
+    out.push({
+      pos, first, last, nat, yob, ovr,
+      pot: Math.max(ovr, old ? old.pot + (ovr - old.ovr) : guessPot(ovr, age, h)),
+      face,
+      wf: old?.wf ?? 2 + (h % 3),
+      sm: old?.sm ?? (pos === "GK" ? 1 : ["LW", "RW", "AM", "ST"].includes(pos) ? (face.dri >= 82 ? 4 : 3) : face.dri >= 80 ? 3 : 2),
+      foot: old?.foot ?? (wide && h % 3 !== 0 ? "left" : h % 5 === 0 ? "left" : "right"),
+    });
+  }
+  return out;
+}
+
+/** Effectif réel d'un club : FC 27 en priorité, sinon anciennes listes. */
+export const realLinesFor = (clubId: string): RealLine[] =>
+  FC27_ROSTERS[clubId] ? parseFc27(FC27_ROSTERS[clubId]) : parseLines(REAL_ROSTERS[clubId] ?? "");
+
 // ─── Construction des joueurs ────────────────────────────────────────────────
 
 const TEMPLATE: WorldPlayerPosition[] = ["GK", "GK", "GK", "CB", "CB", "CB", "CB", "LB", "LB", "RB", "RB", "DM", "DM", "CM", "CM", "CM", "AM", "AM", "LW", "LW", "RW", "RW", "ST", "ST", "ST"];
@@ -180,12 +254,18 @@ export function buildCpPlayers(seed: string): WorldPlayer[] {
   const seen = new Set<string>();
   for (const club of CP_CLUBS) {
     const rng = createRng(seedFromString(`${seed}-cp-${club.id}`));
-    const real = parseLines(REAL_ROSTERS[club.id] ?? "").filter(l => {
+    let real = realLinesFor(club.id).filter(l => {
       const key = `${l.first}|${l.last}|${l.yob}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+    // Au plus 30 joueurs : les 3 meilleurs gardiens et les 27 meilleurs joueurs de champ
+    if (real.length > 30) {
+      const byOvr = [...real].sort((a, b) => b.ovr - a.ovr);
+      const keep = new Set([...byOvr.filter(l => l.pos === "GK").slice(0, 3), ...byOvr.filter(l => l.pos !== "GK").slice(0, 27)]);
+      real = real.filter(l => keep.has(l));
+    }
     const squad: WorldPlayer[] = real.map((l, i) => {
       const { firstName, lastName } = alterName(l.first, l.last);
       return basePlayer({
