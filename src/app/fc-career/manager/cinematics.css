@@ -1,0 +1,45 @@
+/* FC CAREER 27 — Séquences animées (cérémonies, tirages, finales) */
+.cin {
+  position: fixed; inset: 0; z-index: 200; overflow-y: auto; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  color: #EEF2FF; font-family: var(--mg-body, system-ui);
+  background: radial-gradient(ellipse 70% 55% at 50% 35%, #1B33B5 0%, #070E3E 55%, #02051A 100%);
+}
+.cin--ceremony { background: radial-gradient(ellipse 70% 55% at 50% 35%, #4A3510 0%, #120C24 55%, #02051A 100%); }
+.cin.is-mine { background: radial-gradient(ellipse 70% 55% at 50% 35%, #3F6A0A 0%, #0C1C3A 55%, #02051A 100%); }
+.cin__beams { position: fixed; inset: 0; pointer-events: none; opacity: 0.55;
+  background: conic-gradient(from 200deg at 50% -10%, transparent 0deg, rgba(255, 255, 255, 0.16) 8deg, transparent 16deg, transparent 30deg, rgba(255, 255, 255, 0.12) 36deg, transparent 44deg, transparent 316deg, rgba(255, 255, 255, 0.12) 324deg, transparent 332deg);
+  animation: cin-sweep 6s ease-in-out infinite alternate; }
+@keyframes cin-sweep { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+.cin__head { text-align: center; z-index: 1; }
+.cin__kicker { margin: 0; font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: #A7B4E6; }
+.cin__title { margin: 6px 0 0; font-family: var(--mg-display, system-ui); font-stretch: 75%; font-weight: 900; font-size: clamp(34px, 9vw, 84px); line-height: 0.9; text-transform: uppercase;
+  background: linear-gradient(180deg, #fff 35%, #F6C84A); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 8px 30px rgba(246, 200, 74, 0.35)); }
+.cin__stage { width: min(420px, 90vw); height: min(340px, 42vh); flex-shrink: 0; }
+.cin__body { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 120px; z-index: 1; width: min(560px, 100%); }
+.cin__nominees { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.cin__nominees li { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.1); }
+.cin__nominees li.is-me { border-color: #B9FF39; background: rgba(185, 255, 57, 0.15); }
+.cin__nominees span { color: #A7B4E6; font-size: 13px; }
+.cin__rank { font-family: var(--mg-display, system-ui); font-weight: 900; font-size: 20px; color: #F6C84A !important; }
+.cin__suspense { font-family: var(--mg-display, system-ui); font-size: 30px; font-weight: 800; margin: 0; }
+.cin__score { font-size: 20px; font-weight: 700; margin: 0; color: #DCE3FF; text-align: center; }
+.cin__winner { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.cin__winner b { font-family: var(--mg-display, system-ui); font-stretch: 75%; font-size: clamp(36px, 10vw, 76px); font-weight: 900; line-height: 0.95; text-transform: uppercase; text-shadow: 0 0 40px rgba(246, 200, 74, 0.6); }
+.cin__winner span { margin-top: 6px; font-size: 16px; color: #F6C84A; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.cin__winner.is-me b { color: #B9FF39; text-shadow: 0 0 40px rgba(185, 255, 57, 0.7); }
+.cin__groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; width: min(980px, 100%); perspective: 900px; z-index: 1; }
+.cin__group { padding: 12px; border-radius: 18px; background: linear-gradient(165deg, rgba(60, 100, 255, 0.4), rgba(8, 16, 70, 0.85)); border: 1px solid rgba(170, 200, 255, 0.25); box-shadow: 0 6px 0 -1px #050B33, 0 20px 30px -12px rgba(0, 0, 0, 0.7); display: flex; flex-direction: column; gap: 6px; transform-origin: top center; }
+.cin__group h3 { margin: 0 0 4px; font-family: var(--mg-display, system-ui); font-size: 13px; letter-spacing: 0.16em; color: #A7B4E6; text-transform: uppercase; }
+.cin__ball { padding: 8px 10px; border-radius: 999px; background: radial-gradient(circle at 30% 25%, #ffffff, #DCE3FF 40%, #9DB0EE); color: #0A1460; font-weight: 800; font-size: 13px; box-shadow: 0 3px 0 #5B6FB8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cin__ball.is-me { background: radial-gradient(circle at 30% 25%, #F4FFD0, #B9FF39 45%, #7FC20F); box-shadow: 0 3px 0 #4E7F06, 0 0 24px rgba(185, 255, 57, 0.6); }
+.cin__foot { margin-top: auto; z-index: 1; padding-top: 8px; }
+.cin .cin__btn { cursor: pointer; border: none; border-radius: 14px; padding: 12px 26px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: #061000;
+  background: linear-gradient(180deg, #E4FF8A, #B9FF39); box-shadow: 0 5px 0 #4E7F06, 0 16px 30px -10px rgba(185, 255, 57, 0.6); transition: transform 120ms; }
+.cin__btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #4E7F06; }
+.cin__btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.cin-confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.cin-confetti i { position: absolute; top: -20px; width: 8px; height: 14px; border-radius: 2px; animation: cin-fall linear forwards; }
+@keyframes cin-fall { to { transform: translateY(110vh) rotate(720deg); } }
+@media (prefers-reduced-motion: reduce) { .cin__beams, .cin-confetti { display: none; } }

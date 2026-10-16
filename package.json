@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "jest --config jest.config.ts",
-    "test:reducer": "npx tsx src/app/client/fc-career/game/tests/unit/gameReducer.test.ts",
+    "test:reducer": "npx tsx src/app/fc-career/game/tests/unit/gameReducer.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

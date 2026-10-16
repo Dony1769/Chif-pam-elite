@@ -1,0 +1,46 @@
+.portal {
+  min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+  padding: 32px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px));
+  color: #EEF2FF; font-family: system-ui, -apple-system, sans-serif;
+  background:
+    radial-gradient(ellipse 60% 70% at 0% 50%, rgba(16, 185, 129, 0.22), transparent 70%),
+    radial-gradient(ellipse 60% 70% at 100% 50%, rgba(59, 107, 255, 0.32), transparent 70%),
+    #040A1C;
+}
+.portal__title { margin: 0; font-size: clamp(30px, 6vw, 56px); font-weight: 900; letter-spacing: -0.02em; text-align: center; }
+.portal__doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; width: min(980px, 100%); perspective: 1200px; }
+@media (max-width: 680px) { .portal__doors { grid-template-columns: 1fr; } }
+.portal__door {
+  position: relative; overflow: hidden; isolation: isolate;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  padding: 36px 20px 28px; border-radius: 28px; text-decoration: none; color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transform-style: preserve-3d;
+  transition: transform 450ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 450ms;
+}
+.portal__door--chifpam {
+  background: linear-gradient(165deg, #0E3B2E, #06150F 70%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 8px 0 -1px #021009, 0 30px 60px -20px rgba(16, 185, 129, 0.45);
+}
+.portal__door--fc {
+  background: linear-gradient(165deg, #1F3BC2, #08104A 70%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.14) inset, 0 8px 0 -1px #030828, 0 30px 60px -20px rgba(59, 107, 255, 0.6);
+}
+.portal__door:hover { transform: translateY(-6px) rotateX(4deg); }
+.portal__door:active { transform: translateY(2px) scale(0.99); transition-duration: 120ms; }
+.portal__door:focus-visible { outline: 3px solid #B9FF39; outline-offset: 4px; }
+.portal__glow { position: absolute; inset: -30%; z-index: -1; opacity: 0.5; transition: opacity 400ms;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.25), transparent 45%); }
+.portal__door:hover .portal__glow { opacity: 1; }
+.portal__logo { display: grid; place-items: center; height: 170px; filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.5)); transition: transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.portal__door:hover .portal__logo { transform: translateZ(40px) scale(1.06) rotate(-3deg); }
+.portal__name { font-size: 30px; font-weight: 900; letter-spacing: 0.02em; font-style: italic; }
+.portal__door--chifpam .portal__name b { color: #10B981; }
+.portal__door--fc .portal__name b { color: #B9FF39; }
+.portal__desc { font-size: 14px; color: rgba(238, 242, 255, 0.7); }
+.portal__cta {
+  margin-top: 10px; padding: 12px 22px; border-radius: 14px; font-weight: 800; letter-spacing: 0.03em;
+  color: #04120c; background: linear-gradient(180deg, #6EE7B7, #10B981); box-shadow: 0 5px 0 #065F46;
+}
+.portal__door--fc .portal__cta { color: #061000; background: linear-gradient(180deg, #E4FF8A, #B9FF39); box-shadow: 0 5px 0 #4E7F06; }
+@media (prefers-reduced-motion: reduce) { .portal__door, .portal__logo { transition: none; transform: none !important; } }

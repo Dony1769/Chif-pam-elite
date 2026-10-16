@@ -28,7 +28,6 @@ X,
 Flame,
 Dices,
 Filter,
-Trophy,
 type LucideIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -151,22 +150,6 @@ category: "Stratégie",
 isNew: true,
 },
 
-// ==========================================
-// NOUVEAU JEU : FC CAREER 27
-// ==========================================
-{
-id: "fccareer",
-name: "FC Career 27",
-desc: "Carrière Pro : 51 attributs, sponsors & coachs",
-path: "/client/fc-career",
-icon: Trophy,
-iconColor: "text-emerald-400",
-color: "from-emerald-500/20 via-emerald-500/5",
-players: "Pro",
-category: "Stratégie",
-isNew: true,
-isHot: true,
-},
 ];
 
 // ==========================================

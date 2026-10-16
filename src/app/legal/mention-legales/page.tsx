@@ -163,7 +163,7 @@ export default function MentionsLegales() {
           transition={{ duration: 0.45 }}
         >
           <Link
-            href="/"
+            href="/accueil"
             className="group inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.025] px-4 py-2.5 text-sm font-bold text-slate-400 backdrop-blur-xl transition-all hover:border-emerald-400/30 hover:bg-emerald-400/[0.05] hover:text-emerald-400"
           >
             <ArrowLeft

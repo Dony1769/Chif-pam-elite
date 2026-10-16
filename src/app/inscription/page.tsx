@@ -272,7 +272,7 @@ function SignupForm() {
           {/* Mobile brand */}
           <div className="mb-7 flex justify-center md:hidden">
             <Link
-              href="/"
+              href="/accueil"
               aria-label="Retour à l'accueil ChifPam"
               className="rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
             >
@@ -745,7 +745,7 @@ export default function Inscription() {
       <nav className="relative z-20 border-b border-white/[0.05]">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 md:px-10 lg:px-12">
           <Link
-            href="/"
+            href="/accueil"
             aria-label="Accueil ChifPam"
             className="rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
           >

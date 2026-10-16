@@ -359,7 +359,7 @@ function DesktopShell({ children, role, items }: { children: ReactNode; role: "a
   const showBackButton = isClient && pathname !== "/client/home";
   // Pages du jeu FC Career : plein écran, sans la navigation du site (le jeu fournit
   // sa propre navigation et un lien de retour vers /client/home).
-  const immersive = isClient && pathname.startsWith("/client/fc-career");
+  const immersive = isClient && pathname.startsWith("/fc-career");
   const [authUser, setAuthUser] = useState<{ id: string } | null>(null);
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
 
