@@ -42,7 +42,7 @@ export const NATIONS: Nation[] = [
   N("COM", "Comores", "🇰🇲", "CAF"), N("MAD", "Madagascar", "🇲🇬", "CAF"), N("EQG", "Guinée équatoriale", "🇬🇶", "CAF"),
   N("KEN", "Kenya", "🇰🇪", "CAF"), N("ZIM", "Zimbabwe", "🇿🇼", "CAF"), N("CTA", "Centrafrique", "🇨🇫", "CAF"),
   N("BDI", "Burundi", "🇧🇮", "CAF"), N("LBY", "Libye", "🇱🇾", "CAF"), N("MOZ", "Mozambique", "🇲🇿", "CAF"),
-  N("NIG", "Niger", "🇳🇪", "CAF"), N("SLE", "Sierra Leone", "🇸🇱", "CAF"), N("TAN", "Tanzanie", "🇹🇿", "CAF"), N("NAM", "Namibie", "🇳🇦", "CAF"), N("UGA", "Ouganda", "🇺🇬", "CAF"),
+  N("NIG", "Niger", "🇳🇪", "CAF"), N("SLE", "Sierra Leone", "🇸🇱", "CAF"), N("TAN", "Tanzanie", "🇹🇿", "CAF"), N("NAM", "Namibie", "🇳🇦", "CAF"), N("UGA", "Ouganda", "🇺🇬", "CAF"), N("MWI", "Malawi", "🇲🇼", "CAF"),
   N("HAI", "Haïti", "🇭🇹", "CONCACAF"),
   // CONCACAF
   N("USA", "États-Unis", "🇺🇸", "CONCACAF"), N("MEX", "Mexique", "🇲🇽", "CONCACAF"), N("CAN", "Canada", "🇨🇦", "CONCACAF"),
@@ -55,7 +55,7 @@ export const NATIONS: Nation[] = [
   N("IRN", "Iran", "🇮🇷", "AFC"), N("KSA", "Arabie saoudite", "🇸🇦", "AFC"), N("QAT", "Qatar", "🇶🇦", "AFC"),
   N("UZB", "Ouzbékistan", "🇺🇿", "AFC"), N("IRQ", "Irak", "🇮🇶", "AFC"), N("CHN", "Chine", "🇨🇳", "AFC"),
   N("IDN", "Indonésie", "🇮🇩", "AFC"), N("JOR", "Jordanie", "🇯🇴", "AFC"), N("PHI", "Philippines", "🇵🇭", "AFC"),
-  N("THA", "Thaïlande", "🇹🇭", "AFC"),
+  N("THA", "Thaïlande", "🇹🇭", "AFC"), N("LBN", "Liban", "🇱🇧", "AFC"), N("SYR", "Syrie", "🇸🇾", "AFC"), N("UAE", "Émirats arabes unis", "🇦🇪", "AFC"),
   N("NZL", "Nouvelle-Zélande", "🇳🇿", "OFC"),
 ];
 
