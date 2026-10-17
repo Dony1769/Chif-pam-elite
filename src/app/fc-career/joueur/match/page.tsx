@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
+import { MatchPitch } from "../_ui/MatchPitch";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
 import { cupLabel, myCupMatch, startCupLive } from "../../game/player2/cup";
@@ -30,6 +31,7 @@ export default function PlayerMatchPage() {
   const router = useRouter();
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(0);
+  const [hot, setHot] = useState<MomentOption["id"] | null>(null);
   const cup = myCupMatch(state);
   const fx0 = myNextFixture(state);
   const fx = cup ? null : fx0;
@@ -93,13 +95,24 @@ export default function PlayerMatchPage() {
 
   const m = live.match;
   const started = m.minute > 0;
+  const teamColors = (id: string, fallback: [string, string]): [string, string] => {
+    const c = clubOf(id)?.colors;
+    return c ? [c.primary, c.secondary] : fallback;
+  };
+  const myId = m[m.managedSide].clubId, oppId = m[m.managedSide === "home" ? "away" : "home"].clubId;
+  const [mc, mc2] = teamColors(myId, ["#B9FF39", "#0A0C0F"]);
+  let [tc, tc2] = teamColors(oppId, ["#FF6B72", "#ffffff"]);
+  if (tc.toLowerCase() === mc.toLowerCase()) [tc, tc2] = [tc2, tc];
+  const pitchColors = { mine: mc, mineAlt: mc2, theirs: tc, theirsAlt: tc2 };
   const lastDecision = live.decisions[live.decisions.length - 1];
   const myRating = report?.ratings[live.playerId];
 
   function choose(o: MomentOption) {
     if (!live) return;
     setLive(decide(live, o.id));
-    setPlaying(true);
+    setHot(null);
+    // Le temps de voir l'action rejouée sur le terrain
+    setTimeout(() => setPlaying(true), 2000);
   }
   function validate() {
     if (!live) return;
@@ -129,13 +142,15 @@ export default function PlayerMatchPage() {
           <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
 
+        <MatchPitch live={live} hoverOption={hot} colors={pitchColors} />
+
         {live.moment ? (
           <div className="pc-moment" role="dialog" aria-label="Moment clé">
             <div className="pc-moment__head"><b>Moment clé · {live.moment.minute}&apos;</b><span className="mg-small">À vous de choisir</span></div>
             <p style={{ margin: 0 }}>{live.moment.text}</p>
             <div className="pc-options">
               {live.moment.options.map(o => (
-                <button key={o.id} type="button" className="pc-option" onClick={() => choose(o)}>
+                <button key={o.id} type="button" className="pc-option" onClick={() => choose(o)} onPointerEnter={() => setHot(o.id)} onPointerLeave={() => setHot(null)} onFocus={() => setHot(o.id)} onBlur={() => setHot(null)}>
                   <span className="pc-chance">{Math.round(o.chance * 100)} %</span>
                   <b>{o.label}</b>
                   <span>{o.skill ?? attrLabel(o.attr, state.profile.position)} {o.level ?? state.profile.attrs[o.attr]}</span>

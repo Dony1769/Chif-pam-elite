@@ -616,3 +616,33 @@
   .pc-sign__go, .pc-sign__paper { animation: none; opacity: 1; }
 }
 @media (max-width: 560px) { .pc-hide-sm { display: none; } }
+
+/* ── Mini-terrain du match ──────────────────────────────────────────────── */
+.pc-pitch { position: relative; perspective: 1100px; padding: 6px 0 2px; }
+.pc-pitch__field { position: relative; margin: 0 auto; width: min(100%, 46vh * 0.64); aspect-ratio: 64 / 100; border-radius: 10px;
+  transform: rotateX(24deg); transform-origin: 50% 100%; transform-style: preserve-3d;
+  background: repeating-linear-gradient(180deg, #1f6b3a 0 10%, #23763f 10% 20%); box-shadow: 0 30px 40px -18px rgba(0, 0, 0, 0.7), inset 0 0 40px rgba(0, 0, 0, 0.35); }
+.pc-pitch.is-wide .pc-pitch__field { width: 100%; aspect-ratio: 100 / 58; background: repeating-linear-gradient(90deg, #1f6b3a 0 10%, #23763f 10% 20%); transform: rotateX(30deg); }
+.pc-pitch__lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.pc-pitch__lines rect, .pc-pitch__lines line, .pc-pitch__lines circle { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.pc-pitch__lines .pc-pitch__arrow { stroke-width: 2; stroke-dasharray: 5 4; opacity: 0.7; animation: pc-dash 0.9s linear infinite; }
+.pc-pitch__arrow.is-shot { stroke: #F6C84A; } .pc-pitch__arrow.is-pass { stroke: #42C8FF; } .pc-pitch__arrow.is-run { stroke: #B9FF39; } .pc-pitch__arrow.is-def { stroke: #FF6B72; }
+.pc-pitch__lines .pc-pitch__arrow.is-hot { stroke-width: 4; opacity: 1; }
+@keyframes pc-dash { to { stroke-dashoffset: -18; } }
+.pc-pitch__goal { position: absolute; background: rgba(255, 255, 255, 0.85); border-radius: 2px; }
+.pc-pitch__goal.is-theirs { left: 42%; top: -1.4%; width: 16%; height: 1.4%; }
+.pc-pitch__goal.is-ours { left: 42%; bottom: -1.4%; width: 16%; height: 1.4%; }
+.pc-pitch.is-wide .pc-pitch__goal.is-theirs { left: auto; right: -1.2%; top: 40%; width: 1.2%; height: 20%; }
+.pc-pitch.is-wide .pc-pitch__goal.is-ours { left: -1.2%; bottom: auto; top: 40%; width: 1.2%; height: 20%; }
+.pc-pitch__dot { position: absolute; width: 3.6%; aspect-ratio: 1; margin: -1.8% 0 0 -1.8%; border-radius: 50%; background: var(--c); border: 2px solid var(--c2); box-shadow: 0 3px 4px rgba(0, 0, 0, 0.45); }
+.pc-pitch.is-wide .pc-pitch__dot { width: 2.2%; margin: -1.1% 0 0 -1.1%; }
+.pc-pitch__dot.is-gk { filter: saturate(0.4) brightness(1.25); }
+.pc-pitch__dot.is-me { z-index: 2; transform: scale(1.45); box-shadow: 0 0 0 3px #fff, 0 0 18px 4px rgba(185, 255, 57, 0.85); }
+.pc-pitch.is-frozen .pc-pitch__dot.is-me { animation: pc-pulse 1.1s ease-in-out infinite; }
+@keyframes pc-pulse { 50% { box-shadow: 0 0 0 3px #fff, 0 0 26px 10px rgba(185, 255, 57, 0.95); } }
+.pc-pitch__name { position: absolute; left: 50%; bottom: 135%; transform: translateX(-50%); white-space: nowrap; font-size: 9px; font-weight: 800; color: #fff; background: rgba(0, 0, 0, 0.6); padding: 1px 5px; border-radius: 6px; }
+.pc-pitch__ball { position: absolute; z-index: 3; width: 2%; aspect-ratio: 1; margin: -1% 0 0 -1%; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #cfd6e0); box-shadow: 0 4px 5px rgba(0, 0, 0, 0.55); }
+.pc-pitch.is-wide .pc-pitch__ball { width: 1.3%; margin: -0.65% 0 0 -0.65%; }
+.pc-pitch__flash { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: clamp(30px, 7vw, 64px); font-weight: 900; color: #fff; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.8); letter-spacing: 0.02em; }
+.pc-pitch__flash.is-good { color: #B9FF39; } .pc-pitch__flash.is-bad { color: #FF6B72; }
+@media (prefers-reduced-motion: reduce) { .pc-pitch__lines .pc-pitch__arrow, .pc-pitch.is-frozen .pc-pitch__dot.is-me { animation: none; } }
