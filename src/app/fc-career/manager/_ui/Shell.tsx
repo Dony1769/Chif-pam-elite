@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useManager } from "./ManagerContext";
 import { Crest } from "./kit";
+import { SheetsProvider } from "./PlayerSheet";
 import { GameBar, GameNav } from "./GameNav";
 import { formatMoney, getManagedClub } from "../../game/manager/engine";
 import { isWindowOpen } from "../../game/manager/market";
@@ -68,7 +69,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
             items={TABS.map(t => ({ ...t, badge: t.label === "Messages" ? unread : undefined }))} />
         </>
       )}
-      <main className="mg-main">{body}</main>
+      <main className="mg-main">
+        {state ? <SheetsProvider world={state.world} meClub={club?.id}>{body}</SheetsProvider> : body}
+      </main>
       <div className="mg-toasts" aria-live="polite">
         {toasts.map(t => (
           <div key={t.id} data-toast-id={t.id} className={`mg-toast ${t.ok ? "is-ok" : "is-err"}`} role={t.ok ? "status" : "alert"}>{t.text}</div>

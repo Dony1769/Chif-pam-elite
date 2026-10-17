@@ -149,6 +149,12 @@ export interface WorldLiveState {
   competitions?: import("./competitions").Competition[];
   /** Monde CP : palmarès des compétitions à élimination */
   trophies?: import("./competitions").TrophyRecord[];
+  /** Titres de champion (palmarès permanent) */
+  leagueTitles?: { leagueId: string; season: number; clubId: string; coachId?: string }[];
+  /** Feuilles de match de la semaine en cours et de la précédente */
+  weekSheets?: import("./matchSheet").MatchSheet[];
+  /** Records de clubs archivés (saisons sorties de playerStats) : buts, passes, matchs par joueur */
+  clubRecords?: Record<string, { goals: Record<string, number>; assists: Record<string, number>; apps: Record<string, number> }>;
   /** Matchs de coupe déjà joués en direct par l'utilisateur (clé = identifiant du match) */
   forcedTies?: Record<string, import("./competitions").ForcedTie>;
   /** Monde CP : clubs qualifiés pour les coupes d'Europe de la saison suivante */

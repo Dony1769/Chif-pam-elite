@@ -13,7 +13,7 @@ import { Crest, Empty, Section } from "./kit";
 import { POS_FR } from "./kit";
 import { fullName } from "../../game/utils/names";
 import { seasonLabel } from "../../game/domain/calendar";
-import { PlayerLink, PlayerSheet } from "./PlayerSheet";
+import { ClubName, PlayerLink, useSheets } from "./PlayerSheet";
 
 const seasonName = (w: WorldLiveState, season: number) => (w.startYear ? seasonLabel(w.startYear + season - 1) : `Saison ${season}`);
 
@@ -31,8 +31,7 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
     return [...agg.values()].filter(r => r[kind] > 0).sort((a, b) => b[kind] - a[kind] || a.apps - b.apps).slice(0, 15);
   }, [world, leagueId, kind]);
   const byId = useMemo(() => new Map(world.players.map(p => [p.id, p])), [world]);
-  const clubOf = (id: string) => world.clubs.find(c => c.id === id);
-  const [sheet, setSheet] = useState<string | null>(null);
+  const { openPlayer: setSheet } = useSheets();
   return (
     <Section title={kind === "goals" ? "Meilleurs buteurs" : "Meilleurs passeurs"} aside={
       <div className="mg-seg" aria-label="Classement individuel">
@@ -51,7 +50,7 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
                   <tr key={r.id} className={r.id === highlight ? "is-me" : ""}>
                     <td>{i + 1}</td>
                     <td>{p ? <PlayerLink name={fullName(p)} me={r.id === highlight} onOpen={() => setSheet(r.id)} /> : "—"} <span className="mg-small">{p ? POS_FR[p.position] : ""}</span></td>
-                    <td><span className="mg-pname"><Crest club={clubOf(r.clubId)} size={16} />{clubOf(r.clubId)?.shortName}</span></td>
+                    <td><ClubName world={world} id={r.clubId} short /></td>
                     <td className="num">{r.apps}</td>
                     <td className="num"><b>{r[kind]}</b></td>
                   </tr>
@@ -61,7 +60,6 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
           </table>
         </div>
       )}
-      {sheet && <PlayerSheet world={world} playerId={sheet} highlight={highlight} onClose={() => setSheet(null)} />}
     </Section>
   );
 }
@@ -73,13 +71,13 @@ export function AwardsPanel({ world, leagueId, highlight }: { world: WorldLiveSt
   const awards = world.awards ?? [];
   const byId = useMemo(() => new Map(world.players.map(p => [p.id, p])), [world]);
   const clubOf = (id?: string) => world.clubs.find(c => c.id === id);
-  const [sheet, setSheet] = useState<string | null>(null);
+  const { openPlayer: setSheet } = useSheets();
   const who = (a: { playerId?: string; clubId?: string }) => {
     const p = a.playerId ? byId.get(a.playerId) : undefined;
     return (
       <span className="mg-pname">
         <Crest club={clubOf(a.clubId)} size={16} />
-        {p ? <PlayerLink name={fullName(p)} me={a.playerId === highlight} onOpen={() => setSheet(a.playerId!)} /> : <b>{clubOf(a.clubId)?.name}</b>}
+        {p ? <PlayerLink name={fullName(p)} me={a.playerId === highlight} onOpen={() => setSheet(a.playerId!)} /> : a.clubId ? <ClubName world={world} id={a.clubId} crest={0} /> : null}
         {p && <span className="mg-small"> {POS_FR[p.position]} · {p.age} ans</span>}
       </span>
     );
@@ -160,7 +158,6 @@ export function AwardsPanel({ world, leagueId, highlight }: { world: WorldLiveSt
           </div>
         </>
       )}
-      {sheet && <PlayerSheet world={world} playerId={sheet} highlight={highlight} onClose={() => setSheet(null)} />}
     </Section>
   );
 }

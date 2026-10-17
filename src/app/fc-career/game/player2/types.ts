@@ -172,6 +172,10 @@ export interface CareerExtras {
   /** Clubs qui suivent le joueur, avec leurs objectifs */
   interests?: ClubInterest[];
   tally?: Tally;
+  /** Question de presse en attente de réponse */
+  press?: import("./press").PressQuestion | null;
+  /** Cote auprès des supporters (0-100) */
+  fans?: number;
 }
 
 export interface PlayerCareerState {

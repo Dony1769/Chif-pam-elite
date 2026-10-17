@@ -8,8 +8,10 @@ import { usePlayerGame } from "./_ui/PlayerContext";
 import { PlayerCard, PlayStyleChips, Stars } from "./_ui/PlayerCard";
 import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
-import { myCupMatch, cupLabel } from "../game/player2/cup";
-import { teamName } from "../game/domain/competitions";
+import { myCupMatch, cupDate, cupLabel } from "../game/player2/cup";
+import { TONE_EFFECT } from "../game/player2/press";
+import { leagueZones, teamName } from "../game/domain/competitions";
+import { ClubName, WeekResults, useSheets } from "../manager/_ui/PlayerSheet";
 import { POS_LABEL, SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
 import { getLeaguePosition, hasMatchThisWeek } from "../game/manager/engine";
 import { fixtureDate, worldCalendar } from "../game/domain/calendar";
@@ -25,12 +27,16 @@ export default function PlayerHome() {
   const line = currentSeasonLine(state);
   const totals = careerTotals(state);
   const last = state.lastMatch;
+  const { openMatch } = useSheets();
+  const lastSheet = last ? (state.shadow.world.weekSheets ?? []).find(x => x.id === last.report.fixtureId) : undefined;
+  const zones = leagueZones(state.shadow.world, club.leagueId);
   const rows = state.shadow.world.standings[club.leagueId] ?? [];
   const pos = getLeaguePosition(state.shadow);
   const league = state.shadow.world.leagues.find(l => l.id === club.leagueId);
   const thisWeek = hasMatchThisWeek(state.shadow);
   const cup = myCupMatch(state);
-  const canPlay = !!cup || (!!fx && thisWeek && (state.selection === "starter" || state.selection === "bench"));
+  const blocked = state.selection === "injured" || state.selection === "suspended";
+  const canPlay = (!!cup && cup.selection !== "out") || (!!fx && thisWeek && (state.selection === "starter" || state.selection === "bench"));
   const cal = worldCalendar(state.shadow.world);
   const fxDate = fx ? fixtureDate(state.shadow.world, state.shadow.world.schedules[club.leagueId]?.weekOf, fx.matchday) : null;
 
@@ -54,7 +60,7 @@ export default function PlayerHome() {
               ) : <p className="mg-muted">{cal ? `${cal.phase} : plus de match de championnat avant la saison prochaine.` : "Intersaison : pas de match cette semaine."}</p>}
               {cup && (
                 <div className={`pc-cupbanner${cup.stage === "Finale" ? " is-final" : ""}`}>
-                  <span className="mg-small">{cup.national ? "Sélection" : "Coupe"} cette semaine</span>
+                  <span className="mg-small">{cupDate(state, cup) ?? (cup.national ? "Sélection" : "En semaine")}</span>
                   <b>{cupLabel(cup)}</b>
                   <span className="mg-small">contre {teamName(state.shadow.world, cup.opponent)} · {cup.selection === "starter" ? "titulaire" : cup.selection === "bench" ? "remplaçant" : "non retenu"}</span>
                 </div>
@@ -79,9 +85,11 @@ export default function PlayerHome() {
               ) : (
               <div className="mg-row">
                 {canPlay
-                  ? <Link href="/fc-career/joueur/match" className="mg-btn mg-btn--gold">Continuer la carrière</Link>
-                  : <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "PLAY_WEEK" })}>Continuer la carrière</button>}
-                {canPlay && <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Simuler la semaine</button>}
+                  ? <Link href="/fc-career/joueur/match" className="mg-btn mg-btn--gold">Jouer le match</Link>
+                  : cup
+                    ? <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "SKIP_CUP" })}>Passer cette étape</button>
+                    : <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "PLAY_WEEK" })}>{blocked ? "Passer cette étape" : thisWeek && fx ? "Passer le match" : "Passer la semaine"}</button>}
+                {canPlay && <button type="button" className="mg-btn" onClick={() => run({ type: cup ? "SKIP_CUP" : "PLAY_WEEK" })}>Simuler le match</button>}
                 {!thisWeek && !cup && cal && <button type="button" className="mg-btn" onClick={() => run({ type: "ADVANCE_TO_MATCH" })}>Aller au prochain match</button>}
                 <Link href="/fc-career/joueur/progression" className="mg-btn mg-btn--ghost">Entraînement</Link>
               </div>
@@ -91,7 +99,7 @@ export default function PlayerHome() {
         </Section>
 
         {last && (
-          <Section title="Dernier match">
+          <Section title="Dernier match" aside={lastSheet ? <button type="button" className="mg-link" onClick={() => openMatch(lastSheet)}>Feuille de match</button> : undefined}>
             <div className="mg-row mg-row--between">
               <div className="mg-row"><Crest club={clubOf(last.report.homeClubId)} size={24} /><b>{clubOf(last.report.homeClubId)?.shortName}</b></div>
               <strong style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>{last.report.home.goals} - {last.report.away.goals}</strong>
@@ -104,6 +112,22 @@ export default function PlayerHome() {
             </p>
           </Section>
         )}
+
+        {state.career?.press && (
+          <Section className="pc-press" title="Conférence de presse" aside={<span className="mg-small">{state.career.press.journalist}</span>}>
+            <p className="pc-press__q">« {state.career.press.question} »</p>
+            <div className="pc-press__answers">
+              {state.career.press.answers.map(a => (
+                <button key={a.id} type="button" className={`pc-press__a is-${a.id}`} onClick={() => run({ type: "PRESS_ANSWER", tone: a.id })}>
+                  <span className="pc-press__tone">{TONE_EFFECT[a.id].label}</span>{a.text}
+                </button>
+              ))}
+            </div>
+            <p className="mg-small" style={{ margin: 0 }}>Sans réponse avant le prochain match : « pas de commentaire », les supporters n&apos;aiment pas.</p>
+          </Section>
+        )}
+
+        <WeekResults world={state.shadow.world} clubId={club.id} limit={2} />
 
         <Section title="Messages" aside={<Link href="/fc-career/joueur/messages" className="mg-link">Tout voir</Link>}>
           {state.inbox.slice(0, 4).map(m => (
@@ -128,6 +152,7 @@ export default function PlayerHome() {
             <dt>Buts</dt><dd>{totals.goals}</dd>
             <dt>Passes décisives</dt><dd>{totals.assists}</dd>
             <dt>Réputation</dt><dd>{Math.round(state.profile.reputation)}/100</dd>
+            <dt>Supporters</dt><dd>{state.career?.fans ?? 50}/100</dd>
             <dt>Sélections</dt><dd>{state.career?.national.caps ?? 0}</dd>
             <dt>Trophées</dt><dd>{state.career?.awards.length ?? 0}</dd>
           </dl>
@@ -136,8 +161,8 @@ export default function PlayerHome() {
           <table className="mg-table">
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.clubId} className={r.clubId === club.id ? "is-me" : ""}>
-                  <td>{i + 1}</td><td><span className="mg-pname"><Crest club={clubOf(r.clubId)} size={16} />{clubOf(r.clubId)?.shortName}</span></td>
+                <tr key={r.clubId} className={`${r.clubId === club.id ? "is-me" : ""}${zones[i] ? ` pc-zrow is-${zones[i]}` : ""}`}>
+                  <td><span className="pc-rank">{i + 1}</span></td><td><ClubName world={state.shadow.world} id={r.clubId} short /></td>
                   <td className="num">{r.played}</td><td className="num"><b>{r.points}</b></td>
                 </tr>
               ))}

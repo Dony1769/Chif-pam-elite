@@ -28,6 +28,11 @@ export function CinematicHost({ world, me, storageKey }: { world: WorldLiveState
     const key = `fc-career:seen:${storageKey}`;
     const seen = read(key);
     if (!seen) { write(key, all.map(c => c.id)); return; } // première visite : rien d'ancien à rejouer
+    // Nouveau club (transfert, prêt) : son passé (titres, tirages) n'est pas rejoué
+    const clubKey = `${key}:club`;
+    let lastClub: string | null = null;
+    try { lastClub = localStorage.getItem(clubKey); localStorage.setItem(clubKey, clubId ?? ""); } catch { /* stockage indisponible */ }
+    if (lastClub !== null && lastClub !== (clubId ?? "")) { write(key, [...seen, ...all.map(c => c.id)]); return; }
     const fresh = all.filter(c => !seen.includes(c.id));
     if (!fresh.length) return;
     // Après une longue simulation : les plus récents et ceux qui vous concernent d'abord

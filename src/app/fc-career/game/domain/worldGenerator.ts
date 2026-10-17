@@ -244,6 +244,7 @@ export function advanceWorldSeason(
   // (sinon la sauvegarde et chaque semaine de simulation s'alourdissent d'année en année)
   const newWorld = {
     ...world, season: nextSeason, currentWeek: 1,
+    clubRecords: archiveClubRecords(world.clubRecords, world.playerStats.filter(x => x.season < nextSeason - 3)),
     playerStats: world.playerStats.filter(x => x.season >= nextSeason - 3),
     matchResults: world.matchResults.filter(r => (r as { season?: number }).season === undefined || (r as { season?: number }).season! >= world.season),
   };
@@ -272,6 +273,28 @@ export function advanceWorldSeason(
   ];
 
   return newWorld;
+}
+
+/** Ajoute aux records de clubs les statistiques qui sortent de l'historique détaillé. */
+export function archiveClubRecords(
+  records: WorldLiveState["clubRecords"],
+  dropped: WorldLiveState["playerStats"],
+): NonNullable<WorldLiveState["clubRecords"]> {
+  const out: NonNullable<WorldLiveState["clubRecords"]> = { ...(records ?? {}) };
+  for (const st of dropped) {
+    const r = out[st.clubId] ?? { goals: {}, assists: {}, apps: {} };
+    const next = { goals: { ...r.goals }, assists: { ...r.assists }, apps: { ...r.apps } };
+    if (st.goals) next.goals[st.playerId] = (next.goals[st.playerId] ?? 0) + st.goals;
+    if (st.assists) next.assists[st.playerId] = (next.assists[st.playerId] ?? 0) + st.assists;
+    next.apps[st.playerId] = (next.apps[st.playerId] ?? 0) + st.appearances;
+    out[st.clubId] = next;
+  }
+  // Borné : les 25 meilleurs par catégorie et par club
+  for (const [id, r] of Object.entries(out)) {
+    const top = (m: Record<string, number>) => Object.fromEntries(Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 25));
+    out[id] = { goals: top(r.goals), assists: top(r.assists), apps: top(r.apps) };
+  }
+  return out;
 }
 
 // ─── Application des promotions/relégations ───────────────────────────────────

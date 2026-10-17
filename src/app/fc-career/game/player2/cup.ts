@@ -10,10 +10,12 @@
 
 import type { WorldPlayer } from "../data/worldPlayers";
 import { FORMATIONS, aiTacticFor, autoPickLineup, isAvailable } from "../manager/tactics";
-import { finishMatch, initMatch } from "../manager/matchSim";
+import { finishMatch, initMatch, simulateToEnd } from "../manager/matchSim";
 import type { LiveMatch, MatchTeamInput } from "../manager/matchSim";
+import { sheetFromLive } from "../domain/matchSheet";
 import { nationSquad, teamName, teamTiesThisWeek } from "../domain/competitions";
 import type { ForcedTie, TeamTie } from "../domain/competitions";
+import { formatDate, matchDate } from "../domain/calendar";
 import { NATION_BY_ID } from "../data/cp/nations";
 import { createRng, seedFromString } from "../utils/random";
 import { shortName } from "../utils/names";
@@ -21,7 +23,7 @@ import type { OptionId } from "./playstyles";
 import type { PlayerCareerState, SeasonLine } from "./types";
 import { simulateRest, startPlayerLive } from "./live";
 import {
-  POS_LABEL, applyPlayStyleProgress, coachDecision, currentSeasonLine, emptyTally, myClub, pmsg, pushPlayerInbox,
+  POS_LABEL, applyPlayStyleProgress, effSubs, coachDecision, currentSeasonLine, emptyTally, myClub, pmsg, pushPlayerInbox,
 } from "./engine";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -92,6 +94,13 @@ export function myCupMatch(s: PlayerCareerState): CupMatch | null {
 }
 
 /** Libellé court : « CP FA Cup · Huitièmes de finale ». */
+/** Date du match : mardi/mercredi pour les coupes de clubs, week-end pour les sélections. */
+export function cupDate(s: PlayerCareerState, cm: Pick<CupMatch, "national">): string | null {
+  const w = s.shadow.world;
+  if (!w.startYear) return null;
+  return formatDate(matchDate(w.startYear + w.season - 1, w.currentWeek, !cm.national));
+}
+
 export const cupLabel = (cm: Pick<CupMatch, "comp" | "stage">) => `${cm.comp.name} · ${cm.stage}`;
 
 /** Match en direct prêt à démarrer. */
@@ -113,7 +122,7 @@ export function startCupLive(s: PlayerCareerState, cm: CupMatch) {
   const pos = slot >= 0 ? FORMATIONS[formation][slot]?.pos ?? s.profile.position : s.profile.position;
   return startPlayerLive(m, {
     id: s.profile.id, name: shortName(s.profile), attrs: s.profile.attrs, position: pos,
-    sub: s.profile.sub, ps: s.profile.playStyles, weakFoot: s.profile.weakFoot, skillMoves: s.profile.skillMoves,
+    sub: effSubs(s.profile), ps: s.profile.playStyles, weakFoot: s.profile.weakFoot, skillMoves: s.profile.skillMoves,
   });
 }
 
@@ -133,7 +142,8 @@ function shootout(s: PlayerCareerState, cm: CupMatch, mySide: "home" | "away"): 
  * imposé au monde, statistiques et progression du joueur, message.
  */
 export function applyCupMatch(s0: PlayerCareerState, cm: CupMatch, live: LiveMatch, psGain?: Partial<Record<OptionId, number>>): PlayerCareerState {
-  const report = finishMatch(live);
+  const done = live.finished ? live : simulateToEnd(live);
+  const report = finishMatch(done);
   const w = s0.shadow.world;
   const id = s0.profile.id;
   const rating = report.ratings[id] ?? null;
@@ -145,18 +155,20 @@ export function applyCupMatch(s0: PlayerCareerState, cm: CupMatch, live: LiveMat
 
   // Statistiques des deux équipes pour le monde (identifiant de la compétition)
   const byPlayer = new Map<string, { goals: number; assists: number; clubId: string }>();
-  const clubOfPlayer = (pid: string) => (live.home.appeared.includes(pid) ? live.home.clubId : live.away.clubId);
-  for (const pid of [...live.home.appeared, ...live.away.appeared]) byPlayer.set(pid, { goals: 0, assists: 0, clubId: clubOfPlayer(pid) });
+  const clubOfPlayer = (pid: string) => (done.home.appeared.includes(pid) ? done.home.clubId : done.away.clubId);
+  for (const pid of [...done.home.appeared, ...done.away.appeared]) byPlayer.set(pid, { goals: 0, assists: 0, clubId: clubOfPlayer(pid) });
   for (const e of report.events) {
     if (e.type !== "goal") continue;
     if (e.playerId && byPlayer.has(e.playerId)) byPlayer.get(e.playerId)!.goals++;
     if (e.assistId && byPlayer.has(e.assistId)) byPlayer.get(e.assistId)!.assists++;
   }
   const forced: ForcedTie = {
-    hs, as, pens: sh?.pens,
+    hs, as, pens: sh?.pens, sheet: sheetFromLive(done, report, cm.comp.id),
     stats: [...byPlayer].map(([playerId, v]) => ({ playerId, clubId: w.players.find(p => p.id === playerId)?.clubId ?? v.clubId, leagueId: cm.comp.id, goals: v.goals, assists: v.assists })),
   };
-  let s: PlayerCareerState = { ...s0, shadow: { ...s0.shadow, world: { ...w, forcedTies: { ...(w.forcedTies ?? {}), [cm.key]: forced } } } };
+  // Match en semaine : de la fatigue pour le week-end (le coach peut faire tourner)
+  const players = played ? w.players.map(p => (p.id === id ? { ...p, fatigue: Math.min(100, p.fatigue + (cm.selection === "starter" ? 14 : 6)) } : p)) : w.players;
+  let s: PlayerCareerState = { ...s0, shadow: { ...s0.shadow, world: { ...w, players, forcedTies: { ...(w.forcedTies ?? {}), [cm.key]: forced } } } };
 
   const mine = cm.side === "home" ? hs : as, theirs = cm.side === "home" ? as : hs;
   const won = mine > theirs || (sh !== null && (cm.side === "home" ? sh.pens[0] > sh.pens[1] : sh.pens[1] > sh.pens[0]));

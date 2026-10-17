@@ -12,7 +12,7 @@ import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { MatchPitch } from "../_ui/MatchPitch";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
-import { SELECTION_LABEL, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
+import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
 import { cupLabel, myCupMatch, startCupLive } from "../../game/player2/cup";
 import { isNation, teamName } from "../../game/domain/competitions";
 import { NATION_BY_ID } from "../../game/data/cp/nations";
@@ -50,7 +50,7 @@ export default function PlayerMatchPage() {
     const m = preparePlayerMatch(state);
     setLive(m ? startPlayerLive(m, {
       id: state.profile.id, name: `${shortName(state.profile)}`, attrs: state.profile.attrs, position: state.playedAs ?? state.profile.position,
-      sub: state.profile.sub, ps: state.profile.playStyles, weakFoot: state.profile.weakFoot, skillMoves: state.profile.skillMoves,
+      sub: effSubs(state.profile), ps: state.profile.playStyles, weakFoot: state.profile.weakFoot, skillMoves: state.profile.skillMoves,
     }) : null);
   }, [state, cup, liveId, live, setLive, eligible]);
 
@@ -119,7 +119,7 @@ export default function PlayerMatchPage() {
     const done = live.match.finished ? live : simulateRest(live);
     setLive(null);
     // Match de coupe : le championnat de la semaine suit (s'il y en a un)
-    if (cup) { run({ type: "PLAY_CUP", live: done.match, psGain: done.psGain }); return; }
+    if (cup) { run({ type: "PLAY_CUP", live: done.match, psGain: done.psGain }); router.push("/fc-career/joueur"); return; }
     run({ type: "PLAY_WEEK", live: done.match, psGain: done.psGain });
     router.push("/fc-career/joueur");
   }

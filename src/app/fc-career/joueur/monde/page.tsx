@@ -4,8 +4,10 @@
 
 import React, { useState } from "react";
 import { usePlayerGame } from "../_ui/PlayerContext";
-import { Crest, Section } from "../../manager/_ui/kit";
+import { Section } from "../../manager/_ui/kit";
 import { AwardsPanel, LeadersPanel } from "../../manager/_ui/WorldPanels";
+import { ClubName, WeekResults } from "../../manager/_ui/PlayerSheet";
+import { ZONE_LABEL, leagueZones } from "../../game/domain/competitions";
 import { CupsPanel, TrophiesPanel } from "../../manager/_ui/CupsPanel";
 import { myClub } from "../../game/player2/engine";
 import { worldCalendar } from "../../game/domain/calendar";
@@ -18,8 +20,8 @@ export default function WorldPage() {
   const [scope, setScope] = useState<"league" | "all">("league");
   const league = w.leagues.find(l => l.id === leagueId);
   const rows = w.standings[leagueId] ?? [];
-  const clubOf = (id: string) => w.clubs.find(c => c.id === id);
   const cal = worldCalendar(w);
+  const zones = leagueZones(w, leagueId);
 
   return (
     <div className="mg-stack">
@@ -37,14 +39,17 @@ export default function WorldPage() {
                 <thead><tr><th>#</th><th>Club</th><th className="num">J</th><th className="num">Diff.</th><th className="num">Pts</th></tr></thead>
                 <tbody>
                   {rows.map((r, i) => (
-                    <tr key={r.clubId} className={r.clubId === club.id ? "is-me" : ""}>
-                      <td>{i + 1}</td>
-                      <td><span className="mg-pname"><Crest club={clubOf(r.clubId)} size={16} />{clubOf(r.clubId)?.name.replace(/^CP /, "")}</span></td>
+                    <tr key={r.clubId} className={`${r.clubId === club.id ? "is-me" : ""}${zones[i] ? ` pc-zrow is-${zones[i]}` : ""}`}>
+                      <td><span className="pc-rank">{i + 1}</span></td>
+                      <td><ClubName world={w} id={r.clubId} /></td>
                       <td className="num">{r.played}</td><td className="num">{r.goalsFor - r.goalsAgainst}</td><td className="num"><b>{r.points}</b></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="pc-zonelegend">
+              {[...new Set(zones.filter(Boolean))].map(z => <span key={z!} className={`pc-zone is-${z}`}>{ZONE_LABEL[z!]}</span>)}
             </div>
           </Section>
         </div>
@@ -56,6 +61,7 @@ export default function WorldPage() {
           <LeadersPanel world={w} leagueId={scope === "all" ? "all" : leagueId} highlight={state.profile.id} />
         </div>
       </div>
+      <WeekResults world={w} clubId={club.id} limit={6} />
       <CupsPanel world={w} me={club.id} nation={state.profile.nationality} />
       <AwardsPanel world={w} leagueId={leagueId} highlight={state.profile.id} />
       <TrophiesPanel world={w} me={club.id} nation={state.profile.nationality} />

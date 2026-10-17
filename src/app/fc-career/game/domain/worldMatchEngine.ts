@@ -10,6 +10,7 @@ import type { WorldPlayer } from "../data/worldPlayers";
 import type { WorldCoach } from "./worldCoach";
 import type { WorldMatchResult, WorldPlayerSeasonStats } from "./worldState";
 import type { Fixture } from "./season";
+import type { MatchSheet, SheetGoal } from "./matchSheet";
 
 // ─── Types internes ───────────────────────────────────────────────────────────
 
@@ -150,6 +151,8 @@ export interface WorldMatchInput {
 
 export interface WorldMatchOutput {
   result: WorldMatchResult;
+  /** Feuille de match (sans semaine ni jour, complétés par l'appelant) */
+  sheet: Omit<MatchSheet, "weekIdx" | "day">;
   updatedPlayerStats: {
     playerId: string;
     clubId: string;
@@ -202,19 +205,39 @@ export function simulateWorldMatch(input: WorldMatchInput): WorldMatchOutput {
   for (const s of homeScorers) add(s.playerId, home.clubId, 1, 0);
   for (const s of awayScorers) add(s.playerId, away.clubId, 1, 0);
   // Passes décisives : 3 buts sur 4, données plutôt par les créateurs
-  const assists = (scorers: { playerId: string }[], snap: typeof home) => {
+  const goals: SheetGoal[] = [];
+  const assists = (scorers: { playerId: string }[], snap: typeof home, side: "home" | "away") => {
     const pool = matchSquad(snap.players);
     for (const sc of scorers) {
+      const g: SheetGoal = { minute: 0, side, playerId: sc.playerId };
+      goals.push(g);
       if (!rng.chance(0.75)) continue;
       const a = weightedPick(pool.filter(p => p.id !== sc.playerId), q => (ASSIST_W[q.position] ?? 1) * Math.pow(q.overall / 70, 3), rng);
-      if (a) add(a.id, snap.clubId, 0, 1);
+      if (a) { add(a.id, snap.clubId, 0, 1); g.assistId = a.id; }
     }
   };
-  assists(homeScorers, home);
-  assists(awayScorers, away);
+  assists(homeScorers, home, "home");
+  assists(awayScorers, away, "away");
   const statUpdates: WorldMatchOutput["updatedPlayerStats"] = [...tally.values()];
 
-  return { result, updatedPlayerStats: statUpdates };
+  // Feuille de match : minutes et statistiques tirées à part (n'influencent pas le score)
+  const srng = createRng(seedFromString(`${seed}-sheet`));
+  for (const g of goals) g.minute = srng.int(2, 90);
+  goals.sort((a, b) => a.minute - b.minute);
+  const poss = Math.round(Math.max(30, Math.min(70, 50 + (homeStr - awayStr) * 1.3 + srng.float(-4, 4))));
+  const side = (snap: ClubSnapshot, g: number, str: number, opp: number) => {
+    const xi = startingXI(snap.players).map(p => p.id);
+    const subs = matchSquad(snap.players).filter(p => !xi.includes(p.id)).slice(0, 3).map(p => p.id);
+    const shots = Math.max(g + 1, Math.round(8 + (str - opp) * 0.35 + srng.float(-3, 5)));
+    return { xi, subs, shots, onTarget: Math.min(shots, g + srng.int(1, 4)) };
+  };
+  const sheet: WorldMatchOutput["sheet"] = {
+    id: fixture.id, compId: leagueId, homeClubId: fixture.homeClubId, awayClubId: fixture.awayClubId, hs: homeGoals, as: awayGoals,
+    home: { ...side(home, homeGoals, homeStr, awayStr), possession: poss }, away: { ...side(away, awayGoals, awayStr, homeStr), possession: 100 - poss },
+    goals,
+  };
+
+  return { result, updatedPlayerStats: statUpdates, sheet };
 }
 
 // ─── Simulation d'une journée complète d'une ligue ───────────────────────────
@@ -228,6 +251,7 @@ export interface MatchdayInput {
 }
 
 export interface MatchdayOutput {
+  sheets:             WorldMatchOutput["sheet"][];
   results:            WorldMatchResult[];
   playerStatUpdates:  WorldMatchOutput["updatedPlayerStats"];
 }
@@ -240,21 +264,23 @@ export function simulateMatchday(input: MatchdayInput): MatchdayOutput {
   );
 
   const results:           WorldMatchResult[]                    = [];
+  const sheets:            WorldMatchOutput["sheet"][]           = [];
   const playerStatUpdates: WorldMatchOutput["updatedPlayerStats"] = [];
 
   for (const fixture of dayFixtures) {
     const home = getClubSnapshot(fixture.homeClubId);
     const away = getClubSnapshot(fixture.awayClubId);
 
-    const { result, updatedPlayerStats } = simulateWorldMatch({
+    const { result, updatedPlayerStats, sheet } = simulateWorldMatch({
       fixture, home, away, season,
     });
 
     results.push(result);
+    sheets.push(sheet);
     playerStatUpdates.push(...updatedPlayerStats);
   }
 
-  return { results, playerStatUpdates };
+  return { results, playerStatUpdates, sheets };
 }
 
 // ─── Application des stats accumulées ────────────────────────────────────────

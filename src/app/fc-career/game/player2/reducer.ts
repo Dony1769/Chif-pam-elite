@@ -13,6 +13,8 @@ import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
+import { answerPress } from "./press";
+import type { Tone } from "./press";
 import { applyCupMatch, autoPlayCup, myCupMatch } from "./cup";
 import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, signOffer, requestTransfer, retirePlayer } from "./career";
 
@@ -23,6 +25,7 @@ export type PlayerAction =
   | { type: "PLAY_WEEK"; live?: LiveMatch | null; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_FOCUS"; attr: AttrKey | TrainingFocus }
   | { type: "RETIRE" }
+  | { type: "PRESS_ANSWER"; tone: Tone }
   | { type: "SKIP_CUP" }
   | { type: "PLAY_CUP"; live: LiveMatch; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_POSITION"; position: WorldPlayerPosition }
@@ -59,6 +62,7 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
   switch (action.type) {
     case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
     case "RETIRE":           return fromResult(retirePlayer(s));
+    case "PRESS_ANSWER":     return fromResult(answerPress(s, action.tone));
     case "SKIP_CUP": {
       const cm = myCupMatch(s);
       return cm ? plain(autoPlayCup(s, cm)) : plain(s);

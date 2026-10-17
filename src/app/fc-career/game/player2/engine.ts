@@ -18,7 +18,7 @@ import type { AttrKey, Attrs } from "./attributes";
 import { ATTR_KEYS, ATTR_LABEL } from "./attributes";
 import type { SubAttrs, SubKey } from "./subAttributes";
 import {
-  ALL_SUBS, GK_SUBS, OVR_WEIGHTS, SUB_GROUPS, SUB_LABEL, ageDecline, faceOf, keySubs, overallFromSubs, subsForTarget, subsFromFace,
+  ALL_SUBS, GK_SUBS, OVR_WEIGHTS, starSubs, SUB_GROUPS, SUB_LABEL, ageDecline, faceOf, keySubs, overallFromSubs, subsForTarget, subsFromFace,
 } from "./subAttributes";
 import type { OptionId } from "./playstyles";
 import { PS_BY_ID, emptyPlayStyles, unlockPlayStyles } from "./playstyles";
@@ -81,7 +81,9 @@ export function pushPlayerInbox(s: PlayerCareerState, ...m: InboxMessage[]): Pla
 // ─── Profil : sous-attributs ─────────────────────────────────────────────────
 
 /** Note globale du joueur, calculée depuis ses sous-attributs. */
-export const profileOverall = (p: Pick<PlayerProfile, "sub" | "position">) => overallFromSubs(p.sub, p.position);
+/** Sous-attributs effectifs (avec l'effet des étoiles de pied faible et de gestes). */
+export const effSubs = (p: Pick<PlayerProfile, "sub"> & Partial<Pick<PlayerProfile, "weakFoot" | "skillMoves">>) => starSubs(p.sub, p.weakFoot ?? 3, p.skillMoves ?? 3);
+export const profileOverall = (p: Pick<PlayerProfile, "sub" | "position"> & Partial<Pick<PlayerProfile, "weakFoot" | "skillMoves">>) => overallFromSubs(effSubs(p), p.position);
 
 /**
  * Complète un profil créé avant les sous-attributs (sauvegardes antérieures) :
@@ -121,13 +123,14 @@ function defaultSkillMoves(pos: WorldPlayerPosition): number {
 /** Recopie note et potentiel du profil dans le joueur du monde (le moteur de match lit le monde). */
 export function syncWorldPlayer(s: PlayerCareerState): PlayerCareerState {
   const pr = s.profile;
-  const ovr = pr.sub ? overallFromSubs(pr.sub, pr.position) : Math.round((pr.attrs.pac + pr.attrs.sho + pr.attrs.pas + pr.attrs.dri + pr.attrs.def + pr.attrs.phy) / 6);
-  const attrs = pr.sub ? faceOf(pr.sub, pr.position) : pr.attrs;
+  const es = pr.sub ? effSubs(pr) : null;
+  const ovr = es ? overallFromSubs(es, pr.position) : Math.round((pr.attrs.pac + pr.attrs.sho + pr.attrs.pas + pr.attrs.dri + pr.attrs.def + pr.attrs.phy) / 6);
+  const attrs = es ? faceOf(es, pr.position) : pr.attrs;
   const players = s.shadow.world.players.map(p => (p.id === pr.id
     ? {
       ...p, overall: ovr, potential: Math.max(pr.potential, ovr), position: pr.position, protected: true, face: attrs,
       weakFoot: pr.weakFoot, skillMoves: pr.skillMoves, playStyles: pr.playStyles?.owned, playStylesPlus: pr.playStyles?.plus,
-      posRatings: pr.sub ? positionRatings(pr.sub, pr.position, pr.familiarity ?? defaultFamiliarity(pr.position)) : undefined,
+      posRatings: es ? positionRatings(es, pr.position, pr.familiarity ?? defaultFamiliarity(pr.position)) : undefined,
     }
     : p));
   return { ...s, profile: { ...pr, attrs }, shadow: { ...s.shadow, world: { ...s.shadow.world, players } } };
@@ -310,7 +313,7 @@ export function trainWeek(s: PlayerCareerState, played: boolean, rating: number 
     xp[k] = (xp[k] ?? 0) + base * share;
     while ((xp[k] ?? 0) >= xpNeeded(sub[k]) && sub[k] < 99) {
       const trial = { ...sub, [k]: sub[k] + 1 };
-      if (overallFromSubs(trial, pr.position) > pr.potential) { xp[k] = xpNeeded(sub[k]) - 1; break; }
+      if (overallFromSubs(starSubs(trial, pr.weakFoot, pr.skillMoves), pr.position) > pr.potential) { xp[k] = xpNeeded(sub[k]) - 1; break; }
       xp[k] = (xp[k] ?? 0) - xpNeeded(sub[k]);
       sub[k] += 1;
       gains.push(k);
@@ -378,7 +381,7 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
     if (m) {
       const pl = simulateRest(startPlayerLive(m, {
         id: s.profile.id, name: `${shortName(s.profile)}`, attrs: s.profile.attrs, position: s.playedAs ?? s.profile.position,
-        sub: s.profile.sub, ps: s.profile.playStyles, weakFoot: s.profile.weakFoot, skillMoves: s.profile.skillMoves,
+        sub: effSubs(s.profile), ps: s.profile.playStyles, weakFoot: s.profile.weakFoot, skillMoves: s.profile.skillMoves,
       }));
       live = pl.match;
       psGain = pl.psGain;

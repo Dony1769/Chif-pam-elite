@@ -13,7 +13,7 @@ import type { AttrKey } from "../../game/player2/attributes";
 import { GK_SUBS, OVR_WEIGHTS, SUB_GROUPS, SUB_LABEL } from "../../game/player2/subAttributes";
 import type { SubKey } from "../../game/player2/subAttributes";
 import { PLAYSTYLES, psProgress } from "../../game/player2/playstyles";
-import { POS_LABEL, avgRating, focusLabel, me, myClub, profileOverall, specialXpNeeded, xpNeeded } from "../../game/player2/engine";
+import { POS_LABEL, avgRating, effSubs, focusLabel, me, myClub, profileOverall, specialXpNeeded, xpNeeded } from "../../game/player2/engine";
 import type { TrainingFocus } from "../../game/player2/types";
 import { shortName } from "../../game/utils/names";
 
@@ -34,7 +34,8 @@ export default function ProgressionPage() {
   const groups = isGk ? GK_GROUPS : SUB_GROUPS;
   const clubName = (id: string) => state.shadow.world.clubs.find(c => c.id === id)?.shortName ?? "?";
   const setFocus = (f: TrainingFocus) => run({ type: "SET_FOCUS", attr: f });
-  const posRatings = positionRatings(pr.sub, pos, pr.familiarity ?? {});
+  const eff = effSubs(pr);
+  const posRatings = positionRatings(eff, pos, pr.familiarity ?? {});
 
   const psList = PLAYSTYLES.filter(d => !!d.gk === isGk)
     .map(d => ({ d, owned: pr.playStyles.owned.includes(d.id), plus: pr.playStyles.plus.includes(d.id), prog: psProgress(pr.playStyles, d, pr.sub, pr.playStyles.owned.includes(d.id)) }))
@@ -117,13 +118,14 @@ export default function ProgressionPage() {
                   </div>
                   {keys.map(k => {
                     const v = pr.sub[k];
+                    const star = (eff[k] ?? v) - v;
                     const xp = pr.subXp[k] ?? 0;
                     const pct = Math.min(99, Math.floor((xp / xpNeeded(v)) * 100));
                     return (
                       <button key={k} type="button" className={`pc-sub${focus === k ? " is-focus" : ""}${weights[k] ? " is-key" : ""}`}
                         aria-pressed={focus === k} onClick={() => setFocus(k)} title={`Prochain point : ${pct} %`}>
                         <span>{SUB_LABEL[k]}</span>
-                        <b>{v}</b>
+                        <b>{v + star}{star ? <small className={`pc-star ${star > 0 ? "is-up" : "is-down"}`} title="Effet des étoiles (pied faible ou gestes)">{star > 0 ? `+${star}` : star}★</small> : null}</b>
                         <span className="pc-attr__bar" aria-hidden><i style={{ width: `${v}%` }} /></span>
                       </button>
                     );

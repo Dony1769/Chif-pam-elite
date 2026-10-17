@@ -23,6 +23,7 @@ import { playerValue } from "./playerValue";
 import { weekDays } from "./calendar";
 import { runAwards } from "./worldAwards";
 import { runCompetitions } from "./competitions";
+import { pruneSheets } from "./matchSheet";
 import { advanceWorldSeason, buildInitialStandings, generateLeagueSchedule } from "./worldGenerator";
 import { computePromotionRelegation } from "./worldSimulator";
 import { createRng, seedFromString } from "../utils/random";
@@ -53,7 +54,8 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
   const weekSeed = `${world.seed}-week-${world.season}-${world.currentWeek}`;
   const rng = createRng(seedFromString(weekSeed));
 
-  let current = { ...world };
+  const weekIdx = world.season * 100 + world.currentWeek;
+  let current: WorldLiveState = { ...world, weekSheets: pruneSheets(world.weekSheets, weekIdx) };
   const weekResults: WorldMatchResult[] = [];
   const newsItems: string[] = [];
 
@@ -83,6 +85,10 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
         reputation: current.clubReputations[clubId] ?? 50,
       }),
     });
+
+    // Feuilles de match (la 2e journée de la semaine se joue en semaine)
+    const day = days.indexOf(matchday) > 0 ? "mid" as const : "weekend" as const;
+    current = { ...current, weekSheets: [...(current.weekSheets ?? []), ...output.sheets.map(sh => ({ ...sh, weekIdx, day }))] };
 
     // Appliquer les résultats aux classements
     for (const result of output.results) {

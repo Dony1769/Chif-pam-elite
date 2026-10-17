@@ -1,6 +1,6 @@
 /** Recruteurs à objectifs et postes secondaires (Carrière Joueur v2, monde CP). */
 
-import { createPlayerCareer, starterClubs, mutateSubs, coachDecision, setPrimaryPosition, upgradeProfile } from "../../player2/engine";
+import { createPlayerCareer, starterClubs, mutateSubs, coachDecision, effSubs, setPrimaryPosition, upgradeProfile } from "../../player2/engine";
 import { advancePlayerWeek, ensureCareer } from "../../player2/career";
 import { buildObjectives, interestDone, nextDeadline, objectiveProgress, weeksBetween } from "../../player2/scouting";
 import { familiarityPenalty, gainFamiliarity, positionRatings, switchPrimary } from "../../player2/positions";
@@ -19,7 +19,7 @@ describe("Postes secondaires", () => {
     expect(s.profile.familiarity?.LW).toBe(60);
     expect(familiarityPenalty(60)).toBe(4);
     expect(familiarityPenalty(100)).toBe(0);
-    const r = positionRatings(s.profile.sub, "RW", s.profile.familiarity!);
+    const r = positionRatings(effSubs(s.profile), "RW", s.profile.familiarity!);
     expect(r.RW).toBeDefined();
     expect(r.LW).toBeLessThanOrEqual(r.RW! + 5);
     const wp = s.shadow.world.players.find(p => p.id === s.profile.id)!;

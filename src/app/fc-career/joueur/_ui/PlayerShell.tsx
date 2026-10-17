@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "./PlayerContext";
 import { Crest } from "../../manager/_ui/kit";
+import { SheetsProvider } from "../../manager/_ui/PlayerSheet";
 import { GameBar, GameNav } from "../../manager/_ui/GameNav";
 import { formatMoney } from "../../game/manager/engine";
 import { me, myClub } from "../../game/player2/engine";
@@ -66,7 +67,9 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
             items={TABS.map(t => ({ ...t, badge: t.label === "Messages" ? unread : t.label === "Carrière" ? (state.career?.offers.length ?? 0) : undefined }))} />
         </>
       )}
-      <main className="mg-main">{body}</main>
+      <main className="mg-main">
+        {state ? <SheetsProvider world={state.shadow.world} highlight={state.profile.id} meClub={club?.id}>{body}</SheetsProvider> : body}
+      </main>
       <div className="mg-toasts" aria-live="polite">
         {toasts.map(t => <div key={t.id} data-toast-id={t.id} className={`mg-toast ${t.ok ? "is-ok" : "is-err"}`} role={t.ok ? "status" : "alert"}>{t.text}</div>)}
       </div>

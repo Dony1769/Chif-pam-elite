@@ -32,6 +32,8 @@ export interface WorldAward {
   leagueId?: string;
   value?: number;
   ranking?: RankEntry[];
+  /** Entraîneur du club au moment du titre */
+  coachId?: string;
 }
 
 export const AWARD_LABEL: Record<AwardId, string> = {
@@ -39,6 +41,9 @@ export const AWARD_LABEL: Record<AwardId, string> = {
   golden_shoe: "Soulier d'Or", league_top_scorer: "Meilleur buteur", league_top_assist: "Meilleur passeur",
   league_pots: "Joueur de la saison", tots: "Équipe type de la saison", potm: "Joueur du mois", league_title: "Champion",
 };
+
+export const firstCoach = (w: WorldLiveState, clubId: string) =>
+  w.coaches.find(c => c.clubId === clubId && c.teamLevel === "first_team" && c.status === "active")?.id;
 
 export const BALLON_DOR_WEEK = 17;
 export const GOLDEN_BOY_WEEK = 24;
@@ -110,7 +115,9 @@ function score(l: Line, matchdays: number): number {
 const leagueMatchdays = (w: WorldLiveState, leagueId: string) => w.schedules[leagueId]?.totalMatchdays ?? 38;
 
 function push(w: WorldLiveState, a: WorldAward[]): WorldLiveState {
-  return { ...w, awards: [...(w.awards ?? []), ...a].slice(-MAX_AWARDS) };
+  // Titres de champion : palmarès permanent des clubs (les récompenses sont bornées)
+  const titles = a.filter(x => x.id === "league_title" && x.clubId && x.leagueId).map(x => ({ leagueId: x.leagueId!, season: x.season, clubId: x.clubId!, coachId: x.coachId }));
+  return { ...w, awards: [...(w.awards ?? []), ...a].slice(-MAX_AWARDS), leagueTitles: titles.length ? [...(w.leagueTitles ?? []), ...titles] : w.leagueTitles };
 }
 const nameOf = (p: WorldPlayer) => (p.firstName ? `${p.firstName} ${p.lastName}` : p.lastName);
 const clubName = (w: WorldLiveState, id: string) => w.clubs.find(c => c.id === id)?.name ?? id;
@@ -174,7 +181,7 @@ export function runAwards(w0: WorldLiveState, week: number): { world: WorldLiveS
       ];
       for (const l of xi) { out.push({ id: "tots", season, ...at, leagueId: league.id, playerId: l.p.id, clubId: l.p.clubId, label: `Équipe type de la saison · ${league.name}` }); }
       const champion = [...(w.standings[league.id] ?? [])].sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst))[0];
-      if (champion) out.push({ id: "league_title", season, ...at, leagueId: league.id, clubId: champion.clubId, label: `${clubName(w, champion.clubId)} champion de ${league.name}` });
+      if (champion) out.push({ id: "league_title", season, ...at, leagueId: league.id, clubId: champion.clubId, coachId: firstCoach(w, champion.clubId), label: `${clubName(w, champion.clubId)} champion de ${league.name}` });
       if (league.tier === 1) news.push(`${nameOf(scorer.p)} termine meilleur buteur de ${league.name} avec ${scorer.st!.goals} buts.`);
     }
     // Soulier d'Or : buts × 2 en première division, × 1,5 en deuxième

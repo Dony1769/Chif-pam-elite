@@ -4,6 +4,7 @@
  * fin de saison. Fonctions pures : (état) → nouvel état.
  */
 
+import { pruneSheets, sheetFromLive } from "../domain/matchSheet";
 import type { WorldPlayer } from "../data/worldPlayers";
 import type { Club } from "../domain/club";
 import type { ClubSeasonTarget } from "../domain/clubAI";
@@ -360,7 +361,7 @@ function playLeagueMatchday(s: ManagerState): ManagerState {
 }
 
 /** Enregistre un match terminé dans le monde (classement, calendrier, stats, joueurs). */
-function recordMatch(s: ManagerState, live: LiveMatch): { state: ManagerState; report: ManagerMatchReport } {
+function recordMatch(s: ManagerState, live: LiveMatch, day: "mid" | "weekend" = "weekend"): { state: ManagerState; report: ManagerMatchReport } {
   const done = live.finished ? live : simulateToEnd(live);
   const report = finishMatch(done);
   const w = s.world;
@@ -440,6 +441,7 @@ function recordMatch(s: ManagerState, live: LiveMatch): { state: ManagerState; r
     standings: applyResultToStanding(w.standings, result),
     matchResults: [...w.matchResults, result],
     recentResults: [result, ...w.recentResults].slice(0, 20),
+    weekSheets: [...pruneSheets(w.weekSheets, w.season * 100 + w.currentWeek).filter(x => x.id !== report.fixtureId), { ...sheetFromLive(done, report, leagueId), weekIdx: w.season * 100 + w.currentWeek, day }],
     schedules: {
       ...w.schedules,
       [leagueId]: { ...sch, fixtures: sch.fixtures.map(f => (f.id === result.fixtureId ? { ...f, result: { scoreHome: result.scoreHome, scoreAway: result.scoreAway } } : f)) },
@@ -674,7 +676,7 @@ export function playWeek(s: ManagerState, live?: LiveMatch | null): ManagerState
       state = at(state, md);
       const extra = prepareMatch(state);
       if (extra) {
-        const r = recordMatch(state, extra);
+        const r = recordMatch(state, extra, "mid");
         state = r.state;
         report = r.report;
         weekReports.push(r.report);

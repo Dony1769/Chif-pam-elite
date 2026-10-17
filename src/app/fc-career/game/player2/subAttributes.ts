@@ -218,3 +218,20 @@ export function ageDecline(s: SubAttrs, age: number, rnd: () => number): SubAttr
 }
 
 export const SUB_ZERO = (): SubAttrs => Object.fromEntries(ALL_SUBS.map(k => [k, 0])) as SubAttrs;
+
+/** Sous-attributs portés par le pied faible et par les gestes techniques. */
+export const WEAK_FOOT_SUBS: SubKey[] = ["finishing", "shotPower", "longShots", "volleys", "shortPassing", "longPassing", "crossing", "curve"];
+export const SKILL_SUBS: SubKey[] = ["dribbling", "ballControl", "agility", "balance"];
+
+/**
+ * Sous-attributs effectifs : chaque étoile au-dessus (ou en dessous) de 3 en
+ * pied faible ou en gestes techniques ajoute (ou retire) 1 point aux
+ * sous-attributs concernés. Léger, mais visible sur la note.
+ */
+export function starSubs(s: SubAttrs, weakFoot = 3, skillMoves = 3): SubAttrs {
+  const out = { ...s };
+  const wf = Math.max(-2, Math.min(2, weakFoot - 3)), sm = Math.max(-2, Math.min(2, skillMoves - 3));
+  if (wf) for (const k of WEAK_FOOT_SUBS) if (k in out) out[k] = clamp((out[k] ?? 0) + wf, 1, 99);
+  if (sm) for (const k of SKILL_SUBS) if (k in out) out[k] = clamp((out[k] ?? 0) + sm, 1, 99);
+  return out;
+}

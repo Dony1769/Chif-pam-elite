@@ -17,6 +17,7 @@ import type { OptionId } from "./playstyles";
 import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } from "./types";
 import { maybeNewInterest, updateInterests } from "./scouting";
 import { autoPlayCupsThisWeek } from "./cup";
+import { maybePress } from "./press";
 import {
   avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
@@ -439,6 +440,8 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
           : `${o.kind === "free" ? "Contrat libre" : `Indemnité ${money(o.fee)}`} · ${money(o.wage)}/sem · ${o.seasons} saisons · rôle ${ROLE_LABEL[o.role].toLowerCase()}. Valable 2 semaines.`);
     }));
   }
+
+  s = maybePress(withCups, s);
 
   // Joueur libre sans club après 3 semaines : son club lui propose une saison de plus
   if (C(s).freeAgentSince !== null && now - C(s).freeAgentSince! >= 3) {
