@@ -95,6 +95,8 @@ export interface ClubOffer {
   role: SquadRole;
   /** Index absolu de semaine d'expiration (season*100+week) */
   expiresAt: number;
+  /** Refus du club pendant la négociation */
+  rounds?: number;
 }
 
 /** Compteurs cumulés de la carrière (base des objectifs des recruteurs). */
@@ -144,9 +146,15 @@ export interface NationalTeamState {
 
 export interface Award {
   season: number;
-  id: "top_scorer" | "revelation" | "golden_star" | "league_title" | "promotion" | "assist_king"
+  id: "top_scorer" | "revelation" | "golden_star" | "league_title" | "promotion" | "assist_king" | "cup_win"
     | import("../domain/worldAwards").AwardId;
   label: string;
+  /** Club (ou sélection) du joueur au moment du trophée */
+  clubId?: string;
+  /** Valeur associée (buts, passes, points…) */
+  value?: number;
+  /** Compétition gagnée (cup_win) : cup-eng, ucl, uel, euro, wc… */
+  compId?: string;
 }
 
 export interface CareerExtras {

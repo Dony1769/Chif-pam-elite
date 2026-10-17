@@ -3,7 +3,9 @@
 /** FC CAREER 27 — Carrière Joueur v2 : contrat, offres, prêt, sélection, trophées. */
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
+import { TrophyCabinet } from "../_ui/TrophyCabinet";
 import { Crest, Empty, Meter, MoneyInput, Section } from "../../manager/_ui/kit";
 import { MAX_INTERESTS, objectiveLabel, objectiveProgress, weekIndex, weeksBetween } from "../../game/player2/scouting";
 import { formatMoney } from "../../game/manager/engine";
@@ -29,6 +31,7 @@ export default function CareerPage() {
 
   return (
     <div className="mg-grid">
+      <div className="mg-col-12"><TrophyCabinet state={state} /></div>
       <div className="mg-col-8 mg-stack">
         <Section title={`Clubs qui vous suivent (${interests.length})`} aside={<span className="mg-small">{MAX_INTERESTS} au maximum</span>}>
           {interests.length === 0 ? (
@@ -81,7 +84,7 @@ export default function CareerPage() {
                   </div>
                 </div>
                 <span className="mg-row">
-                  <button type="button" className="mg-btn mg-btn--sm mg-btn--gold" onClick={() => run({ type: "ACCEPT_OFFER", offerId: o.id })}>Accepter</button>
+                  <Link href={`/fc-career/joueur/contrat?offre=${encodeURIComponent(o.id)}`} className="mg-btn mg-btn--sm mg-btn--gold">Voir le contrat</Link>
                   <button type="button" className="mg-btn mg-btn--sm mg-btn--ghost" onClick={() => run({ type: "REJECT_OFFER", offerId: o.id })}>Refuser</button>
                 </span>
               </div>
@@ -131,13 +134,6 @@ export default function CareerPage() {
             <dt>Buts</dt><dd>{c.national.goals}</dd>
           </dl>
           <p className="mg-small" style={{ marginBottom: 0 }}>Trêve internationale toutes les 5 semaines, à partir de 18 ans.</p>
-        </Section>
-        <Section title={`Trophées (${c.awards.length})`}>
-          {c.awards.length === 0 ? <Empty>Aucun trophée pour l&apos;instant. Meilleur buteur, révélation, titre, Étoile d&apos;Or… tout reste à gagner.</Empty> : (
-            <table className="mg-table"><tbody>
-              {[...c.awards].reverse().map((a, i) => <tr key={i}><td className="mg-small">S{a.season}</td><td><b>{a.id === "golden_star" ? "★ " : ""}{a.label}</b></td></tr>)}
-            </tbody></table>
-          )}
         </Section>
         <Section title="Totaux de carrière">
           <dl className="mg-dl">

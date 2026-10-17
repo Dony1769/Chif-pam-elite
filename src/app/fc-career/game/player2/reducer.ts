@@ -14,7 +14,7 @@ import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
 import { applyCupMatch, autoPlayCup, myCupMatch } from "./cup";
-import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, requestTransfer, retirePlayer } from "./career";
+import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, signOffer, requestTransfer, retirePlayer } from "./career";
 
 export type PlayerAction =
   | { type: "NEW"; input: NewCareerInput }
@@ -29,6 +29,7 @@ export type PlayerAction =
   | { type: "ADVANCE_TO_MATCH" }
   | { type: "ACCEPT_OFFER"; offerId: string }
   | { type: "REJECT_OFFER"; offerId: string }
+  | { type: "SIGN_OFFER"; offerId: string; wage: number; seasons: number }
   | { type: "REQUEST_TRANSFER"; on: boolean }
   | { type: "RENEW"; wage: number; seasons: number }
   | { type: "MARK_READ"; id: string }
@@ -77,6 +78,7 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
     }
     case "SET_FOCUS":        return plain(setTrainingFocus(s, action.attr));
     case "ACCEPT_OFFER":     return fromResult(acceptOffer(s, action.offerId));
+    case "SIGN_OFFER":       return fromResult(signOffer(s, action.offerId, action.wage, action.seasons));
     case "REJECT_OFFER":     return plain(rejectOffer(s, action.offerId));
     case "REQUEST_TRANSFER": return fromResult(requestTransfer(s, action.on));
     case "RENEW":            return fromResult(negotiateRenewal(s, action.wage, action.seasons));

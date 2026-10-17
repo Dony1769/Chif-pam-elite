@@ -572,3 +572,47 @@
 .pc-cupbanner.is-final { border-color: rgba(246, 200, 74, 0.6); background: linear-gradient(90deg, rgba(246, 200, 74, 0.22), rgba(246, 200, 74, 0.04)); }
 .pc-cupbanner.is-final b { color: #F6C84A; }
 .pc-flag { font-size: 44px; line-height: 1; }
+
+/* ── Vitrine des trophées ───────────────────────────────────────────────── */
+.pc-cabinet { position: relative; width: 100%; border-radius: var(--mg-radius-sm); overflow: hidden;
+  background: radial-gradient(ellipse 70% 60% at 50% 0%, rgba(120, 150, 255, 0.22), transparent 70%), linear-gradient(180deg, rgba(10, 20, 90, 0.55), rgba(4, 10, 42, 0.8));
+  border: 1px solid rgba(160, 185, 255, 0.25); box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.45); }
+.pc-cabinet__grid { position: absolute; inset: 0; display: grid; }
+.pc-cabinet__cell { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 1px; padding: 0 4px 10px; border-radius: 12px; text-align: center; }
+.pc-cabinet__cell:hover, .pc-cabinet__cell.is-active { background: rgba(185, 255, 57, 0.07); }
+.pc-cabinet__cell:focus-visible { outline: 2px solid var(--mg-accent); outline-offset: -4px; }
+.pc-cabinet__count { font-size: 22px; font-weight: 900; line-height: 1; color: #F6C84A; font-variant-numeric: tabular-nums; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7); }
+.pc-cabinet__name { font-size: 12px; font-weight: 700; color: var(--mg-text); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); line-height: 1.15; }
+.pc-cabinet__cell.is-locked .pc-cabinet__count { color: rgba(220, 227, 234, 0.35); }
+.pc-cabinet__cell.is-locked .pc-cabinet__name { color: rgba(220, 227, 234, 0.5); }
+.pc-cabinet__detail { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pc-cabinet__detail h3 { margin: 0; font-size: 17px; }
+
+/* ── Contrat et signature ───────────────────────────────────────────────── */
+.pc-contract__head { display: flex; align-items: center; gap: 14px; }
+.pc-contract__club { margin: 2px 0; font-size: clamp(22px, 4vw, 32px); }
+.pc-release { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--mg-radius-sm); border: 1px solid var(--mg-line); }
+.pc-release.is-ok { border-color: rgba(185, 255, 57, 0.45); background: var(--mg-accent-soft); }
+.pc-release.is-ko { border-color: rgba(255, 107, 114, 0.5); background: rgba(255, 107, 114, 0.1); }
+.pc-sign { display: grid; place-items: center; padding-block: 24px; }
+.pc-sign__paper { width: min(640px, 100%); padding: 26px 24px 22px; border-radius: 14px; color: #1b1f2a;
+  background: linear-gradient(180deg, #fbf8f1, #f1ece0); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+  display: flex; flex-direction: column; gap: 10px; transform: rotate(-0.6deg); animation: pc-paper 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+.pc-sign__top { display: flex; align-items: center; gap: 14px; }
+.pc-sign__top h1 { margin: 2px 0 0; font-size: 26px; color: #10142a; }
+.pc-sign__kicker { font-size: 12px; font-weight: 700; color: #6a5a2e; letter-spacing: 0.06em; }
+.pc-sign__terms { margin: 0; font-size: 14px; color: #39405a; border-top: 1px solid rgba(0, 0, 0, 0.1); padding-top: 10px; }
+.pc-sign__svg { width: 100%; height: auto; }
+.pc-sign__ink { font-family: var(--font-script), "Brush Script MT", cursive; font-size: 72px; fill: transparent; stroke: #1c2f8f; stroke-width: 1.2;
+  stroke-dasharray: 2400; stroke-dashoffset: 2400; animation: pc-ink 2.6s 0.5s ease-in-out forwards, pc-fill 0.6s 2.7s ease-out forwards; }
+.pc-sign__line { stroke: rgba(0, 0, 0, 0.35); stroke-width: 1; }
+.pc-sign__caption { text-align: center; font-size: 12px; color: #6a6f80; margin-top: -6px; }
+.pc-sign__go { align-self: center; margin-top: 6px; opacity: 0; animation: pc-fill 0.4s 3.2s forwards; }
+@keyframes pc-ink { to { stroke-dashoffset: 0; } }
+@keyframes pc-fill { to { fill: #1c2f8f; opacity: 1; } }
+@keyframes pc-paper { from { transform: translateY(30px) rotate(-3deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pc-sign__ink { animation: none; stroke-dashoffset: 0; fill: #1c2f8f; }
+  .pc-sign__go, .pc-sign__paper { animation: none; opacity: 1; }
+}
+@media (max-width: 560px) { .pc-hide-sm { display: none; } }

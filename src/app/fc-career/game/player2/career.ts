@@ -194,6 +194,74 @@ export function acceptOffer(s0: PlayerCareerState, offerId: string): CareerResul
   return done(next, txt);
 }
 
+// ─── Négociation et signature ────────────────────────────────────────────────
+
+/** Tentatives de négociation avant que le club ne retire son offre. */
+export const MAX_ROUNDS = 3;
+
+export interface ReleaseDecision { allowed: boolean; askingFee: number; buyerMax: number; reason: string }
+
+/**
+ * Le club actuel décide seul du prix et du départ : il réclame plus pour un
+ * joueur clé sous contrat long, moins s'il est en fin de contrat ou a demandé
+ * à partir. L'acheteur ne paiera pas plus que son plafond.
+ */
+export function releaseDecision(s: PlayerCareerState, o: ClubOffer): ReleaseDecision {
+  const buyer = s.shadow.world.clubs.find(c => c.id === o.clubId)?.name ?? "Le club";
+  const cur = myClub(s);
+  if (o.kind !== "transfer") return { allowed: true, askingFee: 0, buyerMax: 0, reason: o.kind === "loan" ? `${cur.name} accepte le prêt.` : "Libre de tout contrat : aucune indemnité." };
+  const role = s.contract.role;
+  let f = 1 + (role === "key" ? 0.35 : role === "starter" ? 0.15 : 0);
+  f += s.contract.seasonsLeft >= 3 ? 0.2 : s.contract.seasonsLeft <= 1 ? -0.3 : 0;
+  if (C(s).transferRequested) f -= 0.15;
+  const askingFee = Math.round((marketValue(s) * f) / 10_000) * 10_000;
+  const buyerMax = Math.round((o.fee * 1.1) / 10_000) * 10_000;
+  const allowed = askingFee <= buyerMax;
+  return {
+    allowed, askingFee, buyerMax,
+    reason: allowed
+      ? `${cur.name} accepte de vous laisser partir pour ${money(askingFee)}.`
+      : `${cur.name} réclame ${money(askingFee)} ; ${buyer} ne monte pas au-delà de ${money(buyerMax)}. ${C(s).transferRequested ? "" : "Demander à partir peut faire baisser le prix."}`.trim(),
+  };
+}
+
+/** Salaire maximal que le club acheteur accepte (jamais affiché tel quel). */
+export function wageCeiling(s: PlayerCareerState, o: ClubOffer): number {
+  const bonus = (o.role === "key" ? 0.1 : o.role === "starter" ? 0.05 : 0) + s.profile.reputation / 1000;
+  return Math.round((o.wage * (1.1 + bonus)) / 50) * 50;
+}
+
+/**
+ * Le joueur propose un salaire et une durée. Accepté si le club peut suivre ;
+ * sinon le club contre-propose son maximum. Après 3 refus, il retire l'offre.
+ * Accepté : transfert immédiat (ou prêt / signature libre).
+ */
+export function signOffer(s0: PlayerCareerState, offerId: string, wage: number, seasons: number): CareerResult {
+  const s = ensureCareer(s0);
+  const o = C(s).offers.find(x => x.id === offerId);
+  if (!o) return fail(s, "Cette offre n'est plus valable.");
+  if (o.expiresAt < weekIndex(s)) return fail(s, "Cette offre a expiré.");
+  const club = s.shadow.world.clubs.find(c => c.id === o.clubId);
+  if (!club) return fail(s, "Club introuvable.");
+  if (o.kind !== "loan" && (seasons < 1 || seasons > 5)) return fail(s, "Durée : 1 à 5 saisons.");
+  const rel = releaseDecision(s, o);
+  if (!rel.allowed) return fail(s, rel.reason);
+  const ceiling = o.kind === "loan" ? o.wage : wageCeiling(s, o);
+  if (wage > ceiling) {
+    const rounds = (o.rounds ?? 0) + 1;
+    if (rounds >= MAX_ROUNDS) {
+      const next = pushPlayerInbox(withCareer(s, { offers: C(s).offers.filter(x => x.id !== o.id) }),
+        pmsg(s, "finance", `${club.name} retire son offre`, "Les négociations n'ont pas abouti : le club se tourne vers une autre piste."));
+      return fail(next, `${club.name} met fin aux discussions et retire son offre.`);
+    }
+    const offers = C(s).offers.map(x => (x.id === o.id ? { ...x, rounds, wage: ceiling } : x));
+    return fail(withCareer(s, { offers }), `${club.name} refuse ${money(wage)}/sem et propose ${money(ceiling)}/sem, son maximum. ${MAX_ROUNDS - rounds} tentative(s) restante(s).`);
+  }
+  const final: ClubOffer = { ...o, wage: Math.max(0, wage), seasons: o.kind === "loan" ? 1 : seasons, fee: rel.askingFee };
+  const offers = C(s).offers.map(x => (x.id === o.id ? final : x));
+  return acceptOffer(withCareer(s, { offers }), o.id);
+}
+
 export function rejectOffer(s0: PlayerCareerState, offerId: string): PlayerCareerState {
   const s = ensureCareer(s0);
   return withCareer(s, { offers: C(s).offers.filter(o => o.id !== offerId) });
@@ -339,6 +407,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
 
   s = nationalWindow(s);
   s = collectWorldAwards(s, season, start.shadow.world.currentWeek);
+  s = collectCupWins(withCups, s);
 
   if (s.shadow.world.season !== season) s = seasonChange(start, s);
 
@@ -393,7 +462,7 @@ function collectWorldAwards(s: PlayerCareerState, season: number, week: number):
     const line = s.seasons.find(l => l.season === a.season);
     const mine = a.playerId === id || (a.id === "league_title" && a.clubId === myClub(s).id && (line?.apps ?? 0) >= 5);
     if (mine) {
-      won.push({ season: a.season, id: a.id, label: a.label });
+      won.push({ season: a.season, id: a.id, label: a.label, clubId: a.clubId ?? myClub(s).id, value: a.value });
       messages.push(pmsg(s, "board", a.id === "ballon_dor" ? "BALLON D'OR CP !" : "Récompense", a.label));
     } else if (a.ranking) {
       const rank = a.ranking.findIndex(r => r.playerId === id);
@@ -404,6 +473,29 @@ function collectWorldAwards(s: PlayerCareerState, season: number, week: number):
   const big = won.filter(a => a.id === "ballon_dor" || a.id === "golden_boy" || a.id === "golden_shoe").length;
   const rep = clamp(s.profile.reputation + won.length * 2 + big * 8, 1, 100);
   return pushPlayerInbox({ ...withCareer(s, { awards: [...C(s).awards, ...won] }), profile: { ...s.profile, reputation: rep } }, ...messages);
+}
+
+/**
+ * Coupes gagnées cette semaine : avec son club (s'il a joué pour lui cette
+ * saison) ou avec sa sélection (s'il en fait partie).
+ */
+function collectCupWins(before: PlayerCareerState, s: PlayerCareerState): PlayerCareerState {
+  const old = new Set((before.shadow.world.trophies ?? []).map(t => `${t.compId}-${t.season}`));
+  const fresh = (s.shadow.world.trophies ?? []).filter(t => !old.has(`${t.compId}-${t.season}`));
+  if (!fresh.length) return s;
+  const me0 = s.shadow.world.players.find(p => p.id === s.profile.id);
+  const won: Award[] = [];
+  for (const t of fresh) {
+    const line = s.seasons.find(l => l.season === t.season && l.clubId === t.winner);
+    const forNation = t.kind === "national" && t.winner === me0?.nationality && C(s).national.caps > 0;
+    if ((line && line.apps > 0) || forNation) {
+      won.push({ season: t.season, id: "cup_win", compId: t.compId, clubId: t.winner, label: `${t.name} ${t.kind === "national" ? t.year : ""}`.trim() });
+    }
+  }
+  if (!won.length) return s;
+  const rep = clamp(s.profile.reputation + won.length * 3, 1, 100);
+  return pushPlayerInbox({ ...withCareer(s, { awards: [...C(s).awards, ...won] }), profile: { ...s.profile, reputation: rep } },
+    ...won.map(a => pmsg(s, "board", `Trophée : ${a.label}`, "Vous soulevez le trophée !")));
 }
 
 function seasonChange(prev: PlayerCareerState, s0: PlayerCareerState): PlayerCareerState {

@@ -33,7 +33,13 @@ function shieldShape() {
   return s;
 }
 
-function Model({ kind }: { kind: Trophy }) {
+const LOCKED = { color: "#1a2350", metalness: 0.4, roughness: 0.6, clearcoat: 0.3, envMapIntensity: 0.6, emissive: "#000000", emissiveIntensity: 0 };
+
+export type ModelKind = Trophy | "medal" | "plate";
+
+export function Model({ kind, finish, locked }: { kind: ModelKind; finish?: "gold" | "silver"; locked?: boolean }) {
+  const G = locked ? LOCKED : finish === "silver" ? SILVER : GOLD;
+  const S = locked ? LOCKED : finish === "gold" ? GOLD : SILVER;
   const extrude = { depth: 0.22, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 4 };
   const star = useMemo(() => new THREE.ExtrudeGeometry(starShape(), extrude), []); // eslint-disable-line react-hooks/exhaustive-deps
   const boot = useMemo(() => new THREE.ExtrudeGeometry(bootShape(), { ...extrude, depth: 0.45 }), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -44,36 +50,53 @@ function Model({ kind }: { kind: Trophy }) {
     return new THREE.LatheGeometry(pts, 64);
   }, []);
   switch (kind) {
+    case "medal":
+      return (
+        <group>
+          <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.85, 0.85, 0.16, 64]} /><meshPhysicalMaterial {...G} /></mesh>
+          <mesh><torusGeometry args={[0.85, 0.08, 16, 96]} /><meshPhysicalMaterial {...G} /></mesh>
+          <mesh position={[0, 0, 0.1]} geometry={star} scale={0.42}><meshPhysicalMaterial {...G} /></mesh>
+          <mesh position={[0, 1.05, 0]}><torusGeometry args={[0.18, 0.05, 12, 48]} /><meshPhysicalMaterial {...G} /></mesh>
+        </group>
+      );
+    case "plate":
+      return (
+        <group rotation={[0.35, 0, 0]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[1.1, 1.0, 0.1, 64]} /><meshPhysicalMaterial {...G} /></mesh>
+          <mesh><torusGeometry args={[1.08, 0.06, 16, 96]} /><meshPhysicalMaterial {...G} /></mesh>
+          <mesh position={[0, 0, 0.06]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.55, 0.55, 0.04, 48]} /><meshPhysicalMaterial {...G} /></mesh>
+        </group>
+      );
     case "ballon":
-      return <mesh><icosahedronGeometry args={[1.05, 1]} /><meshPhysicalMaterial {...GOLD} flatShading /></mesh>;
+      return <mesh><icosahedronGeometry args={[1.05, 1]} /><meshPhysicalMaterial {...G} flatShading /></mesh>;
     case "globe":
       return (
         <group>
-          <mesh><sphereGeometry args={[0.85, 48, 48]} /><meshPhysicalMaterial {...GOLD} /></mesh>
-          <mesh rotation={[Math.PI / 2.4, 0, 0]}><torusGeometry args={[1.15, 0.05, 16, 96]} /><meshPhysicalMaterial {...GOLD} /></mesh>
-          <mesh rotation={[0, 0, Math.PI / 3]}><torusGeometry args={[1.25, 0.04, 16, 96]} /><meshPhysicalMaterial {...GOLD} /></mesh>
+          <mesh><sphereGeometry args={[0.85, 48, 48]} /><meshPhysicalMaterial {...G} /></mesh>
+          <mesh rotation={[Math.PI / 2.4, 0, 0]}><torusGeometry args={[1.15, 0.05, 16, 96]} /><meshPhysicalMaterial {...G} /></mesh>
+          <mesh rotation={[0, 0, Math.PI / 3]}><torusGeometry args={[1.25, 0.04, 16, 96]} /><meshPhysicalMaterial {...G} /></mesh>
         </group>
       );
     case "star":
       return (
         <group>
-          <mesh geometry={star} position={[0, 0, -0.11]}><meshPhysicalMaterial {...SILVER} /></mesh>
-          <mesh><torusGeometry args={[1.35, 0.06, 16, 96]} /><meshPhysicalMaterial {...SILVER} /></mesh>
+          <mesh geometry={star} position={[0, 0, -0.11]}><meshPhysicalMaterial {...S} /></mesh>
+          <mesh><torusGeometry args={[1.35, 0.06, 16, 96]} /><meshPhysicalMaterial {...S} /></mesh>
         </group>
       );
     case "shield":
-      return <mesh geometry={shield} position={[0, 0, -0.11]}><meshPhysicalMaterial {...SILVER} /></mesh>;
+      return <mesh geometry={shield} position={[0, 0, -0.11]}><meshPhysicalMaterial {...S} /></mesh>;
     case "glove":
-      return <mesh><dodecahedronGeometry args={[1, 0]} /><meshPhysicalMaterial {...GOLD} flatShading /></mesh>;
+      return <mesh><dodecahedronGeometry args={[1, 0]} /><meshPhysicalMaterial {...G} flatShading /></mesh>;
     case "boot":
-      return <mesh geometry={boot} position={[-0.2, 0, -0.22]}><meshPhysicalMaterial {...GOLD} /></mesh>;
+      return <mesh geometry={boot} position={[-0.2, 0, -0.22]}><meshPhysicalMaterial {...G} /></mesh>;
     case "cup":
     default:
       return (
         <group>
-          <mesh geometry={cup}><meshPhysicalMaterial {...SILVER} side={THREE.DoubleSide} /></mesh>
-          <mesh position={[0.95, 0.45, 0]} rotation={[0, 0, Math.PI / 2]}><torusGeometry args={[0.28, 0.05, 12, 48, Math.PI]} /><meshPhysicalMaterial {...SILVER} /></mesh>
-          <mesh position={[-0.95, 0.45, 0]} rotation={[0, 0, -Math.PI / 2]}><torusGeometry args={[0.28, 0.05, 12, 48, Math.PI]} /><meshPhysicalMaterial {...SILVER} /></mesh>
+          <mesh geometry={cup}><meshPhysicalMaterial {...S} side={THREE.DoubleSide} /></mesh>
+          <mesh position={[0.95, 0.45, 0]} rotation={[0, 0, Math.PI / 2]}><torusGeometry args={[0.28, 0.05, 12, 48, Math.PI]} /><meshPhysicalMaterial {...S} /></mesh>
+          <mesh position={[-0.95, 0.45, 0]} rotation={[0, 0, -Math.PI / 2]}><torusGeometry args={[0.28, 0.05, 12, 48, Math.PI]} /><meshPhysicalMaterial {...S} /></mesh>
         </group>
       );
   }
