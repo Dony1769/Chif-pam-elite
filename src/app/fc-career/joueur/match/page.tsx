@@ -12,6 +12,9 @@ import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
+import { cupLabel, myCupMatch, startCupLive } from "../../game/player2/cup";
+import { isNation, teamName } from "../../game/domain/competitions";
+import { NATION_BY_ID } from "../../game/data/cp/nations";
 import { decide, onPitch, simulateRest, startPlayerLive, stepPlayerLive } from "../../game/player2/live";
 import type { MomentOption } from "../../game/player2/live";
 import { finishMatch } from "../../game/manager/matchSim";
@@ -27,23 +30,27 @@ export default function PlayerMatchPage() {
   const router = useRouter();
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(0);
-  const fx = myNextFixture(state);
+  const cup = myCupMatch(state);
+  const fx0 = myNextFixture(state);
+  const fx = cup ? null : fx0;
   const preparedFor = useRef<PlayerCareerState | null>(null);
-  const eligible = state.selection === "starter" || state.selection === "bench";
+  const eligible = cup ? cup.selection !== "out" : state.selection === "starter" || state.selection === "bench";
+  const liveId = cup ? `cup:${cup.key}` : fx?.id;
 
   // Préparer le match de la semaine (la compo du coach peut changer jusqu'au coup d'envoi)
   useEffect(() => {
     if (!eligible) return;
-    const stale = !live || !fx || live.match.fixtureId !== fx.id;
+    const stale = !live || !liveId || live.match.fixtureId !== liveId;
     const notStarted = !!live && live.match.minute === 0 && preparedFor.current !== state;
     if (!stale && !notStarted) return;
     preparedFor.current = state;
+    if (cup) { setLive(startCupLive(state, cup)); return; }
     const m = preparePlayerMatch(state);
     setLive(m ? startPlayerLive(m, {
       id: state.profile.id, name: `${shortName(state.profile)}`, attrs: state.profile.attrs, position: state.playedAs ?? state.profile.position,
       sub: state.profile.sub, ps: state.profile.playStyles, weakFoot: state.profile.weakFoot, skillMoves: state.profile.skillMoves,
     }) : null);
-  }, [state, fx, live, setLive, eligible]);
+  }, [state, cup, liveId, live, setLive, eligible]);
 
   // Horloge : pause automatique sur un moment clé, à la mi-temps et à la fin
   useEffect(() => {
@@ -59,7 +66,19 @@ export default function PlayerMatchPage() {
   const report = useMemo(() => (live?.match.finished ? finishMatch(live.match) : null), [live]);
   const clubOf = (id: string) => state.shadow.world.clubs.find(c => c.id === id);
 
-  if (!eligible || !fx || !live) {
+  if (cup && !eligible) {
+    return (
+      <div className="mg-center">
+        <div className="mg-card mg-nogame">
+          <h1>Non retenu</h1>
+          <p className="mg-muted">{cupLabel(cup)} contre {teamName(state.shadow.world, cup.opponent)} : {cup.national ? "le sélectionneur" : "le coach"} ne vous a pas retenu pour ce match.</p>
+          <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "SKIP_CUP" })}>Suivre le match depuis la tribune</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!eligible || !(fx || cup) || !live || live.match.fixtureId !== liveId) {
     return (
       <div className="mg-center">
         <div className="mg-card mg-nogame">
@@ -85,21 +104,29 @@ export default function PlayerMatchPage() {
   function validate() {
     if (!live) return;
     const done = live.match.finished ? live : simulateRest(live);
-    run({ type: "PLAY_WEEK", live: done.match, psGain: done.psGain });
     setLive(null);
+    // Match de coupe : le championnat de la semaine suit (s'il y en a un)
+    if (cup) { run({ type: "PLAY_CUP", live: done.match, psGain: done.psGain }); return; }
+    run({ type: "PLAY_WEEK", live: done.match, psGain: done.psGain });
     router.push("/fc-career/joueur");
   }
 
   return (
     <div className="mg-grid">
       <div className="mg-col-8 mg-stack">
+        {cup && (
+          <div className={`pc-cupbanner${cup.stage === "Finale" ? " is-final" : ""}`}>
+            <span className="mg-small">{cup.national ? "Sélection" : cup.comp.kind === "continental" ? "Coupe d'Europe" : "Coupe nationale"}{cup.knockout ? " · élimination directe, tirs au but en cas d'égalité" : ""}</span>
+            <b>{cupLabel(cup)}</b>
+          </div>
+        )}
         <div className="mg-score" aria-live="polite">
-          <div className="mg-score__team"><Crest club={clubOf(m.home.clubId)} size={48} /><strong>{m.home.name}</strong></div>
+          <div className="mg-score__team">{isNation(m.home.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.home.clubId]?.flag}</span> : <Crest club={clubOf(m.home.clubId)} size={48} />}<strong>{m.home.name}</strong></div>
           <div className="mg-score__mid">
             <div className="mg-score__goals">{m.home.goals} - {m.away.goals}</div>
             <span className={`mg-score__min${m.finished ? " is-ft" : ""}`}>{m.finished ? "Terminé" : started ? `${m.minute}'` : "Coup d'envoi"}</span>
           </div>
-          <div className="mg-score__team"><Crest club={clubOf(m.away.clubId)} size={48} /><strong>{m.away.name}</strong></div>
+          <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
 
         {live.moment ? (

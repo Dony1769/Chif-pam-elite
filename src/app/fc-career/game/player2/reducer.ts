@@ -13,6 +13,7 @@ import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
+import { applyCupMatch, autoPlayCup, myCupMatch } from "./cup";
 import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, requestTransfer, retirePlayer } from "./career";
 
 export type PlayerAction =
@@ -22,6 +23,8 @@ export type PlayerAction =
   | { type: "PLAY_WEEK"; live?: LiveMatch | null; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_FOCUS"; attr: AttrKey | TrainingFocus }
   | { type: "RETIRE" }
+  | { type: "SKIP_CUP" }
+  | { type: "PLAY_CUP"; live: LiveMatch; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_POSITION"; position: WorldPlayerPosition }
   | { type: "ADVANCE_TO_MATCH" }
   | { type: "ACCEPT_OFFER"; offerId: string }
@@ -55,12 +58,21 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
   switch (action.type) {
     case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
     case "RETIRE":           return fromResult(retirePlayer(s));
+    case "SKIP_CUP": {
+      const cm = myCupMatch(s);
+      return cm ? plain(autoPlayCup(s, cm)) : plain(s);
+    }
+    case "PLAY_CUP": {
+      const cm = myCupMatch(s);
+      if (!cm || action.live.fixtureId !== `cup:${cm.key}`) return { state: s, message: { ok: false, text: "Ce match de coupe n'est plus d'actualité." } };
+      return plain(applyCupMatch(s, cm, action.live, action.psGain));
+    }
     case "SET_POSITION":     return fromResult(setPrimaryPosition(s, action.position));
     case "ADVANCE_TO_MATCH": {
       // Semaines sans match (intersaison, trêves) enchaînées jusqu'au prochain match ou une offre
       let cur = s, n = 0;
       const season = s.shadow.world.season;
-      do { cur = advancePlayerWeek(cur); n++; } while (n < 16 && !cur.retired && !hasMatchThisWeek(cur.shadow) && cur.shadow.world.season === season && (cur.career?.offers.length ?? 0) === (s.career?.offers.length ?? 0));
+      do { cur = advancePlayerWeek(cur); n++; } while (n < 16 && !cur.retired && !hasMatchThisWeek(cur.shadow) && !myCupMatch(cur) && cur.shadow.world.season === season && (cur.career?.offers.length ?? 0) === (s.career?.offers.length ?? 0));
       return { state: cur, message: { ok: true, text: `${n} semaine${n > 1 ? "s" : ""} passée${n > 1 ? "s" : ""}.` } };
     }
     case "SET_FOCUS":        return plain(setTrainingFocus(s, action.attr));

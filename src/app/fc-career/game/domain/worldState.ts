@@ -149,6 +149,8 @@ export interface WorldLiveState {
   competitions?: import("./competitions").Competition[];
   /** Monde CP : palmarès des compétitions à élimination */
   trophies?: import("./competitions").TrophyRecord[];
+  /** Matchs de coupe déjà joués en direct par l'utilisateur (clé = identifiant du match) */
+  forcedTies?: Record<string, import("./competitions").ForcedTie>;
   /** Monde CP : clubs qualifiés pour les coupes d'Europe de la saison suivante */
   continentalNext?: { forSeason: number; ucl: string[]; uel: string[] };
 }

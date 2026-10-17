@@ -565,3 +565,10 @@
 .pc-scout__val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
 .mg-app.mg-portal { display: contents; }
 .mg-app.mg-portal::before, .mg-app.mg-portal::after { content: none; }
+
+/* ── Matchs de coupe et de sélection ─────────────────────────────────────── */
+.pc-cupbanner { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: var(--mg-radius-sm); border: 1px solid rgba(66, 200, 255, 0.4); background: linear-gradient(90deg, rgba(66, 200, 255, 0.16), rgba(66, 200, 255, 0.03)); }
+.pc-cupbanner b { font-size: 17px; }
+.pc-cupbanner.is-final { border-color: rgba(246, 200, 74, 0.6); background: linear-gradient(90deg, rgba(246, 200, 74, 0.22), rgba(246, 200, 74, 0.04)); }
+.pc-cupbanner.is-final b { color: #F6C84A; }
+.pc-flag { font-size: 44px; line-height: 1; }

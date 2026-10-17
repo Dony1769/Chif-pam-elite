@@ -16,6 +16,7 @@ import { isInternationalBreak } from "../domain/calendar";
 import type { OptionId } from "./playstyles";
 import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } from "./types";
 import { maybeNewInterest, updateInterests } from "./scouting";
+import { autoPlayCupsThisWeek } from "./cup";
 import {
   avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
@@ -270,6 +271,9 @@ function nationalWindow(s: PlayerCareerState): PlayerCareerState {
   const nat = C(s).national;
   const now = weekIndex(s);
   if (!isInternationalWeek(s) || nat.lastWindow === now) return s;
+  // Juin d'Euro ou de Coupe du monde : la sélection joue le tournoi (matchs jouables), pas de rassemblement amical
+  const inTournament = (s.shadow.world.competitions ?? []).some(c => c.kind === "national" && c.season === s.shadow.world.season && c.groups?.some(g => g.teams.includes(nat.countryId)));
+  if (inTournament && s.shadow.world.currentWeek >= 48) return withCareer(s, { national: { ...nat, lastWindow: now } });
   const rank = nationalRank(s);
   const called = rank <= 23 && me(s).age >= 18 && !me(s).injury;
   const country = s.shadow.world.countries.find(c => c.id === nat.countryId);
@@ -324,7 +328,9 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
   const start = ensureCareer(s0);
   if (start.retired) return start;
   const season = start.shadow.world.season;
-  let s = ensureCareer(playPlayerWeek(start, live, psGain));
+  // Matchs de coupe / sélection de la semaine pas joués en direct : joués automatiquement
+  const withCups = autoPlayCupsThisWeek(start);
+  let s = ensureCareer(playPlayerWeek(withCups, live, psGain));
 
   // Salaire + primes de match
   const sum = s.lastMatch !== start.lastMatch ? s.lastMatch : null;

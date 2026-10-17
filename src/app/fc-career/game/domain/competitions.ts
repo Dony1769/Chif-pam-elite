@@ -42,6 +42,33 @@ export interface Competition {
   winner?: string;
   runnerUp?: string;
 }
+/** Résultat imposé par un match joué en direct (Carrière Joueur). */
+export interface ForcedTie { hs: number; as: number; pens?: [number, number]; stats: { playerId: string; clubId: string; leagueId: string; goals: number; assists: number }[] }
+export const tieKey = (comp: Pick<Competition, "id" | "season">, tie: Pick<CupTie, "id">) => `${comp.id}-${comp.season}-${tie.id}`;
+
+/** Match de coupe d'une équipe pendant la semaine (pas encore joué). */
+export interface TeamTie { comp: Competition; tie: CupTie; knockout: boolean; stage: string; key: string }
+
+export function teamTiesThisWeek(w: WorldLiveState, team: string, week: number): TeamTie[] {
+  const out: TeamTie[] = [];
+  for (const c of w.competitions ?? []) {
+    if (c.winner || c.season !== w.season) continue;
+    if (c.groups && c.groupWeeks) {
+      c.groupWeeks.forEach((gw, md) => {
+        if (gw !== week) return;
+        for (const g of c.groups!) for (const t of g.matchdays[md] ?? []) {
+          if (t.hs === undefined && (t.home === team || t.away === team)) out.push({ comp: c, tie: t, knockout: false, stage: `${g.name} · journée ${md + 1}`, key: tieKey(c, t) });
+        }
+      });
+    }
+    const r = c.rounds[c.rounds.length - 1];
+    if (r && !r.done && r.week === week) {
+      for (const t of r.ties) if (!t.winner && (t.home === team || t.away === team)) out.push({ comp: c, tie: t, knockout: true, stage: r.name, key: tieKey(c, t) });
+    }
+  }
+  return out.filter(x => !w.forcedTies?.[x.key]);
+}
+
 export interface TrophyRecord { compId: string; name: string; kind: CompetitionKind; season: number; year: number; winner: string; runnerUp?: string }
 
 const CUP_NAMES: Record<string, string> = {
@@ -91,7 +118,7 @@ export function continentalEntrants(w: WorldLiveState): { ucl: string[]; uel: st
 
 // ─── Équipes ─────────────────────────────────────────────────────────────────
 
-function nationSquad(w: WorldLiveState, nat: string): WorldPlayer[] {
+export function nationSquad(w: WorldLiveState, nat: string): WorldPlayer[] {
   const pool = w.players.filter(p => p.nationality === nat && p.clubId !== "retired" && p.clubId !== "free");
   const gks = pool.filter(p => p.position === "GK").sort((a, b) => b.overall - a.overall).slice(0, 3);
   const out = pool.filter(p => p.position !== "GK").sort((a, b) => b.overall - a.overall).slice(0, 20);
@@ -196,8 +223,8 @@ function nationalTournament(w: WorldLiveState, kind: "euro" | "wc", year: number
   const id = kind;
   return {
     id, name: kind === "euro" ? `CP Euro ${year}` : `CP Coupe du monde ${year}`, kind: "national", season: w.season,
-    pending: [], koWeeks: kind === "euro" ? [51, 51, 52] : [50, 51, 52, 52],
-    groupWeeks: [49, 49, 50], groups: makeGroups(teams, `${w.seed}-${id}-${year}`, "ABCDEFGH", false), rounds: [],
+    pending: [], koWeeks: kind === "euro" ? [51, 52, 52] : [51, 51, 52, 52],
+    groupWeeks: [48, 49, 50], groups: makeGroups(teams, `${w.seed}-${id}-${year}`, "ABCDEFGH", false), rounds: [],
   };
 }
 
@@ -217,7 +244,7 @@ function ensureCompetitions(w: WorldLiveState, week: number): WorldLiveState {
   }
   const y = juneYear(w);
   const nk: "euro" | "wc" | null = y % 4 === 0 ? "euro" : y % 4 === 2 ? "wc" : null;
-  if (nk && week >= 48 && week <= 49 && !next.some(c => c.id === nk)) {
+  if (nk && week >= 47 && week <= 49 && !next.some(c => c.id === nk)) {
     const t = nationalTournament(w, nk, y);
     if (t) { next.push(t); changed = true; }
   }
@@ -229,6 +256,15 @@ function ensureCompetitions(w: WorldLiveState, week: number): WorldLiveState {
 interface Ctx { w: WorldLiveState; cache: Map<string, WorldPlayer[]>; stats: { playerId: string; clubId: string; leagueId: string; goals: number; assists: number }[] }
 
 function play(ctx: Ctx, comp: Competition, tie: CupTie, knockout: boolean): CupTie {
+  const forced = ctx.w.forcedTies?.[tieKey(comp, tie)];
+  if (forced) {
+    ctx.stats.push(...forced.stats);
+    const { hs, as } = forced;
+    if (!knockout) return { ...tie, hs, as };
+    if (hs !== as) return { ...tie, hs, as, winner: hs > as ? tie.home : tie.away };
+    const pens = forced.pens ?? [5, 4];
+    return { ...tie, hs, as, pens, winner: pens[0] > pens[1] ? tie.home : tie.away };
+  }
   const out = simulateWorldMatch({
     fixture: { id: `${comp.id}-${comp.season}-${tie.id}`, season: comp.season, matchday: 1, homeClubId: tie.home, awayClubId: tie.away, competitionId: comp.id, result: null },
     home: snapshot(ctx.w, tie.home, ctx.cache), away: snapshot(ctx.w, tie.away, ctx.cache), season: comp.season,
@@ -339,7 +375,18 @@ export function runCompetitions(w0: WorldLiveState, week: number): { world: Worl
       else { idx.set(key, playerStats.length); playerStats.push({ playerId: u.playerId, clubId: u.clubId, leagueId: u.leagueId, season: w.season, goals: u.goals, assists: u.assists, appearances: 1, yellowCards: 0, redCards: 0, avgRating: 6.5 }); }
     }
   }
-  return { world: { ...w, competitions: updated, trophies: trophies.slice(-300), playerStats }, news };
+  // Résultats imposés consommés : on ne garde que ceux des semaines à venir
+  const forcedTies = w.forcedTies && Object.keys(w.forcedTies).length ? Object.fromEntries(Object.entries(w.forcedTies).filter(([k]) => !playedKeys(updated).has(k))) : w.forcedTies;
+  return { world: { ...w, competitions: updated, trophies: trophies.slice(-300), playerStats, forcedTies }, news };
+}
+
+function playedKeys(comps: Competition[]): Set<string> {
+  const out = new Set<string>();
+  for (const c of comps) {
+    for (const g of c.groups ?? []) for (const md of g.matchdays) for (const t of md) if (t.hs !== undefined) out.add(tieKey(c, t));
+    for (const r of c.rounds) for (const t of r.ties) if (t.winner) out.add(tieKey(c, t));
+  }
+  return out;
 }
 
 /** Parcours d'une équipe dans une compétition (« Quarts de finale », « Vainqueur »…). */

@@ -8,6 +8,8 @@ import { usePlayerGame } from "./_ui/PlayerContext";
 import { PlayerCard, PlayStyleChips, Stars } from "./_ui/PlayerCard";
 import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
+import { myCupMatch, cupLabel } from "../game/player2/cup";
+import { teamName } from "../game/domain/competitions";
 import { POS_LABEL, SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
 import { getLeaguePosition, hasMatchThisWeek } from "../game/manager/engine";
 import { fixtureDate, worldCalendar } from "../game/domain/calendar";
@@ -27,7 +29,8 @@ export default function PlayerHome() {
   const pos = getLeaguePosition(state.shadow);
   const league = state.shadow.world.leagues.find(l => l.id === club.leagueId);
   const thisWeek = hasMatchThisWeek(state.shadow);
-  const canPlay = !!fx && thisWeek && (state.selection === "starter" || state.selection === "bench");
+  const cup = myCupMatch(state);
+  const canPlay = !!cup || (!!fx && thisWeek && (state.selection === "starter" || state.selection === "bench"));
   const cal = worldCalendar(state.shadow.world);
   const fxDate = fx ? fixtureDate(state.shadow.world, state.shadow.world.schedules[club.leagueId]?.weekOf, fx.matchday) : null;
 
@@ -49,6 +52,13 @@ export default function PlayerHome() {
                   <span className="mg-small">· journée {fx.matchday}{fxDate ? ` · ${fxDate}` : ""}</span>
                 </div>
               ) : <p className="mg-muted">{cal ? `${cal.phase} : plus de match de championnat avant la saison prochaine.` : "Intersaison : pas de match cette semaine."}</p>}
+              {cup && (
+                <div className={`pc-cupbanner${cup.stage === "Finale" ? " is-final" : ""}`}>
+                  <span className="mg-small">{cup.national ? "Sélection" : "Coupe"} cette semaine</span>
+                  <b>{cupLabel(cup)}</b>
+                  <span className="mg-small">contre {teamName(state.shadow.world, cup.opponent)} · {cup.selection === "starter" ? "titulaire" : cup.selection === "bench" ? "remplaçant" : "non retenu"}</span>
+                </div>
+              )}
               {fx && !thisWeek && <p className="mg-small" style={{ margin: 0 }}>Pas de match cette semaine ({cal?.phase === "Intersaison" ? "préparation" : "trêve"}) : entraînement uniquement.</p>}
               <div className="mg-row mg-row--between">
                 <span className="mg-small">Confiance du coach</span>
@@ -72,7 +82,7 @@ export default function PlayerHome() {
                   ? <Link href="/fc-career/joueur/match" className="mg-btn mg-btn--gold">Continuer la carrière</Link>
                   : <button type="button" className="mg-btn mg-btn--gold" onClick={() => run({ type: "PLAY_WEEK" })}>Continuer la carrière</button>}
                 {canPlay && <button type="button" className="mg-btn" onClick={() => run({ type: "PLAY_WEEK" })}>Simuler la semaine</button>}
-                {!thisWeek && cal && <button type="button" className="mg-btn" onClick={() => run({ type: "ADVANCE_TO_MATCH" })}>Aller au prochain match</button>}
+                {!thisWeek && !cup && cal && <button type="button" className="mg-btn" onClick={() => run({ type: "ADVANCE_TO_MATCH" })}>Aller au prochain match</button>}
                 <Link href="/fc-career/joueur/progression" className="mg-btn mg-btn--ghost">Entraînement</Link>
               </div>
               )}
