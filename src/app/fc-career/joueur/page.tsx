@@ -8,7 +8,7 @@ import { usePlayerGame } from "./_ui/PlayerContext";
 import { PlayerCard, PlayStyleChips, Stars } from "./_ui/PlayerCard";
 import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
-import { SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
+import { POS_LABEL, SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
 import { getLeaguePosition, hasMatchThisWeek } from "../game/manager/engine";
 import { fixtureDate, worldCalendar } from "../game/domain/calendar";
 import { ROLE_LABEL } from "../game/player2/career";
@@ -40,7 +40,7 @@ export default function PlayerHome() {
               attrs={state.profile.attrs} club={club} potential={state.profile.potential} />
             <div className="pc-hero__info">
               <span className="mg-small">Cette semaine</span>
-              <span className={`pc-status pc-status--${state.selection}`}>{SELECTION_LABEL[state.selection]}</span>
+              <span className={`pc-status pc-status--${state.selection}`}>{SELECTION_LABEL[state.selection]}{state.selection === "starter" && state.playedAs ? ` · ${POS_LABEL[state.playedAs]}` : ""}</span>
               {fx ? (
                 <div className="mg-row">
                   <Crest club={clubOf(fx.homeClubId)} size={26} /><b>{clubOf(fx.homeClubId)?.shortName}</b>

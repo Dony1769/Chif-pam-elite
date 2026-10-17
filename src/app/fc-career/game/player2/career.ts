@@ -15,6 +15,7 @@ import { playerValue } from "../domain/playerValue";
 import { isInternationalBreak } from "../domain/calendar";
 import type { OptionId } from "./playstyles";
 import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } from "./types";
+import { maybeNewInterest, updateInterests } from "./scouting";
 import {
   avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
@@ -39,7 +40,7 @@ export function ensureCareer(s0: PlayerCareerState): PlayerCareerState {
   const countries = s.shadow.world.countries.map(c => c.id);
   const countryId = countries.includes(s.profile.nationality) ? s.profile.nationality : myClub(s).countryId;
   const career: CareerExtras = {
-    bank: 0, offers: [], transferRequested: false, loan: null,
+    bank: 0, offers: [], transferRequested: false, loan: null, interests: [],
     national: { countryId, called: false, caps: 0, goals: 0, lastWindow: 0 },
     awards: [], freeAgentSince: null,
   };
@@ -110,7 +111,9 @@ export function generateOffers(s: PlayerCareerState): ClubOffer[] {
 
   // Transferts : clubs dont l'effectif est autour du niveau du joueur, plutôt meilleurs que le sien
   const shine = clamp((form - 6.4) * 0.25 + rep / 300 + (askMore ? 0.15 : 0) + (free ? 0.5 : 0), 0, 0.85);
-  if (rng.chance(shine)) {
+  // Monde CP : un transfert passe par un recruteur et ses objectifs (scouting.ts) ; seuls les joueurs libres reçoivent des offres directes
+  const direct = free || s.shadow.world.dataset !== "cp";
+  if (direct && rng.chance(shine)) {
     // Plancher : un joueur au-dessus du niveau du monde intéresse les meilleurs clubs
     const best = Math.max(...pool.map(c => squadStrength(s.shadow.world, c.id)));
     const floor = Math.min(ovr - 9, best - 6);
@@ -181,7 +184,7 @@ export function acceptOffer(s0: PlayerCareerState, offerId: string): CareerResul
     });
   } else {
     next = moveTo(s, club, { wage: o.wage, seasons: o.seasons, role: o.role });
-    next = withCareer(next, { offers: [], transferRequested: false, loan: null, freeAgentSince: null });
+    next = withCareer(next, { offers: [], transferRequested: false, loan: null, freeAgentSince: null, interests: (C(s).interests ?? []).filter(i => i.clubId !== club.id) });
   }
   const txt = o.kind === "loan"
     ? `Prêté à ${club.name} jusqu'à la fin de la saison. Rôle annoncé : ${ROLE_LABEL[o.role].toLowerCase()}.`
@@ -333,13 +336,26 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
 
   if (s.shadow.world.season !== season) s = seasonChange(start, s);
 
-  // Offres : expirées retirées, nouvelles ajoutées
+  // Offres : expirées retirées ; recruteurs suivis ; nouvelles offres
   const now = weekIndex(s);
   const kept = C(s).offers.filter(o => o.expiresAt >= now);
   s = withCareer(s, { offers: kept });
-  const fresh = generateOffers(s);
+  const beforeIds = new Set(kept.map(o => o.id));
+  s = updateInterests(s, id => roleAt(s, id), (clubId, role) => {
+    const club = s.shadow.world.clubs.find(c => c.id === clubId)!;
+    const rng = createRng(seedFromString(`${s.shadow.world.seed}-intoffer-${clubId}-${now}`));
+    return {
+      id: `of-${clubId}-${now}`, clubId, kind: "transfer",
+      fee: Math.round(marketValue(s) * rng.float(0.95, 1.3) / 10_000) * 10_000,
+      wage: Math.round(wageFor(club, role, s.profile.reputation) * rng.float(1, 1.2) / 50) * 50,
+      seasons: rng.int(3, 5), role, expiresAt: now + 2,
+    };
+  });
+  s = maybeNewInterest(s);
+  const fresh = [...C(s).offers.filter(o => !beforeIds.has(o.id)), ...generateOffers(s)];
   if (fresh.length) {
     s = withCareer(s, { offers: [...kept, ...fresh] });
+    s = withCareer(s, { offers: C(s).offers.filter((o, i, all) => all.findIndex(x => x.id === o.id) === i) });
     s = pushPlayerInbox(s, ...fresh.map(o => {
       const c = s.shadow.world.clubs.find(x => x.id === o.clubId);
       return pmsg(s, "finance", o.kind === "loan" ? `Proposition de prêt : ${c?.name}` : `Offre de ${c?.name}`,

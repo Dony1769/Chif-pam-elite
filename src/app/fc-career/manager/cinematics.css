@@ -29,6 +29,7 @@
 .cin__winner b { font-family: var(--mg-display, system-ui); font-stretch: 75%; font-size: clamp(36px, 10vw, 76px); font-weight: 900; line-height: 0.95; text-transform: uppercase; text-shadow: 0 0 40px rgba(246, 200, 74, 0.6); }
 .cin__winner span { margin-top: 6px; font-size: 16px; color: #F6C84A; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .cin__winner.is-me b { color: #B9FF39; text-shadow: 0 0 40px rgba(185, 255, 57, 0.7); }
+.cin__winner .cin__stats { margin-top: 10px; font-size: 15px; color: rgba(255, 255, 255, 0.85); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cin__groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; width: min(980px, 100%); perspective: 900px; z-index: 1; }
 .cin__group { padding: 12px; border-radius: 18px; background: linear-gradient(165deg, rgba(60, 100, 255, 0.4), rgba(8, 16, 70, 0.85)); border: 1px solid rgba(170, 200, 255, 0.25); box-shadow: 0 6px 0 -1px #050B33, 0 20px 30px -12px rgba(0, 0, 0, 0.7); display: flex; flex-direction: column; gap: 6px; transform-origin: top center; }
 .cin__group h3 { margin: 0 0 4px; font-family: var(--mg-display, system-ui); font-size: 13px; letter-spacing: 0.16em; color: #A7B4E6; text-transform: uppercase; }

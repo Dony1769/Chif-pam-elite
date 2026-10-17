@@ -80,11 +80,12 @@ export function positionFit(natural: WorldPlayerPosition, slot: WorldPlayerPosit
 
 /** Valeur effective d'un joueur dans un slot (OVR × compatibilité × condition). */
 export function effectiveRating(p: WorldPlayer, slot: WorldPlayerPosition): number {
-  const fit = positionFit(p.position, slot);
+  const known = p.posRatings?.[slot];
+  const base = known !== undefined ? known : p.overall * positionFit(p.position, slot);
   const condition = 1 - Math.max(0, p.fatigue - 30) / 250;          // fatigue >30 pénalise, max -28%
   const moraleMod = 0.96 + (p.morale / 100) * 0.08;                // 0.96 → 1.04
   const formMod   = 0.97 + (p.form / 100) * 0.06;                  // 0.97 → 1.03
-  return p.overall * fit * condition * moraleMod * formMod;
+  return base * condition * moraleMod * formMod;
 }
 
 export function isAvailable(p: WorldPlayer): boolean {

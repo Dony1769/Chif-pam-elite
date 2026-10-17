@@ -6,10 +6,11 @@
 import type { WorldLiveState } from "../../../game/domain/worldState";
 import { isNation, teamName } from "../../../game/domain/competitions";
 import { fullName } from "../../../game/utils/names";
+import { seasonRecord, seasonSummary } from "../../../game/domain/playerRecord";
 
 export type Trophy = "ballon" | "boot" | "glove" | "star" | "cup" | "shield" | "globe";
 
-export interface Nominee { id: string; name: string; club: string; clubId: string; points?: number; isMe?: boolean }
+export interface Nominee { id: string; name: string; club: string; clubId: string; points?: number; isMe?: boolean; stats?: string }
 export type Cinematic =
   | { kind: "ceremony"; id: string; title: string; subtitle: string; trophy: Trophy; nominees: Nominee[]; winner: Nominee }
   | { kind: "draw"; id: string; title: string; subtitle: string; groups: { name: string; teams: { id: string; name: string; isMe: boolean }[] }[] }
@@ -28,9 +29,10 @@ export function allCinematics(w: WorldLiveState, me: Me): Cinematic[] {
   const out: Cinematic[] = [];
   const pl = new Map(w.players.map(p => [p.id, p]));
   const clubName = (id: string) => teamName(w, id);
-  const nominee = (playerId: string, clubId: string, points?: number): Nominee => {
+  const nominee = (playerId: string, clubId: string, points?: number, season?: number): Nominee => {
     const p = pl.get(playerId);
-    return { id: playerId, name: p ? fullName(p) : "Joueur", club: clubName(clubId), clubId, points, isMe: playerId === me.playerId || (!me.playerId && clubId === me.clubId) };
+    const stats = season !== undefined ? seasonSummary(seasonRecord(w, playerId, season), p?.position === "GK") : undefined;
+    return { id: playerId, name: p ? fullName(p) : "Joueur", club: clubName(clubId), clubId, points, stats, isMe: playerId === me.playerId || (!me.playerId && clubId === me.clubId) };
   };
 
   // Tirages des coupes d'Europe et des tournois de sélections
@@ -68,16 +70,16 @@ export function allCinematics(w: WorldLiveState, me: Me): Cinematic[] {
   for (const a of w.awards ?? []) {
     if (a.id === "ballon_dor" || a.id === "golden_boy" || a.id === "yachine" || a.id === "kopa") {
       if (!a.playerId) continue;
-      const ranking = (a.ranking ?? []).slice(0, a.id === "ballon_dor" ? 10 : 5).map(r => nominee(r.playerId, r.clubId, r.points));
+      const ranking = (a.ranking ?? []).slice(0, a.id === "ballon_dor" ? 10 : 5).map(r => nominee(r.playerId, r.clubId, r.points, a.season));
       out.push({
         kind: "ceremony", id: `aw-${a.id}-s${a.season}`, title: a.label.replace(/ \d+$/, ""),
         subtitle: a.id === "golden_boy" ? `Meilleur jeune · ${yearLabel(w, a.season)}` : `Saison ${yearLabel(w, a.season)}`,
         trophy: a.id === "yachine" ? "glove" : "ballon",
-        nominees: ranking.length ? ranking : [nominee(a.playerId, a.clubId ?? "")], winner: nominee(a.playerId, a.clubId ?? ""),
+        nominees: ranking.length ? ranking : [nominee(a.playerId, a.clubId ?? "")], winner: nominee(a.playerId, a.clubId ?? "", undefined, a.season),
       });
     }
     if (a.id === "golden_shoe" && a.playerId) {
-      out.push({ kind: "ceremony", id: `aw-shoe-s${a.season}`, title: "Soulier d'Or CP", subtitle: `Saison ${yearLabel(w, a.season)}`, trophy: "boot", nominees: [], winner: nominee(a.playerId, a.clubId ?? "") });
+      out.push({ kind: "ceremony", id: `aw-shoe-s${a.season}`, title: "Soulier d'Or CP", subtitle: `Saison ${yearLabel(w, a.season)}`, trophy: "boot", nominees: [], winner: nominee(a.playerId, a.clubId ?? "", undefined, a.season) });
     }
     if (a.id === "league_title" && a.clubId && (a.clubId === me.clubId || w.leagues.find(l => l.id === a.leagueId)?.tier === 1)) {
       const league = w.leagues.find(l => l.id === a.leagueId);

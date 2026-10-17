@@ -40,7 +40,7 @@ export default function PlayerMatchPage() {
     preparedFor.current = state;
     const m = preparePlayerMatch(state);
     setLive(m ? startPlayerLive(m, {
-      id: state.profile.id, name: `${shortName(state.profile)}`, attrs: state.profile.attrs, position: state.profile.position,
+      id: state.profile.id, name: `${shortName(state.profile)}`, attrs: state.profile.attrs, position: state.playedAs ?? state.profile.position,
       sub: state.profile.sub, ps: state.profile.playStyles, weakFoot: state.profile.weakFoot, skillMoves: state.profile.skillMoves,
     }) : null);
   }, [state, fx, live, setLive, eligible]);

@@ -5,13 +5,15 @@
 import React, { useState } from "react";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { PlayerCard, Stars } from "../_ui/PlayerCard";
-import { Empty, Section } from "../../manager/_ui/kit";
+import { Empty, Meter, POS_FR, Section } from "../../manager/_ui/kit";
+import { MASTERED, positionRatings } from "../../game/player2/positions";
+import type { WorldPlayerPosition } from "../../game/data/worldPlayers";
 import { ATTR_KEYS, attrLabel } from "../../game/player2/attributes";
 import type { AttrKey } from "../../game/player2/attributes";
 import { GK_SUBS, OVR_WEIGHTS, SUB_GROUPS, SUB_LABEL } from "../../game/player2/subAttributes";
 import type { SubKey } from "../../game/player2/subAttributes";
 import { PLAYSTYLES, psProgress } from "../../game/player2/playstyles";
-import { avgRating, focusLabel, me, myClub, profileOverall, specialXpNeeded, xpNeeded } from "../../game/player2/engine";
+import { POS_LABEL, avgRating, focusLabel, me, myClub, profileOverall, specialXpNeeded, xpNeeded } from "../../game/player2/engine";
 import type { TrainingFocus } from "../../game/player2/types";
 import { shortName } from "../../game/utils/names";
 
@@ -32,6 +34,7 @@ export default function ProgressionPage() {
   const groups = isGk ? GK_GROUPS : SUB_GROUPS;
   const clubName = (id: string) => state.shadow.world.clubs.find(c => c.id === id)?.shortName ?? "?";
   const setFocus = (f: TrainingFocus) => run({ type: "SET_FOCUS", attr: f });
+  const posRatings = positionRatings(pr.sub, pos, pr.familiarity ?? {});
 
   const psList = PLAYSTYLES.filter(d => !!d.gk === isGk)
     .map(d => ({ d, owned: pr.playStyles.owned.includes(d.id), plus: pr.playStyles.plus.includes(d.id), prog: psProgress(pr.playStyles, d, pr.sub, pr.playStyles.owned.includes(d.id)) }))
@@ -56,6 +59,23 @@ export default function ProgressionPage() {
             <dt>Gestes techniques</dt><dd><Stars n={pr.skillMoves} label="Gestes techniques" /></dd>
             <dt>Forme · moral</dt><dd>{p.form} · {p.morale}</dd>
           </dl>
+        </Section>
+
+        <Section title="Postes" aside={<span className="mg-small">Principal : <b>{POS_LABEL[pos]}</b></span>}>
+          <p className="mg-small" style={{ marginTop: 0 }}>Barré à votre poste, le coach peut vous décaler sur un poste voisin. Chaque titularisation là-bas fait progresser la familiarité ; à {MASTERED}, vous pouvez en faire votre poste principal.</p>
+          {isGk ? <Empty>Un gardien ne change pas de poste.</Empty> : (
+            <div className="mg-stack" style={{ gap: 8 }}>
+              {(Object.entries(pr.familiarity ?? {}) as [WorldPlayerPosition, number][]).sort((a, b) => b[1] - a[1]).map(([k, fam]) => (
+                <div key={k} className="pc-posrow">
+                  <span className="pc-posrow__name"><b>{POS_FR[k]}</b> <span className="mg-small">{POS_LABEL[k]}</span></span>
+                  <span className="pc-posrow__ovr" title="Note à ce poste">{posRatings[k] ?? "–"}</span>
+                  <Meter value={fam} tone={fam >= MASTERED ? "green" : "auto"} label={`Familiarité ${POS_LABEL[k]}`} />
+                  <span className="mg-small pc-posrow__fam">{fam}/100</span>
+                  <button type="button" className="mg-btn mg-btn--sm" disabled={fam < MASTERED} onClick={() => run({ type: "SET_POSITION", position: k })}>Poste principal</button>
+                </div>
+              ))}
+            </div>
+          )}
         </Section>
 
         <Section title="Entraînement spécial">

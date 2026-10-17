@@ -97,13 +97,13 @@ function Sequence({ c, onClose, more }: { c: Cinematic; onClose: () => void; mor
             <ol className="cin__nominees">
               {nominees.map((n, i) => (
                 <motion.li key={n.id} className={n.isMe ? "is-me" : ""} initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: i * 0.5 }}>
-                  <span className="cin__rank">{nominees.length - i + 1}</span><b>{n.name}</b><span>{n.club}</span>
+                  <span className="cin__rank">{nominees.length - i + 1}</span><b>{n.name}</b><span>{n.club}{n.stats ? ` · ${n.stats}` : ""}</span>
                 </motion.li>
               ))}
             </ol>
           )}
           {phase === 2 && <motion.p className="cin__suspense" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>Et le vainqueur est…</motion.p>}
-          {reveal && <Winner name={c.winner.name} club={c.winner.club} isMe={!!c.winner.isMe} />}
+          {reveal && <Winner name={c.winner.name} club={c.winner.club} isMe={!!c.winner.isMe} stats={c.winner.stats} />}
         </div>
       )}
 
@@ -139,11 +139,12 @@ function Sequence({ c, onClose, more }: { c: Cinematic; onClose: () => void; mor
   );
 }
 
-function Winner({ name, club, isMe }: { name: string; club: string; isMe: boolean }) {
+function Winner({ name, club, isMe, stats }: { name: string; club: string; isMe: boolean; stats?: string }) {
   return (
     <motion.div className={`cin__winner${isMe ? " is-me" : ""}`} initial={{ scale: 0.4, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 160, damping: 14 }}>
       <b>{name}</b>
       <span>{isMe ? "C'est vous !" : club}</span>
+      {stats && <small className="cin__stats">{stats}</small>}
     </motion.div>
   );
 }

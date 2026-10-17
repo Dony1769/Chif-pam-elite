@@ -531,3 +531,37 @@
 .pc-award .mg-pname { flex-wrap: wrap; }
 .pc-me { color: var(--mg-accent); }
 .pc-subhead { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mg-text-2); margin: 16px 0 8px; }
+
+/* ── Fiche joueur (fenêtre) ─────────────────────────────────────────────── */
+.pc-plink { all: unset; cursor: pointer; font-weight: 700; color: var(--mg-text); border-bottom: 1px dotted rgba(255, 255, 255, 0.35); }
+.pc-plink:hover, .pc-plink:focus-visible { color: var(--mg-accent); border-bottom-color: var(--mg-accent); }
+.pc-plink:focus-visible { outline: 2px solid var(--mg-accent); outline-offset: 2px; border-radius: 3px; }
+.pc-plink.pc-me { color: var(--mg-accent); }
+.pc-chip--btn { cursor: pointer; font: inherit; }
+.pc-sheet { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(4, 6, 10, 0.72); backdrop-filter: blur(6px); }
+.pc-sheet__panel { width: min(680px, 100%); max-height: 88vh; overflow-y: auto; padding: 18px; border-radius: var(--mg-radius); border: 1px solid var(--mg-line); background: var(--mg-glass-strong); box-shadow: var(--mg-shadow); display: flex; flex-direction: column; gap: 14px; }
+.pc-sheet__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pc-sheet__head h2 { margin: 0; font-size: 22px; line-height: 1.1; }
+.pc-sheet__head p { margin: 4px 0 0; }
+.pc-sheet__totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.pc-sheet__totals div { padding: 8px 10px; border-radius: var(--mg-radius-sm); border: 1px solid var(--mg-line); }
+.pc-sheet__totals dt { font-size: 12px; color: rgba(220, 227, 234, 0.6); }
+.pc-sheet__totals dd { margin: 2px 0 0; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pc-sheet__season h3 { margin: 0 0 6px; font-size: 15px; }
+@media (max-width: 480px) { .pc-sheet__totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ── Postes secondaires ─────────────────────────────────────────────────── */
+.pc-posrow { display: grid; grid-template-columns: minmax(0, 1.4fr) 40px minmax(60px, 1fr) 56px auto; align-items: center; gap: 10px; }
+.pc-posrow__name { min-width: 0; }
+.pc-posrow__ovr { font-weight: 800; font-size: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.pc-posrow__fam { font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .pc-posrow { grid-template-columns: minmax(0, 1fr) 36px minmax(50px, 1fr); } .pc-posrow__fam { display: none; } .pc-posrow .mg-btn { grid-column: 1 / -1; } }
+
+/* ── Recruteurs ─────────────────────────────────────────────────────────── */
+.pc-scout { padding: 12px 0; border-bottom: 1px solid var(--mg-line); display: flex; flex-direction: column; gap: 8px; }
+.pc-scout:last-child { border-bottom: 0; }
+.pc-scout__goal { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(60px, 1fr) 72px; align-items: center; gap: 10px; }
+.pc-scout__goal.is-done span:first-child { color: var(--mg-accent); }
+.pc-scout__val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.mg-app.mg-portal { display: contents; }
+.mg-app.mg-portal::before, .mg-app.mg-portal::after { content: none; }

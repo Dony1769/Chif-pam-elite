@@ -85,6 +85,8 @@ export interface WorldPlayer {
   regenOf?: string;
   /** Jour de l'anniversaire dans l'année (1-365) */
   birthDay?: number;
+  /** Note à chaque poste connu (joueur de l'utilisateur) : remplace la compatibilité générique */
+  posRatings?: Partial<Record<WorldPlayerPosition, number>>;
 }
 
 // ─── Générateur RNG déterministe (LCG simple) ────────────────────────────────

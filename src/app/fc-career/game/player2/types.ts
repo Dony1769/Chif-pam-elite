@@ -47,6 +47,8 @@ export interface PlayerProfile {
   playStyles: PlayStyleState;
   /** Réputation sportive 0-100 */
   reputation: number;
+  /** Familiarité avec les postes secondaires (0-100) */
+  familiarity?: Partial<Record<WorldPlayerPosition, number>>;
 }
 
 export type Selection = "starter" | "bench" | "out" | "injured" | "suspended";
@@ -95,6 +97,42 @@ export interface ClubOffer {
   expiresAt: number;
 }
 
+/** Compteurs cumulés de la carrière (base des objectifs des recruteurs). */
+export interface Tally {
+  apps: number;
+  starts: number;
+  goals: number;
+  assists: number;
+  cleanSheets: number;
+  /** Matchs à 7,3+ contre une équipe du top 6 de son championnat */
+  bigGames: number;
+  ratingSum: number;
+}
+
+export type ObjectiveKind = "goals" | "assists" | "cleanSheets" | "starts" | "bigGames" | "rating" | "sub" | "overall";
+
+export interface ScoutObjective {
+  kind: ObjectiveKind;
+  /** Sous-attribut visé (kind "sub") */
+  sub?: SubKey;
+  target: number;
+}
+
+/** Un club suit le joueur : il fera une offre si les objectifs sont remplis à temps. */
+export interface ClubInterest {
+  id: string;
+  clubId: string;
+  /** Index absolu de semaine (season*100+week) */
+  since: number;
+  deadline: number;
+  role: SquadRole;
+  objectives: ScoutObjective[];
+  /** Compteurs au début du suivi */
+  base: Tally;
+  /** Objectifs remplis : l'offre arrive dès que le mercato est ouvert */
+  ready: boolean;
+}
+
 export interface NationalTeamState {
   countryId: string;
   called: boolean;
@@ -123,6 +161,9 @@ export interface CareerExtras {
   awards: Award[];
   /** Contrat arrivé à échéance : offres libres en attente */
   freeAgentSince: number | null;
+  /** Clubs qui suivent le joueur, avec leurs objectifs */
+  interests?: ClubInterest[];
+  tally?: Tally;
 }
 
 export interface PlayerCareerState {
@@ -134,6 +175,8 @@ export interface PlayerCareerState {
   /** Confiance de l'entraîneur 0-100 */
   coachTrust: number;
   selection: Selection;
+  /** Poste où le coach aligne le joueur au prochain match (si différent du principal) */
+  playedAs?: WorldPlayerPosition | null;
   seasons: SeasonLine[];
   lastMatch: PlayerMatchSummary | null;
   inbox: InboxMessage[];

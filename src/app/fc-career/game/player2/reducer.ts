@@ -8,7 +8,8 @@ import type { TrainingFocus } from "./types";
 import type { OptionId } from "./playstyles";
 import type { LiveMatch } from "../manager/matchSim";
 import type { NewCareerInput } from "./engine";
-import { applyPlayStyleProgress, createPlayerCareer, setTrainingFocus } from "./engine";
+import { applyPlayStyleProgress, createPlayerCareer, setPrimaryPosition, setTrainingFocus } from "./engine";
+import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
@@ -21,6 +22,7 @@ export type PlayerAction =
   | { type: "PLAY_WEEK"; live?: LiveMatch | null; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_FOCUS"; attr: AttrKey | TrainingFocus }
   | { type: "RETIRE" }
+  | { type: "SET_POSITION"; position: WorldPlayerPosition }
   | { type: "ADVANCE_TO_MATCH" }
   | { type: "ACCEPT_OFFER"; offerId: string }
   | { type: "REJECT_OFFER"; offerId: string }
@@ -53,6 +55,7 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
   switch (action.type) {
     case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
     case "RETIRE":           return fromResult(retirePlayer(s));
+    case "SET_POSITION":     return fromResult(setPrimaryPosition(s, action.position));
     case "ADVANCE_TO_MATCH": {
       // Semaines sans match (intersaison, trêves) enchaînées jusqu'au prochain match ou une offre
       let cur = s, n = 0;

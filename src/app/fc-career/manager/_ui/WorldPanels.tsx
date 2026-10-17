@@ -13,6 +13,7 @@ import { Crest, Empty, Section } from "./kit";
 import { POS_FR } from "./kit";
 import { fullName } from "../../game/utils/names";
 import { seasonLabel } from "../../game/domain/calendar";
+import { PlayerLink, PlayerSheet } from "./PlayerSheet";
 
 const seasonName = (w: WorldLiveState, season: number) => (w.startYear ? seasonLabel(w.startYear + season - 1) : `Saison ${season}`);
 
@@ -31,6 +32,7 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
   }, [world, leagueId, kind]);
   const byId = useMemo(() => new Map(world.players.map(p => [p.id, p])), [world]);
   const clubOf = (id: string) => world.clubs.find(c => c.id === id);
+  const [sheet, setSheet] = useState<string | null>(null);
   return (
     <Section title={kind === "goals" ? "Meilleurs buteurs" : "Meilleurs passeurs"} aside={
       <div className="mg-seg" aria-label="Classement individuel">
@@ -48,7 +50,7 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
                 return (
                   <tr key={r.id} className={r.id === highlight ? "is-me" : ""}>
                     <td>{i + 1}</td>
-                    <td><b>{p ? fullName(p) : "—"}</b> <span className="mg-small">{p ? POS_FR[p.position] : ""}</span></td>
+                    <td>{p ? <PlayerLink name={fullName(p)} me={r.id === highlight} onOpen={() => setSheet(r.id)} /> : "—"} <span className="mg-small">{p ? POS_FR[p.position] : ""}</span></td>
                     <td><span className="mg-pname"><Crest club={clubOf(r.clubId)} size={16} />{clubOf(r.clubId)?.shortName}</span></td>
                     <td className="num">{r.apps}</td>
                     <td className="num"><b>{r[kind]}</b></td>
@@ -59,6 +61,7 @@ export function LeadersPanel({ world, leagueId, highlight }: { world: WorldLiveS
           </table>
         </div>
       )}
+      {sheet && <PlayerSheet world={world} playerId={sheet} highlight={highlight} onClose={() => setSheet(null)} />}
     </Section>
   );
 }
@@ -70,12 +73,13 @@ export function AwardsPanel({ world, leagueId, highlight }: { world: WorldLiveSt
   const awards = world.awards ?? [];
   const byId = useMemo(() => new Map(world.players.map(p => [p.id, p])), [world]);
   const clubOf = (id?: string) => world.clubs.find(c => c.id === id);
+  const [sheet, setSheet] = useState<string | null>(null);
   const who = (a: { playerId?: string; clubId?: string }) => {
     const p = a.playerId ? byId.get(a.playerId) : undefined;
     return (
       <span className="mg-pname">
         <Crest club={clubOf(a.clubId)} size={16} />
-        {p ? <b className={a.playerId === highlight ? "pc-me" : ""}>{fullName(p)}</b> : <b>{clubOf(a.clubId)?.name}</b>}
+        {p ? <PlayerLink name={fullName(p)} me={a.playerId === highlight} onOpen={() => setSheet(a.playerId!)} /> : <b>{clubOf(a.clubId)?.name}</b>}
         {p && <span className="mg-small"> {POS_FR[p.position]} · {p.age} ans</span>}
       </span>
     );
@@ -143,7 +147,7 @@ export function AwardsPanel({ world, leagueId, highlight }: { world: WorldLiveSt
           {tots.length > 0 && (
             <>
               <h3 className="pc-subhead">Équipe type</h3>
-              <div className="pc-chips">{tots.map(a => { const p = byId.get(a.playerId!); return p ? <span key={a.playerId} className={`pc-chip${a.playerId === highlight ? " is-plus" : ""}`}>{POS_FR[p.position]} {fullName(p)}</span> : null; })}</div>
+              <div className="pc-chips">{tots.map(a => { const p = byId.get(a.playerId!); return p ? <button type="button" key={a.playerId} className={`pc-chip pc-chip--btn${a.playerId === highlight ? " is-plus" : ""}`} onClick={() => setSheet(a.playerId!)}>{POS_FR[p.position]} {fullName(p)}</button> : null; })}</div>
             </>
           )}
         </>
@@ -156,6 +160,7 @@ export function AwardsPanel({ world, leagueId, highlight }: { world: WorldLiveSt
           </div>
         </>
       )}
+      {sheet && <PlayerSheet world={world} playerId={sheet} highlight={highlight} onClose={() => setSheet(null)} />}
     </Section>
   );
 }

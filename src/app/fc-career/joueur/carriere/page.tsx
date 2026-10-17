@@ -4,7 +4,8 @@
 
 import React, { useState } from "react";
 import { usePlayerGame } from "../_ui/PlayerContext";
-import { Crest, Empty, MoneyInput, Section } from "../../manager/_ui/kit";
+import { Crest, Empty, Meter, MoneyInput, Section } from "../../manager/_ui/kit";
+import { MAX_INTERESTS, objectiveLabel, objectiveProgress, weekIndex, weeksBetween } from "../../game/player2/scouting";
 import { formatMoney } from "../../game/manager/engine";
 import { careerTotals, me, myClub } from "../../game/player2/engine";
 import { ROLE_LABEL, clubWageCap, marketValue, nationalRank, renewalDemand } from "../../game/player2/career";
@@ -23,13 +24,48 @@ export default function CareerPage() {
   const rank = nationalRank(state);
   const [confirmRetire, setConfirmRetire] = useState(false);
   const age = me(state).age;
+  const interests = c.interests ?? [];
+  const nowIdx = weekIndex(state);
 
   return (
     <div className="mg-grid">
       <div className="mg-col-8 mg-stack">
+        <Section title={`Clubs qui vous suivent (${interests.length})`} aside={<span className="mg-small">{MAX_INTERESTS} au maximum</span>}>
+          {interests.length === 0 ? (
+            <Empty>{c.loan ? "Pendant un prêt, les recruteurs attendent votre retour." : "Aucun recruteur ne vous suit pour l'instant. Enchaînez les bons matchs : un club peut se manifester à tout moment avec ses objectifs."}</Empty>
+          ) : interests.map(it => {
+            const target = clubOf(it.clubId);
+            const weeks = Math.max(0, weeksBetween(nowIdx, it.deadline));
+            const win = it.deadline % 100 <= 9 ? "mercato d'été" : "mercato d'hiver";
+            return (
+              <div key={it.id} className="pc-scout">
+                <div className="mg-row mg-row--between">
+                  <span className="mg-row" style={{ minWidth: 0 }}>
+                    <Crest club={target} size={30} />
+                    <span style={{ minWidth: 0 }}><b>{target?.name}</b><span className="mg-small"> · {state.shadow.world.leagues.find(l => l.id === target?.leagueId)?.name} · rôle envisagé {ROLE_LABEL[it.role].toLowerCase()}</span></span>
+                  </span>
+                  {it.ready ? <span className="mg-tag">Objectifs remplis : offre au {win}</span> : <span className="mg-small">Fin du {win} · {weeks} sem.</span>}
+                </div>
+                {it.objectives.map((o, i) => {
+                  const pg = objectiveProgress(state, it, o);
+                  const pct = o.kind === "rating" ? (pg.value ? Math.min(100, (pg.value / pg.target) * 100) : 0) : Math.min(100, (pg.value / Math.max(1, pg.target)) * 100);
+                  const val = o.kind === "rating" ? `${pg.value ? pg.value.toFixed(2).replace(".", ",") : "–"} / ${pg.target.toFixed(1).replace(".", ",")}` : `${pg.value} / ${pg.target}`;
+                  return (
+                    <div key={i} className={`pc-scout__goal${pg.done ? " is-done" : ""}`}>
+                      <span>{pg.done ? "✓ " : ""}{objectiveLabel(o)}</span>
+                      <Meter value={pct} tone={pg.done ? "green" : "auto"} label={objectiveLabel(o)} />
+                      <span className="pc-scout__val">{val}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </Section>
+
         <Section title={`Offres (${c.offers.length})`} aside={<span className={`mg-small${isWindowOpen(state.shadow) ? "" : ""}`}>{c.freeAgentSince !== null ? "Joueur libre" : windowLabel(state.shadow)}</span>}>
           {c.offers.length === 0 ? (
-            <Empty>{c.loan ? "Vous êtes en prêt : pas d'offre avant votre retour." : "Aucune offre pour l'instant. Brillez sur le terrain, ou demandez à partir."}</Empty>
+            <Empty>{c.loan ? "Vous êtes en prêt : pas d'offre avant votre retour." : "Aucune offre pour l'instant. Un club fait son offre au mercato quand vous avez rempli ses objectifs. Demander à partir attire plus de recruteurs."}</Empty>
           ) : c.offers.map(o => {
             const target = clubOf(o.clubId);
             const league = state.shadow.world.leagues.find(l => l.id === target?.leagueId);
@@ -56,7 +92,7 @@ export default function CareerPage() {
               <button type="button" className={`mg-btn mg-btn--sm${c.transferRequested ? " mg-btn--danger" : ""}`} onClick={() => run({ type: "REQUEST_TRANSFER", on: !c.transferRequested })}>
                 {c.transferRequested ? "Annuler la demande de départ" : "Demander à partir"}
               </button>
-              <span className="mg-small">{c.transferRequested ? "Votre agent cherche un club. Le coach n'apprécie pas." : "Plus d'offres, mais le coach perd un peu confiance."}</span>
+              <span className="mg-small">{c.transferRequested ? "Votre agent prévient les clubs. Le coach n'apprécie pas." : "Plus de recruteurs, mais le coach perd un peu confiance."}</span>
             </div>
           )}
         </Section>

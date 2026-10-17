@@ -10,7 +10,8 @@ import type { InboxKind, InboxMessage, ManagerMatchReport, ManagerState } from "
 import {
   createManagerGame, getManagedClub, getNextFixture, getLeagueSchedule, playWeek, prepareMatch, squadStrength,
 } from "../manager/engine";
-import { aiTacticFor, autoPickLineup, isAvailable } from "../manager/tactics";
+import { FORMATIONS, aiTacticFor, autoPickLineup, isAvailable } from "../manager/tactics";
+import { MASTERED, defaultFamiliarity, gainFamiliarity, positionRatings, switchPrimary } from "./positions";
 import type { LiveMatch } from "../manager/matchSim";
 import { createRng, seedFromString } from "../utils/random";
 import type { AttrKey, Attrs } from "./attributes";
@@ -24,13 +25,13 @@ import { PS_BY_ID, emptyPlayStyles, unlockPlayStyles } from "./playstyles";
 import { simulateRest, startPlayerLive } from "./live";
 import { playerValue } from "../domain/playerValue";
 import type {
-  Foot, PlayerCareerState, PlayerMatchSummary, PlayerProfile, SeasonLine, Selection, SquadRole, TrainingFocus,
+  Foot, PlayerCareerState, PlayerMatchSummary, PlayerProfile, SeasonLine, Selection, SquadRole, TrainingFocus, Tally,
 } from "./types";
 import { PLAYER2_SAVE_VERSION } from "./types";
 import { fullName, shortName } from "../utils/names";
 
 const INBOX_MAX = 80;
-const POS_LABEL: Record<WorldPlayerPosition, string> = {
+export const POS_LABEL: Record<WorldPlayerPosition, string> = {
   GK: "gardien", CB: "défenseur central", LB: "latéral gauche", RB: "latéral droit", DM: "milieu défensif",
   CM: "milieu central", AM: "milieu offensif", LW: "ailier gauche", RW: "ailier droit", ST: "buteur",
 };
@@ -94,7 +95,11 @@ export function upgradeProfile(s0: PlayerCareerState): PlayerCareerState {
     const players = s.shadow.world.players.map(x => (x.id === p.id ? { ...x, birthDay: (seedFromString(p.id) % 365) + 1 } : x));
     s = { ...s, shadow: { ...s.shadow, world: { ...s.shadow.world, players } } };
   }
-  if (p.sub && p.playStyles && p.specialXp && p.subXp && p.weakFoot) return s;
+  if (p.sub && !p.familiarity) {
+    const profile0 = { ...p, familiarity: defaultFamiliarity(p.position) } as PlayerProfile;
+    s = { ...s, profile: profile0 };
+  }
+  if (p.sub && p.playStyles && p.specialXp && p.subXp && p.weakFoot) return p.familiarity ? s : syncWorldPlayer(s);
   const old = p.trainingFocus as string;
   const focus: TrainingFocus = (ATTR_KEYS as string[]).includes(old) ? `group:${old as AttrKey}` : (p.trainingFocus ?? keySubs(p.position)[0]);
   const sub = p.sub ?? subsFromFace(p.attrs, p.position, p.id);
@@ -102,6 +107,7 @@ export function upgradeProfile(s0: PlayerCareerState): PlayerCareerState {
     ...p, sub, attrs: faceOf(sub, p.position), subXp: p.subXp ?? {}, trainingFocus: focus,
     weakFoot: p.weakFoot ?? (p.foot === "both" ? 4 : 3), skillMoves: p.skillMoves ?? defaultSkillMoves(p.position),
     specialXp: p.specialXp ?? { weakFoot: 0, skillMoves: 0 }, playStyles: p.playStyles ?? emptyPlayStyles(),
+    familiarity: p.familiarity ?? defaultFamiliarity(p.position),
   };
   return syncWorldPlayer({ ...s, profile });
 }
@@ -121,6 +127,7 @@ export function syncWorldPlayer(s: PlayerCareerState): PlayerCareerState {
     ? {
       ...p, overall: ovr, potential: Math.max(pr.potential, ovr), position: pr.position, protected: true, face: attrs,
       weakFoot: pr.weakFoot, skillMoves: pr.skillMoves, playStyles: pr.playStyles?.owned, playStylesPlus: pr.playStyles?.plus,
+      posRatings: pr.sub ? positionRatings(pr.sub, pr.position, pr.familiarity ?? defaultFamiliarity(pr.position)) : undefined,
     }
     : p));
   return { ...s, profile: { ...pr, attrs }, shadow: { ...s.shadow, world: { ...s.shadow.world, players } } };
@@ -213,7 +220,10 @@ export function coachDecision(s: PlayerCareerState): PlayerCareerState {
   // Le coach juge aussi l'entraînement : sans temps de jeu, forme et moral
   // comptent au moins pour un niveau d'entraînement normal (60)
   const view = squad.map(p => (p.id === s.profile.id
-    ? { ...p, overall: p.overall + bonus, form: Math.max(p.form, 60), morale: Math.max(p.morale, 60) }
+    ? {
+      ...p, overall: p.overall + bonus, form: Math.max(p.form, 60), morale: Math.max(p.morale, 60),
+      posRatings: p.posRatings ? Object.fromEntries(Object.entries(p.posRatings).map(([k, v]) => [k, (v ?? 0) + bonus])) : undefined,
+    }
     : p));
   const lineup = autoPickLineup(view, tactic.formation);
   const mine = squad.find(p => p.id === s.profile.id);
@@ -222,7 +232,11 @@ export function coachDecision(s: PlayerCareerState): PlayerCareerState {
   else if ((sh.suspensions[s.profile.id] ?? 0) > 0) selection = "suspended";
   else if (lineup.starters.includes(s.profile.id)) selection = "starter";
   else if (lineup.bench.includes(s.profile.id)) selection = "bench";
-  return { ...s, selection, shadow: { ...sh, tactic, lineup } };
+  // Poste réel : le slot de la formation où le coach l'aligne
+  const slot = lineup.starters.indexOf(s.profile.id);
+  const slotPos = slot >= 0 ? FORMATIONS[tactic.formation][slot]?.pos : undefined;
+  const playedAs = slotPos && slotPos !== s.profile.position ? slotPos : null;
+  return { ...s, selection, playedAs, shadow: { ...sh, tactic, lineup } };
 }
 
 export const SELECTION_LABEL: Record<Selection, string> = {
@@ -363,7 +377,7 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
     const m = preparePlayerMatch(s);
     if (m) {
       const pl = simulateRest(startPlayerLive(m, {
-        id: s.profile.id, name: `${shortName(s.profile)}`, attrs: s.profile.attrs, position: s.profile.position,
+        id: s.profile.id, name: `${shortName(s.profile)}`, attrs: s.profile.attrs, position: s.playedAs ?? s.profile.position,
         sub: s.profile.sub, ps: s.profile.playStyles, weakFoot: s.profile.weakFoot, skillMoves: s.profile.skillMoves,
       }));
       live = pl.match;
@@ -410,7 +424,11 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
   if (after.world.season !== season) s = closePlayerSeason(s, season, messages);
   s = coachDecision(s);
   if (s.selection === "starter" && s0.selection !== "starter") {
-    messages.push(pmsg(s, "board", "Titulaire pour le prochain match", "Le coach vous fait confiance : vous démarrez la rencontre."));
+    messages.push(pmsg(s, "board", "Titulaire pour le prochain match", s.playedAs
+      ? `Le coach vous fait confiance, mais vous décale : vous démarrez ${POS_LABEL[s.playedAs]}.`
+      : "Le coach vous fait confiance : vous démarrez la rencontre."));
+  } else if (s.selection === "starter" && s.playedAs && s.playedAs !== s0.playedAs) {
+    messages.push(pmsg(s, "board", `Décalé ${POS_LABEL[s.playedAs]}`, `La concurrence est rude à votre poste : le coach vous aligne ${POS_LABEL[s.playedAs]} au prochain match.`));
   }
   return pushPlayerInbox(s, ...messages);
 }
@@ -446,11 +464,34 @@ function applyMatch(s: PlayerCareerState, sum: PlayerMatchSummary, messages: Inb
   const body = sum.played
     ? `${sum.started ? "Titulaire" : "Entré en jeu"} · note ${sum.rating!.toFixed(1)}${sum.goals ? ` · ${sum.goals} but(s)` : ""}${sum.assists ? ` · ${sum.assists} passe(s) déc.` : ""}${sum.motm ? " · homme du match" : ""}.`
     : s.selection === "bench" ? "Resté sur le banc." : "Pas dans le groupe cette semaine.";
-  messages.push(pmsg(s, "match", `${res} ${mine}-${theirs} contre ${opp?.name ?? "l'adversaire"}`, `${body} Confiance du coach : ${coachTrust}/100.`));
+  // Décalé sur un autre poste : la familiarité progresse
+  const shifted = sum.started && s.playedAs ? s.playedAs : null;
+  const familiarity = shifted ? gainFamiliarity(s.profile.familiarity ?? {}, s.profile.position, shifted) : s.profile.familiarity;
+  const where = shifted ? ` Aligné ${POS_LABEL[shifted].toLowerCase()} (familiarité ${familiarity?.[shifted] ?? 0}/100).` : "";
+  messages.push(pmsg(s, "match", `${res} ${mine}-${theirs} contre ${opp?.name ?? "l'adversaire"}`, `${body}${where} Confiance du coach : ${coachTrust}/100.`));
+  if (shifted && (s.profile.familiarity?.[shifted] ?? 0) < 80 && (familiarity?.[shifted] ?? 0) >= 80) {
+    messages.push(pmsg(s, "squad", `Nouveau poste maîtrisé : ${POS_LABEL[shifted]}`, `À force d'y jouer, vous êtes à l'aise ${POS_LABEL[shifted].toLowerCase()}. Vous pouvez en faire votre poste principal dans Progression.`));
+  }
   void club;
+  // Compteurs de carrière (objectifs des recruteurs)
+  let career = s.career;
+  if (career && sum.played) {
+    const t = career.tally ?? emptyTally();
+    const oppId = opp?.id ?? "";
+    const oppRank = (s.shadow.world.standings[opp?.leagueId ?? ""] ?? []).findIndex(r => r.clubId === oppId);
+    const big = oppRank >= 0 && oppRank < 6 && (sum.rating ?? 0) >= 7.3;
+    career = {
+      ...career,
+      tally: {
+        apps: t.apps + 1, starts: t.starts + (sum.started ? 1 : 0), goals: t.goals + sum.goals, assists: t.assists + sum.assists,
+        cleanSheets: t.cleanSheets + (sum.started && theirs === 0 ? 1 : 0), bigGames: t.bigGames + (big ? 1 : 0),
+        ratingSum: Math.round((t.ratingSum + (sum.rating ?? 0)) * 10) / 10,
+      },
+    };
+  }
   return {
-    ...s, seasons, coachTrust, lastMatch: sum,
-    profile: { ...s.profile, reputation },
+    ...s, seasons, coachTrust, lastMatch: sum, career,
+    profile: { ...s.profile, reputation, familiarity },
     shadow: { ...s.shadow, world: { ...s.shadow.world, players } },
   };
 }
@@ -472,6 +513,22 @@ function closePlayerSeason(s: PlayerCareerState, endedSeason: number, messages: 
     messages.push(pmsg(s, "finance", "Dernière année de contrat", "Votre contrat se termine à la fin de cette saison. Votre agent peut négocier une prolongation ou chercher un nouveau club."));
   }
   return syncWorldPlayer({ ...s, contract, profile: { ...s.profile, sub } });
+}
+
+export const emptyTally = (): Tally => ({ apps: 0, starts: 0, goals: 0, assists: 0, cleanSheets: 0, bigGames: 0, ratingSum: 0 });
+
+// ─── Poste principal ─────────────────────────────────────────────────────────
+
+/** Change le poste principal (familiarité ≥ 80 requise). */
+export function setPrimaryPosition(s0: PlayerCareerState, pos: WorldPlayerPosition): { ok: boolean; state: PlayerCareerState; message: string } {
+  const s = upgradeProfile(s0);
+  const pr = s.profile;
+  if (pos === pr.position) return { ok: false, state: s, message: "C'est déjà votre poste principal." };
+  const fam = pr.familiarity?.[pos] ?? 0;
+  if (fam < MASTERED) return { ok: false, state: s, message: `Familiarité insuffisante (${fam}/100, ${MASTERED} requis).` };
+  const familiarity = switchPrimary(pr.familiarity ?? {}, pr.position, pos);
+  const next = coachDecision(syncWorldPlayer({ ...s, profile: { ...pr, position: pos, familiarity } }));
+  return { ok: true, state: pushPlayerInbox(next, pmsg(next, "squad", `Nouveau poste : ${POS_LABEL[pos]}`, `Vous jouez désormais ${POS_LABEL[pos]}. Votre ancien poste reste parfaitement maîtrisé.`)), message: `Poste principal : ${POS_LABEL[pos]}.` };
 }
 
 // ─── Pilote automatique (tests) ──────────────────────────────────────────────
