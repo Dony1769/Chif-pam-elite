@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { MatchPitch, isVisualEvent } from "../_ui/MatchPitch";
-import { minuteFrames } from "../../game/player2/pitchPlay";
+import { minuteFrames, phaseFrames } from "../../game/player2/pitchPlay";
+import type { MinuteInput } from "../../game/player2/pitchPlay";
 import type { PitchAction } from "../_ui/MatchPitch";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
@@ -79,10 +80,13 @@ export default function PlayerMatchPage() {
       const show = mode === "direct" || fresh.length > 0;
       if (show) {
         const me = live.match.managedSide;
-        const frames = minuteFrames({
+        const input: MinuteInput = {
           mine: live.match[me], theirs: live.match[me === "home" ? "away" : "home"], mySide: me, minute: next.match.minute,
           possession: side, events: fresh, seed: live.match.seed, from: lastBall.current,
-        });
+        };
+        // Phase réellement jouée par le moteur positionnel (sinon reconstruction)
+        const ph = next.match.phase;
+        const frames = ph && ph.minute === next.match.minute ? phaseFrames(ph, input) : minuteFrames(input);
         const shot = fresh.some(e => e.type === "goal" || e.type === "shot" || e.type === "save" || e.type === "chance");
         const last = frames[frames.length - 1];
         if (last) lastBall.current = last.ball;

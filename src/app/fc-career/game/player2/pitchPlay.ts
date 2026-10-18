@@ -193,3 +193,50 @@ export function minuteFrames(i: MinuteInput): Frame[] {
   }
   return frames;
 }
+
+/**
+ * Images d'écran à partir de la phase réellement jouée par le moteur
+ * positionnel (repère domicile → repère du joueur), complétées par l'issue du
+ * tir et les cartons de la minute.
+ */
+export function phaseFrames(phase: import("../manager/positional").Phase, i: MinuteInput): Frame[] {
+  const flip = i.mySide === "away";
+  const mp = (p: Pt): Pt => (flip ? { x: 100 - p.x, y: 100 - p.y } : p);
+  const all = anchors(i.mine, i.theirs);
+  const name = new Map(all.map(a => [a.id, a.name]));
+  const frames: Frame[] = phase.frames.map(f => ({
+    w: f.w, ball: mp(f.ball), holder: f.holder,
+    pos: Object.fromEntries(Object.entries(f.pos).map(([k, v]) => [k, mp(v)])),
+    caption: f.kind === "lost" && f.holder ? `${name.get(f.holder) ?? "L'adversaire"} récupère le ballon` : undefined,
+  }));
+  const last = frames[frames.length - 1];
+  if (!last) return minuteFrames(i);
+  const shotEv = i.events.find(e => e.type === "goal" || e.type === "shot" || e.type === "chance" || e.type === "save");
+  if (shotEv) {
+    const attMine = (shotEv.type === "save" ? (shotEv.side === "home" ? "away" : "home") : shotEv.side) === i.mySide;
+    const goalY = attMine ? 0 : 100, dir = attMine ? 1 : -1;
+    const keeper = all.find(a => a.gk && a.mine !== attMine);
+    const saved = shotEv.type === "save" || shotEv.result === "saved";
+    const sPt = last.ball;
+    const end: Pt = shotEv.type === "goal" ? { x: 44 + ((i.minute * 7) % 13), y: goalY - dir * 2 }
+      : saved ? { x: 46 + ((i.minute * 5) % 9), y: goalY + dir * 3 }
+      : shotEv.type === "chance" ? { x: sPt.x < 50 ? 41 : 59, y: goalY - dir * 0.5 } : { x: sPt.x < 50 ? 30 : 70, y: goalY - dir * 2 };
+    const after = { ...last.pos };
+    if (keeper && after[keeper.id]) after[keeper.id] = { x: shotEv.type === "goal" ? (end.x < 50 ? 56 : 44) : end.x, y: after[keeper.id].y };
+    last.caption = shotEv.type === "goal" && shotEv.assistId ? `${name.get(shotEv.assistId) ?? ""} pour ${name.get(shotEv.playerId ?? "") ?? ""}…` : `${name.get(shotEv.type === "save" ? shotEv.shooterId ?? "" : shotEv.playerId ?? "") ?? "Le tireur"} frappe…`;
+    frames.push({
+      w: 1.5, ball: end, pos: after, caption: shotEv.text,
+      flash: shotEv.type === "goal" ? { text: "BUT !", tone: attMine ? "good" : "bad" } : shotEv.type === "chance" ? { text: "Poteau !", tone: "neutral" } : undefined,
+      badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined,
+    });
+  }
+  for (const e of i.events) {
+    const ref = frames[frames.length - 1];
+    if (e.type === "yellow" || e.type === "red" || e.type === "injury") {
+      frames.push({ w: 1.2, ball: ref.ball, pos: ref.pos, caption: e.text, badge: e.playerId ? { id: e.playerId, kind: e.type } : undefined });
+    } else if (e.type === "half_time" || e.type === "full_time") {
+      frames.push({ w: 1.4, ball: { x: 50, y: 50 }, pos: shape(all, { x: 50, y: 50 }, true), caption: e.text, flash: { text: e.type === "half_time" ? "MI-TEMPS" : "FIN DU MATCH", tone: "neutral" } });
+    }
+  }
+  return frames;
+}

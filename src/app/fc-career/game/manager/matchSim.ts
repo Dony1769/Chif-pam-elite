@@ -15,6 +15,8 @@ import {
   FORMATIONS, computeTeamRatings, effectiveRating, styleMatchup, tacticalProfile,
 } from "./tactics";
 import { shortName } from "../utils/names";
+import { playPossession } from "./positional";
+import type { Phase } from "./positional";
 
 export const MAX_SUBS = 5;
 
@@ -66,6 +68,9 @@ export interface LiveMatch {
   finished: boolean;
   /** Bonus de note par joueur (décisions réussies en carrière joueur) */
   ratingBonus?: Record<string, number>;
+  /** Dernier point du ballon (repère domicile) et phase de jeu de la dernière minute */
+  ball?: { x: number; y: number };
+  phase?: Phase;
 }
 
 const HOME_ADVANTAGE = 1.09;
@@ -228,44 +233,38 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
   const profAtt = homeHasBall ? pH : pA;
   const profDef = homeHasBall ? pA : pH;
 
-  // Occasion
+  // Possession jouée sur le terrain : passes, interceptions, tir (moteur positionnel)
   const atkPower = rAtt.attack * profAtt.creation * urgency(side) * (homeHasBall ? HOME_ADVANTAGE : 1);
   const defPower = rDef.defense * profDef.resistance;
-  // L'écart de niveau est amplifié (exposant) : un favori domine nettement plus
-  // souvent qu'avec un simple rapport, sans changer le volume d'occasions à niveau égal
-  const chanceProb = 0.232 * Math.pow(atkPower / defPower, 1.9);
-  if (rng.chance(Math.min(0.55, chanceProb))) {
-    const slots = FORMATIONS[att.tactic.formation];
-    const candidates = att.pitch.map((p, i) => ({ p, i })).filter((x): x is { p: WorldPlayer; i: number } => x.p !== null);
-    const shooter = weightedPick(candidates, c => LINE_SHOT_WEIGHT[slots[c.i].line] * effectiveRating(c.p, slots[c.i].pos), rng);
-    if (shooter) {
-      const gk = def.pitch.find((p, i) => p && FORMATIONS[def.tactic.formation][i].line === "GK") ?? null;
-      const gkRating = gk ? effectiveRating(gk, "GK") : 35;
-      const shooterRating = effectiveRating(shooter.p, slots[shooter.i].pos);
-      const duel = Math.max(0.6, Math.min(1.6, shooterRating / Math.max(30, gkRating)));
-      let xg = 0.11 * profAtt.chanceQuality * Math.pow(duel, 1.2) * rng.float(0.35, 1.9);
-      xg = Math.max(0.02, Math.min(0.7, xg));
-      att.shots += 1;
-      att.xg += xg;
-      const onTarget = rng.chance(Math.min(0.9, 0.3 + xg * 1.2));
-      if (onTarget) att.shotsOnTarget += 1;
-      if (onTarget && rng.chance(Math.min(0.95, xg / (0.3 + xg * 1.2) * 1.05))) {
-        att.goals += 1;
-        const helpers = candidates.filter(c => c.p.id !== shooter.p.id);
-        const assist = rng.chance(0.72) ? weightedPick(helpers, c => LINE_ASSIST_WEIGHT[slots[c.i].line] * c.p.overall, rng) : null;
-        m.events.push({
-          minute, type: "goal", side, playerId: shooter.p.id, assistId: assist?.p.id,
-          text: `BUT ! ${name(shooter.p)} marque pour ${att.name}${assist ? ` sur une passe de ${name(assist.p)}` : ""}. ${m.home.goals}-${m.away.goals}.`,
-        });
-      } else if (onTarget) {
-        def.saves += 1;
-        if (xg > 0.18) m.events.push({ minute, type: "save", side: oppSide, playerId: gk?.id, shooterId: shooter.p.id, text: `Arrêt décisif ${gk ? `de ${name(gk)}` : ""} face à ${name(shooter.p)}.` });
-        else m.events.push({ minute, type: "shot", side, playerId: shooter.p.id, result: "saved", text: `Arrêt sur ${name(shooter.p)}.` });
-      } else if (xg > 0.25) {
-        m.events.push({ minute, type: "chance", side, playerId: shooter.p.id, text: `Grosse occasion manquée par ${name(shooter.p)} !` });
-      } else {
-        m.events.push({ minute, type: "shot", side, playerId: shooter.p.id, result: "wide", text: `${name(shooter.p)} tente, à côté.` });
-      }
+  const prng = createRng(seedFromString(`${match.seed}-p${minute}`));
+  const tactic = (profAtt.creation * urgency(side)) / Math.max(0.1, profDef.resistance);
+  const power = (rAtt.attack * (homeHasBall ? HOME_ADVANTAGE : 1)) / Math.max(1, rDef.defense);
+  const play = playPossession(m.home, m.away, side, minute, prng, { power, tactic, quality: profAtt.chanceQuality, from: match.ball });
+  m.ball = play.end;
+  m.phase = play.phase;
+  if (play.shot) {
+    const shooter = play.shot.shooter;
+    const gk = def.pitch.find((p, i) => p && FORMATIONS[def.tactic.formation][i].line === "GK") ?? null;
+    const xg = play.shot.xg;
+    att.shots += 1;
+    att.xg += xg;
+    const onTarget = rng.chance(Math.min(0.9, 0.3 + xg * 1.2));
+    if (onTarget) att.shotsOnTarget += 1;
+    if (onTarget && rng.chance(Math.min(0.95, xg / (0.3 + xg * 1.2) * 1.05))) {
+      att.goals += 1;
+      const assist = play.shot.assist && rng.chance(0.85) ? play.shot.assist : null;
+      m.events.push({
+        minute, type: "goal", side, playerId: shooter.id, assistId: assist?.id,
+        text: `BUT ! ${name(shooter)} marque pour ${att.name}${assist ? ` sur une passe de ${name(assist)}` : ""}. ${m.home.goals}-${m.away.goals}.`,
+      });
+    } else if (onTarget) {
+      def.saves += 1;
+      if (xg > 0.18) m.events.push({ minute, type: "save", side: oppSide, playerId: gk?.id, shooterId: shooter.id, text: `Arrêt décisif ${gk ? `de ${name(gk)}` : ""} face à ${name(shooter)}.` });
+      else m.events.push({ minute, type: "shot", side, playerId: shooter.id, result: "saved", text: `Arrêt sur ${name(shooter)}.` });
+    } else if (xg > 0.25) {
+      m.events.push({ minute, type: "chance", side, playerId: shooter.id, text: `Grosse occasion manquée par ${name(shooter)} !` });
+    } else {
+      m.events.push({ minute, type: "shot", side, playerId: shooter.id, result: "wide", text: `${name(shooter)} tente, à côté.` });
     }
   }
 
