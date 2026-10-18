@@ -195,7 +195,7 @@ function useWide(): boolean {
   return wide;
 }
 
-export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", action, onActionDone, pace = 1, possession, board }: {
+export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", action, onActionDone, pace = 1, possession, board, onStep }: {
   live: PlayerLive;
   colors: { mine: string; mineAlt: string; theirs: string; theirsAlt: string };
   hoverOption?: MomentOption["id"] | null;
@@ -209,6 +209,8 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
   possession?: "home" | "away" | null;
   /** État affiché au tableau (score avant l'action en cours) */
   board?: PlayerLive["match"];
+  /** Chaque étape jouée (son, vibrations…) */
+  onStep?: (s: Step) => void;
 }) {
   const wide = useWide();
   const reduce = useReducedMotion();
@@ -279,6 +281,10 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
     if (!steps.length) { setPlay(null); onActionDone?.(); return; }
     setPlay({ key: actionKey, steps, idx: 0 });
   }, [actionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const playKey = play ? `${play.key}-${play.idx}` : null;
+  useEffect(() => {
+    if (play) onStep?.(play.steps[play.idx]);
+  }, [playKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!play) return;
     const st = play.steps[play.idx];

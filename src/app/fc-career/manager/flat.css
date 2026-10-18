@@ -150,3 +150,35 @@
 @keyframes fp-badge { from { transform: translateX(-50%) scale(0) rotate(-20deg); } }
 .mg-app .mg-ev--shot .mg-ev__txt { color: var(--mg-text-2); }
 .mg-app .pc-pitch__flash.is-neutral { font-size: clamp(22px, 4.5vw, 40px); }
+
+/* ── Histoire : dilemme, entourage, journal, récit de saison ───────────── */
+.mg-app .pc-dilemma { border-color: rgba(246, 191, 69, 0.5); }
+.pc-dilemma__text { margin: 0 0 10px; font-size: 15px; line-height: 1.45; }
+.pc-dilemma__choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.pc-dilemma__choice { all: unset; box-sizing: border-box; cursor: pointer; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--mg-line-2); background: var(--mg-panel-2); font-weight: 700; font-size: 14px; }
+.pc-dilemma__choice:hover, .pc-dilemma__choice:focus-visible { border-color: var(--fp-gold); color: var(--fp-gold); }
+.pc-dilemma__choice:focus-visible { outline: 2px solid var(--fp-gold); outline-offset: 2px; }
+.pc-entourage { display: flex; flex-direction: column; gap: 8px; }
+.pc-entourage__row { display: grid; grid-template-columns: 80px minmax(0, 1fr) 90px; align-items: center; gap: 8px; }
+.pc-entourage__row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-rival { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(240, 82, 91, 0.4); background: rgba(240, 82, 91, 0.07); display: flex; flex-direction: column; gap: 3px; }
+.pc-rival__duel { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin-top: 6px; font-size: 13px; }
+.pc-rival__duel span:nth-child(2) { color: var(--mg-text-3); font-size: 11px; }
+.pc-rival__duel span:last-child { text-align: right; }
+.pc-rival__duel b { font-size: 20px; }
+.pc-journal { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.pc-journal li { display: flex; flex-direction: column; padding-left: 10px; border-left: 3px solid var(--mg-line-2); }
+.pc-journal li.is-good { border-left-color: var(--fp-good); } .pc-journal li.is-bad { border-left-color: var(--fp-bad); }
+.pc-recap { text-align: center; align-items: stretch; }
+.pc-recap__kicker { margin: 0; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mg-text-2); }
+.pc-recap__title { margin: 2px 0 6px; font-size: clamp(28px, 6vw, 40px); color: var(--fp-gold); font-family: var(--mg-display, system-ui); }
+.pc-recap__tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pc-recap__tiles div { padding: 10px 6px; border-radius: 10px; background: var(--mg-panel-2); display: flex; flex-direction: column; }
+.pc-recap__tiles b { font-size: 24px; } .pc-recap__tiles span { font-size: 12px; color: var(--mg-text-2); }
+.pc-recap__best { margin: 0; }
+.pc-recap__story { text-align: left; padding: 12px 14px; border-radius: 12px; border-left: 3px solid var(--fp-gold); background: var(--mg-panel-2); }
+.pc-recap__story p { margin: 0 0 6px; line-height: 1.45; } .pc-recap__story p:last-child { margin: 0; }
+.pc-recap__rival { text-align: left; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(240, 82, 91, 0.4); display: flex; flex-direction: column; gap: 2px; }
+.pc-recap__rival em { color: var(--fp-gold); font-style: normal; font-weight: 700; }
+.pc-recap__rel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; text-align: left; }
+@media (max-width: 480px) { .pc-recap__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pc-entourage__row { grid-template-columns: 70px minmax(0, 1fr) 70px; } }

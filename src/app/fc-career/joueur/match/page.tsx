@@ -11,6 +11,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { MatchPitch, isVisualEvent } from "../_ui/MatchPitch";
+import type { Step } from "../_ui/MatchPitch";
+import { goalRoar, kick, ooh, post, save, setSoundOn, soundOn, startCrowd, stopCrowd, whistle } from "../_ui/sound";
 import { minuteFrames, phaseFrames } from "../../game/player2/pitchPlay";
 import type { MinuteInput } from "../../game/player2/pitchPlay";
 import type { PitchAction } from "../_ui/MatchPitch";
@@ -44,6 +46,20 @@ export default function PlayerMatchPage() {
   const [poss, setPoss] = useState<"home" | "away" | null>(null);
   const endAction = useCallback(() => { setAction(null); setView(null); }, []);
   const lastBall = useRef<{ x: number; y: number } | undefined>(undefined);
+  const [sound, setSound] = useState(true);
+  useEffect(() => { setSound(soundOn()); return () => stopCrowd(); }, []);
+  // Son de chaque étape : passes, frappes, filet, poteau, arrêt, sifflet
+  const onStep = useCallback((st: Step) => {
+    const f = st.flash?.text;
+    if (f === "BUT !") { kick(true); window.setTimeout(() => goalRoar(st.flash!.tone !== "bad"), 350); }
+    else if (f === "MI-TEMPS") whistle("long");
+    else if (f === "FIN DU MATCH") { whistle("end"); stopCrowd(); }
+    else if (f === "Poteau !") { kick(true); window.setTimeout(post, 300); }
+    else if (st.badge?.kind === "glove") { kick(true); window.setTimeout(save, 300); }
+    else if (st.badge?.kind === "yellow" || st.badge?.kind === "red") whistle("short");
+    else if (st.caption && /tente|frappe|à côté/.test(st.caption)) { kick(true); window.setTimeout(ooh, 250); }
+    else if (st.ball.length > 1) kick(false);
+  }, []);
   const cup = myCupMatch(state);
   const fx0 = myNextFixture(state);
   const fx = cup ? null : fx0;
@@ -179,7 +195,7 @@ export default function PlayerMatchPage() {
           <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
 
-        <MatchPitch live={live} board={shown.match} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={1} possession={action ? null : poss} />
+        <MatchPitch live={live} board={shown.match} onStep={onStep} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={1} possession={action ? null : poss} />
 
         {live.moment && !action ? (
           <div className="pc-moment" role="dialog" aria-label="Moment clé">
@@ -199,7 +215,7 @@ export default function PlayerMatchPage() {
         ) : (
           <div className="mg-row">
             {!m.finished && (
-              <button type="button" className="mg-btn mg-btn--gold" onClick={() => setPlaying(p => !p)}>
+              <button type="button" className="mg-btn mg-btn--gold" onClick={() => { if (!playing && (m.minute === 0 || m.minute === 45)) { whistle("short"); startCrowd(); } setPlaying(p => !p); }}>
                 {playing ? "Pause" : started ? (m.minute === 45 ? "Seconde période" : "Reprendre") : "Coup d'envoi"}
               </button>
             )}
@@ -214,6 +230,7 @@ export default function PlayerMatchPage() {
               <button type="button" aria-pressed={mode === "highlights"} onClick={() => setMode("highlights")}>Temps forts</button>
               <button type="button" aria-pressed={mode === "goals"} onClick={() => setMode("goals")}>Buts</button>
             </div>
+            <button type="button" className="mg-btn mg-btn--ghost" aria-pressed={sound} onClick={() => { const on = !sound; setSound(on); setSoundOn(on); if (on && playing) startCrowd(); }}>{sound ? "🔊 Son" : "🔇 Muet"}</button>
             <div className="mg-seg" role="group" aria-label="Caméra">
               <button type="button" aria-pressed={cam === "dynamic"} onClick={() => setCam("dynamic")}>Dynamique</button>
               <button type="button" aria-pressed={cam === "fixed"} onClick={() => setCam("fixed")}>Plan fixe</button>

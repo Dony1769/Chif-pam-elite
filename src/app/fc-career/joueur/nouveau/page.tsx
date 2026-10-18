@@ -2,6 +2,8 @@
 
 /** FC CAREER 27 — Carrière Joueur v2 : création du joueur et choix du premier club. */
 
+import { DIFFICULTY } from "../../game/player2/difficulty";
+import type { Difficulty } from "../../game/player2/difficulty";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateWorld } from "../../game/domain/worldGenerator";
@@ -30,6 +32,7 @@ export default function NewPlayerPage() {
   const [leagueId, setLeagueId] = useState("eng-2");
   const [position, setPosition] = useState<WorldPlayerPosition>("ST");
   const [foot, setFoot] = useState<Foot>("right");
+  const [difficulty, setDifficulty] = useState<Difficulty>("pro");
   const [clubId, setClubId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
 
@@ -60,7 +63,7 @@ export default function NewPlayerPage() {
     if (!seed || !clubId || !nameOk) return;
     if (hasSave && !confirm) { setConfirm(true); return; }
     if (!archivePlayerSave()) { notify(false, "Impossible d'archiver la carrière actuelle : création annulée pour ne rien perdre."); return; }
-    run({ type: "NEW", input: { seed, clubId, firstName: firstName.trim(), lastName: lastName.trim(), nationality, position, foot } });
+    run({ type: "NEW", input: { seed, clubId, firstName: firstName.trim(), lastName: lastName.trim(), nationality, position, foot, difficulty } });
     router.push("/fc-career/joueur");
   }
 
@@ -100,6 +103,13 @@ export default function NewPlayerPage() {
           <label className="mg-field"><span>Pied fort</span>
             <select className="mg-select" value={foot} onChange={e => setFoot(e.target.value as Foot)}>{FEET.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}</select>
           </label>
+        </div>
+        <div>
+          <span className="mg-small">Difficulté</span>
+          <div className="mg-seg" role="group" aria-label="Difficulté" style={{ marginTop: 6 }}>
+            {(Object.keys(DIFFICULTY) as Difficulty[]).map(d => <button key={d} type="button" aria-pressed={difficulty === d} onClick={() => setDifficulty(d)}>{DIFFICULTY[d].label}</button>)}
+          </div>
+          <p className="mg-small" style={{ margin: "6px 0 0" }}>{DIFFICULTY[difficulty].desc}</p>
         </div>
         <div>
           <span className="mg-small">Poste</span>

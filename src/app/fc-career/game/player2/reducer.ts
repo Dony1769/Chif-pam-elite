@@ -8,13 +8,15 @@ import type { TrainingFocus } from "./types";
 import type { OptionId } from "./playstyles";
 import type { LiveMatch } from "../manager/matchSim";
 import type { NewCareerInput } from "./engine";
-import { applyPlayStyleProgress, createPlayerCareer, setPrimaryPosition, setTrainingFocus } from "./engine";
+import { applyPlayStyleProgress, createPlayerCareer, setIntensity, setPrimaryPosition, setTrainingFocus } from "./engine";
+import type { Difficulty, Intensity } from "./difficulty";
 import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
 import { answerPress } from "./press";
 import { recordMoments } from "./moments";
+import { chooseStory, dismissRecap } from "./story";
 import type { Tone } from "./press";
 import { applyCupMatch, autoPlayCup, myCupMatch } from "./cup";
 import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, signOffer, requestTransfer, retirePlayer } from "./career";
@@ -26,6 +28,10 @@ export type PlayerAction =
   | { type: "PLAY_WEEK"; live?: LiveMatch | null; psGain?: Partial<Record<OptionId, number>> }
   | { type: "SET_FOCUS"; attr: AttrKey | TrainingFocus }
   | { type: "RETIRE" }
+  | { type: "STORY_CHOICE"; choiceId: string }
+  | { type: "DISMISS_RECAP" }
+  | { type: "SET_INTENSITY"; intensity: Intensity }
+  | { type: "SET_DIFFICULTY"; difficulty: Difficulty }
   | { type: "PRESS_ANSWER"; tone: Tone }
   | { type: "SKIP_CUP" }
   | { type: "PLAY_CUP"; live: LiveMatch; psGain?: Partial<Record<OptionId, number>> }
@@ -69,6 +75,10 @@ function stepInner(s: PlayerCareerState, action: PlayerAction): PlayerStep {
   switch (action.type) {
     case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
     case "RETIRE":           return fromResult(retirePlayer(s));
+    case "STORY_CHOICE":     return fromResult(chooseStory(s, action.choiceId));
+    case "DISMISS_RECAP":    return plain(dismissRecap(s));
+    case "SET_INTENSITY":    return plain(setIntensity(s, action.intensity));
+    case "SET_DIFFICULTY":   return { state: { ...s, difficulty: action.difficulty }, message: { ok: true, text: "Niveau de difficulté changé." } };
     case "PRESS_ANSWER":     return fromResult(answerPress(s, action.tone));
     case "SKIP_CUP": {
       const cm = myCupMatch(s);

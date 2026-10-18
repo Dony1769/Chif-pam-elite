@@ -49,6 +49,8 @@ export interface PlayerProfile {
   reputation: number;
   /** Familiarité avec les postes secondaires (0-100) */
   familiarity?: Partial<Record<WorldPlayerPosition, number>>;
+  /** Intensité des séances d'entraînement */
+  intensity?: import("./difficulty").Intensity;
 }
 
 export type Selection = "starter" | "bench" | "out" | "injured" | "suspended";
@@ -178,6 +180,8 @@ export interface CareerExtras {
   fans?: number;
   /** Moments forts de la carrière (mis en scène une fois) */
   moments?: import("./moments").CareerMoment[];
+  /** Histoire : personnages, rival, dilemmes, journal, récit de saison */
+  story?: import("./story").StoryState;
   /** Dernier transfert du joueur (indemnité) */
   lastMove?: { clubId: string; fee: number };
 }
@@ -191,6 +195,8 @@ export interface PlayerCareerState {
   /** Confiance de l'entraîneur 0-100 */
   coachTrust: number;
   selection: Selection;
+  /** Niveau de difficulté choisi à la création */
+  difficulty?: import("./difficulty").Difficulty;
   /** Poste où le coach aligne le joueur au prochain match (si différent du principal) */
   playedAs?: WorldPlayerPosition | null;
   seasons: SeasonLine[];

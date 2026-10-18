@@ -10,6 +10,7 @@ import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
 import { myCupMatch, cupDate, cupLabel } from "../game/player2/cup";
 import { TONE_EFFECT } from "../game/player2/press";
+import { DilemmaCard, SeasonRecapModal } from "./_ui/StoryPanels";
 import { leagueZones, teamName } from "../game/domain/competitions";
 import { ClubName, WeekResults, useSheets } from "../manager/_ui/PlayerSheet";
 import { POS_LABEL, SELECTION_LABEL, avgRating, careerTotals, currentSeasonLine, me, myClub, myNextFixture } from "../game/player2/engine";
@@ -112,6 +113,9 @@ export default function PlayerHome() {
             </p>
           </Section>
         )}
+
+        <DilemmaCard state={state} run={run} />
+        <SeasonRecapModal state={state} run={run} />
 
         {state.career?.press && (
           <Section className="pc-press" title="Conférence de presse" aside={<span className="mg-small">{state.career.press.journalist}</span>}>

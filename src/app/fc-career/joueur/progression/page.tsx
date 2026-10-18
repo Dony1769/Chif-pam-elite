@@ -3,6 +3,8 @@
 /** FC CAREER 27 — Carrière Joueur : sous-attributs, entraînement ciblé, PlayStyles. */
 
 import React, { useState } from "react";
+import { INTENSITY } from "../../game/player2/difficulty";
+import type { Intensity } from "../../game/player2/difficulty";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { PlayerCard, Stars } from "../_ui/PlayerCard";
 import { Empty, Meter, POS_FR, Section } from "../../manager/_ui/kit";
@@ -100,6 +102,12 @@ export default function ProgressionPage() {
       </div>
 
       <div className="mg-col-8 mg-stack">
+        <Section title="Intensité des séances" aside={<span className="mg-small">{INTENSITY[pr.intensity ?? "normal"].desc}</span>}>
+          <div className="mg-seg" role="group" aria-label="Intensité">
+            {(Object.keys(INTENSITY) as Intensity[]).map(k => <button key={k} type="button" aria-pressed={(pr.intensity ?? "normal") === k} onClick={() => run({ type: "SET_INTENSITY", intensity: k })}>{INTENSITY[k].label}</button>)}
+          </div>
+        </Section>
+
         <Section title="Entraînement" aside={<span className="mg-small">Objectif : <b>{focusLabel(focus, pos)}</b></span>}>
           <p className="mg-small" style={{ marginTop: 0 }}>
             Touchez un sous-attribut pour le travailler seul (progression rapide), ou « Toute la famille » pour en travailler plusieurs à la fois.

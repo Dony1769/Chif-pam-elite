@@ -18,6 +18,7 @@ import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } fro
 import { maybeNewInterest, updateInterests } from "./scouting";
 import { autoPlayCupsThisWeek } from "./cup";
 import { maybePress } from "./press";
+import { storyWeek } from "./story";
 import {
   avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, quiet, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
@@ -443,6 +444,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
   }
 
   s = maybePress(withCups, s);
+  s = storyWeek(withCups, s);
 
   // Joueur libre sans club après 3 semaines : son club lui propose une saison de plus
   if (C(s).freeAgentSince !== null && now - C(s).freeAgentSince! >= 3) {

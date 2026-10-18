@@ -4,8 +4,11 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { DIFFICULTY } from "../../game/player2/difficulty";
+import type { Difficulty } from "../../game/player2/difficulty";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { TrophyCabinet } from "../_ui/TrophyCabinet";
+import { Entourage } from "../_ui/StoryPanels";
 import { Crest, Empty, Meter, MoneyInput, Section } from "../../manager/_ui/kit";
 import { MAX_INTERESTS, objectiveLabel, objectiveProgress, weekIndex, weeksBetween } from "../../game/player2/scouting";
 import { formatMoney } from "../../game/manager/engine";
@@ -141,6 +144,13 @@ export default function CareerPage() {
             <dt>Réputation</dt><dd>{Math.round(state.profile.reputation)}/100</dd>
             {state.legacy && <><dt>Importé de la v1</dt><dd>{state.legacy.apps} m · {state.legacy.goals} b</dd></>}
           </dl>
+        </Section>
+        <Entourage state={state} />
+        <Section title="Difficulté">
+          <div className="mg-seg" role="group" aria-label="Difficulté">
+            {(Object.keys(DIFFICULTY) as Difficulty[]).map(d => <button key={d} type="button" aria-pressed={(state.difficulty ?? "pro") === d} onClick={() => run({ type: "SET_DIFFICULTY", difficulty: d })}>{DIFFICULTY[d].label}</button>)}
+          </div>
+          <p className="mg-small" style={{ marginBottom: 0 }}>{DIFFICULTY[state.difficulty ?? "pro"].desc}</p>
         </Section>
         <Section title="Fin de carrière">
           {state.retired ? (

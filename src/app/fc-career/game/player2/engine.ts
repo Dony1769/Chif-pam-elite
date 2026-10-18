@@ -11,6 +11,7 @@ import {
   createManagerGame, getManagedClub, getNextFixture, getLeagueSchedule, playWeek, prepareMatch, squadStrength,
 } from "../manager/engine";
 import { FORMATIONS, aiTacticFor, autoPickLineup, isAvailable } from "../manager/tactics";
+import { INTENSITY, diffOf } from "./difficulty";
 import { MASTERED, defaultFamiliarity, gainFamiliarity, positionRatings, switchPrimary } from "./positions";
 import type { LiveMatch } from "../manager/matchSim";
 import { createRng, seedFromString } from "../utils/random";
@@ -144,6 +145,7 @@ export function syncWorldPlayer(s: PlayerCareerState): PlayerCareerState {
 
 export interface NewCareerInput {
   seed: string;
+  difficulty?: import("./difficulty").Difficulty;
   clubId: string;
   firstName: string;
   lastName: string;
@@ -187,7 +189,7 @@ export function createPlayerCareer(i: NewCareerInput): PlayerCareerState {
   const zero: Attrs = { pac: 0, sho: 0, pas: 0, dri: 0, def: 0, phy: 0 };
   const now = i.now ?? Date.now();
   const base: PlayerCareerState = {
-    version: PLAYER2_SAVE_VERSION,
+    version: PLAYER2_SAVE_VERSION, difficulty: i.difficulty ?? "pro",
     shadow,
     profile: {
       id, firstName: wp.firstName, lastName: wp.lastName, nationality: i.nationality, foot: i.foot,
@@ -303,7 +305,7 @@ export function trainWeek(s: PlayerCareerState, played: boolean, rating: number 
   const playF = played ? 1.25 + Math.max(0, ((rating ?? 6.5) - 6.5) * 0.2) : 1;
   const moraleF = 0.85 + p.morale / 400;
   const tierF = myClub(s).tier === 1 ? 1.1 : 1;
-  const base = 30 * ageF * playF * moraleF * tierF;
+  const base = 30 * ageF * playF * moraleF * tierF * diffOf(s.difficulty).xp * INTENSITY[pr.intensity ?? "normal"].xp;
   const sub = { ...pr.sub };
   const xp = { ...pr.subXp };
   const gains: SubKey[] = [];
@@ -412,6 +414,18 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
   const ovrBefore = profileOverall(s.profile);
   const t = trainWeek(s, !!sum?.played, sum?.rating ?? null);
   s = t.state;
+  // Intensité des séances : fraîcheur ou risque de blessure
+  {
+    const it = INTENSITY[s.profile.intensity ?? "normal"];
+    const irng = createRng(seedFromString(`${s.shadow.world.seed}-train-${s.shadow.world.season}-${s.shadow.world.currentWeek}-${s.profile.id}`));
+    const hurt = irng.chance(it.injury);
+    const players = s.shadow.world.players.map(p => (p.id === s.profile.id ? {
+      ...p, fatigue: Math.max(0, Math.min(100, p.fatigue + it.fatigue)),
+      injury: hurt && !p.injury ? { type: "Blessure à l'entraînement", severity: "minor" as const, weeksRemaining: irng.int(1, 3) } : p.injury,
+    } : p));
+    s = { ...s, shadow: { ...s.shadow, world: { ...s.shadow.world, players } } };
+    if (hurt) messages.push(pmsg(s, "squad", "Blessé à l'entraînement", "Une séance trop poussée : vous êtes indisponible quelques semaines."));
+  }
   if (t.gains.length || t.special.length) {
     const counts = new Map<SubKey, number>();
     for (const k of t.gains) counts.set(k, (counts.get(k) ?? 0) + 1);
@@ -457,7 +471,11 @@ function applyMatch(s: PlayerCareerState, sum: PlayerMatchSummary, messages: Inb
   // Confiance du coach : la note fait tout ; ne pas jouer l'érode lentement
   // Sans jouer, la confiance revient doucement vers un niveau neutre (pas de spirale)
   let dTrust = s.coachTrust < 45 ? 1 : s.coachTrust > 45 ? -1 : 0;
-  if (sum.played && sum.rating !== null) dTrust = Math.round((sum.rating - 6.4) * 4) + sum.goals * 2 + sum.assists;
+  if (sum.played && sum.rating !== null) {
+    const raw = (sum.rating - 6.4) * 4 + sum.goals * 2 + sum.assists;
+    const d = diffOf(s.difficulty);
+    dTrust = Math.round(raw * (raw >= 0 ? d.trustUp : d.trustDown));
+  }
   const coachTrust = clamp(s.coachTrust + dTrust, 0, 100);
   const reputation = clamp(Math.round((s.profile.reputation + (sum.played ? ((sum.rating ?? 6.5) - 6.5) * 1.2 + sum.goals * 0.6 : 0)) * 10) / 10, 1, 100);
 
@@ -525,6 +543,10 @@ function closePlayerSeason(s: PlayerCareerState, endedSeason: number, messages: 
 }
 
 export const emptyTally = (): Tally => ({ apps: 0, starts: 0, goals: 0, assists: 0, cleanSheets: 0, bigGames: 0, ratingSum: 0 });
+
+export function setIntensity(s: PlayerCareerState, intensity: import("./difficulty").Intensity): PlayerCareerState {
+  return { ...s, profile: { ...s.profile, intensity } };
+}
 
 // ─── Poste principal ─────────────────────────────────────────────────────────
 

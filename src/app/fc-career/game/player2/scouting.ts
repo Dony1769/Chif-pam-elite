@@ -13,6 +13,7 @@ import { squadStrength } from "../manager/engine";
 import { SEASON_WEEKS, WINTER_WINDOW, SUMMER_WINDOW, transferWindow } from "../domain/calendar";
 import { createRng, seedFromString } from "../utils/random";
 import type { WorldPlayerPosition } from "../data/worldPlayers";
+import { diffOf } from "./difficulty";
 import { SUB_LABEL, keySubs, GK_SUBS } from "./subAttributes";
 import type { ClubInterest, ClubOffer, PlayerCareerState, ScoutObjective, Tally } from "./types";
 import { avgRating, emptyTally, me, myClub, pmsg, pushPlayerInbox } from "./engine";
@@ -87,7 +88,7 @@ export function buildObjectives(s: PlayerCareerState, clubStrength: number, week
   const gap = clamp(clubStrength - ovr, -6, 10);
   // Matchs de championnat attendus d'ici l'échéance (hors intersaison)
   const games = clamp(Math.round(weeks * 0.8), 6, 30);
-  const hard = 1 + Math.max(0, gap) * 0.06;
+  const hard = (1 + Math.max(0, gap) * 0.06) * diffOf(s.difficulty).scout;
   const out: ScoutObjective[] = [];
   const add = (o: ScoutObjective) => { if (!out.some(x => x.kind === o.kind && x.sub === o.sub)) out.push(o); };
 
