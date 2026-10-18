@@ -32,6 +32,7 @@ export default function PlayerMatchPage() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(0);
   const [hot, setHot] = useState<MomentOption["id"] | null>(null);
+  const [cam, setCam] = useState<"dynamic" | "fixed">("dynamic");
   const cup = myCupMatch(state);
   const fx0 = myNextFixture(state);
   const fx = cup ? null : fx0;
@@ -142,7 +143,7 @@ export default function PlayerMatchPage() {
           <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
 
-        <MatchPitch live={live} hoverOption={hot} colors={pitchColors} />
+        <MatchPitch live={live} hoverOption={hot} colors={pitchColors} camera={cam} />
 
         {live.moment ? (
           <div className="pc-moment" role="dialog" aria-label="Moment clé">
@@ -172,6 +173,10 @@ export default function PlayerMatchPage() {
               </div>
             )}
             {!m.finished && <button type="button" className="mg-btn mg-btn--ghost" onClick={() => { setPlaying(false); setLive(simulateRest(live)); }}>Simuler le reste</button>}
+            <div className="mg-seg" role="group" aria-label="Caméra">
+              <button type="button" aria-pressed={cam === "dynamic"} onClick={() => setCam("dynamic")}>Dynamique</button>
+              <button type="button" aria-pressed={cam === "fixed"} onClick={() => setCam("fixed")}>Plan fixe</button>
+            </div>
             {m.finished && <button type="button" className="mg-btn mg-btn--gold" onClick={validate}>Valider et continuer</button>}
           </div>
         )}
@@ -202,6 +207,28 @@ export default function PlayerMatchPage() {
             <dt>Décisions réussies</dt><dd>{live.decisions.filter(d => d.success).length}</dd>
             {myRating !== undefined && <><dt>Note</dt><dd className={myRating >= 7 ? "mg-pos-num" : myRating < 6 ? "mg-neg-num" : ""}>{myRating.toFixed(1)}</dd></>}
           </dl>
+        </Section>
+        <Section title="Statistiques">
+          {(() => {
+            const me = m[m.managedSide], op = m[m.managedSide === "home" ? "away" : "home"];
+            const tot = Math.max(1, me.possessionMinutes + op.possessionMinutes);
+            const rows: [string, number, number, string][] = [
+              ["Possession", Math.round((me.possessionMinutes / tot) * 100), 100 - Math.round((me.possessionMinutes / tot) * 100), " %"],
+              ["Tirs", me.shots, op.shots, ""], ["Tirs cadrés", me.shotsOnTarget, op.shotsOnTarget, ""], ["xG", Math.round(me.xg * 100) / 100, Math.round(op.xg * 100) / 100, ""],
+            ];
+            return (
+              <div className="pc-livestats">
+                {rows.map(([l, a, b, u]) => (
+                  <div key={l} className="pc-livestat">
+                    <span className="pc-livestat__lbl">{l}</span>
+                    <span>{a}{u}</span>
+                    <span className="pc-livestat__bar"><i style={{ width: `${(a / Math.max(0.0001, a + b)) * 100}%` }} /></span>
+                    <span>{b}{u}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </Section>
         <Section title="Vos décisions">
           {live.decisions.length === 0 ? <Empty>Aucune pour l&apos;instant.</Empty> : live.decisions.map((d, i) => (

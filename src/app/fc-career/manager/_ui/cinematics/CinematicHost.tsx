@@ -19,7 +19,7 @@ const MAX_QUEUE = 4;
 const read = (k: string): string[] | null => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
 const write = (k: string, v: string[]) => { try { localStorage.setItem(k, JSON.stringify(v.slice(-600))); } catch { /* stockage indisponible */ } };
 
-export function CinematicHost({ world, me, storageKey, extra }: { world: WorldLiveState; me: Me; storageKey: string; extra?: Cinematic[] }) {
+export function CinematicHost({ world, me, storageKey, extra, paused }: { world: WorldLiveState; me: Me; storageKey: string; extra?: Cinematic[]; paused?: boolean }) {
   const { clubId, playerId, nation } = me;
   const all = useMemo(() => {
     const m = { clubId, playerId, nation };
@@ -53,7 +53,8 @@ export function CinematicHost({ world, me, storageKey, extra }: { world: WorldLi
     setQueue(q => [...q, ...picked.filter(p => !q.some(x => x.id === p.id))]);
   }, [all, storageKey]);
 
-  const current = queue[0];
+  // En pause (signature en cours) : la séquence attend la page suivante
+  const current = paused ? undefined : queue[0];
   const close = () => setQueue(q => q.slice(1));
   return (
     <AnimatePresence>

@@ -52,7 +52,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mg-app" ref={appRef}>
       <Backdrop club={club?.colors.primary} />
-      {state && club && !onNew && <CinematicHost world={state.shadow.world} me={{ clubId: club.id, playerId: state.profile.id, nation: state.profile.nationality }} storageKey={`joueur-${state.profile.id}`} extra={moments} />}
+      {state && club && !onNew && <CinematicHost world={state.shadow.world} me={{ clubId: club.id, playerId: state.profile.id, nation: state.profile.nationality }} storageKey={`joueur-${state.profile.id}`} extra={moments} paused={pathname.startsWith(`${BASE}/contrat`)} />}
       <GameBar />
       {state && club && p && !onNew && (
         <>

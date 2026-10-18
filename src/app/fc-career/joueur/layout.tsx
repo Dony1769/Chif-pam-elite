@@ -4,6 +4,7 @@ import { PlayerProvider } from "./_ui/PlayerContext";
 import { PlayerShell } from "./_ui/PlayerShell";
 import "../manager/manager.css";
 import "../manager/motion3d.css";
+import "../manager/flat.css";
 import "../manager/cinematics.css";
 import "./joueur.css";
 

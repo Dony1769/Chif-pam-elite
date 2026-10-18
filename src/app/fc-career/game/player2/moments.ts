@@ -57,7 +57,8 @@ export function detectMoments(prev: PlayerCareerState, next: PlayerCareerState):
   if (prev.contract.clubId !== next.contract.clubId && !next.career.loan) {
     const fee = next.career.lastMove?.clubId === next.contract.clubId ? next.career.lastMove.fee : 0;
     const best = Math.max(0, ...w.transferHistory.map(x => x.fee));
-    const record = fee > 0 && fee > best;
+    // Record : au-dessus de tous les transferts du monde, et d'un montant digne d'un record
+    const record = fee > Math.max(best, 30_000_000);
     add(`sign-${next.contract.clubId}-${season}-${week}`, {
       title: record ? "Transfert record !" : "Présentation officielle", subtitle: `${club} · ${label}`,
       detail: fee ? `Indemnité ${money(fee)} · ${next.contract.seasonsLeft} saisons` : `Contrat de ${next.contract.seasonsLeft} saisons`, trophy: record ? "cup" : "star",

@@ -19,11 +19,17 @@ import type { WorldPlayer } from "../../game/data/worldPlayers";
 import { createRng, seedFromString } from "../../game/utils/random";
 
 type Pt = { x: number; y: number };
-interface Dot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean }
+interface Dot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number }
 
 const SHOTS = new Set(["shoot", "longshot", "finesse", "chip", "acrobatic", "header", "lowdriven", "powershot", "trivela", "freekick", "penalty"]);
 const PASSES = new Set(["pass", "cross", "through", "longball", "outside", "longthrow", "quickthrow"]);
 const RUNS = new Set(["dribble", "flair"]);
+/** Numéro de maillot selon le poste occupé (numérotation classique). */
+const SHIRT: Record<string, number[]> = { GK: [1], RB: [2], LB: [3], CB: [4, 5, 15], DM: [6, 16], CM: [8, 14, 18], AM: [10], RW: [7], LW: [11], ST: [9, 19] };
+const KIND_LABEL: Record<string, string> = {
+  box: "Dans la surface", wing: "Sur l'aile", build: "Construction", long: "Jeu long", defend: "Duel défensif", keeper: "Face à face",
+  air: "Duel aérien", setpiece: "Coup franc", penalty: "Penalty", keepercross: "Centre adverse", gkbuild: "Relance",
+};
 const OPP_GOAL: Pt = { x: 50, y: 0 };
 const MY_GOAL: Pt = { x: 50, y: 100 };
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -102,10 +108,11 @@ function useWide(): boolean {
   return wide;
 }
 
-export function MatchPitch({ live, colors, hoverOption }: {
+export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
   live: PlayerLive;
   colors: { mine: string; mineAlt: string; theirs: string; theirsAlt: string };
   hoverOption?: MomentOption["id"] | null;
+  camera?: "dynamic" | "fixed";
 }) {
   const wide = useWide();
   const reduce = useReducedMotion();
@@ -127,11 +134,18 @@ export function MatchPitch({ live, colors, hoverOption }: {
     return { x: clamp(p.x + r.float(-4, 4), 3, 97), y: clamp(p.y + r.float(-4, 4), 3, 97) };
   };
   const dots: Dot[] = [];
-  const add = (team: LiveTeam, pts: (Pt | null)[], own: boolean) => team.pitch.forEach((p: WorldPlayer | null, i) => {
-    const pt = pts[i];
-    if (!p || !pt) return;
-    dots.push({ id: p.id, mine: own, me: p.id === live.playerId, pt: jitter(p.id, pt), label: p.lastName, gk: FORMATIONS[team.tactic.formation][i]?.pos === "GK" });
-  });
+  const add = (team: LiveTeam, pts: (Pt | null)[], own: boolean) => {
+    const used = new Map<string, number>();
+    team.pitch.forEach((p: WorldPlayer | null, i) => {
+      const pt = pts[i];
+      if (!p || !pt) return;
+      const pos = FORMATIONS[team.tactic.formation][i]?.pos ?? p.position;
+      const k = used.get(pos) ?? 0;
+      used.set(pos, k + 1);
+      const num = SHIRT[pos]?.[k] ?? 12 + i;
+      dots.push({ id: p.id, mine: own, me: p.id === live.playerId, pt: jitter(p.id, pt), label: p.lastName, gk: pos === "GK", num });
+    });
+  };
   add(mine, myPts, true);
   add(theirs, theirPts, false);
 
@@ -190,53 +204,85 @@ export function MatchPitch({ live, colors, hoverOption }: {
   const arrows = live.moment && spot ? live.moment.options.map(o => ({ o, to: optionTarget(o.id, spot, dots) })) : [];
   const svgXY = (p: Pt) => (wide ? { x: 100 - p.y, y: p.x } : { x: p.x, y: p.y });
 
+  // Caméra : zoom sur l'action pendant un moment clé ou un rejeu
+  const focus: Pt | null = camera === "dynamic" ? (replay ? replay.path[replay.path.length - 1] : spot ? spot.ball : null) : null;
+  const zoom = focus ? 1.45 : 1;
+  const camXY = (() => {
+    if (!focus) return { x: "0%", y: "0%" };
+    const p = P({ x: clamp(focus.x, 0, 100), y: clamp(focus.y, 0, 100) });
+    const fx = clamp(parseFloat(p.left), 50 / zoom, 100 - 50 / zoom), fy = clamp(parseFloat(p.top), 50 / zoom, 100 - 50 / zoom);
+    return { x: `${50 - fx}%`, y: `${50 - fy}%` };
+  })();
+  const abbr = (n: string) => n.replace(/^CP /, "").replace(/[^A-Za-zÀ-ÿ ]/g, "").trim().slice(0, 3).toUpperCase();
+  const lastGoal = [...m.events].reverse().find(e => e.type === "goal");
+  const lastDecision = live.decisions[live.decisions.length - 1];
+  const caption = live.moment ? live.moment.text
+    : replay ? (replay.key.startsWith("d") ? lastDecision?.text : lastGoal?.text) : null;
+  const holderName = !live.moment && !replay && holder ? holder.label : null;
+
   return (
     <div className={`pc-pitch${wide ? " is-wide" : ""}${live.moment ? " is-frozen" : ""}`} aria-hidden>
-      <div className="pc-pitch__field">
-        <svg className="pc-pitch__lines" viewBox="0 0 100 100" preserveAspectRatio="none">
-          {wide ? (
-            <g>
-              <rect x="1" y="1" width="98" height="98" /><line x1="50" y1="1" x2="50" y2="99" /><circle cx="50" cy="50" r="9" />
-              <rect x="1" y="22" width="15" height="56" /><rect x="84" y="22" width="15" height="56" />
-              <rect x="1" y="38" width="5" height="24" /><rect x="94" y="38" width="5" height="24" />
-            </g>
-          ) : (
-            <g>
-              <rect x="1" y="1" width="98" height="98" /><line x1="1" y1="50" x2="99" y2="50" /><circle cx="50" cy="50" r="9" />
-              <rect x="22" y="1" width="56" height="15" /><rect x="22" y="84" width="56" height="15" />
-              <rect x="38" y="1" width="24" height="5" /><rect x="38" y="94" width="24" height="5" />
-            </g>
+      <div className="pc-pitch__frame">
+        <motion.div className="pc-pitch__cam" initial={false} animate={{ scale: zoom, x: camXY.x, y: camXY.y }} transition={{ duration: reduce ? 0 : 0.7, ease: [0.22, 1, 0.36, 1] }}>
+          <div className="pc-pitch__stand is-a" style={{ ["--c" as string]: colors.mine }} />
+          <div className="pc-pitch__stand is-b" style={{ ["--c" as string]: colors.theirs }} />
+          <div className="pc-pitch__field">
+            <svg className="pc-pitch__lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {wide ? (
+                <g>
+                  <rect x="1" y="1" width="98" height="98" /><line x1="50" y1="1" x2="50" y2="99" /><circle cx="50" cy="50" r="9" />
+                  <rect x="1" y="22" width="15" height="56" /><rect x="84" y="22" width="15" height="56" />
+                  <rect x="1" y="38" width="5" height="24" /><rect x="94" y="38" width="5" height="24" />
+                </g>
+              ) : (
+                <g>
+                  <rect x="1" y="1" width="98" height="98" /><line x1="1" y1="50" x2="99" y2="50" /><circle cx="50" cy="50" r="9" />
+                  <rect x="22" y="1" width="56" height="15" /><rect x="22" y="84" width="56" height="15" />
+                  <rect x="38" y="1" width="24" height="5" /><rect x="38" y="94" width="24" height="5" />
+                </g>
+              )}
+              {arrows.map(({ o, to }) => {
+                const a = svgXY(spot!.me), b = svgXY(to);
+                const kind = SHOTS.has(o.id) ? "shot" : PASSES.has(o.id) ? "pass" : RUNS.has(o.id) ? "run" : "def";
+                return <line key={o.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`pc-pitch__arrow is-${kind}${hoverOption === o.id ? " is-hot" : ""}`} />;
+              })}
+            </svg>
+            <div className="pc-pitch__goal is-theirs" /><div className="pc-pitch__goal is-ours" />
+            {dots.map(d => (
+              <motion.div key={d.id} className={`pc-pitch__dot${d.mine ? " is-mine" : " is-theirs"}${d.me ? " is-me" : ""}${d.gk ? " is-gk" : ""}`}
+                style={{ ["--c" as string]: d.mine ? colors.mine : colors.theirs, ["--c2" as string]: d.mine ? colors.mineAlt : colors.theirsAlt }}
+                initial={false} animate={P(d.pt)} transition={{ duration: reduce ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}>
+                <span className="pc-pitch__num">{d.num}</span>
+                {(d.me || d.label === holderName) && <span className="pc-pitch__name">{d.label}</span>}
+              </motion.div>
+            ))}
+            {replay ? (
+              <motion.div key={replay.key} className="pc-pitch__ball"
+                initial={P(replay.path[0])} animate={{ left: replay.path.map(p => P(p).left), top: replay.path.map(p => P(p).top) }}
+                transition={{ duration: reduce ? 0 : 1.1, ease: "easeInOut" }} />
+            ) : (
+              <motion.div className="pc-pitch__ball" initial={false} animate={P(restBall)} transition={{ duration: reduce ? 0 : 0.5, ease: "easeOut" }} />
+            )}
+          </div>
+        </motion.div>
+        <div className="pc-pitch__hud">
+          <span className="pc-pitch__board">
+            <i style={{ background: m.home.clubId === mine.clubId ? colors.mine : colors.theirs }} />{abbr(m.home.name)}
+            <b>{m.home.goals} - {m.away.goals}</b>{abbr(m.away.name)}
+            <i style={{ background: m.away.clubId === mine.clubId ? colors.mine : colors.theirs }} /><em>{m.finished ? "FIN" : `${m.minute}'`}</em>
+          </span>
+        </div>
+        {live.moment && <span className="pc-pitch__tag">{live.moment.minute}&apos; · {KIND_LABEL[live.moment.kind] ?? "Moment clé"}</span>}
+        {caption && <span className="pc-pitch__caption">{caption}</span>}
+        <AnimatePresence>
+          {replay?.flash && (
+            <motion.div key={replay.key + "f"} className={`pc-pitch__flash${replay.mineGoal === true ? " is-good" : replay.mineGoal === false ? " is-bad" : ""}`}
+              initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.2 }} transition={{ delay: reduce ? 0 : 0.8, duration: 0.35 }}>
+              {replay.flash}
+            </motion.div>
           )}
-          {arrows.map(({ o, to }) => {
-            const a = svgXY(spot!.me), b = svgXY(to);
-            const kind = SHOTS.has(o.id) ? "shot" : PASSES.has(o.id) ? "pass" : RUNS.has(o.id) ? "run" : "def";
-            return <line key={o.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`pc-pitch__arrow is-${kind}${hoverOption === o.id ? " is-hot" : ""}`} />;
-          })}
-        </svg>
-        <div className="pc-pitch__goal is-theirs" /><div className="pc-pitch__goal is-ours" />
-        {dots.map(d => (
-          <motion.div key={d.id} className={`pc-pitch__dot${d.mine ? " is-mine" : " is-theirs"}${d.me ? " is-me" : ""}${d.gk ? " is-gk" : ""}`}
-            style={{ ["--c" as string]: d.mine ? colors.mine : colors.theirs, ["--c2" as string]: d.mine ? colors.mineAlt : colors.theirsAlt }}
-            initial={false} animate={P(d.pt)} transition={{ duration: reduce ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}>
-            {d.me && <span className="pc-pitch__name">{d.label}</span>}
-          </motion.div>
-        ))}
-        {replay ? (
-          <motion.div key={replay.key} className="pc-pitch__ball"
-            initial={P(replay.path[0])} animate={{ left: replay.path.map(p => P(p).left), top: replay.path.map(p => P(p).top) }}
-            transition={{ duration: reduce ? 0 : 1.1, ease: "easeInOut" }} />
-        ) : (
-          <motion.div className="pc-pitch__ball" initial={false} animate={P(restBall)} transition={{ duration: reduce ? 0 : 0.5, ease: "easeOut" }} />
-        )}
+        </AnimatePresence>
       </div>
-      <AnimatePresence>
-        {replay?.flash && (
-          <motion.div key={replay.key + "f"} className={`pc-pitch__flash${replay.mineGoal === true ? " is-good" : replay.mineGoal === false ? " is-bad" : ""}`}
-            initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.2 }} transition={{ delay: reduce ? 0 : 0.8, duration: 0.35 }}>
-            {replay.flash}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

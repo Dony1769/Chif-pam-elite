@@ -4,6 +4,7 @@ import { ManagerProvider } from "./_ui/ManagerContext";
 import { Shell } from "./_ui/Shell";
 import "./manager.css";
 import "./motion3d.css";
+import "./flat.css";
 import "./cinematics.css";
 
 export const metadata: Metadata = {
