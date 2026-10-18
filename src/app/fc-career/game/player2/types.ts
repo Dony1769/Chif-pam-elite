@@ -61,6 +61,10 @@ export interface PlayerContractV2 {
   wage: number;
   seasonsLeft: number;
   role: SquadRole;
+  /** Prime par but marqué (sinon 15 % du salaire hebdomadaire) */
+  goalBonus?: number;
+  /** Clause libératoire : au-delà, le club ne peut pas refuser le départ */
+  releaseClause?: number | null;
 }
 
 export interface SeasonLine {

@@ -5,7 +5,7 @@
 import { createPlayerCareer, starterClubs, me, myClub, mutateAttrs, coachDecision, playPlayerWeek } from "../../player2/engine";
 import {
   ensureCareer, advancePlayerWeek, acceptOffer, rejectOffer, requestTransfer, negotiateRenewal, renewalDemand,
-  clubWageCap, generateOffers, roleAt, nationalRank, seasonAwards, marketValue, wageFor, simulateCareerSeason,
+  clubWageCap, defaultGoalBonus, generateOffers, roleAt, nationalRank, seasonAwards, marketValue, wageFor, simulateCareerSeason,
 } from "../../player2/career";
 import { isWindowOpen } from "../../manager/market";
 import type { PlayerCareerState, ClubOffer } from "../../player2/types";
@@ -122,6 +122,17 @@ describe("Contrat", () => {
     const r = negotiateRenewal(late, renewalDemand(late), 4);
     expect(r.ok).toBe(true);
     expect(r.state.contract.seasonsLeft).toBe(4);
+  });
+
+  test("clauses : prime par but, clause libératoire, refus du club si le coach ne suit plus", () => {
+    const s = fresh();
+    const late = { ...s, contract: { ...s.contract, seasonsLeft: 1 } };
+    const r = negotiateRenewal(late, renewalDemand(late), 3, { goalBonus: defaultGoalBonus(late), releaseClause: marketValue(late) * 3 });
+    expect(r.ok).toBe(true);
+    expect(r.state.contract.goalBonus).toBe(defaultGoalBonus(late));
+    expect(r.state.contract.releaseClause).toBe(marketValue(late) * 3);
+    expect(negotiateRenewal(late, renewalDemand(late), 3, { releaseClause: 1000 }).ok).toBe(false);
+    expect(negotiateRenewal({ ...late, coachTrust: 10 }, renewalDemand(late), 3).ok).toBe(false);
   });
 
   test("fin de contrat : joueur libre, puis prolongé d'une saison sans accord ailleurs", () => {

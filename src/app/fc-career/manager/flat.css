@@ -197,3 +197,6 @@
 .pc-pen.is-you { box-shadow: 0 0 0 2px #d9a400 inset; }
 @keyframes pc-pen-pop { from { transform: scale(.4); } to { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .pc-pen.is-in, .pc-pen.is-out { animation: none; } }
+
+.pc-agentnote { padding: 8px 10px; border-left: 3px solid #d9a400; background: rgba(217, 164, 0, .08); }
+.pc-agentnote.is-closed { border-left-color: #c0392b; background: rgba(192, 57, 43, .08); }

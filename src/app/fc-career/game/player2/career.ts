@@ -216,8 +216,13 @@ export function releaseDecision(s: PlayerCareerState, o: ClubOffer): ReleaseDeci
   let f = 1 + (role === "key" ? 0.35 : role === "starter" ? 0.15 : 0);
   f += s.contract.seasonsLeft >= 3 ? 0.2 : s.contract.seasonsLeft <= 1 ? -0.3 : 0;
   if (C(s).transferRequested) f -= 0.15;
-  const askingFee = Math.round((marketValue(s) * f) / 10_000) * 10_000;
+  const clause = s.contract.releaseClause ?? null;
   const buyerMax = Math.round((o.fee * 1.1) / 10_000) * 10_000;
+  // Clause libératoire : payée par l'acheteur, le club ne peut plus s'opposer
+  if (clause !== null && clause <= buyerMax && clause < Math.round((marketValue(s) * f) / 10_000) * 10_000) {
+    return { allowed: true, askingFee: clause, buyerMax, reason: `${buyer} lève votre clause libératoire de ${money(clause)} : ${cur.name} ne peut pas s'y opposer.` };
+  }
+  const askingFee = Math.round((marketValue(s) * f) / 10_000) * 10_000;
   const allowed = askingFee <= buyerMax;
   return {
     allowed, askingFee, buyerMax,
@@ -307,16 +312,58 @@ export function clubWageCap(s: PlayerCareerState): number {
   return Math.round(wageFor(myClub(s), roleAt(s, myClub(s).id), s.profile.reputation) * 1.25 / 50) * 50;
 }
 
-export function negotiateRenewal(s0: PlayerCareerState, wage: number, seasons: number): CareerResult {
+export interface RenewalTerms { goalBonus?: number; releaseClause?: number | null }
+
+/**
+ * Avis du club sur une prolongation : il peut refuser tout net (saison
+ * ratée, coach fâché) avant même de parler d'argent.
+ */
+export function renewalStance(s: PlayerCareerState): { open: boolean; reason: string } {
+  const line = s.seasons.find(l => l.season === s.shadow.world.season && l.clubId === s.contract.clubId);
+  const avg = line && line.apps ? line.ratingSum / line.apps : null;
+  if (s.coachTrust < 25) return { open: false, reason: "Le coach ne compte plus sur vous : le club refuse d'ouvrir les discussions." };
+  if (avg !== null && line!.apps >= 8 && avg < 6.2) return { open: false, reason: `Avec ${avg.toFixed(1).replace(".", ",")} de moyenne cette saison, le club préfère attendre avant de prolonger.` };
+  if (me(s).age >= 33 && s.contract.seasonsLeft >= 1) return { open: true, reason: "À votre âge, le club ne proposera pas plus d'une saison." };
+  return { open: true, reason: "Le club est prêt à discuter." };
+}
+
+/** Prime par but par défaut et plancher accepté pour la clause libératoire. */
+export const defaultGoalBonus = (s: PlayerCareerState) => Math.round((s.contract.wage * 0.15) / 50) * 50;
+export const minReleaseClause = (s: PlayerCareerState) => Math.round((marketValue(s) * 1.5) / 100_000) * 100_000;
+
+/**
+ * Coût que le club évalue : salaire + primes attendues + prix d'une clause
+ * (une clause basse le prive d'une indemnité, il le compense en salaire).
+ */
+function renewalCost(s: PlayerCareerState, wage: number, t: RenewalTerms): number {
+  const line = s.seasons.find(l => l.season === s.shadow.world.season);
+  const gpw = line && line.apps ? line.goals / Math.max(1, line.apps) : 0.2;
+  const bonusExtra = ((t.goalBonus ?? defaultGoalBonus(s)) - defaultGoalBonus(s)) * gpw;
+  const minC = minReleaseClause(s);
+  const clauseExtra = t.releaseClause ? Math.max(0, (minC * 2 - t.releaseClause) / (minC * 2)) * wage * 0.25 : 0;
+  return wage + bonusExtra + clauseExtra;
+}
+
+export function negotiateRenewal(s0: PlayerCareerState, wage: number, seasons: number, terms: RenewalTerms = {}): CareerResult {
   const s = ensureCareer(s0);
   if (C(s).loan) return fail(s, "Prolongation impossible pendant un prêt.");
   if (seasons < 1 || seasons > 5) return fail(s, "Durée : 1 à 5 saisons.");
-  const cap = clubWageCap(s);
-  if (wage > cap) return fail(s, `Le club refuse : il ne peut pas dépasser ${money(cap)} par semaine.`);
   if (s.contract.seasonsLeft >= 3) return fail(s, "Le club ne prolonge pas un contrat qui court encore sur 3 saisons ou plus.");
+  const stance = renewalStance(s);
+  if (!stance.open) return fail(s, stance.reason);
+  if (me(s).age >= 33 && seasons > 1) return fail(s, "À votre âge, le club ne propose qu'une saison à la fois.");
+  if (terms.releaseClause && terms.releaseClause < minReleaseClause(s)) return fail(s, `Le club refuse une clause sous ${money(minReleaseClause(s))}.`);
+  if (terms.goalBonus !== undefined && (terms.goalBonus < 0 || terms.goalBonus > s.contract.wage)) return fail(s, "La prime par but doit rester entre 0 et un salaire hebdomadaire.");
+  // Une bonne relation avec l'agent arrache un peu plus
+  const agent = s.career?.story?.agentRel ?? 50;
+  const cap = Math.round((clubWageCap(s) * (1 + (agent - 50) / 500)) / 50) * 50;
+  const cost = renewalCost(s, wage, terms);
+  if (cost > cap) return fail(s, `Le club refuse : primes et clause comprises, il ne dépasse pas ${money(cap)} par semaine.`);
   const role = roleAt(s, myClub(s).id);
-  const next = withCareer({ ...s, contract: { ...s.contract, wage, seasonsLeft: seasons, role } }, { freeAgentSince: null });
-  return done(next, `Prolongation signée : ${seasons} saison(s) à ${money(wage)} par semaine.`);
+  const contract = { ...s.contract, wage, seasonsLeft: seasons, role, goalBonus: terms.goalBonus ?? s.contract.goalBonus, releaseClause: terms.releaseClause === undefined ? s.contract.releaseClause : terms.releaseClause };
+  const next = withCareer({ ...s, contract }, { freeAgentSince: null });
+  const extras = [contract.goalBonus !== undefined ? `prime de ${money(contract.goalBonus)} par but` : "", contract.releaseClause ? `clause de ${money(contract.releaseClause)}` : ""].filter(Boolean).join(", ");
+  return done(next, `Prolongation signée : ${seasons} saison(s) à ${money(wage)} par semaine${extras ? `, ${extras}` : ""}.`);
 }
 
 // ─── Sélection nationale ─────────────────────────────────────────────────────
@@ -405,7 +452,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
 
   // Salaire + primes de match
   const sum = s.lastMatch !== start.lastMatch ? s.lastMatch : null;
-  const bonus = sum ? sum.goals * Math.round(s.contract.wage * 0.15) + sum.assists * Math.round(s.contract.wage * 0.08) : 0;
+  const bonus = sum ? sum.goals * (s.contract.goalBonus ?? Math.round(s.contract.wage * 0.15)) + sum.assists * Math.round(s.contract.wage * 0.08) : 0;
   s = withCareer(s, { bank: C(s).bank + s.contract.wage + bonus });
 
   s = nationalWindow(s);

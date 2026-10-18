@@ -41,7 +41,7 @@ export type PlayerAction =
   | { type: "REJECT_OFFER"; offerId: string }
   | { type: "SIGN_OFFER"; offerId: string; wage: number; seasons: number }
   | { type: "REQUEST_TRANSFER"; on: boolean }
-  | { type: "RENEW"; wage: number; seasons: number }
+  | { type: "RENEW"; wage: number; seasons: number; goalBonus?: number; releaseClause?: number | null }
   | { type: "MARK_READ"; id: string }
   | { type: "MARK_ALL_READ" };
 
@@ -102,7 +102,7 @@ function stepInner(s: PlayerCareerState, action: PlayerAction): PlayerStep {
     case "SIGN_OFFER":       return fromResult(signOffer(s, action.offerId, action.wage, action.seasons));
     case "REJECT_OFFER":     return plain(rejectOffer(s, action.offerId));
     case "REQUEST_TRANSFER": return fromResult(requestTransfer(s, action.on));
-    case "RENEW":            return fromResult(negotiateRenewal(s, action.wage, action.seasons));
+    case "RENEW":            return fromResult(negotiateRenewal(s, action.wage, action.seasons, { goalBonus: action.goalBonus, releaseClause: action.releaseClause }));
     case "MARK_READ":        return plain({ ...s, inbox: s.inbox.map(m => (m.id === action.id ? { ...m, read: true } : m)) });
     case "MARK_ALL_READ":    return plain({ ...s, inbox: s.inbox.map(m => ({ ...m, read: true })) });
     default:                 return plain(s);

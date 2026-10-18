@@ -13,7 +13,7 @@ import { Crest, Empty, Meter, MoneyInput, Section } from "../../manager/_ui/kit"
 import { MAX_INTERESTS, objectiveLabel, objectiveProgress, weekIndex, weeksBetween } from "../../game/player2/scouting";
 import { formatMoney } from "../../game/manager/engine";
 import { careerTotals, me, myClub } from "../../game/player2/engine";
-import { ROLE_LABEL, clubWageCap, marketValue, nationalRank, renewalDemand } from "../../game/player2/career";
+import { ROLE_LABEL, clubWageCap, defaultGoalBonus, marketValue, minReleaseClause, nationalRank, renewalDemand, renewalStance } from "../../game/player2/career";
 import { isWindowOpen, windowLabel } from "../../game/manager/market";
 
 export default function CareerPage() {
@@ -24,6 +24,11 @@ export default function CareerPage() {
   const demand = renewalDemand(state);
   const [wage, setWage] = useState(demand);
   const [seasons, setSeasons] = useState(3);
+  const [goalBonus, setGoalBonus] = useState(state.contract.goalBonus ?? defaultGoalBonus(state));
+  const minClause = minReleaseClause(state);
+  const [clause, setClause] = useState<number>(state.contract.releaseClause ?? 0);
+  const stance = renewalStance(state);
+  const agentRel = c.story?.agentRel ?? 50;
   const totals = careerTotals(state);
   const country = state.shadow.world.countries.find(k => k.id === c.national.countryId);
   const rank = nationalRank(state);
@@ -109,19 +114,34 @@ export default function CareerPage() {
             <dt>Salaire</dt><dd>{formatMoney(state.contract.wage)} / semaine</dd>
             <dt>Saisons restantes</dt><dd>{state.contract.seasonsLeft}</dd>
             <dt>Rôle</dt><dd>{ROLE_LABEL[state.contract.role]}</dd>
+            <dt>Prime par but</dt><dd>{formatMoney(state.contract.goalBonus ?? defaultGoalBonus(state))}</dd>
+            <dt>Clause libératoire</dt><dd>{state.contract.releaseClause ? formatMoney(state.contract.releaseClause) : "Aucune"}</dd>
             <dt>Valeur marchande</dt><dd>{formatMoney(marketValue(state))}</dd>
             <dt>Économies</dt><dd>{formatMoney(c.bank)}</dd>
           </dl>
           {!c.loan && (
             <div className="mg-panel-detail mg-stack">
               <b>Prolongation</b>
+              <p className={`pc-agentnote${stance.open ? "" : " is-closed"}`} style={{ margin: 0 }}>
+                <b>{c.story?.agent ?? "Votre agent"}</b> : « {stance.open
+                  ? (agentRel >= 65 ? "Le directeur sportif me fait confiance, on peut pousser un peu." : agentRel < 35 ? "Je ne suis pas sûr d'avoir l'oreille du club, restons raisonnables." : "Une prime par but élevée coûte peu au club si tu marques peu. Une clause basse, il la fera payer en salaire.")
+                  : "Ce n'est pas le moment. Montre-toi sur le terrain et on en reparle."} »
+                <span className="mg-small" style={{ display: "block" }}>{stance.reason}</span>
+              </p>
               <span className="mg-small">Demande de votre agent : {formatMoney(demand)}/sem · le club peut aller jusqu&apos;à {formatMoney(clubWageCap(state))}/sem. Possible à partir de 2 saisons restantes.</span>
               <div className="mg-row" style={{ alignItems: "flex-end" }}>
                 <div style={{ width: 200 }}><MoneyInput id="renew-wage" label="Salaire / semaine" value={wage} step={100} onChange={setWage} /></div>
                 <label className="mg-field" style={{ width: 130 }}><span>Durée</span>
                   <select className="mg-select" value={seasons} onChange={e => setSeasons(Number(e.target.value))}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} saison{n > 1 ? "s" : ""}</option>)}</select>
                 </label>
-                <button type="button" className="mg-btn mg-btn--green" onClick={() => run({ type: "RENEW", wage, seasons })}>Proposer au club</button>
+                <div style={{ width: 170 }}><MoneyInput id="renew-bonus" label="Prime par but" value={goalBonus} step={50} onChange={setGoalBonus} /></div>
+                <label className="mg-field" style={{ width: 190 }}><span>Clause libératoire</span>
+                  <select className="mg-select" value={clause} onChange={e => setClause(Number(e.target.value))}>
+                    <option value={0}>Aucune</option>
+                    {[1, 1.5, 2, 3].map(k => { const v = Math.round((minClause * k) / 100_000) * 100_000; return <option key={k} value={v}>{formatMoney(v)}</option>; })}
+                  </select>
+                </label>
+                <button type="button" className="mg-btn mg-btn--green" disabled={!stance.open} onClick={() => run({ type: "RENEW", wage, seasons, goalBonus, releaseClause: clause || null })}>Proposer au club</button>
               </div>
             </div>
           )}
