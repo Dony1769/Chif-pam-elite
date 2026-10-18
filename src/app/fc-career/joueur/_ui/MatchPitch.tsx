@@ -131,7 +131,7 @@ function framesToSteps(frames: Frame[], total: number): Step[] {
   });
 }
 
-const VISUAL = new Set(["goal", "shot", "save", "chance", "yellow", "red", "injury", "half_time", "full_time"]);
+const VISUAL = new Set(["goal", "shot", "corner", "freekick", "save", "chance", "yellow", "red", "injury", "half_time", "full_time"]);
 export const isVisualEvent = (e: MatchEvent) => VISUAL.has(e.type);
 
 /**

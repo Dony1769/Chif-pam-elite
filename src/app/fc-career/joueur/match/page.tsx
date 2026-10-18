@@ -30,7 +30,7 @@ import { shortName } from "../../game/utils/names";
 
 /** Durée d'une phase de jeu (une minute) : normale ou rapide. */
 const SPEEDS = [{ label: "Normal", ms: 260, phase: 2200 }, { label: "Rapide", ms: 60, phase: 900 }];
-const ICON: Record<string, string> = { shot: "↗", goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
+const ICON: Record<string, string> = { corner: "⚑", freekick: "◔", shot: "↗", goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
 
 export default function PlayerMatchPage() {
   const { state, run, live, setLive } = usePlayerGame();

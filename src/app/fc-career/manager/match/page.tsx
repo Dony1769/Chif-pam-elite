@@ -20,7 +20,7 @@ const SPEEDS = [
   { label: "Normal", ms: 280 },
   { label: "Rapide", ms: 70 },
 ];
-const ICON: Record<string, string> = { goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
+const ICON: Record<string, string> = { corner: "⚑", freekick: "◔", shot: "↗", goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
 
 export default function LiveMatchPage() {
   const { state, run, live, setLive } = useGame();

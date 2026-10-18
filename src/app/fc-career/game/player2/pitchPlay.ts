@@ -110,7 +110,7 @@ export function minuteFrames(i: MinuteInput): Frame[] {
   const rng = createRng(seedFromString(`${i.seed}-phase-${i.minute}`));
   const byId = new Map(all.map(a => [a.id, a]));
   const frames: Frame[] = [];
-  const shotEv = i.events.find(e => e.type === "goal" || e.type === "shot" || e.type === "chance" || e.type === "save");
+  const shotEv = i.events.find(e => (e.type === "goal" && !e.setPiece) || e.type === "shot" || e.type === "chance" || e.type === "save");
   // Le camp qui attaque : celui du tir s'il y en a un, sinon la possession réelle
   const attSide = shotEv ? (shotEv.type === "save" ? (shotEv.side === "home" ? "away" : "home") : shotEv.side) : i.possession;
   const myBall = attSide === i.mySide;
@@ -182,6 +182,7 @@ export function minuteFrames(i: MinuteInput): Frame[] {
       frames.push({ w: 0.8, ball, holder: thief.id, pos });
     }
   }
+  frames.push(...setPieceFrames(i, all, frames[frames.length - 1]));
   // Cartons, blessures, mi-temps, fin
   for (const e of i.events) {
     if (e.type === "yellow" || e.type === "red" || e.type === "injury") {
@@ -211,7 +212,7 @@ export function phaseFrames(phase: import("../manager/positional").Phase, i: Min
   }));
   const last = frames[frames.length - 1];
   if (!last) return minuteFrames(i);
-  const shotEv = i.events.find(e => e.type === "goal" || e.type === "shot" || e.type === "chance" || e.type === "save");
+  const shotEv = i.events.find(e => (e.type === "goal" && !e.setPiece) || e.type === "shot" || e.type === "chance" || e.type === "save");
   if (shotEv) {
     const attMine = (shotEv.type === "save" ? (shotEv.side === "home" ? "away" : "home") : shotEv.side) === i.mySide;
     const goalY = attMine ? 0 : 100, dir = attMine ? 1 : -1;
@@ -230,6 +231,7 @@ export function phaseFrames(phase: import("../manager/positional").Phase, i: Min
       badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined,
     });
   }
+  frames.push(...setPieceFrames(i, all, frames[frames.length - 1]));
   for (const e of i.events) {
     const ref = frames[frames.length - 1];
     if (e.type === "yellow" || e.type === "red" || e.type === "injury") {
@@ -239,4 +241,54 @@ export function phaseFrames(phase: import("../manager/positional").Phase, i: Min
     }
   }
   return frames;
+}
+
+
+/**
+ * Coups de pied arrêtés de la minute : corner (centre au point de penalty,
+ * reprise de la tête) ou coup franc (mur, frappe enroulée), avec leur issue.
+ */
+function setPieceFrames(i: MinuteInput, all: Anchor[], ref?: Frame): Frame[] {
+  const out: Frame[] = [];
+  const name = new Map(all.map(a => [a.id, a.name]));
+  for (const e of i.events) {
+    const kind = e.type === "corner" || e.type === "freekick" ? e.type : e.type === "goal" ? e.setPiece : undefined;
+    if (!kind) continue;
+    const attMine = e.side === i.mySide;
+    const goalY = attMine ? 0 : 100, dir = attMine ? 1 : -1;
+    const taker = all.find(a => a.id === e.playerId);
+    const keeper = all.find(a => a.gk && a.mine !== attMine);
+    const goal = e.type === "goal", saved = e.result === "saved";
+    const att = all.filter(a => a.mine === attMine && !a.gk), def = all.filter(a => a.mine !== attMine && !a.gk);
+    const end: Pt = goal ? { x: 46 + ((i.minute * 3) % 9), y: goalY - dir * 2 } : saved ? { x: 50, y: goalY + dir * 3 } : { x: 62, y: goalY - dir * 3 };
+    if (kind === "corner") {
+      const flag: Pt = { x: (i.minute % 2) ? 2 : 98, y: goalY + dir * 1 };
+      const head: Pt = { x: 48 + ((i.minute * 5) % 7), y: goalY + dir * 9 };
+      const box = shape(all, { x: 50, y: goalY + dir * 12 }, attMine);
+      // Attaquants et défenseurs dans la surface
+      att.slice(-5).forEach((a, k) => { box[a.id] = { x: 38 + k * 6, y: goalY + dir * (8 + (k % 2) * 4) }; });
+      def.slice(0, 5).forEach((a, k) => { box[a.id] = { x: 40 + k * 5, y: goalY + dir * (6 + (k % 2) * 4) }; });
+      const kicker = att.find(a => a.id !== taker?.id);
+      if (kicker) box[kicker.id] = flag;
+      if (taker) box[taker.id] = { x: head.x, y: head.y + dir * 4 };
+      out.push({ w: 1, ball: flag, holder: kicker?.id, pos: box, caption: `Corner pour ${attMine ? "vous" : "l'adversaire"}` });
+      const at = { ...box, ...(taker ? { [taker.id]: head } : {}) };
+      out.push({ w: 0.9, ball: head, holder: taker?.id, pos: at, caption: `${name.get(taker?.id ?? "") ?? "Un joueur"} s'élève…` });
+      out.push({ w: 1.3, ball: end, pos: { ...at, ...(keeper ? { [keeper.id]: { x: goal ? (end.x < 50 ? 56 : 44) : end.x, y: at[keeper.id]?.y ?? goalY + dir * 3 } } : {}) }, caption: e.text,
+        flash: goal ? { text: "BUT !", tone: attMine ? "good" : "bad" } : undefined, badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined });
+    } else {
+      const spot: Pt = { x: 40 + ((i.minute * 7) % 21), y: goalY + dir * 22 };
+      const pos = shape(all, spot, attMine);
+      // Le mur : quatre défenseurs à 9 mètres, entre le ballon et le but
+      def.slice(0, 4).forEach((a, k) => { pos[a.id] = { x: spot.x + (50 - spot.x) * 0.35 - 4.5 + k * 3, y: spot.y - dir * 9 }; });
+      if (taker) pos[taker.id] = { x: spot.x - 2, y: spot.y + dir * 3 };
+      out.push({ w: 1, ball: spot, holder: taker?.id, pos, caption: `Coup franc : ${name.get(taker?.id ?? "") ?? "un tireur"} se présente` });
+      const curve: Pt = { x: (spot.x + end.x) / 2 + (spot.x < 50 ? -6 : 6), y: (spot.y + goalY) / 2 };
+      out.push({ w: 0.6, ball: curve, pos, caption: "Par-dessus le mur…" });
+      out.push({ w: 1.2, ball: end, pos: { ...pos, ...(keeper ? { [keeper.id]: { x: goal ? (end.x < 50 ? 56 : 44) : end.x, y: pos[keeper.id]?.y ?? goalY + dir * 3 } } : {}) }, caption: e.text,
+        flash: goal ? { text: "BUT !", tone: attMine ? "good" : "bad" } : undefined, badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined });
+    }
+  }
+  void ref;
+  return out;
 }

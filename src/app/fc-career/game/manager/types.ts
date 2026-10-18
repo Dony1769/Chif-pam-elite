@@ -36,7 +36,7 @@ export interface Lineup {
 // ─── Match du club géré ──────────────────────────────────────────────────────
 
 export type MatchEventType =
-  | "goal" | "chance" | "save" | "shot" | "yellow" | "red" | "injury" | "sub" | "half_time" | "full_time";
+  | "goal" | "chance" | "save" | "shot" | "corner" | "freekick" | "yellow" | "red" | "injury" | "sub" | "half_time" | "full_time";
 
 export interface MatchEvent {
   minute: number;
@@ -50,6 +50,8 @@ export interface MatchEvent {
   shooterId?: string;
   /** Tir sans but : arrêté ou à côté */
   result?: "saved" | "wide";
+  /** But sur coup de pied arrêté */
+  setPiece?: "corner" | "freekick";
   text: string;
 }
 

@@ -268,6 +268,40 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
     }
   }
 
+  // Coups de pied arrêtés : corner après un tir repoussé ou contré, coup franc après une faute aux abords de la surface
+  {
+    const srng = createRng(seedFromString(`${match.seed}-sp${minute}`));
+    const lastShot = m.events.length > match.events.length ? m.events[m.events.length - 1] : null;
+    const corner = lastShot && (lastShot.type === "save" || (lastShot.type === "shot" && lastShot.result === "saved") || lastShot.type === "chance") && srng.chance(0.4);
+    const freekick = !lastShot && srng.chance(0.012 * (atkPower / Math.max(1, defPower)));
+    if (corner || freekick) {
+      const slots = FORMATIONS[att.tactic.formation];
+      const cands = att.pitch.map((p, i) => ({ p, i })).filter((x): x is { p: WorldPlayer; i: number } => !!x.p && slots[x.i].line !== "GK");
+      // Corner : le meilleur de la tête (défenseurs et attaquants) ; coup franc : le meilleur tireur
+      const taker = cands.sort((a, b) => (corner
+        ? ((["CB", "ST"].includes(slots[b.i].pos) ? 8 : 0) + (b.p.face?.phy ?? b.p.overall)) - ((["CB", "ST"].includes(slots[a.i].pos) ? 8 : 0) + (a.p.face?.phy ?? a.p.overall))
+        : (b.p.face?.sho ?? b.p.overall) - (a.p.face?.sho ?? a.p.overall)))[0];
+      if (taker) {
+        const xg = corner ? srng.float(0.03, 0.11) : srng.float(0.04, 0.09);
+        att.shots += 1; att.xg += xg;
+        const on = srng.chance(0.4);
+        if (on) att.shotsOnTarget += 1;
+        const goal = on && srng.chance(Math.min(0.9, xg / 0.4));
+        const kind = corner ? "corner" : "freekick";
+        const who = name(taker.p);
+        if (goal) {
+          att.goals += 1;
+          m.events.push({ minute, type: "goal", side, playerId: taker.p.id, setPiece: kind,
+            text: `BUT ! ${who} ${corner ? "de la tête sur corner" : "sur coup franc direct"} pour ${att.name}. ${m.home.goals}-${m.away.goals}.` });
+        } else {
+          if (on) def.saves += 1;
+          m.events.push({ minute, type: kind, side, playerId: taker.p.id, result: on ? "saved" : "wide",
+            text: corner ? `Corner pour ${att.name} : ${who} reprend de la tête, ${on ? "arrêt du gardien" : "à côté"}.` : `Coup franc pour ${att.name} : ${who} tente sa chance, ${on ? "le gardien capte" : "au-dessus"}.` });
+        }
+      }
+    }
+  }
+
   // Cartons et blessures (les deux équipes)
   for (const s of ["home", "away"] as const) {
     const t = m[s];

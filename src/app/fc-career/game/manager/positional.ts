@@ -96,7 +96,7 @@ export const TUNE = {
   intRadius: 7,
   intSkillExp: 0.8,
   intPowerExp: 0.3,
-  xgScale: 0.195,
+  xgScale: 0.177,
   xgDecay: 16,
   duelExp: 0.6,
   homeXg: 1.06,
