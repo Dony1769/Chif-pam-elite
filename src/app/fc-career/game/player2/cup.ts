@@ -154,15 +154,33 @@ export function startCupLive(s: PlayerCareerState, cm: CupMatch) {
   });
 }
 
-/** Tirs au but : le joueur tire (et réussit selon sa finition), le reste est aléatoire. */
-function shootout(s: PlayerCareerState, cm: CupMatch, mySide: "home" | "away"): { pens: [number, number]; scored: boolean } {
+export interface ShootoutKick { mine: boolean; scored: boolean; you: boolean }
+
+/**
+ * Tirs au but : le joueur tire le cinquième penalty (et réussit selon sa
+ * finition), le reste est aléatoire. Renvoie aussi la séance tir par tir,
+ * de vos tireurs et des leurs en alternance, mort subite comprise.
+ */
+export function shootout(s: PlayerCareerState, cm: CupMatch, mySide: "home" | "away" = cm.side): { pens: [number, number]; scored: boolean; kicks: ShootoutKick[] } {
   const rng = createRng(seedFromString(`${s.shadow.world.seed}-pens-${cm.key}`));
   const skill = s.profile.position === "GK" ? 60 : (s.profile.sub.penalties ?? 60);
   const scored = rng.chance(clamp(0.55 + (skill - 60) / 100, 0.5, 0.95));
-  let mine = (scored ? 1 : 0) + [0, 1, 2, 3].filter(() => rng.chance(0.76)).length;
-  let theirs = [0, 1, 2, 3, 4].filter(() => rng.chance(0.76)).length;
-  while (mine === theirs) { mine += rng.chance(0.75) ? 1 : 0; theirs += rng.chance(0.75) ? 1 : 0; }
-  return { pens: mySide === "home" ? [mine, theirs] : [theirs, mine], scored };
+  const mineFive = [0, 1, 2, 3].map(() => rng.chance(0.76));
+  const theirFive = [0, 1, 2, 3, 4].map(() => rng.chance(0.76));
+  let mine = (scored ? 1 : 0) + mineFive.filter(Boolean).length;
+  let theirs = theirFive.filter(Boolean).length;
+  const kicks: ShootoutKick[] = [];
+  const order = [...mineFive.slice(0, 4), scored];
+  for (let k = 0; k < 5; k++) {
+    kicks.push({ mine: true, scored: order[k], you: k === 4 });
+    kicks.push({ mine: false, scored: theirFive[k], you: false });
+  }
+  while (mine === theirs) {
+    const a = rng.chance(0.75), b = rng.chance(0.75);
+    mine += a ? 1 : 0; theirs += b ? 1 : 0;
+    kicks.push({ mine: true, scored: a, you: false }, { mine: false, scored: b, you: false });
+  }
+  return { pens: mySide === "home" ? [mine, theirs] : [theirs, mine], scored, kicks };
 }
 
 /**

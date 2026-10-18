@@ -18,7 +18,8 @@ import type { MinuteInput } from "../../game/player2/pitchPlay";
 import type { PitchAction } from "../_ui/MatchPitch";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
-import { cupLabel, myCupMatch, startCupLive } from "../../game/player2/cup";
+import { cupLabel, myCupMatch, shootout, startCupLive } from "../../game/player2/cup";
+import { Shootout } from "../_ui/Shootout";
 import { isNation, teamName } from "../../game/domain/competitions";
 import { NATION_BY_ID } from "../../game/data/cp/nations";
 import { decide, onPitch, simulateRest, startPlayerLive, stepPlayerLive } from "../../game/player2/live";
@@ -194,6 +195,12 @@ export default function PlayerMatchPage() {
           </div>
           <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
+
+        {cup?.knockout && m.finished && m.home.goals === m.away.goals && (() => {
+          const sh = shootout(state, cup);
+          const mineN = cup.side === "home" ? m.home.name : m.away.name, theirN = cup.side === "home" ? m.away.name : m.home.name;
+          return <Shootout kicks={sh.kicks} mineName={mineN} theirName={theirN} />;
+        })()}
 
         <MatchPitch live={live} board={shown.match} onStep={onStep} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={1} possession={action ? null : poss} />
 
