@@ -130,7 +130,7 @@ export default function PlayerHome() {
         <WeekResults world={state.shadow.world} clubId={club.id} limit={2} />
 
         <Section title="Messages" aside={<Link href="/fc-career/joueur/messages" className="mg-link">Tout voir</Link>}>
-          {state.inbox.slice(0, 4).map(m => (
+          {state.inbox.filter(m => !m.info).slice(0, 4).map(m => (
             <div key={m.id} className={`mg-msg${m.read ? "" : " is-unread"}`}><b>{m.title}</b><span>{m.body}</span></div>
           ))}
           {state.inbox.length === 0 && <Empty>Aucun message.</Empty>}

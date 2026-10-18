@@ -19,9 +19,12 @@ const MAX_QUEUE = 4;
 const read = (k: string): string[] | null => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
 const write = (k: string, v: string[]) => { try { localStorage.setItem(k, JSON.stringify(v.slice(-600))); } catch { /* stockage indisponible */ } };
 
-export function CinematicHost({ world, me, storageKey }: { world: WorldLiveState; me: Me; storageKey: string }) {
+export function CinematicHost({ world, me, storageKey, extra }: { world: WorldLiveState; me: Me; storageKey: string; extra?: Cinematic[] }) {
   const { clubId, playerId, nation } = me;
-  const all = useMemo(() => { const m = { clubId, playerId, nation }; return allCinematics(world, m).filter(c => relevant(c, world, m)); }, [world, clubId, playerId, nation]);
+  const all = useMemo(() => {
+    const m = { clubId, playerId, nation };
+    return [...allCinematics(world, m).filter(c => relevant(c, world, m)), ...(extra ?? [])];
+  }, [world, clubId, playerId, nation, extra]);
   const [queue, setQueue] = useState<Cinematic[]>([]);
 
   useEffect(() => {
@@ -32,7 +35,15 @@ export function CinematicHost({ world, me, storageKey }: { world: WorldLiveState
     const clubKey = `${key}:club`;
     let lastClub: string | null = null;
     try { lastClub = localStorage.getItem(clubKey); localStorage.setItem(clubKey, clubId ?? ""); } catch { /* stockage indisponible */ }
-    if (lastClub !== null && lastClub !== (clubId ?? "")) { write(key, [...seen, ...all.map(c => c.id)]); return; }
+    if (lastClub !== null && lastClub !== (clubId ?? "")) {
+      // Les moments de carrière (la signature elle-même) restent à jouer
+      const own = all.filter(c => c.id.startsWith("moment-") && !seen.includes(c.id));
+      write(key, [...seen, ...all.filter(c => !c.id.startsWith("moment-")).map(c => c.id)]);
+      if (!own.length) return;
+      setQueue(q => [...q, ...own.filter(p => !q.some(x => x.id === p.id)).slice(-MAX_QUEUE)]);
+      write(key, [...seen, ...all.map(c => c.id)]);
+      return;
+    }
     const fresh = all.filter(c => !seen.includes(c.id));
     if (!fresh.length) return;
     // Après une longue simulation : les plus récents et ceux qui vous concernent d'abord

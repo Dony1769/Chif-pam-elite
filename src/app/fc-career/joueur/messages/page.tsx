@@ -12,8 +12,8 @@ const KIND: Record<InboxKind, string> = { board: "Coach & sélection", match: "M
 export default function PlayerMessages() {
   const { state, run } = usePlayerGame();
   const [open, setOpen] = useState<string | null>(null);
-  const [filter, setFilter] = useState<InboxKind | "all">("all");
-  const list = state.inbox.filter(m => filter === "all" || m.kind === filter || (filter === "board" && m.kind === "welcome"));
+  const [filter, setFilter] = useState<InboxKind | "all" | "key">("key");
+  const list = state.inbox.filter(m => filter === "all" || (filter === "key" ? !m.info : m.kind === filter || (filter === "board" && m.kind === "welcome")));
   const unread = state.inbox.filter(m => !m.read).length;
   return (
     <div className="mg-stack">
@@ -22,8 +22,8 @@ export default function PlayerMessages() {
         <button type="button" className="mg-btn" disabled={unread === 0} onClick={() => run({ type: "MARK_ALL_READ" })}>Tout marquer comme lu</button>
       </div>
       <div className="mg-seg" role="group" aria-label="Filtrer">
-        {(["all", "match", "board", "finance", "squad"] as const).map(k => (
-          <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{k === "all" ? "Tous" : KIND[k]}</button>
+        {(["key", "all", "match", "board", "finance", "squad"] as const).map(k => (
+          <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{k === "key" ? "Importants" : k === "all" ? "Tous" : KIND[k]}</button>
         ))}
       </div>
       <Section>

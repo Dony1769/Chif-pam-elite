@@ -176,6 +176,10 @@ export interface CareerExtras {
   press?: import("./press").PressQuestion | null;
   /** Cote auprès des supporters (0-100) */
   fans?: number;
+  /** Moments forts de la carrière (mis en scène une fois) */
+  moments?: import("./moments").CareerMoment[];
+  /** Dernier transfert du joueur (indemnité) */
+  lastMove?: { clubId: string; fee: number };
 }
 
 export interface PlayerCareerState {

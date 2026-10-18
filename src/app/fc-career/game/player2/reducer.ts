@@ -14,6 +14,7 @@ import { hasMatchThisWeek } from "../manager/engine";
 import type { CareerResult } from "./career";
 import { migrateLegacy } from "./migrate";
 import { answerPress } from "./press";
+import { recordMoments } from "./moments";
 import type { Tone } from "./press";
 import { applyCupMatch, autoPlayCup, myCupMatch } from "./cup";
 import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, signOffer, requestTransfer, retirePlayer } from "./career";
@@ -58,6 +59,12 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
   }
   if (!state) return { state, message: null };
   const s = ensureCareer(state);
+  const step = stepInner(s, action);
+  // Moments forts de la carrière (premier but, paliers, sélection, signature…)
+  return step.state && step.state !== s ? { ...step, state: recordMoments(s, step.state) } : step;
+}
+
+function stepInner(s: PlayerCareerState, action: PlayerAction): PlayerStep {
   const plain = (next: PlayerCareerState): PlayerStep => ({ state: next, message: null });
   switch (action.type) {
     case "PLAY_WEEK":        return plain(advancePlayerWeek(s, action.live, action.psGain));
@@ -88,5 +95,6 @@ export function playerStep(state: PlayerCareerState | null, action: PlayerAction
     case "RENEW":            return fromResult(negotiateRenewal(s, action.wage, action.seasons));
     case "MARK_READ":        return plain({ ...s, inbox: s.inbox.map(m => (m.id === action.id ? { ...m, read: true } : m)) });
     case "MARK_ALL_READ":    return plain({ ...s, inbox: s.inbox.map(m => ({ ...m, read: true })) });
+    default:                 return plain(s);
   }
 }

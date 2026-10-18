@@ -114,6 +114,8 @@ export interface InboxMessage {
   title: string;
   body: string;
   read: boolean;
+  /** Simple information (résultat, entraînement) : pas de notification */
+  info?: boolean;
 }
 
 // ─── État complet ────────────────────────────────────────────────────────────

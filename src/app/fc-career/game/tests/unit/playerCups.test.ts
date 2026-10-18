@@ -77,3 +77,36 @@ describe("Tournois de sélections jouables", () => {
     expect(after.career!.national.caps).toBe(s.career!.national.caps + 1);
   }, 60000);
 });
+
+describe("Matchs amicaux de sélection", () => {
+  test("trêve internationale : amical jouable, compté une seule fois", () => {
+    let s = mutateSubs(ensureCareer(createPlayerCareer({ seed: SEED, clubId: club.id, firstName: "Léo", lastName: "Ami", nationality: "FRA", position: "ST", foot: "right", now: 0 })),
+      { finishing: 96, positioning: 96, shotPower: 95, ballControl: 95, reactions: 95, dribbling: 95, headingAccuracy: 95, strength: 92, sprintSpeed: 92, acceleration: 92, shortPassing: 92 });
+    s = { ...s, shadow: { ...s.shadow, world: { ...s.shadow.world, currentWeek: 10 } } };
+    const cm = myCupMatch(s);
+    expect(cm?.comp.id).toBe("friendly");
+    expect(cm?.national).toBe(true);
+    const pl = simulateRest(startCupLive(s, cm!));
+    const after = applyCupMatch(s, cm!, pl.match, pl.psGain);
+    const caps = after.career!.national.caps;
+    expect(caps).toBe(s.career!.national.caps + (pl.match && finishedPlayed(after, s) ? 1 : 0));
+    expect(myCupMatch(after)).toBeNull();
+    expect(after.shadow.world.weekSheets!.some(x => x.compId === "friendly")).toBe(true);
+    const week = advancePlayerWeek(after);
+    expect(week.career!.national.caps).toBe(caps);
+  }, 60000);
+
+  test("Euro et Coupe du monde : un tour à élimination par semaine", () => {
+    const s0 = ensureCareer(createPlayerCareer({ seed: SEED, clubId: club.id, firstName: "A", lastName: "B", nationality: "FRA", position: "ST", foot: "right", now: 0 }));
+    for (const season of [2, 4]) {
+      const w = runCompetitions({ ...s0.shadow.world, season, currentWeek: 46, competitions: [] } as typeof s0.shadow.world, 46).world;
+      const t = (w.competitions ?? []).find(c => c.kind === "national")!;
+      expect(new Set(t.koWeeks).size).toBe(t.koWeeks.length);
+      expect(Math.min(...t.koWeeks)).toBeGreaterThan(Math.max(...t.groupWeeks!));
+    }
+  });
+});
+
+function finishedPlayed(after: PlayerCareerState, before: PlayerCareerState) {
+  return after.career!.national.caps > before.career!.national.caps;
+}

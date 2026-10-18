@@ -19,7 +19,7 @@ import { maybeNewInterest, updateInterests } from "./scouting";
 import { autoPlayCupsThisWeek } from "./cup";
 import { maybePress } from "./press";
 import {
-  avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
+  avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, quiet, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -186,7 +186,7 @@ export function acceptOffer(s0: PlayerCareerState, offerId: string): CareerResul
     });
   } else {
     next = moveTo(s, club, { wage: o.wage, seasons: o.seasons, role: o.role });
-    next = withCareer(next, { offers: [], transferRequested: false, loan: null, freeAgentSince: null, interests: (C(s).interests ?? []).filter(i => i.clubId !== club.id) });
+    next = withCareer(next, { lastMove: { clubId: club.id, fee: o.fee }, offers: [], transferRequested: false, loan: null, freeAgentSince: null, interests: (C(s).interests ?? []).filter(i => i.clubId !== club.id) });
   }
   const txt = o.kind === "loan"
     ? `Prêté à ${club.name} jusqu'à la fin de la saison. Rôle annoncé : ${ROLE_LABEL[o.role].toLowerCase()}.`
@@ -355,7 +355,8 @@ function nationalWindow(s: PlayerCareerState): PlayerCareerState {
   const nextNat = { ...nat, called: true, lastWindow: now, caps: nat.caps + (plays ? 1 : 0), goals: nat.goals + goals };
   const first = !nat.called && nat.caps === 0;
   const next = { ...withCareer(s, { national: nextNat }), profile: { ...s.profile, reputation: clamp(s.profile.reputation + (plays ? 1.5 : 0.5), 1, 100) } };
-  return pushPlayerInbox(next, pmsg(next, "board", first ? `Première convocation : ${country?.name ?? "sélection"}` : `Sélection : ${country?.name ?? ""}`,
+  const mk = first ? pmsg : (st: PlayerCareerState, k: "board", t: string, b: string) => quiet(pmsg(st, k, t, b));
+  return pushPlayerInbox(next, mk(next, "board", first ? `Première convocation : ${country?.name ?? "sélection"}` : `Sélection : ${country?.name ?? ""}`,
     plays ? `Vous jouez pour ${country?.name}${goals ? " et vous marquez" : ""}. ${nextNat.caps} sélection(s), ${nextNat.goals} but(s).` : `Convoqué mais resté sur le banc. ${nextNat.caps} sélection(s).`));
 }
 

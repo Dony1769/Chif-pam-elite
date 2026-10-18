@@ -15,15 +15,15 @@ import type { LiveMatch, MatchTeamInput } from "../manager/matchSim";
 import { sheetFromLive } from "../domain/matchSheet";
 import { nationSquad, teamName, teamTiesThisWeek } from "../domain/competitions";
 import type { ForcedTie, TeamTie } from "../domain/competitions";
-import { formatDate, matchDate } from "../domain/calendar";
-import { NATION_BY_ID } from "../data/cp/nations";
+import { formatDate, isInternationalBreak, matchDate } from "../domain/calendar";
+import { NATIONS, NATION_BY_ID } from "../data/cp/nations";
 import { createRng, seedFromString } from "../utils/random";
 import { shortName } from "../utils/names";
 import type { OptionId } from "./playstyles";
 import type { PlayerCareerState, SeasonLine } from "./types";
 import { simulateRest, startPlayerLive } from "./live";
 import {
-  POS_LABEL, applyPlayStyleProgress, effSubs, coachDecision, currentSeasonLine, emptyTally, myClub, pmsg, pushPlayerInbox,
+  POS_LABEL, applyPlayStyleProgress, effSubs, quiet, coachDecision, currentSeasonLine, emptyTally, myClub, pmsg, pushPlayerInbox,
 } from "./engine";
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -81,7 +81,7 @@ export function myCupMatch(s: PlayerCareerState): CupMatch | null {
     ...teamTiesThisWeek(w, myClub(s).id, week).map(t => ({ t, team: myClub(s).id, national: false })),
     ...(nation ? teamTiesThisWeek(w, nation, week).map(t => ({ t, team: nation, national: true })) : []),
   ];
-  const first = candidates[0];
+  const first = candidates[0] ?? (nation ? friendlyTie(s, nation) : null);
   if (!first) return null;
   const side = first.t.tie.home === first.team ? "home" : "away";
   const mine = teamInput(s, first.team, first.national);
@@ -91,6 +91,34 @@ export function myCupMatch(s: PlayerCareerState): CupMatch | null {
     opponent: side === "home" ? first.t.tie.away : first.t.tie.home,
     selection: injured && injured.weeksRemaining > 0 ? "out" : mine.me,
   };
+}
+
+export const FRIENDLY_ID = "friendly";
+
+/**
+ * Trêve internationale sans tournoi pour sa sélection : match amical contre
+ * une autre sélection (tirée au sort), jouable comme un match officiel.
+ */
+function friendlyTie(s: PlayerCareerState, nation: string): { t: TeamTie; team: string; national: boolean } | null {
+  const w = s.shadow.world;
+  const week = w.currentWeek;
+  if (!isInternationalBreak(week)) return null;
+  const now = w.season * 100 + week;
+  if (s.career?.national.lastWindow === now) return null;
+  const inTournament = (w.competitions ?? []).some(c => c.kind === "national" && c.season === w.season && !c.winner && c.groups?.some(g => g.teams.includes(nation)));
+  if (inTournament) return null;
+  const rng = createRng(seedFromString(`${w.seed}-friendly-${now}-${nation}`));
+  const pool = NATIONS.filter(n => n.id !== nation);
+  let opp: string | null = null;
+  for (let i = 0; i < 12 && !opp; i++) {
+    const n = pool[rng.int(0, pool.length - 1)];
+    if (nationSquad(w, n.id).length >= 14) opp = n.id;
+  }
+  if (!opp) return null;
+  const home = rng.chance(0.5);
+  const comp = { id: FRIENDLY_ID, name: "Match amical international", kind: "national" as const, season: w.season, pending: [], koWeeks: [], rounds: [] };
+  const tie = { id: `fr-${now}`, home: home ? nation : opp, away: home ? opp : nation };
+  return { t: { comp, tie, knockout: false, stage: "Amical", key: `${FRIENDLY_ID}-${now}` }, team: nation, national: true };
 }
 
 /** Libellé court : « CP FA Cup · Huitièmes de finale ». */
@@ -168,7 +196,14 @@ export function applyCupMatch(s0: PlayerCareerState, cm: CupMatch, live: LiveMat
   };
   // Match en semaine : de la fatigue pour le week-end (le coach peut faire tourner)
   const players = played ? w.players.map(p => (p.id === id ? { ...p, fatigue: Math.min(100, p.fatigue + (cm.selection === "starter" ? 14 : 6)) } : p)) : w.players;
-  let s: PlayerCareerState = { ...s0, shadow: { ...s0.shadow, world: { ...w, players, forcedTies: { ...(w.forcedTies ?? {}), [cm.key]: forced } } } };
+  const nowIdx = w.season * 100 + w.currentWeek;
+  const friendly = cm.comp.id === FRIENDLY_ID;
+  // Amical : pas de compétition à faire avancer, la feuille va directement dans les résultats de la semaine
+  const world = friendly
+    ? { ...w, players, weekSheets: [...(w.weekSheets ?? []), { ...forced.sheet!, id: cm.key, compId: FRIENDLY_ID, stage: "Amical", weekIdx: nowIdx, day: "weekend" as const }] }
+    : { ...w, players, forcedTies: { ...(w.forcedTies ?? {}), [cm.key]: forced } };
+  let s: PlayerCareerState = { ...s0, shadow: { ...s0.shadow, world } };
+  if (friendly && s.career) s = { ...s, career: { ...s.career, national: { ...s.career.national, called: true, lastWindow: nowIdx } } };
 
   const mine = cm.side === "home" ? hs : as, theirs = cm.side === "home" ? as : hs;
   const won = mine > theirs || (sh !== null && (cm.side === "home" ? sh.pens[0] > sh.pens[1] : sh.pens[1] > sh.pens[0]));
@@ -212,7 +247,9 @@ export function applyCupMatch(s0: PlayerCareerState, cm: CupMatch, live: LiveMat
     ? `${cm.selection === "starter" ? "Titulaire" : "Entré en jeu"} · note ${rating!.toFixed(1)}${goals ? ` · ${goals} but(s)` : ""}${assists ? ` · ${assists} passe(s) déc.` : ""}${sh ? (sh.scored ? " · tir au but réussi" : " · tir au but manqué") : ""}.`
     : cm.selection === "bench" ? "Resté sur le banc." : "Pas dans le groupe.";
   const title = cm.knockout ? `${res} ${score} contre ${opp}` : `${mine > theirs ? "Victoire" : mine < theirs ? "Défaite" : "Nul"} ${score} contre ${opp}`;
-  return pushPlayerInbox(s, pmsg(s, "match", `${cupLabel(cm)} : ${title}`, mePart));
+  const msg = pmsg(s, "match", `${cupLabel(cm)} : ${title}`, mePart);
+  // Une qualification ou une élimination compte ; une journée de groupe reste une information
+  return pushPlayerInbox(s, cm.knockout ? msg : quiet(msg));
 }
 
 /** Joue automatiquement le match de coupe du joueur (il décide seul de ses moments clés). */

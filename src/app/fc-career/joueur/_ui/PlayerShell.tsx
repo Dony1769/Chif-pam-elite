@@ -4,7 +4,8 @@
 
 import { Backdrop } from "../../manager/_ui/Backdrop";
 import { CinematicHost } from "../../manager/_ui/cinematics/CinematicHost";
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
+import type { Cinematic } from "../../manager/_ui/cinematics/events";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "./PlayerContext";
@@ -41,11 +42,17 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
   const p = state ? me(state) : undefined;
   const cal = state ? worldCalendar(state.shadow.world) : null;
   const unread = state?.inbox.filter(m => !m.read).length ?? 0;
+  const rawMoments = state?.career?.moments;
+  const playerName = state ? `${state.profile.firstName} ${state.profile.lastName}` : "";
+  const moments = useMemo<Cinematic[] | undefined>(() => rawMoments?.map(m => ({
+    kind: "final" as const, id: m.id, title: m.title, subtitle: m.subtitle, trophy: m.trophy,
+    winner: { id: m.id, name: playerName, isMe: true }, runnerUp: "", score: m.detail,
+  })), [rawMoments, playerName]);
 
   return (
     <div className="mg-app" ref={appRef}>
       <Backdrop club={club?.colors.primary} />
-      {state && club && !onNew && <CinematicHost world={state.shadow.world} me={{ clubId: club.id, playerId: state.profile.id, nation: state.profile.nationality }} storageKey={`joueur-${state.profile.id}`} />}
+      {state && club && !onNew && <CinematicHost world={state.shadow.world} me={{ clubId: club.id, playerId: state.profile.id, nation: state.profile.nationality }} storageKey={`joueur-${state.profile.id}`} extra={moments} />}
       <GameBar />
       {state && club && p && !onNew && (
         <>

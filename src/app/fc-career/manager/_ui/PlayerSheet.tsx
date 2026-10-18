@@ -288,6 +288,7 @@ function Formation({ world, formation, ids }: { world: WorldLiveState; formation
 // ─── Feuille de match ────────────────────────────────────────────────────────
 
 function compLabel(w: WorldLiveState, id: string) {
+  if (id === "friendly") return "Matchs amicaux internationaux";
   return w.leagues.find(l => l.id === id)?.name ?? (w.competitions ?? []).find(c => c.id === id)?.name ?? (w.trophies ?? []).find(t => t.compId === id)?.name ?? id;
 }
 

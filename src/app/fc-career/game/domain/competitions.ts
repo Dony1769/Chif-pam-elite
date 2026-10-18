@@ -224,8 +224,9 @@ function nationalTournament(w: WorldLiveState, kind: "euro" | "wc", year: number
   const id = kind;
   return {
     id, name: kind === "euro" ? `CP Euro ${year}` : `CP Coupe du monde ${year}`, kind: "national", season: w.season,
-    pending: [], koWeeks: kind === "euro" ? [51, 52, 52] : [51, 51, 52, 52],
-    groupWeeks: [48, 49, 50], groups: makeGroups(teams, `${w.seed}-${id}-${year}`, "ABCDEFGH", false), rounds: [],
+    pending: [], koWeeks: kind === "euro" ? [50, 51, 52] : [49, 50, 51, 52],
+    // Une semaine par tour à élimination : chaque tour est tiré avant d'être joué (jouable en direct)
+    groupWeeks: kind === "euro" ? [48, 48, 49] : [47, 48, 48], groups: makeGroups(teams, `${w.seed}-${id}-${year}`, "ABCDEFGH", false), rounds: [],
   };
 }
 
@@ -245,7 +246,7 @@ function ensureCompetitions(w: WorldLiveState, week: number): WorldLiveState {
   }
   const y = juneYear(w);
   const nk: "euro" | "wc" | null = y % 4 === 0 ? "euro" : y % 4 === 2 ? "wc" : null;
-  if (nk && week >= 47 && week <= 49 && !next.some(c => c.id === nk)) {
+  if (nk && week >= 45 && week <= 47 && !next.some(c => c.id === nk)) {
     const t = nationalTournament(w, nk, y);
     if (t) { next.push(t); changed = true; }
   }

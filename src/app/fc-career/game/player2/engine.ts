@@ -67,6 +67,10 @@ export function pmsg(s: PlayerCareerState, kind: InboxKind, title: string, body:
     season: s.shadow.world.season, week: s.shadow.world.currentWeek, kind, title, body, read: false,
   };
 }
+/** Message d'information : visible dans « Tous », sans notification. */
+const quietMsg = (s: PlayerCareerState, kind: InboxKind, title: string, body: string) => quiet(pmsg(s, kind, title, body));
+export const quiet = (m: InboxMessage): InboxMessage => ({ ...m, read: true, info: true });
+
 export function pushPlayerInbox(s: PlayerCareerState, ...m: InboxMessage[]): PlayerCareerState {
   const taken = new Set(s.inbox.map(x => x.id));
   const fresh = m.map(x => {
@@ -415,8 +419,10 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
     if (t.special.includes("weakFoot")) labels.push(`Pied faible ${s.profile.weakFoot}★`);
     if (t.special.includes("skillMoves")) labels.push(`Gestes techniques ${s.profile.skillMoves}★`);
     const ovr = profileOverall(s.profile);
-    messages.push(pmsg(s, "squad", ovr > ovrBefore ? `Note globale : ${ovr} (+${ovr - ovrBefore})` : "Progrès à l'entraînement",
-      `${labels.join(", ")}. Note globale : ${ovr}.`));
+    const m = pmsg(s, "squad", ovr > ovrBefore ? `Note globale : ${ovr} (+${ovr - ovrBefore})` : "Progrès à l'entraînement",
+      `${labels.join(", ")}. Note globale : ${ovr}.`);
+    // Seuls une note globale en hausse ou une étoile gagnée méritent une notification
+    messages.push(ovr > ovrBefore || t.special.length ? m : quiet(m));
   }
   // PlayStyles
   const ps = applyPlayStyleProgress(s, sum?.played ? psGain : undefined);
@@ -427,7 +433,7 @@ export function playPlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null, p
   if (after.world.season !== season) s = closePlayerSeason(s, season, messages);
   s = coachDecision(s);
   if (s.selection === "starter" && s0.selection !== "starter") {
-    messages.push(pmsg(s, "board", "Titulaire pour le prochain match", s.playedAs
+    messages.push(quietMsg(s, "board", "Titulaire pour le prochain match", s.playedAs
       ? `Le coach vous fait confiance, mais vous décale : vous démarrez ${POS_LABEL[s.playedAs]}.`
       : "Le coach vous fait confiance : vous démarrez la rencontre."));
   } else if (s.selection === "starter" && s.playedAs && s.playedAs !== s0.playedAs) {
@@ -471,7 +477,7 @@ function applyMatch(s: PlayerCareerState, sum: PlayerMatchSummary, messages: Inb
   const shifted = sum.started && s.playedAs ? s.playedAs : null;
   const familiarity = shifted ? gainFamiliarity(s.profile.familiarity ?? {}, s.profile.position, shifted) : s.profile.familiarity;
   const where = shifted ? ` Aligné ${POS_LABEL[shifted].toLowerCase()} (familiarité ${familiarity?.[shifted] ?? 0}/100).` : "";
-  messages.push(pmsg(s, "match", `${res} ${mine}-${theirs} contre ${opp?.name ?? "l'adversaire"}`, `${body}${where} Confiance du coach : ${coachTrust}/100.`));
+  messages.push(quiet(pmsg(s, "match", `${res} ${mine}-${theirs} contre ${opp?.name ?? "l'adversaire"}`, `${body}${where} Confiance du coach : ${coachTrust}/100.`)));
   if (shifted && (s.profile.familiarity?.[shifted] ?? 0) < 80 && (familiarity?.[shifted] ?? 0) >= 80) {
     messages.push(pmsg(s, "squad", `Nouveau poste maîtrisé : ${POS_LABEL[shifted]}`, `À force d'y jouer, vous êtes à l'aise ${POS_LABEL[shifted].toLowerCase()}. Vous pouvez en faire votre poste principal dans Progression.`));
   }
