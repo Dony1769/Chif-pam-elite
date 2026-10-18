@@ -75,7 +75,8 @@ export function hydrateGameStore(): Promise<HydrateInfo> {
     if (db) {
       try {
         for (const k of GAME_KEYS) {
-          const v = await req(tx("readonly").get(k));
+          const raw = await req(tx("readonly").get(k));
+          const v = raw instanceof Blob ? await unzip(raw) : raw;
           if (typeof v === "string") map.set(k, v);
           else if (local) {
             // Migration : une ancienne sauvegarde localStorage passe dans IndexedDB
@@ -102,12 +103,40 @@ export function hydrateGameStore(): Promise<HydrateInfo> {
   return hydrating;
 }
 
+/**
+ * Compression gzip native du navigateur (aucune bibliothèque) : une carrière
+ * de plusieurs saisons passe de quelques Mo à quelques centaines de Ko.
+ * Les anciennes sauvegardes en texte restent lues telles quelles.
+ */
+const canZip = () => typeof CompressionStream !== "undefined" && typeof DecompressionStream !== "undefined" && typeof Blob !== "undefined";
+async function zip(text: string): Promise<Blob> {
+  return new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).blob();
+}
+async function unzip(b: Blob): Promise<string | null> {
+  try { return await new Response(b.stream().pipeThrough(new DecompressionStream("gzip"))).text(); } catch { return null; }
+}
+
+/** Écritures enchaînées par clé : la dernière sauvegarde gagne toujours. */
+const queue = new Map<string, Promise<void>>();
+function persistIdb(key: string, value: string | null) {
+  const fail = () => writeErrorListeners.forEach(f => f(key));
+  const prev = queue.get(key) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    try {
+      if (value === null) { await req(tx("readwrite").delete(key)); return; }
+      const data: string | Blob = canZip() && value.length > 4096 ? await zip(value) : value;
+      // Vérification : on ne remplace jamais une sauvegarde par une archive illisible
+      if (data instanceof Blob && (await unzip(data)) !== value) { await req(tx("readwrite").put(value, key)); return; }
+      await req(tx("readwrite").put(data, key));
+    } catch { fail(); }
+  });
+  queue.set(key, next);
+  void next.finally(() => { if (queue.get(key) === next) queue.delete(key); });
+}
+
 function persist(key: string, value: string | null) {
   if (backend === "idb" && db) {
-    try {
-      const r = value === null ? tx("readwrite").delete(key) : tx("readwrite").put(value, key);
-      r.onerror = () => writeErrorListeners.forEach(f => f(key));
-    } catch { writeErrorListeners.forEach(f => f(key)); }
+    persistIdb(key, value);
   } else {
     const local = ls();
     if (!local) throw new Error("stockage indisponible");
@@ -147,7 +176,7 @@ export async function resetCareers(scope: ResetScope): Promise<boolean> {
     }
     if (scope === "all") for (const k of LEGACY_LS_KEYS) ls()?.removeItem(k);
     if (backend === "idb" && db) {
-      for (const k of keys) await req(tx("readwrite").delete(k));
+      for (const k of keys) { await queue.get(k); await req(tx("readwrite").delete(k)); }
     }
     return true;
   } catch {
