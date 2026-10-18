@@ -36,7 +36,7 @@ export interface Lineup {
 // ─── Match du club géré ──────────────────────────────────────────────────────
 
 export type MatchEventType =
-  | "goal" | "chance" | "save" | "yellow" | "red" | "injury" | "sub" | "half_time" | "full_time";
+  | "goal" | "chance" | "save" | "shot" | "yellow" | "red" | "injury" | "sub" | "half_time" | "full_time";
 
 export interface MatchEvent {
   minute: number;
@@ -46,6 +46,10 @@ export interface MatchEvent {
   assistId?: string;
   /** Joueur entrant pour un remplacement */
   inPlayerId?: string;
+  /** Tireur (arrêt du gardien) */
+  shooterId?: string;
+  /** Tir sans but : arrêté ou à côté */
+  result?: "saved" | "wide";
   text: string;
 }
 

@@ -300,7 +300,7 @@ export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive
             text: mo.kind === "penalty" ? `BUT ! ${pl.playerName} transforme le penalty. ${score()}.`
               : mo.kind === "setpiece" ? `BUT ! Coup franc magnifique de ${pl.playerName}. ${score()}.`
               : `BUT ! ${pl.playerName} marque${!solo && mate ? ` après un service de ${mate.lastName}` : ""}. ${score()}.` });
-          text = `But ! Votre ${option.label.toLowerCase()} fait mouche.`;
+          text = `But ! ${option.label} : ça fait mouche.`;
         } else {
           outcome = "assist";
           ev({ type: "goal", side: me, playerId: mate?.id ?? pl.playerId, assistId: mate ? pl.playerId : undefined, text: `BUT ! ${mate?.lastName ?? pl.playerName} conclut sur une offrande de ${pl.playerName}. ${score()}.` });

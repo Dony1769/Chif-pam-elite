@@ -16,10 +16,11 @@ import type { PlayerLive, KeyMoment, MomentOption, DecisionLog } from "../../gam
 import { FORMATIONS } from "../../game/manager/tactics";
 import type { LiveTeam } from "../../game/manager/matchSim";
 import type { WorldPlayer } from "../../game/data/worldPlayers";
+import type { MatchEvent } from "../../game/manager/types";
 import { createRng, seedFromString } from "../../game/utils/random";
 
 type Pt = { x: number; y: number };
-interface Dot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number }
+export interface Dot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number }
 
 const SHOTS = new Set(["shoot", "longshot", "finesse", "chip", "acrobatic", "header", "lowdriven", "powershot", "trivela", "freekick", "penalty"]);
 const PASSES = new Set(["pass", "cross", "through", "longball", "outside", "longthrow", "quickthrow"]);
@@ -96,6 +97,71 @@ function outcomePath(d: DecisionLog, spot: { me: Pt; ball: Pt; rival?: Pt }, tar
   }
 }
 
+// ─── Rejeu synchronisé des événements du moteur ──────────────────────────────
+
+/** Une étape d'action : trajet du ballon, joueurs déplacés, légende, effet. */
+export interface Step {
+  ball: Pt[];
+  moves: Record<string, Pt>;
+  dur: number;
+  caption?: string;
+  flash?: { text: string; tone: "good" | "bad" | "neutral" };
+  badge?: { id: string; kind: "yellow" | "red" | "injury" | "glove" };
+}
+export interface PitchAction { key: string; events: MatchEvent[]; possession: "home" | "away" }
+
+const VISUAL = new Set(["goal", "shot", "save", "chance", "yellow", "red", "injury", "half_time", "full_time"]);
+export const isVisualEvent = (e: MatchEvent) => VISUAL.has(e.type);
+
+/**
+ * Script d'un ensemble d'événements de la même minute, avec les vrais joueurs :
+ * le passeur sert le buteur, le tir file au fond, à côté ou dans les gants.
+ */
+export function scriptFor(events: MatchEvent[], dots: Dot[], mySide: "home" | "away"): Step[] {
+  const steps: Step[] = [];
+  const at = (id?: string) => dots.find(d => d.id === id);
+  for (const e of events) {
+    const ours = e.side === mySide;
+    // But visé : y = 0 pour nous, y = 100 pour l'adversaire
+    const gy = (e.type === "save" ? !ours : ours) ? 0 : 100;
+    const dir = gy === 0 ? 1 : -1;
+    const box = (x: number, depth: number): Pt => ({ x: clamp(x, 30, 70), y: gy + dir * depth });
+    const keeper = dots.find(d => d.gk && (gy === 0 ? !d.mine : d.mine));
+    if (e.type === "goal") {
+      const sc = at(e.playerId), as = at(e.assistId);
+      const scPt = box(sc?.pt.x ?? 50, 12);
+      const net: Pt = { x: 44 + ((e.minute * 7) % 13), y: gy - dir * 2 };
+      if (as) {
+        const asPt: Pt = { x: as.pt.x < 50 ? 16 : 84, y: gy + dir * 22 };
+        steps.push({ ball: [asPt], moves: { [as.id]: asPt, ...(sc ? { [sc.id]: { x: scPt.x, y: scPt.y + dir * 8 } } : {}) }, dur: 650, caption: `${as.label} s'avance` });
+        steps.push({ ball: [asPt, scPt], moves: { [as.id]: asPt, ...(sc ? { [sc.id]: scPt } : {}) }, dur: 600, caption: `${as.label} pour ${sc?.label ?? "le buteur"}…` });
+      } else {
+        steps.push({ ball: [{ x: scPt.x, y: scPt.y + dir * 14 }], moves: sc ? { [sc.id]: { x: scPt.x, y: scPt.y + dir * 14 } } : {}, dur: 650, caption: `${sc?.label ?? "Un attaquant"} s'avance` });
+      }
+      steps.push({ ball: [scPt, net], moves: { ...(sc ? { [sc.id]: scPt } : {}), ...(keeper ? { [keeper.id]: { x: net.x < 50 ? 54 : 46, y: keeper.pt.y } } : {}) }, dur: 1500, caption: e.text, flash: { text: "BUT !", tone: ours ? "good" : "bad" } });
+    } else if (e.type === "shot" || e.type === "chance" || e.type === "save") {
+      const sh = at(e.type === "save" ? e.shooterId : e.playerId);
+      const deep = e.type === "chance" ? 9 : e.type === "save" ? 12 : 20;
+      const shPt = box(sh?.pt.x ?? 50, deep);
+      steps.push({ ball: [{ x: shPt.x, y: shPt.y + dir * 10 }], moves: sh ? { [sh.id]: { x: shPt.x, y: shPt.y + dir * 10 } } : {}, dur: 550, caption: `${sh?.label ?? "Un attaquant"} s'avance` });
+      const saved = e.type === "save" || e.result === "saved";
+      const end: Pt = saved ? { x: 50 + ((e.minute * 5) % 9) - 4, y: gy + dir * 3 }
+        : e.type === "chance" ? { x: shPt.x < 50 ? 41 : 59, y: gy - dir * 1 } : { x: shPt.x < 50 ? 30 : 70, y: gy - dir * 2 };
+      steps.push({
+        ball: [shPt, end], moves: { ...(sh ? { [sh.id]: shPt } : {}), ...(saved && keeper ? { [keeper.id]: { x: end.x, y: keeper.pt.y } } : {}) }, dur: 1100, caption: e.text,
+        flash: e.type === "chance" ? { text: "Poteau !", tone: "neutral" } : undefined,
+        badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined,
+      });
+    } else if (e.type === "yellow" || e.type === "red" || e.type === "injury") {
+      const p = at(e.playerId);
+      steps.push({ ball: p ? [{ x: p.pt.x + 2, y: p.pt.y }] : [], moves: {}, dur: 1200, caption: e.text, badge: p ? { id: p.id, kind: e.type } : undefined });
+    } else if (e.type === "half_time" || e.type === "full_time") {
+      steps.push({ ball: [{ x: 50, y: 50 }], moves: {}, dur: 1400, caption: e.text, flash: { text: e.type === "half_time" ? "MI-TEMPS" : "FIN DU MATCH", tone: "neutral" } });
+    }
+  }
+  return steps;
+}
+
 function useWide(): boolean {
   const [wide, setWide] = useState(false);
   useEffect(() => {
@@ -108,28 +174,42 @@ function useWide(): boolean {
   return wide;
 }
 
-export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
+export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", action, onActionDone, pace = 1, possession, board }: {
   live: PlayerLive;
   colors: { mine: string; mineAlt: string; theirs: string; theirsAlt: string };
   hoverOption?: MomentOption["id"] | null;
   camera?: "dynamic" | "fixed";
+  /** Événements de la minute à rejouer avant de mettre à jour le score */
+  action?: PitchAction | null;
+  onActionDone?: () => void;
+  /** Multiplicateur de durée (vitesse rapide < 1) */
+  pace?: number;
+  /** Équipe en possession à la dernière minute (sinon tirage) */
+  possession?: "home" | "away" | null;
+  /** État affiché au tableau (score avant l'action en cours) */
+  board?: PlayerLive["match"];
 }) {
   const wide = useWide();
   const reduce = useReducedMotion();
   const m = live.match;
   const mySide = m.managedSide;
+  // Pendant le rejeu d'une minute, le moment clé suivant attend
+  const moment = action ? null : live.moment;
+  const bm = board ?? m;
   const mine = m[mySide], theirs = m[mySide === "home" ? "away" : "home"];
 
   // Possession de la minute (déterministe), l'équipe qui a le ballon monte d'un cran
   const rng = createRng(seedFromString(`${m.seed}-pitch-${m.minute}`));
   const total = Math.max(1, m.home.possessionMinutes + m.away.possessionMinutes);
-  const ours = live.moment ? !["defend", "keeper", "keepercross"].includes(live.moment.kind) : rng.chance(m.minute === 0 ? 0.5 : mine.possessionMinutes / total);
+  const ours = action ? action.possession === mySide
+    : moment ? !["defend", "keeper", "keepercross"].includes(moment.kind)
+    : possession ? possession === mySide : rng.chance(m.minute === 0 ? 0.5 : mine.possessionMinutes / total);
   const myPts = slotPts(mine, false, ours ? 7 : -3);
   const theirPts = slotPts(theirs, true, ours ? -3 : 7);
 
   // Petit mouvement : chaque joueur dérive autour de son poste
   const jitter = (id: string, p: Pt): Pt => {
-    if (live.moment) return p;
+    if (moment) return p;
     const r = createRng(seedFromString(`${id}-${m.minute}`));
     return { x: clamp(p.x + r.float(-4, 4), 3, 97), y: clamp(p.y + r.float(-4, 4), 3, 97) };
   };
@@ -150,7 +230,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
   add(theirs, theirPts, false);
 
   const meDot = dots.find(d => d.me);
-  const spot = live.moment && meDot ? momentSpot(live.moment.kind, meDot.pt) : null;
+  const spot = moment && meDot ? momentSpot(moment.kind, meDot.pt) : null;
   if (spot && meDot) {
     meDot.pt = spot.me;
     if (spot.rival) {
@@ -163,6 +243,31 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
     }
   }
 
+  // Rejeu des événements de la minute (synchronisé avec le moteur)
+  const [play, setPlay] = useState<{ key: string; steps: Step[]; idx: number } | null>(null);
+  const dotsRef = useRef(dots);
+  useEffect(() => { dotsRef.current = dots; });
+  const actionKey = action?.key ?? null;
+  const actionEvents = action?.events;
+  useEffect(() => {
+    if (!actionKey || !actionEvents) { setPlay(null); return; }
+    const steps = scriptFor(actionEvents, dotsRef.current, mySide);
+    if (!steps.length) { setPlay(null); onActionDone?.(); return; }
+    setPlay({ key: actionKey, steps, idx: 0 });
+  }, [actionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!play) return;
+    const st = play.steps[play.idx];
+    const t = setTimeout(() => {
+      if (play.idx + 1 < play.steps.length) setPlay({ ...play, idx: play.idx + 1 });
+      else { setPlay(null); onActionDone?.(); }
+    }, Math.max(120, st.dur * pace * (reduce ? 0.4 : 1)));
+    return () => clearTimeout(t);
+  }, [play, pace, reduce, onActionDone]);
+  const step = play ? play.steps[play.idx] : null;
+  const moves: Record<string, Pt> = play ? Object.assign({}, ...play.steps.slice(0, play.idx + 1).map(x => x.moves)) : {};
+  const shownDots = play ? dots.map(d => (moves[d.id] ? { ...d, pt: moves[d.id] } : d)) : dots;
+
   // Ballon : porteur de la minute, ou point du moment clé
   const holderPool = dots.filter(d => d.mine === ours && !d.gk);
   const holder = holderPool.length ? holderPool[rng.int(0, holderPool.length - 1)] : null;
@@ -171,7 +276,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
   // Rejeu après une décision, ou but du reste du match
   const [replay, setReplay] = useState<{ key: string; path: Pt[]; flash: string | null; mineGoal: boolean | null } | null>(null);
   const lastSpot = useRef<{ spot: { me: Pt; ball: Pt; rival?: Pt }; dots: Dot[]; moment: KeyMoment } | null>(null);
-  const momentNow = live.moment;
+  const momentNow = moment;
   useEffect(() => { if (spot && momentNow) lastSpot.current = { spot, dots, moment: momentNow }; });
   const decisions = live.decisions.length;
   const goals = mine.goals + theirs.goals;
@@ -187,25 +292,20 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
       setReplay({ key: `d${decisions}`, ...o });
       return;
     }
-    if (goals > prev.goals) {
-      const last = [...m.events].reverse().find(e => e.type === "goal");
-      const forUs = last?.side === mySide;
-      setReplay({ key: `g${goals}`, path: forUs ? [{ x: 45, y: 22 }, { x: 50, y: 2 }, { x: 50, y: -2 }] : [{ x: 55, y: 78 }, { x: 50, y: 98 }, { x: 50, y: 102 }], flash: "BUT !", mineGoal: forUs });
-    }
-  }, [decisions, goals, live.decisions, m.events, mySide]);
+  }, [decisions, goals, live.decisions]);
   useEffect(() => {
     if (!replay) return;
-    const t = setTimeout(() => setReplay(null), reduce ? 900 : 2300);
+    const t = setTimeout(() => { setReplay(null); onActionDone?.(); }, reduce ? 900 : 2300);
     return () => clearTimeout(t);
-  }, [replay, reduce]);
+  }, [replay, reduce, onActionDone]);
 
   // Repères : horizontal sur grand écran (nous attaquons vers la droite), vertical sinon (vers le haut)
   const P = (p: Pt) => (wide ? { left: `${100 - p.y}%`, top: `${p.x}%` } : { left: `${p.x}%`, top: `${p.y}%` });
-  const arrows = live.moment && spot ? live.moment.options.map(o => ({ o, to: optionTarget(o.id, spot, dots) })) : [];
+  const arrows = moment && spot ? moment.options.map(o => ({ o, to: optionTarget(o.id, spot, dots) })) : [];
   const svgXY = (p: Pt) => (wide ? { x: 100 - p.y, y: p.x } : { x: p.x, y: p.y });
 
   // Caméra : zoom sur l'action pendant un moment clé ou un rejeu
-  const focus: Pt | null = camera === "dynamic" ? (replay ? replay.path[replay.path.length - 1] : spot ? spot.ball : null) : null;
+  const focus: Pt | null = camera === "dynamic" ? (step && step.ball.length ? step.ball[step.ball.length - 1] : replay ? replay.path[replay.path.length - 1] : spot ? spot.ball : null) : null;
   const zoom = focus ? 1.45 : 1;
   const camXY = (() => {
     if (!focus) return { x: "0%", y: "0%" };
@@ -216,12 +316,14 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
   const abbr = (n: string) => n.replace(/^CP /, "").replace(/[^A-Za-zÀ-ÿ ]/g, "").trim().slice(0, 3).toUpperCase();
   const lastGoal = [...m.events].reverse().find(e => e.type === "goal");
   const lastDecision = live.decisions[live.decisions.length - 1];
-  const caption = live.moment ? live.moment.text
+  const caption = step ? step.caption ?? null : moment ? moment.text
     : replay ? (replay.key.startsWith("d") ? lastDecision?.text : lastGoal?.text) : null;
-  const holderName = !live.moment && !replay && holder ? holder.label : null;
+  const holderName = !moment && !replay && !step && holder ? holder.label : null;
+  const flash = step?.flash ? { key: `${play!.key}-${play!.idx}`, text: step.flash.text, tone: step.flash.tone }
+    : replay?.flash ? { key: replay.key + "f", text: replay.flash, tone: replay.mineGoal === true ? "good" : replay.mineGoal === false ? "bad" : "neutral" } : null;
 
   return (
-    <div className={`pc-pitch${wide ? " is-wide" : ""}${live.moment ? " is-frozen" : ""}`} aria-hidden>
+    <div className={`pc-pitch${wide ? " is-wide" : ""}${moment ? " is-frozen" : ""}`} aria-hidden>
       <div className="pc-pitch__frame">
         <motion.div className="pc-pitch__cam" initial={false} animate={{ scale: zoom, x: camXY.x, y: camXY.y }} transition={{ duration: reduce ? 0 : 0.7, ease: [0.22, 1, 0.36, 1] }}>
           <div className="pc-pitch__stand is-a" style={{ ["--c" as string]: colors.mine }} />
@@ -248,15 +350,20 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
               })}
             </svg>
             <div className="pc-pitch__goal is-theirs" /><div className="pc-pitch__goal is-ours" />
-            {dots.map(d => (
+            {shownDots.map(d => (
               <motion.div key={d.id} className={`pc-pitch__dot${d.mine ? " is-mine" : " is-theirs"}${d.me ? " is-me" : ""}${d.gk ? " is-gk" : ""}`}
                 style={{ ["--c" as string]: d.mine ? colors.mine : colors.theirs, ["--c2" as string]: d.mine ? colors.mineAlt : colors.theirsAlt }}
                 initial={false} animate={P(d.pt)} transition={{ duration: reduce ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}>
                 <span className="pc-pitch__num">{d.num}</span>
+                {step?.badge?.id === d.id && <span className={`pc-pitch__badge is-${step.badge.kind}`} />}
                 {(d.me || d.label === holderName) && <span className="pc-pitch__name">{d.label}</span>}
               </motion.div>
             ))}
-            {replay ? (
+            {step && step.ball.length ? (
+              <motion.div key={`${play!.key}-${play!.idx}`} className="pc-pitch__ball"
+                initial={P(step.ball[0])} animate={{ left: step.ball.map(p => P(p).left), top: step.ball.map(p => P(p).top) }}
+                transition={{ duration: reduce ? 0 : Math.min(1.1, (step.dur * pace) / 1000 * 0.8), ease: "easeInOut" }} />
+            ) : replay ? (
               <motion.div key={replay.key} className="pc-pitch__ball"
                 initial={P(replay.path[0])} animate={{ left: replay.path.map(p => P(p).left), top: replay.path.map(p => P(p).top) }}
                 transition={{ duration: reduce ? 0 : 1.1, ease: "easeInOut" }} />
@@ -268,17 +375,17 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic" }: {
         <div className="pc-pitch__hud">
           <span className="pc-pitch__board">
             <i style={{ background: m.home.clubId === mine.clubId ? colors.mine : colors.theirs }} />{abbr(m.home.name)}
-            <b>{m.home.goals} - {m.away.goals}</b>{abbr(m.away.name)}
-            <i style={{ background: m.away.clubId === mine.clubId ? colors.mine : colors.theirs }} /><em>{m.finished ? "FIN" : `${m.minute}'`}</em>
+            <b>{bm.home.goals} - {bm.away.goals}</b>{abbr(m.away.name)}
+            <i style={{ background: m.away.clubId === mine.clubId ? colors.mine : colors.theirs }} /><em>{bm.finished ? "FIN" : `${action ? action.events[0]?.minute ?? bm.minute : bm.minute}'`}</em>
           </span>
         </div>
-        {live.moment && <span className="pc-pitch__tag">{live.moment.minute}&apos; · {KIND_LABEL[live.moment.kind] ?? "Moment clé"}</span>}
+        {moment && <span className="pc-pitch__tag">{moment.minute}&apos; · {KIND_LABEL[moment.kind] ?? "Moment clé"}</span>}
         {caption && <span className="pc-pitch__caption">{caption}</span>}
         <AnimatePresence>
-          {replay?.flash && (
-            <motion.div key={replay.key + "f"} className={`pc-pitch__flash${replay.mineGoal === true ? " is-good" : replay.mineGoal === false ? " is-bad" : ""}`}
-              initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.2 }} transition={{ delay: reduce ? 0 : 0.8, duration: 0.35 }}>
-              {replay.flash}
+          {flash && (
+            <motion.div key={flash.key} className={`pc-pitch__flash is-${flash.tone}`}
+              initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.2 }} transition={{ delay: reduce ? 0 : step ? 0.55 * pace : 0.8, duration: 0.35 }}>
+              {flash.text}
             </motion.div>
           )}
         </AnimatePresence>

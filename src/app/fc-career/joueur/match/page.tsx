@@ -6,25 +6,26 @@
  * le joueur décider seul jusqu'au coup de sifflet.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
-import { MatchPitch } from "../_ui/MatchPitch";
+import { MatchPitch, isVisualEvent } from "../_ui/MatchPitch";
+import type { PitchAction } from "../_ui/MatchPitch";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
 import { cupLabel, myCupMatch, startCupLive } from "../../game/player2/cup";
 import { isNation, teamName } from "../../game/domain/competitions";
 import { NATION_BY_ID } from "../../game/data/cp/nations";
 import { decide, onPitch, simulateRest, startPlayerLive, stepPlayerLive } from "../../game/player2/live";
-import type { MomentOption } from "../../game/player2/live";
+import type { MomentOption, PlayerLive } from "../../game/player2/live";
 import { finishMatch } from "../../game/manager/matchSim";
 import { attrLabel } from "../../game/player2/attributes";
 import type { PlayerCareerState } from "../../game/player2/types";
 import { shortName } from "../../game/utils/names";
 
 const SPEEDS = [{ label: "Normal", ms: 260 }, { label: "Rapide", ms: 60 }];
-const ICON: Record<string, string> = { goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
+const ICON: Record<string, string> = { shot: "↗", goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
 
 export default function PlayerMatchPage() {
   const { state, run, live, setLive } = usePlayerGame();
@@ -33,6 +34,12 @@ export default function PlayerMatchPage() {
   const [speed, setSpeed] = useState(0);
   const [hot, setHot] = useState<MomentOption["id"] | null>(null);
   const [cam, setCam] = useState<"dynamic" | "fixed">("dynamic");
+  const [mode, setMode] = useState<"direct" | "highlights" | "goals">("direct");
+  // Rejeu synchronisé : le score, le fil et les stats restent sur `view` tant que l'action joue
+  const [action, setAction] = useState<PitchAction | null>(null);
+  const [view, setView] = useState<PlayerLive | null>(null);
+  const [poss, setPoss] = useState<"home" | "away" | null>(null);
+  const endAction = useCallback(() => { setAction(null); setView(null); }, []);
   const cup = myCupMatch(state);
   const fx0 = myNextFixture(state);
   const fx = cup ? null : fx0;
@@ -57,14 +64,23 @@ export default function PlayerMatchPage() {
 
   // Horloge : pause automatique sur un moment clé, à la mi-temps et à la fin
   useEffect(() => {
-    if (!playing || !live || live.match.finished || live.moment) return;
+    if (!playing || !live || live.match.finished || live.moment || action || view) return;
+    // Direct : chaque minute ; Temps forts et Buts : les minutes calmes défilent
     const t = setTimeout(() => {
       const next = stepPlayerLive(live);
+      const fresh = next.match.events.slice(live.match.events.length).filter(isVisualEvent)
+        .filter(e => mode !== "goals" || e.type === "goal" || e.type === "half_time" || e.type === "full_time");
+      const side = next.match.home.possessionMinutes > live.match.home.possessionMinutes ? "home" : "away";
+      setPoss(side);
+      if (fresh.length) {
+        setView(live);
+        setAction({ key: `m${next.match.minute}-${next.match.events.length}`, events: fresh, possession: side });
+      }
       setLive(next);
       if (next.moment || next.match.minute === 45 || next.match.finished) setPlaying(false);
-    }, SPEEDS[speed].ms);
+    }, mode === "direct" ? SPEEDS[speed].ms : 20);
     return () => clearTimeout(t);
-  }, [playing, live, speed, setLive]);
+  }, [playing, live, speed, setLive, action, view, mode]);
 
   const report = useMemo(() => (live?.match.finished ? finishMatch(live.match) : null), [live]);
   const clubOf = (id: string) => state.shadow.world.clubs.find(c => c.id === id);
@@ -94,7 +110,8 @@ export default function PlayerMatchPage() {
     );
   }
 
-  const m = live.match;
+  const shown = view ?? live;
+  const m = shown.match;
   const started = m.minute > 0;
   const teamColors = (id: string, fallback: [string, string]): [string, string] => {
     const c = clubOf(id)?.colors;
@@ -110,10 +127,12 @@ export default function PlayerMatchPage() {
 
   function choose(o: MomentOption) {
     if (!live) return;
+    // Le score attend la fin du rejeu de l'action
+    setView(live);
     setLive(decide(live, o.id));
     setHot(null);
     // Le temps de voir l'action rejouée sur le terrain
-    setTimeout(() => setPlaying(true), 2000);
+    setTimeout(() => { setView(null); setPlaying(true); }, 2600);
   }
   function validate() {
     if (!live) return;
@@ -143,9 +162,9 @@ export default function PlayerMatchPage() {
           <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
 
-        <MatchPitch live={live} hoverOption={hot} colors={pitchColors} camera={cam} />
+        <MatchPitch live={live} board={shown.match} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={speed === 0 ? 1 : 0.55} possession={action ? null : poss} />
 
-        {live.moment ? (
+        {live.moment && !action ? (
           <div className="pc-moment" role="dialog" aria-label="Moment clé">
             <div className="pc-moment__head"><b>Moment clé · {live.moment.minute}&apos;</b><span className="mg-small">À vous de choisir</span></div>
             <p style={{ margin: 0 }}>{live.moment.text}</p>
@@ -172,7 +191,12 @@ export default function PlayerMatchPage() {
                 {SPEEDS.map((s, i) => <button key={s.label} type="button" aria-pressed={speed === i} onClick={() => setSpeed(i)}>{s.label}</button>)}
               </div>
             )}
-            {!m.finished && <button type="button" className="mg-btn mg-btn--ghost" onClick={() => { setPlaying(false); setLive(simulateRest(live)); }}>Simuler le reste</button>}
+            {!m.finished && <button type="button" className="mg-btn mg-btn--ghost" onClick={() => { setPlaying(false); endAction(); setLive(simulateRest(live)); }}>Simuler le reste</button>}
+            <div className="mg-seg" role="group" aria-label="Déroulé">
+              <button type="button" aria-pressed={mode === "direct"} onClick={() => setMode("direct")}>Direct</button>
+              <button type="button" aria-pressed={mode === "highlights"} onClick={() => setMode("highlights")}>Temps forts</button>
+              <button type="button" aria-pressed={mode === "goals"} onClick={() => setMode("goals")}>Buts</button>
+            </div>
             <div className="mg-seg" role="group" aria-label="Caméra">
               <button type="button" aria-pressed={cam === "dynamic"} onClick={() => setCam("dynamic")}>Dynamique</button>
               <button type="button" aria-pressed={cam === "fixed"} onClick={() => setCam("fixed")}>Plan fixe</button>

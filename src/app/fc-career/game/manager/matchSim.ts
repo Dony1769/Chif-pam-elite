@@ -259,9 +259,12 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
         });
       } else if (onTarget) {
         def.saves += 1;
-        if (xg > 0.18) m.events.push({ minute, type: "save", side: oppSide, playerId: gk?.id, text: `Arrêt décisif ${gk ? `de ${name(gk)}` : ""} face à ${name(shooter.p)}.` });
+        if (xg > 0.18) m.events.push({ minute, type: "save", side: oppSide, playerId: gk?.id, shooterId: shooter.p.id, text: `Arrêt décisif ${gk ? `de ${name(gk)}` : ""} face à ${name(shooter.p)}.` });
+        else m.events.push({ minute, type: "shot", side, playerId: shooter.p.id, result: "saved", text: `Arrêt sur ${name(shooter.p)}.` });
       } else if (xg > 0.25) {
         m.events.push({ minute, type: "chance", side, playerId: shooter.p.id, text: `Grosse occasion manquée par ${name(shooter.p)} !` });
+      } else {
+        m.events.push({ minute, type: "shot", side, playerId: shooter.p.id, result: "wide", text: `${name(shooter.p)} tente, à côté.` });
       }
     }
   }
