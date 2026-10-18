@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
 import { MatchPitch, isVisualEvent } from "../_ui/MatchPitch";
+import { minuteFrames } from "../../game/player2/pitchPlay";
 import type { PitchAction } from "../_ui/MatchPitch";
 import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
@@ -24,7 +25,8 @@ import { attrLabel } from "../../game/player2/attributes";
 import type { PlayerCareerState } from "../../game/player2/types";
 import { shortName } from "../../game/utils/names";
 
-const SPEEDS = [{ label: "Normal", ms: 260 }, { label: "Rapide", ms: 60 }];
+/** Durée d'une phase de jeu (une minute) : normale ou rapide. */
+const SPEEDS = [{ label: "Normal", ms: 260, phase: 2200 }, { label: "Rapide", ms: 60, phase: 900 }];
 const ICON: Record<string, string> = { shot: "↗", goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
 
 export default function PlayerMatchPage() {
@@ -40,6 +42,7 @@ export default function PlayerMatchPage() {
   const [view, setView] = useState<PlayerLive | null>(null);
   const [poss, setPoss] = useState<"home" | "away" | null>(null);
   const endAction = useCallback(() => { setAction(null); setView(null); }, []);
+  const lastBall = useRef<{ x: number; y: number } | undefined>(undefined);
   const cup = myCupMatch(state);
   const fx0 = myNextFixture(state);
   const fx = cup ? null : fx0;
@@ -68,17 +71,27 @@ export default function PlayerMatchPage() {
     // Direct : chaque minute ; Temps forts et Buts : les minutes calmes défilent
     const t = setTimeout(() => {
       const next = stepPlayerLive(live);
-      const fresh = next.match.events.slice(live.match.events.length).filter(isVisualEvent)
-        .filter(e => mode !== "goals" || e.type === "goal" || e.type === "half_time" || e.type === "full_time");
+      const all = next.match.events.slice(live.match.events.length).filter(isVisualEvent);
+      const fresh = all.filter(e => mode !== "goals" || e.type === "goal" || e.type === "half_time" || e.type === "full_time");
       const side = next.match.home.possessionMinutes > live.match.home.possessionMinutes ? "home" : "away";
       setPoss(side);
-      if (fresh.length) {
+      // Direct : chaque minute est jouée ; Temps forts : les minutes avec une action ; Buts : les buts
+      const show = mode === "direct" || fresh.length > 0;
+      if (show) {
+        const me = live.match.managedSide;
+        const frames = minuteFrames({
+          mine: live.match[me], theirs: live.match[me === "home" ? "away" : "home"], mySide: me, minute: next.match.minute,
+          possession: side, events: fresh, seed: live.match.seed, from: lastBall.current,
+        });
+        const shot = fresh.some(e => e.type === "goal" || e.type === "shot" || e.type === "save" || e.type === "chance");
+        const last = frames[frames.length - 1];
+        if (last) lastBall.current = last.ball;
         setView(live);
-        setAction({ key: `m${next.match.minute}-${next.match.events.length}`, events: fresh, possession: side });
+        setAction({ key: `m${next.match.minute}-${next.match.events.length}`, events: fresh, possession: side, frames, total: (SPEEDS[speed].phase + (shot ? 1400 : 0)) });
       }
       setLive(next);
       if (next.moment || next.match.minute === 45 || next.match.finished) setPlaying(false);
-    }, mode === "direct" ? SPEEDS[speed].ms : 20);
+    }, mode === "direct" ? 30 : 20);
     return () => clearTimeout(t);
   }, [playing, live, speed, setLive, action, view, mode]);
 
@@ -162,7 +175,7 @@ export default function PlayerMatchPage() {
           <div className="mg-score__team">{isNation(m.away.clubId) ? <span className="pc-flag" aria-hidden>{NATION_BY_ID[m.away.clubId]?.flag}</span> : <Crest club={clubOf(m.away.clubId)} size={48} />}<strong>{m.away.name}</strong></div>
         </div>
 
-        <MatchPitch live={live} board={shown.match} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={speed === 0 ? 1 : 0.55} possession={action ? null : poss} />
+        <MatchPitch live={live} board={shown.match} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={1} possession={action ? null : poss} />
 
         {live.moment && !action ? (
           <div className="pc-moment" role="dialog" aria-label="Moment clé">
