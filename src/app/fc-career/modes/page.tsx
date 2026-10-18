@@ -161,35 +161,35 @@ export default function ModesPage() {
 }
 
 const CSS = `
-.fcm-modes{min-height:100dvh;background:radial-gradient(ellipse 70% 50% at 20% 0%,rgba(66,200,255,.10),transparent),radial-gradient(ellipse 50% 40% at 90% 100%,rgba(185,255,57,.06),transparent),#0A0C0F;color:#DCE3EA;font-family:'Inter',system-ui,sans-serif;padding:72px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:center;gap:28px}
+.fcm-modes{min-height:100dvh;background:radial-gradient(ellipse 80% 40% at 50% -5%,rgba(61,134,255,.16),transparent 70%),#0A1430;color:#EDF1FF;font-family:'Inter',system-ui,sans-serif;padding:72px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:center;gap:28px}
 .fcm-modes__head{text-align:center}
-.fcm-modes__kicker{font-family:Inter,system-ui,sans-serif;font-weight:800;font-size:13px;letter-spacing:.14em;color:#B9FF39;text-transform:uppercase;margin:0 0 6px}
+.fcm-modes__kicker{font-family:Inter,system-ui,sans-serif;font-weight:800;font-size:13px;letter-spacing:.14em;color:#F6BF45;text-transform:uppercase;margin:0 0 6px}
 .fcm-modes__head h1{font-family:Inter,system-ui,sans-serif;font-weight:900;font-size:clamp(30px,6vw,46px);line-height:1;margin:0;text-transform:uppercase;text-wrap:balance}
 .fcm-modes__grid{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;width:100%;max-width:880px}
 @media (max-width:720px){.fcm-modes__grid{grid-template-columns:1fr}}
-.fcm-card{position:relative;display:flex;flex-direction:column;gap:12px;padding:26px 24px 22px;border-radius:14px;background:rgba(21,26,32,.92);border:1px solid rgba(255,255,255,.16);color:inherit;text-decoration:none;min-width:0;overflow:hidden}
-.fcm-card--player{border-color:rgba(185,255,57,.45);box-shadow:0 0 50px rgba(185,255,57,.08);transition:transform .2s,box-shadow .2s}
-.fcm-card--player::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,transparent,#B9FF39 25%,#D6FF85 50%,#B9FF39 75%,transparent)}
-.fcm-card--player:hover{transform:translateY(-2px);box-shadow:0 0 60px rgba(185,255,57,.16)}
-.fcm-card--player:focus-visible{outline:2px solid #D6FF85;outline-offset:3px}
-.fcm-card__tag{align-self:flex-start;font-size:11px;font-weight:700;color:#0A0C0F;background:#B9FF39;padding:3px 9px;border-radius:999px}
+.fcm-card{position:relative;display:flex;flex-direction:column;gap:12px;padding:26px 24px 22px;border-radius:14px;background:#111C3B;border:1px solid rgba(120,150,230,.16);color:inherit;text-decoration:none;min-width:0;overflow:hidden}
+.fcm-card--player{border-color:rgba(61,134,255,.55);box-shadow:none;transition:transform .2s,box-shadow .2s}
+.fcm-card--player::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:#3D86FF}
+.fcm-card--player:hover{transform:translateY(-2px);box-shadow:none;border-color:#3D86FF}
+.fcm-card--player:focus-visible{outline:2px solid #F6BF45;outline-offset:3px}
+.fcm-card__tag{align-self:flex-start;font-size:11px;font-weight:700;color:#0A1430;background:#F6BF45;padding:3px 9px;border-radius:999px}
 .fcm-card__icon{font-size:34px;line-height:1}
 .fcm-card h2{font-family:Inter,system-ui,sans-serif;font-weight:900;font-size:30px;line-height:1;margin:0;text-transform:uppercase}
-.fcm-card--player h2{color:#D6FF85}
-.fcm-card__lead{margin:0;font-size:14px;line-height:1.55;color:#8D98A6;max-width:52ch}
-.fcm-card__save{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:rgba(10,12,15,.7);border:1px solid rgba(255,255,255,.12)}
+.fcm-card--player h2{color:#fff}
+.fcm-card__lead{margin:0;font-size:14px;line-height:1.55;color:#A6B3DA;max-width:52ch}
+.fcm-card__save{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:#16234A;border:1px solid rgba(120,150,230,.16)}
 .fcm-card__save strong{display:block;font-size:15px}
-.fcm-card__save span{font-size:12px;color:#8D98A6}
-.fcm-card__save--empty{font-size:13px;color:#8D98A6}
+.fcm-card__save span{font-size:12px;color:#A6B3DA}
+.fcm-card__save--empty{font-size:13px;color:#A6B3DA}
 .fcm-ovr{text-align:right;flex-shrink:0}
-.fcm-ovr b{display:block;font-family:Inter,system-ui,sans-serif;font-size:30px;font-weight:900;line-height:1;color:#B9FF39;font-variant-numeric:tabular-nums}
-.fcm-ovr--money b{font-size:20px;color:#B9FF39}
-.fcm-ovr small{font-size:11px;color:#8D98A6}
-.fcm-card__cta{margin-top:auto;display:flex;align-items:center;justify-content:center;height:46px;border-radius:9px;background:linear-gradient(135deg,#B9FF39,#D6FF85);color:#0A0C0F;font-family:Inter,system-ui,sans-serif;font-weight:900;font-size:16px;text-transform:uppercase;letter-spacing:.04em}
-.fcm-card__cta--manager{background:rgba(255,255,255,.12);color:#DCE3EA;border:1px solid rgba(255,255,255,.25)}
-.fcm-card--manager{transition:transform .2s,border-color .2s}.fcm-card--manager:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.35)}
-.fcm-card--manager:focus-visible{outline:2px solid #D6FF85;outline-offset:3px}
-.fcm-modes__back{font-size:13px;color:#8D98A6}
-.fcm-modes__legacy{font-size:13px;color:#B9FF39;text-align:center;max-width:560px}
+.fcm-ovr b{display:block;font-family:Inter,system-ui,sans-serif;font-size:30px;font-weight:900;line-height:1;color:#F6BF45;font-variant-numeric:tabular-nums}
+.fcm-ovr--money b{font-size:20px;color:#F6BF45}
+.fcm-ovr small{font-size:11px;color:#A6B3DA}
+.fcm-card__cta{margin-top:auto;display:flex;align-items:center;justify-content:center;height:46px;border-radius:9px;background:#3D86FF;color:#fff;font-family:Inter,system-ui,sans-serif;font-weight:900;font-size:16px;text-transform:uppercase;letter-spacing:.04em}
+.fcm-card__cta--manager{background:#16234A;color:#EDF1FF;border:1px solid rgba(130,160,240,.3)}
+.fcm-card--manager{transition:transform .2s,border-color .2s}.fcm-card--manager:hover{transform:translateY(-2px);border-color:rgba(130,160,240,.5)}
+.fcm-card--manager:focus-visible{outline:2px solid #F6BF45;outline-offset:3px}
+.fcm-modes__back{font-size:13px;color:#A6B3DA}
+.fcm-modes__legacy{font-size:13px;color:#F6BF45;text-align:center;max-width:560px}
 @media (prefers-reduced-motion:reduce){.fcm-card--player{transition:none}.fcm-card--player:hover{transform:none}}
 `;
