@@ -6,6 +6,7 @@
  * club peut ouvrir sa fiche, et d'une fiche on passe à une autre (avec retour).
  */
 
+import { Avatar } from "./Avatar";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { WorldLiveState } from "../../game/domain/worldState";
@@ -123,7 +124,8 @@ function PlayerView({ world, id }: { world: WorldLiveState; id: string }) {
   return (
     <>
       <header className="pc-sheet__head">
-        <Crest club={club} size={44} />
+        <Avatar id={p.id} age={p.age} kit={club?.colors.primary} trim={club?.colors.secondary} size={52} label={`Portrait de ${fullName(p)}`} />
+        <Crest club={club} size={28} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2>{fullName(p)}{p.id === highlight ? " (vous)" : ""}</h2>
           <p className="mg-small">{POS_FR[p.position]} · {p.age} ans · {country?.name ?? NATION_BY_ID[p.nationality]?.name ?? p.nationality} · {p.clubId === "retired" ? "retraité" : club ? <ClubName world={world} id={club.id} crest={0} /> : "libre"}</p>

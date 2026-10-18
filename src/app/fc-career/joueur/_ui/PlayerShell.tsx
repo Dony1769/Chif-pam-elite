@@ -10,6 +10,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "./PlayerContext";
 import { Crest } from "../../manager/_ui/kit";
+import { Avatar } from "../../manager/_ui/Avatar";
 import { SheetsProvider } from "../../manager/_ui/PlayerSheet";
 import { GameBar, GameNav } from "../../manager/_ui/GameNav";
 import { formatMoney } from "../../game/manager/engine";
@@ -58,7 +59,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
         <>
           <header className="mg-top" style={{ ["--club" as string]: club.colors.primary }}>
             <div className="mg-top__club">
-              <Crest club={club} size={34} />
+              <Avatar id={state.profile.id} age={p.age} kit={club.colors.primary} trim={club.colors.secondary} size={38} label="Votre portrait" />
               <div className="mg-top__id">
                 <strong>{state.profile.firstName} {state.profile.lastName}</strong>
                 <span>{club.name} · {cal ? `${cal.date} · ${cal.season}` : `saison ${state.shadow.world.season} · semaine ${state.shadow.world.currentWeek}`} · {p.age} ans</span>
