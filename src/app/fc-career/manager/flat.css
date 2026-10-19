@@ -239,3 +239,12 @@
 .pc-busy__ball { display: inline-block; animation: pc-spin 0.9s linear infinite; }
 @keyframes pc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pc-busy__ball { animation: none; } }
+
+/* Jauge de timing */
+.pc-timing { display: grid; gap: 10px; padding: 14px; border-radius: 12px; background: var(--mg-panel, #111C3B); border: 1px solid rgba(246,191,69,.45); }
+.pc-timing__bar { position: relative; height: 34px; width: 100%; border-radius: 17px; background: #0A1430; border: 1px solid var(--mg-line-2, rgba(130,160,240,.24)); cursor: pointer; overflow: hidden; padding: 0; }
+.pc-timing__zone { position: absolute; top: 0; bottom: 0; background: rgba(52,212,126,.35); }
+.pc-timing__sweet { position: absolute; top: 0; bottom: 0; background: #34D47E; }
+.pc-timing__cursor { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #F6BF45; box-shadow: 0 0 10px #F6BF45; }
+.pc-timing__grade { margin: 0; font-weight: 800; min-height: 1.4em; }
+.pc-timing__grade.is-perfect { color: #34D47E; } .pc-timing__grade.is-good { color: #8BE3B0; } .pc-timing__grade.is-miss { color: #F0525B; }

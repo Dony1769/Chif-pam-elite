@@ -20,6 +20,7 @@ import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
 import { cupLabel, myCupMatch, shootout, startCupLive } from "../../game/player2/cup";
 import { Shootout } from "../_ui/Shootout";
+import { TimingMeter } from "../_ui/TimingMeter";
 import { commentLine } from "../../game/player2/commentary";
 import type { CommentCtx } from "../../game/player2/commentary";
 import { MatchReportCard } from "../_ui/MatchReportCard";
@@ -48,6 +49,8 @@ export default function PlayerMatchPage() {
   const [action, setAction] = useState<PitchAction | null>(null);
   const [view, setView] = useState<PlayerLive | null>(null);
   const [poss, setPoss] = useState<"home" | "away" | null>(null);
+  const [aiming, setAiming] = useState<MomentOption | null>(null);
+  const [control, setControl] = useState(() => { try { return localStorage.getItem("fc-career:control") !== "off"; } catch { return true; } });
   const endAction = useCallback(() => { setAction(null); setView(null); }, []);
   const lastBall = useRef<{ x: number; y: number } | undefined>(undefined);
   const [sound, setSound] = useState(true);
@@ -173,9 +176,16 @@ export default function PlayerMatchPage() {
 
   function choose(o: MomentOption) {
     if (!live) return;
+    // Mode geste : la jauge de timing précède l'exécution
+    if (control && !aiming) { setAiming(o); setHot(null); return; }
+    execute(o, 0);
+  }
+  function execute(o: MomentOption, skill: number) {
+    if (!live) return;
+    setAiming(null);
     // Le score attend la fin du rejeu de l'action
     setView(live);
-    setLive(decide(live, o.id));
+    setLive(decide(live, o.id, skill));
     setHot(null);
     // Le temps de voir l'action rejouée sur le terrain
     setTimeout(() => { setView(null); setPlaying(true); }, 2600);
@@ -216,7 +226,9 @@ export default function PlayerMatchPage() {
 
         <MatchPitch live={live} board={shown.match} onStep={onStep} hoverOption={hot} colors={pitchColors} camera={cam} action={action} onActionDone={endAction} pace={1} possession={action ? null : poss} />
 
-        {live.moment && !action ? (
+        {aiming && live.moment ? (
+          <TimingMeter key={`${live.moment.minute}-${aiming.id}`} label={aiming.label} level={aiming.level ?? 60} onDone={b => execute(aiming, b)} />
+        ) : live.moment && !action ? (
           <div className="pc-moment" role="dialog" aria-label="Moment clé">
             <div className="pc-moment__head"><b>Moment clé · {live.moment.minute}&apos;</b><span className="mg-small">À vous de choisir</span></div>
             <p style={{ margin: 0 }}>{live.moment.text}</p>
@@ -249,6 +261,7 @@ export default function PlayerMatchPage() {
               <button type="button" aria-pressed={mode === "highlights"} onClick={() => setMode("highlights")}>Temps forts</button>
               <button type="button" aria-pressed={mode === "goals"} onClick={() => setMode("goals")}>Buts</button>
             </div>
+            <button type="button" className="mg-btn mg-btn--ghost" aria-pressed={control} title="Jauge de timing à chaque moment clé" onClick={() => { const on = !control; setControl(on); try { localStorage.setItem("fc-career:control", on ? "on" : "off"); } catch { /* stockage indisponible */ } }}>{control ? "🎯 Geste" : "🎯 Auto"}</button>
             <button type="button" className="mg-btn mg-btn--ghost" aria-pressed={sound} onClick={() => { const on = !sound; setSound(on); setSoundOn(on); if (on && playing) startCrowd(); }}>{sound ? "🔊 Son" : "🔇 Muet"}</button>
             <div className="mg-seg" role="group" aria-label="Caméra">
               <button type="button" aria-pressed={cam === "dynamic"} onClick={() => setCam("dynamic")}>Dynamique</button>

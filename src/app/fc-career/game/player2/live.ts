@@ -274,13 +274,17 @@ export function stepPlayerLive(pl: PlayerLive): PlayerLive {
 }
 
 /** Applique le choix du joueur au moment clé en cours. */
-export function decide(pl: PlayerLive, optionId: MomentOption["id"]): PlayerLive {
+/**
+ * @param skill Bonus d'exécution du joueur (jauge de timing) : -0,12 à +0,12
+ * sur la probabilité de réussite. Le tirage reste le même (déterministe).
+ */
+export function decide(pl: PlayerLive, optionId: MomentOption["id"], skill = 0): PlayerLive {
   const mo = pl.moment;
   if (!mo) return pl;
   const option = mo.options.find(o => o.id === optionId);
   if (!option) return pl;
   const rng = createRng(seedFromString(`${pl.match.seed}-decide-${mo.minute}-${optionId}-${pl.playerId}`));
-  const success = rng.chance(option.chance);
+  const success = rng.chance(clamp(option.chance + clamp(skill, -0.12, 0.12), 0.03, 0.97));
   const me = mySide(pl), them = oppSide(pl);
   const m: LiveMatch = {
     ...pl.match,
