@@ -228,3 +228,8 @@
 .pc-editor { display: grid; gap: 12px; }
 .pc-editor__row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .pc-color { width: 100%; height: 38px; padding: 2px; border-radius: 8px; border: 1px solid var(--mg-line, rgba(120,150,230,.16)); background: transparent; cursor: pointer; }
+@media (max-width: 560px) {
+  .pc-identity { flex-direction: column; align-items: stretch; }
+  .pc-identity > .mg-avatar { align-self: center; }
+  .pc-identity__row > .mg-small { width: 100%; }
+}
