@@ -9,6 +9,8 @@ import type { OptionId } from "./playstyles";
 import type { LiveMatch } from "../manager/matchSim";
 import type { NewCareerInput } from "./engine";
 import { applyPlayStyleProgress, createPlayerCareer, setIntensity, setPrimaryPosition, setTrainingFocus } from "./engine";
+import { setIdentity } from "./identity";
+import { editClub } from "./editor";
 import type { Difficulty, Intensity } from "./difficulty";
 import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { hasMatchThisWeek } from "../manager/engine";
@@ -19,7 +21,7 @@ import { recordMoments } from "./moments";
 import { chooseStory, dismissRecap } from "./story";
 import type { Tone } from "./press";
 import { applyCupMatch, autoPlayCup, myCupMatch } from "./cup";
-import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, rejectOffer, signOffer, requestTransfer, retirePlayer } from "./career";
+import { acceptOffer, advancePlayerWeek, ensureCareer, negotiateRenewal, nationalChoice, rejectOffer, signOffer, requestTransfer, retirePlayer } from "./career";
 
 export type PlayerAction =
   | { type: "NEW"; input: NewCareerInput }
@@ -32,6 +34,7 @@ export type PlayerAction =
   | { type: "DISMISS_RECAP" }
   | { type: "SET_INTENSITY"; intensity: Intensity }
   | { type: "SET_DIFFICULTY"; difficulty: Difficulty }
+  | { type: "SET_IDENTITY"; identity: import("./identity").IdentityInput }
   | { type: "PRESS_ANSWER"; tone: Tone }
   | { type: "SKIP_CUP" }
   | { type: "PLAY_CUP"; live: LiveMatch; psGain?: Partial<Record<OptionId, number>> }
@@ -41,6 +44,9 @@ export type PlayerAction =
   | { type: "REJECT_OFFER"; offerId: string }
   | { type: "SIGN_OFFER"; offerId: string; wage: number; seasons: number }
   | { type: "REQUEST_TRANSFER"; on: boolean }
+  | { type: "ACCEPT_RENEW_COUNTER" }
+  | { type: "EDIT_CLUB"; edit: import("./editor").ClubEdit }
+  | { type: "NATIONAL"; choice: "decline" | "undecline" | "retire" | "unretire" }
   | { type: "RENEW"; wage: number; seasons: number; goalBonus?: number; releaseClause?: number | null }
   | { type: "MARK_READ"; id: string }
   | { type: "MARK_ALL_READ" };
@@ -78,6 +84,7 @@ function stepInner(s: PlayerCareerState, action: PlayerAction): PlayerStep {
     case "STORY_CHOICE":     return fromResult(chooseStory(s, action.choiceId));
     case "DISMISS_RECAP":    return plain(dismissRecap(s));
     case "SET_INTENSITY":    return plain(setIntensity(s, action.intensity));
+    case "SET_IDENTITY":     return { state: setIdentity(s, action.identity), message: { ok: true, text: "Identité mise à jour." } };
     case "SET_DIFFICULTY":   return { state: { ...s, difficulty: action.difficulty }, message: { ok: true, text: "Niveau de difficulté changé." } };
     case "PRESS_ANSWER":     return fromResult(answerPress(s, action.tone));
     case "SKIP_CUP": {
@@ -102,6 +109,13 @@ function stepInner(s: PlayerCareerState, action: PlayerAction): PlayerStep {
     case "SIGN_OFFER":       return fromResult(signOffer(s, action.offerId, action.wage, action.seasons));
     case "REJECT_OFFER":     return plain(rejectOffer(s, action.offerId));
     case "REQUEST_TRANSFER": return fromResult(requestTransfer(s, action.on));
+    case "EDIT_CLUB":        { const r = editClub(s, action.edit); return { state: r.state, message: { ok: r.ok, text: r.message } }; }
+    case "NATIONAL":         return fromResult(nationalChoice(s, action.choice));
+    case "ACCEPT_RENEW_COUNTER": {
+      const c = s.career?.renewalTalks?.counter;
+      if (!c) return { state: s, message: { ok: false, text: "Aucune contre-offre en cours." } };
+      return fromResult(negotiateRenewal(s, c.wage, c.seasons, { goalBonus: c.goalBonus, releaseClause: c.releaseClause }));
+    }
     case "RENEW":            return fromResult(negotiateRenewal(s, action.wage, action.seasons, { goalBonus: action.goalBonus, releaseClause: action.releaseClause }));
     case "MARK_READ":        return plain({ ...s, inbox: s.inbox.map(m => (m.id === action.id ? { ...m, read: true } : m)) });
     case "MARK_ALL_READ":    return plain({ ...s, inbox: s.inbox.map(m => ({ ...m, read: true })) });

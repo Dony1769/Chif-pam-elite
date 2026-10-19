@@ -97,3 +97,14 @@
 .pc-ps__item span { font-size: 12px; color: var(--mg-text-2); }
 .pc-ps__badge { align-self: flex-start; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: var(--mg-accent); color: #0A0C0F; }
 .pc-ps__item.is-plus .pc-ps__badge { background: var(--mg-cyan); }
+
+/* Paliers de carte : Or rare et Légende ; portrait ; carte qui s'illumine après une progression */
+.pc-card--rare { --tone: #e0b22e; --tone-lt: #fff0a8; }
+.pc-card--legend { --tone: #1b1f2e; --tone-lt: #4a4f66; color: #f6d27a; box-shadow: 0 20px 50px rgba(0,0,0,.6), 0 0 0 1px rgba(246,210,122,.5), inset 0 0 0 2px rgba(246,210,122,.55); }
+.pc-card--legend .pc-card__name { border-bottom-color: rgba(246,210,122,.35); }
+.pc-card__portrait { margin: -4px 0 -8px; }
+.pc-card__portrait .mg-avatar { display: block; border-radius: 12px; }
+.pc-card__delta { position: absolute; top: -10px; right: -10px; padding: 4px 9px; border-radius: 999px; background: #34D47E; color: #062014; font-weight: 900; font-size: 14px; box-shadow: 0 4px 14px rgba(52,212,126,.5); }
+.pc-card.is-upgraded { animation: pc-card-up 1.6s ease-out 1; }
+@keyframes pc-card-up { 0% { transform: scale(.94); filter: brightness(1.6); } 40% { transform: scale(1.04); filter: brightness(1.25); } 100% { transform: none; filter: none; } }
+@media (prefers-reduced-motion: reduce) { .pc-card.is-upgraded { animation: none; } }

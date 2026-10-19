@@ -23,7 +23,7 @@ import { optionAvailable, psBonus } from "./playstyles";
 import { shortName } from "../utils/names";
 
 export type MomentKind = "box" | "wing" | "build" | "long" | "defend" | "keeper"
-  | "air" | "setpiece" | "penalty" | "keepercross" | "gkbuild";
+  | "air" | "setpiece" | "penalty" | "keepercross" | "gkbuild" | "oneonone" | "counter";
 
 export interface MomentOption {
   id: OptionId;
@@ -180,6 +180,20 @@ function buildMoment(pl: PlayerLive, minute: number, kind: MomentKind): KeyMomen
       add("cross", "Brosser dans la surface", "pas", { crossing: 0.5, curve: 0.5 }, o.defense, 0.1, 0.5);
       add("pass", "Combinaison à deux", "pas", { shortPassing: 0.7, vision: 0.3 }, o.defense, 0.05, 0.55);
       break;
+    case "oneonone":
+      text = "Lancé en profondeur : seul face au gardien !";
+      add("finesse", "Placer à ras de terre", "sho", { finishing: 0.6, composure: 0.4 }, o.keeper, 0.32, 0.5);
+      add("chip", "Lob au-dessus du gardien", "sho", { finishing: 0.3, composure: 0.7 }, o.keeper, 0.34, 0.42);
+      add("dribble", "Dribbler le gardien", "dri", { dribbling: 0.5, agility: 0.3, composure: 0.2 }, o.keeper, 0.36, 0.4);
+      add("powershot", "Frapper fort au premier poteau", "sho", { shotPower: 0.6, finishing: 0.4 }, o.keeper, 0.3, 0.46);
+      break;
+    case "counter":
+      text = "Contre-attaque à trois contre deux, vous menez le ballon.";
+      add("through", "Glisser la passe décisive", "pas", { vision: 0.6, shortPassing: 0.4 }, o.defense, 0.16, 0.5);
+      add("dribble", "Accélérer et provoquer", "dri", { sprintSpeed: 0.4, dribbling: 0.6 }, o.defense, 0.15, 0.46);
+      add("shoot", "Frapper dès l'entrée de la surface", "sho", { finishing: 0.5, longShots: 0.5 }, o.keeper, 0.14, 0.4);
+      add("pass", "Temporiser pour les renforts", "pas", { shortPassing: 0.6, composure: 0.4 }, o.midfield - 10, 0.04, 0.6);
+      break;
     case "penalty":
       text = "Penalty ! Vous prenez le ballon.";
       add("penalty", "Placer au ras du poteau", "sho", { penalties: 0.7, composure: 0.3 }, o.keeper - 20, 1, 0.62);
@@ -223,10 +237,10 @@ function kindsFor(pos: WorldPlayerPosition): MomentKind[] {
     case "CB": return ["defend", "defend", "defend", "build", "air"];
     case "LB": case "RB": return ["defend", "defend", "wing"];
     case "DM": return ["defend", "build", "build"];
-    case "CM": return ["build", "build", "long", "defend"];
-    case "AM": return ["build", "long", "box"];
-    case "LW": case "RW": return ["wing", "wing", "box"];
-    case "ST": return ["box", "box", "box", "long", "air"];
+    case "CM": return ["build", "build", "long", "defend", "counter"];
+    case "AM": return ["build", "long", "box", "counter", "oneonone"];
+    case "LW": case "RW": return ["wing", "wing", "box", "counter", "oneonone"];
+    case "ST": return ["box", "box", "oneonone", "long", "air", "counter"];
   }
 }
 
@@ -236,6 +250,8 @@ function pickKind(pl: PlayerLive, rng: ReturnType<typeof createRng>): MomentKind
   if (sub && pl.position !== "GK") {
     const deadBall = pl.ps?.owned.includes("dead_ball") ?? false;
     if (sub.penalties >= 68 && rng.chance(0.045)) return "penalty";
+    // Penalty provoqué : les attaquants le tirent eux-mêmes
+    if (["ST", "LW", "RW", "AM"].includes(pl.position) && rng.chance(0.02)) return "penalty";
     if ((sub.freeKick >= 70 || deadBall) && rng.chance(0.08)) return "setpiece";
   }
   return rng.pick(kindsFor(pl.position));

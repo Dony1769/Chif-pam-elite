@@ -31,6 +31,8 @@ interface SheetsCtx {
   openClub: (id: string) => void;
   openMatch: (sheet: MatchSheet) => void;
   highlight?: string;
+  myLook?: import("./Avatar").Look;
+  myShirt?: number;
   meClub?: string;
 }
 const Ctx = createContext<SheetsCtx | null>(null);
@@ -39,13 +41,13 @@ export function useSheets(): SheetsCtx {
   return useContext(Ctx) ?? { openPlayer: () => {}, openClub: () => {}, openMatch: () => {} };
 }
 
-export function SheetsProvider({ world, highlight, meClub, children }: { world: WorldLiveState; highlight?: string; meClub?: string; children: React.ReactNode }) {
+export function SheetsProvider({ world, highlight, meClub, myLook, myShirt, children }: { world: WorldLiveState; highlight?: string; meClub?: string; myLook?: import("./Avatar").Look; myShirt?: number; children: React.ReactNode }) {
   const [stack, setStack] = useState<View[]>([]);
   const push = useCallback((v: View) => setStack(s => [...s, v].slice(-8)), []);
   const value = useMemo<SheetsCtx>(() => ({
     openPlayer: id => push({ kind: "player", id }), openClub: id => { if (!isNation(id)) push({ kind: "club", id }); },
-    openMatch: sheet => push({ kind: "match", sheet }), highlight, meClub,
-  }), [push, highlight, meClub]);
+    openMatch: sheet => push({ kind: "match", sheet }), highlight, meClub, myLook, myShirt,
+  }), [push, highlight, meClub, myLook, myShirt]);
   const top = stack[stack.length - 1];
   const close = useCallback(() => setStack([]), []);
   const back = useCallback(() => setStack(s => s.slice(0, -1)), []);
@@ -108,7 +110,7 @@ export function PlayerLink({ name, onOpen, me }: { name: string; onOpen: () => v
 // ─── Joueur ──────────────────────────────────────────────────────────────────
 
 function PlayerView({ world, id }: { world: WorldLiveState; id: string }) {
-  const { highlight } = useSheets();
+  const { highlight, myLook, myShirt } = useSheets();
   const p = world.players.find(x => x.id === id);
   const record = useMemo(() => playerRecord(world, id), [world, id]);
   const clubOf = (cid: string) => world.clubs.find(c => c.id === cid);
@@ -124,7 +126,7 @@ function PlayerView({ world, id }: { world: WorldLiveState; id: string }) {
   return (
     <>
       <header className="pc-sheet__head">
-        <Avatar id={p.id} age={p.age} kit={club?.colors.primary} trim={club?.colors.secondary} size={52} label={`Portrait de ${fullName(p)}`} />
+        <Avatar id={p.id} age={p.age} look={p.id === highlight ? myLook : undefined} number={p.id === highlight ? myShirt : undefined} kit={club?.colors.primary} trim={club?.colors.secondary} size={52} label={`Portrait de ${fullName(p)}`} />
         <Crest club={club} size={28} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2>{fullName(p)}{p.id === highlight ? " (vous)" : ""}</h2>

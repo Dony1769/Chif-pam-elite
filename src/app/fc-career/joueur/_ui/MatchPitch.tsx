@@ -57,6 +57,8 @@ function momentSpot(kind: KeyMoment["kind"], me: Pt): { me: Pt; ball: Pt; rival?
     case "air": return { me: { x: 50, y: 12 }, ball: { x: 50, y: 11 } };
     case "setpiece": return { me: { x: 58, y: 26 }, ball: { x: 58, y: 27 } };
     case "penalty": return { me: { x: 50, y: 15 }, ball: { x: 50, y: 12 } };
+    case "oneonone": return { me: { x: 52, y: 17 }, ball: { x: 52, y: 16 }, rival: { x: 50, y: 7 } };
+    case "counter": return { me: { x: clamp(me.x, 35, 65), y: 40 }, ball: { x: clamp(me.x, 35, 65), y: 39 } };
     case "keeper": return { me: { x: 50, y: 95 }, ball: { x: 46, y: 78 }, rival: { x: 46, y: 77 } };
     case "keepercross": return { me: { x: 50, y: 95 }, ball: { x: 88, y: 84 }, rival: { x: 52, y: 86 } };
     case "gkbuild": return { me: { x: 50, y: 93 }, ball: { x: 50, y: 91 } };

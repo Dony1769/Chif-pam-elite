@@ -2,9 +2,10 @@
 
 /** FC CAREER 27 — Carrière Joueur v2 : accueil. */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePlayerGame } from "./_ui/PlayerContext";
+import { Avatar } from "../manager/_ui/Avatar";
 import { PlayerCard, PlayStyleChips, Stars } from "./_ui/PlayerCard";
 import { PS_BY_ID } from "../game/player2/playstyles";
 import { Crest, Empty, Meter, Section } from "../manager/_ui/kit";
@@ -23,6 +24,10 @@ export default function PlayerHome() {
   const { state, run } = usePlayerGame();
   const p = me(state);
   const club = myClub(state);
+  // Progression de note depuis la dernière visite (mémorisée dans ce navigateur)
+  const seenKey = `fc-career:seen-ovr:${state.profile.id}`;
+  const [ovrDelta] = useState(() => { try { const v = Number(localStorage.getItem(seenKey)); return v ? p.overall - v : 0; } catch { return 0; } });
+  useEffect(() => { try { localStorage.setItem(seenKey, String(p.overall)); } catch { /* stockage indisponible */ } }, [seenKey, p.overall]);
   const fx = myNextFixture(state);
   const clubOf = (id: string) => state.shadow.world.clubs.find(c => c.id === id);
   const line = currentSeasonLine(state);
@@ -47,7 +52,8 @@ export default function PlayerHome() {
         <Section className="mg-card--accent">
           <div className="pc-hero">
             <PlayerCard name={`${shortName(state.profile)}`} overall={p.overall} position={state.profile.position}
-              attrs={state.profile.attrs} club={club} potential={state.profile.potential} />
+              attrs={state.profile.attrs} club={club} potential={state.profile.potential} delta={ovrDelta}
+              portrait={<Avatar id={state.profile.id} age={p.age} look={state.profile.look} number={state.profile.shirt} kit={club.colors.primary} trim={club.colors.secondary} size={64} label="Ton portrait" />} />
             <div className="pc-hero__info">
               <span className="mg-small">Cette semaine</span>
               <span className={`pc-status pc-status--${state.selection}`}>{SELECTION_LABEL[state.selection]}{state.selection === "starter" && state.playedAs ? ` · ${POS_LABEL[state.playedAs]}` : ""}</span>

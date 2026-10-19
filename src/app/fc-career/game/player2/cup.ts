@@ -76,7 +76,7 @@ export function myCupMatch(s: PlayerCareerState): CupMatch | null {
   const w = s.shadow.world;
   if (w.dataset !== "cp" || s.retired) return null;
   const week = w.currentWeek;
-  const nation = nationalPick(s) ? (w.players.find(p => p.id === s.profile.id)?.nationality ?? s.profile.nationality) : null;
+  const nation = !s.career?.national.retired && nationalPick(s) ? (w.players.find(p => p.id === s.profile.id)?.nationality ?? s.profile.nationality) : null;
   const candidates: { t: TeamTie; team: string; national: boolean }[] = [
     ...teamTiesThisWeek(w, myClub(s).id, week).map(t => ({ t, team: myClub(s).id, national: false })),
     ...(nation ? teamTiesThisWeek(w, nation, week).map(t => ({ t, team: nation, national: true })) : []),

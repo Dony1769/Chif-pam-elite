@@ -15,10 +15,12 @@ import { playerValue } from "../domain/playerValue";
 import { isInternationalBreak } from "../domain/calendar";
 import type { OptionId } from "./playstyles";
 import type { Award, CareerExtras, ClubOffer, PlayerCareerState, SquadRole } from "./types";
-import { maybeNewInterest, updateInterests } from "./scouting";
+import { maybeNewInterest, pressRumours, updateInterests } from "./scouting";
 import { autoPlayCupsThisWeek } from "./cup";
 import { maybePress } from "./press";
 import { storyWeek } from "./story";
+import { diffOf } from "./difficulty";
+import { objectivesAfterMatch } from "./objectives";
 import {
   avgRating, coachDecision, me, myClub, playPlayerWeek, pmsg, quiet, profileOverall, pushPlayerInbox, syncWorldPlayer, upgradeProfile,
 } from "./engine";
@@ -309,7 +311,7 @@ export function renewalDemand(s: PlayerCareerState): number {
 
 /** Plafond que le club accepte de payer au joueur. */
 export function clubWageCap(s: PlayerCareerState): number {
-  return Math.round(wageFor(myClub(s), roleAt(s, myClub(s).id), s.profile.reputation) * 1.25 / 50) * 50;
+  return Math.round(wageFor(myClub(s), roleAt(s, myClub(s).id), s.profile.reputation) * 1.25 * diffOf(s.difficulty).wage / 50) * 50;
 }
 
 export interface RenewalTerms { goalBonus?: number; releaseClause?: number | null }
@@ -357,11 +359,25 @@ export function negotiateRenewal(s0: PlayerCareerState, wage: number, seasons: n
   // Une bonne relation avec l'agent arrache un peu plus
   const agent = s.career?.story?.agentRel ?? 50;
   const cap = Math.round((clubWageCap(s) * (1 + (agent - 50) / 500)) / 50) * 50;
+  const talks = C(s).renewalTalks ?? { rounds: 0, counter: null, lockedUntil: 0 };
+  if (talks.lockedUntil > weekIndex(s)) return fail(s, "Le club a suspendu les discussions. Il faudra revenir plus tard avec de meilleurs arguments.");
   const cost = renewalCost(s, wage, terms);
-  if (cost > cap) return fail(s, `Le club refuse : primes et clause comprises, il ne dépasse pas ${money(cap)} par semaine.`);
+  if (cost > cap) {
+    const rounds = talks.rounds + 1;
+    if (rounds >= 3) {
+      const next = withCareer(s, { renewalTalks: { rounds: 0, counter: null, lockedUntil: weekIndex(s) + 8 } });
+      return fail(pushPlayerInbox(next, pmsg(next, "finance", "Discussions suspendues", "Après trois refus, le directeur sportif met la prolongation en pause pour deux mois.")), "Troisième refus : le club suspend les discussions pendant deux mois.");
+    }
+    // Contre-offre : mêmes primes et clause, salaire ramené au plafond
+    const extras = cost - wage;
+    let counter = { wage: Math.round((cap - extras) / 50) * 50, seasons, goalBonus: terms.goalBonus, releaseClause: terms.releaseClause };
+    if (counter.wage < s.contract.wage) counter = { wage: Math.max(s.contract.wage, Math.round(cap / 50) * 50), seasons, goalBonus: undefined, releaseClause: null };
+    const next = withCareer(s, { renewalTalks: { rounds, counter, lockedUntil: 0 } });
+    return fail(next, `Le club refuse et fait une contre-offre : ${money(counter.wage)}/sem sur ${seasons} saison(s)${counter.goalBonus !== undefined ? `, prime de ${money(counter.goalBonus)} par but` : ""}${counter.releaseClause ? `, clause de ${money(counter.releaseClause)}` : ""}. ${3 - rounds} essai(s) avant que les discussions ne soient gelées.`);
+  }
   const role = roleAt(s, myClub(s).id);
   const contract = { ...s.contract, wage, seasonsLeft: seasons, role, goalBonus: terms.goalBonus ?? s.contract.goalBonus, releaseClause: terms.releaseClause === undefined ? s.contract.releaseClause : terms.releaseClause };
-  const next = withCareer({ ...s, contract }, { freeAgentSince: null });
+  const next = withCareer({ ...s, contract }, { freeAgentSince: null, renewalTalks: { rounds: 0, counter: null, lockedUntil: 0 } });
   const extras = [contract.goalBonus !== undefined ? `prime de ${money(contract.goalBonus)} par but` : "", contract.releaseClause ? `clause de ${money(contract.releaseClause)}` : ""].filter(Boolean).join(", ");
   return done(next, `Prolongation signée : ${seasons} saison(s) à ${money(wage)} par semaine${extras ? `, ${extras}` : ""}.`);
 }
@@ -391,7 +407,12 @@ function nationalWindow(s: PlayerCareerState): PlayerCareerState {
   // Juin d'Euro ou de Coupe du monde : la sélection joue le tournoi (matchs jouables), pas de rassemblement amical
   const inTournament = (s.shadow.world.competitions ?? []).some(c => c.kind === "national" && c.season === s.shadow.world.season && c.groups?.some(g => g.teams.includes(nat.countryId)));
   if (inTournament && s.shadow.world.currentWeek >= 48) return withCareer(s, { national: { ...nat, lastWindow: now } });
+  if (nat.retired) return withCareer(s, { national: { ...nat, called: false, lastWindow: now } });
   const rank = nationalRank(s);
+  if (nat.decline && rank <= 23) {
+    const next = { ...withCareer(s, { national: { ...nat, called: false, decline: false, lastWindow: now } }), coachTrust: clamp(s.coachTrust + 3, 0, 100) };
+    return pushPlayerInbox(next, pmsg(next, "board", "Convocation déclinée", "Vous avez demandé au sélectionneur de vous laisser souffler. Votre coach apprécie, le sélectionneur un peu moins."));
+  }
   const called = rank <= 23 && me(s).age >= 18 && !me(s).injury;
   const country = s.shadow.world.countries.find(c => c.id === nat.countryId);
   if (!called) {
@@ -406,6 +427,19 @@ function nationalWindow(s: PlayerCareerState): PlayerCareerState {
   const mk = first ? pmsg : (st: PlayerCareerState, k: "board", t: string, b: string) => quiet(pmsg(st, k, t, b));
   return pushPlayerInbox(next, mk(next, "board", first ? `Première convocation : ${country?.name ?? "sélection"}` : `Sélection : ${country?.name ?? ""}`,
     plays ? `Vous jouez pour ${country?.name}${goals ? " et vous marquez" : ""}. ${nextNat.caps} sélection(s), ${nextNat.goals} but(s).` : `Convoqué mais resté sur le banc. ${nextNat.caps} sélection(s).`));
+}
+
+/** Décliner la prochaine convocation, ou annoncer (annuler) sa retraite internationale. */
+export function nationalChoice(s0: PlayerCareerState, choice: "decline" | "undecline" | "retire" | "unretire"): CareerResult {
+  const s = ensureCareer(s0);
+  const nat = C(s).national;
+  if (choice === "retire" && me(s).age < 27) return fail(s, "La retraite internationale est possible à partir de 27 ans.");
+  const national = { ...nat, decline: choice === "decline" ? true : choice === "undecline" ? false : nat.decline, retired: choice === "retire" ? true : choice === "unretire" ? false : nat.retired };
+  if (choice === "retire") national.called = false;
+  let next: PlayerCareerState = withCareer(s, { national });
+  if (choice === "retire") next = pushPlayerInbox(next, pmsg(next, "board", "Retraite internationale", `Vous quittez la sélection avec ${nat.caps} sélection(s) et ${nat.goals} but(s).`));
+  const txt = { decline: "Vous déclinerez la prochaine convocation.", undecline: "Vous répondrez à la prochaine convocation.", retire: "Retraite internationale annoncée.", unretire: "Vous revenez sur votre décision : de nouveau sélectionnable." }[choice];
+  return done(next, txt);
 }
 
 // ─── Récompenses ─────────────────────────────────────────────────────────────
@@ -454,6 +488,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
   const sum = s.lastMatch !== start.lastMatch ? s.lastMatch : null;
   const bonus = sum ? sum.goals * (s.contract.goalBonus ?? Math.round(s.contract.wage * 0.15)) + sum.assists * Math.round(s.contract.wage * 0.08) : 0;
   s = withCareer(s, { bank: C(s).bank + s.contract.wage + bonus });
+  if (sum?.played && sum.rating !== null) s = withCareer(s, { recent: [...(C(s).recent ?? []), sum.rating].slice(-6) });
 
   s = nationalWindow(s);
   s = collectWorldAwards(s, season, start.shadow.world.currentWeek);
@@ -477,6 +512,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
     };
   });
   s = maybeNewInterest(s);
+  s = pressRumours(s);
   const fresh = [...C(s).offers.filter(o => !beforeIds.has(o.id)), ...generateOffers(s)];
   if (fresh.length) {
     s = withCareer(s, { offers: [...kept, ...fresh] });
@@ -492,6 +528,7 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
 
   s = maybePress(withCups, s);
   s = storyWeek(withCups, s);
+  s = objectivesAfterMatch(s, sum);
 
   // Joueur libre sans club après 3 semaines : son club lui propose une saison de plus
   if (C(s).freeAgentSince !== null && now - C(s).freeAgentSince! >= 3) {

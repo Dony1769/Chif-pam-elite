@@ -18,6 +18,7 @@ import { PLAYSTYLES, psProgress } from "../../game/player2/playstyles";
 import { POS_LABEL, avgRating, effSubs, focusLabel, me, myClub, profileOverall, specialXpNeeded, xpNeeded } from "../../game/player2/engine";
 import type { TrainingFocus } from "../../game/player2/types";
 import { shortName } from "../../game/utils/names";
+import { objectiveRatio, objectiveText, refillObjectives } from "../../game/player2/objectives";
 
 const GK_GROUPS: Record<AttrKey, SubKey[]> = {
   pac: ["gkDiving"], sho: ["gkHandling"], pas: ["gkKicking"], dri: ["gkReflexes"], def: ["gkPositioning"], phy: ["acceleration", "sprintSpeed"],
@@ -102,6 +103,28 @@ export default function ProgressionPage() {
       </div>
 
       <div className="mg-col-8 mg-stack">
+        {(() => {
+          const obj = (state.career?.objectives?.active.length ? state : refillObjectives(state)).career?.objectives;
+          if (!obj) return null;
+          return (
+            <Section title="Objectifs de développement" aside={<span className="mg-small">{obj.done} réussi{obj.done > 1 ? "s" : ""} · {obj.failed} manqué{obj.failed > 1 ? "s" : ""}</span>}>
+              <div className="pc-objectives">
+                {obj.active.map(o => {
+                  const r = objectiveRatio(o);
+                  return (
+                    <div key={o.id} className="pc-objective">
+                      <div className="pc-objective__head"><b>{objectiveText(o)}</b><span className="pc-objective__reward">+{o.reward.pts} {SUB_LABEL[o.reward.sub]}</span></div>
+                      <div className="pc-objective__bar"><i style={{ width: `${Math.round(r * 100)}%` }} /></div>
+                      <span className="mg-small">
+                        {o.kind === "rating" ? `Moyenne ${o.played ? (o.progress / o.played / 10).toFixed(2).replace(".", ",") : "–"} · ${o.played}/${o.window} matchs` : `${o.progress}/${o.target} · ${o.window - o.played} match${o.window - o.played > 1 ? "s" : ""} restant${o.window - o.played > 1 ? "s" : ""}`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          );
+        })()}
         <Section title="Intensité des séances" aside={<span className="mg-small">{INTENSITY[pr.intensity ?? "normal"].desc}</span>}>
           <div className="mg-seg" role="group" aria-label="Intensité">
             {(Object.keys(INTENSITY) as Intensity[]).map(k => <button key={k} type="button" aria-pressed={(pr.intensity ?? "normal") === k} onClick={() => run({ type: "SET_INTENSITY", intensity: k })}>{INTENSITY[k].label}</button>)}

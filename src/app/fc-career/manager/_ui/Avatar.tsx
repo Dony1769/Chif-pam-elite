@@ -5,8 +5,9 @@
 
 import React from "react";
 
-const SKIN = ["#f6d7c3", "#eac0a0", "#d9a27c", "#c18560", "#9c6644", "#7a4b2f", "#5b3720"];
-const HAIR = ["#1d1611", "#3b2a1e", "#6b4a2b", "#a8763e", "#d9b26a", "#8a8a8a", "#b4472e"];
+export interface Look { skin: number; hair: number; style: number; beard: boolean }
+export const SKIN = ["#f6d7c3", "#eac0a0", "#d9a27c", "#c18560", "#9c6644", "#7a4b2f", "#5b3720"];
+export const HAIR = ["#1d1611", "#3b2a1e", "#6b4a2b", "#a8763e", "#d9b26a", "#8a8a8a", "#b4472e"];
 
 function hash(s: string): number {
   let h = 2166136261;
@@ -14,13 +15,26 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-export function Avatar({ id, kit = "#2b5d9b", trim = "#ffffff", size = 48, age, label }: { id: string; kit?: string; trim?: string; size?: number; age?: number; label?: string }) {
+export const HAIR_STYLES = ["Ras", "Court", "Mèche", "Boucles", "Chignon"];
+
+/** Apparence par défaut tirée de l'identifiant. */
+export function lookFor(id: string, age?: number): Look {
   const h = hash(id);
-  const pick = <T,>(a: T[], shift: number) => a[(h >>> shift) % a.length];
-  const skin = pick(SKIN, 0);
-  const hair = age && age >= 34 && (h >>> 20) % 3 === 0 ? "#9a9a9a" : pick(HAIR, 4);
-  const style = (h >>> 8) % 5; // 0 ras, 1 court, 2 mèche, 3 boucles, 4 chignon
-  const beard = (h >>> 12) % 4 === 0 || (age !== undefined && age > 26 && (h >>> 12) % 3 === 0);
+  return {
+    skin: h % SKIN.length,
+    hair: age && age >= 34 && (h >>> 20) % 3 === 0 ? 5 : (h >>> 4) % HAIR.length,
+    style: (h >>> 8) % 5,
+    beard: (h >>> 12) % 4 === 0 || (age !== undefined && age > 26 && (h >>> 12) % 3 === 0),
+  };
+}
+
+export function Avatar({ id, kit = "#2b5d9b", trim = "#ffffff", size = 48, age, label, look, number }: { id: string; kit?: string; trim?: string; size?: number; age?: number; label?: string; look?: Look; number?: number }) {
+  const h = hash(id);
+  const l = look ?? lookFor(id, age);
+  const skin = SKIN[l.skin % SKIN.length];
+  const hair = HAIR[l.hair % HAIR.length];
+  const style = l.style % 5; // 0 ras, 1 court, 2 mèche, 3 boucles, 4 chignon
+  const beard = l.beard;
   const brow = (h >>> 16) % 3;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={label ?? "Portrait"} className="mg-avatar">
@@ -28,6 +42,7 @@ export function Avatar({ id, kit = "#2b5d9b", trim = "#ffffff", size = 48, age, 
       {/* Maillot */}
       <path d="M8 64c2-12 10-17 24-17s22 5 24 17z" fill={kit} />
       <path d="M25 47l7 7 7-7" fill="none" stroke={trim} strokeWidth="2.5" />
+      {number !== undefined && <text x="47" y="61" fontSize="9" fontWeight="800" textAnchor="middle" fill={trim} fontFamily="system-ui, sans-serif">{number}</text>}
       {/* Cou et tête */}
       <rect x="27" y="38" width="10" height="10" rx="3" fill={skin} />
       <ellipse cx="32" cy="28" rx="12" ry="14" fill={skin} />

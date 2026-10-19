@@ -59,6 +59,7 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
   const weekResults: WorldMatchResult[] = [];
   const newsItems: string[] = [];
 
+  let statIndex: Map<string, number> | null = null;
   // ── 1. Simuler les matchs de la journée dans chaque ligue ──────────────────
   for (const league of current.leagues) {
    // Monde CP : toutes les journées prévues cette semaine (0, 1 ou 2) ; sinon une par semaine
@@ -70,6 +71,16 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
    } else if (first.currentMatchday <= first.totalMatchdays) days.push(first.currentMatchday);
    for (const matchday of days) {
     const schedule = current.schedules[league.id];
+    // Effectifs indexés par club une fois par journée (au lieu d'un filtre par équipe)
+    let clubIndex: Map<string, typeof current.players> | null = null;
+    const snapPlayers = current.players;
+    const byClub = () => {
+      if (!clubIndex) {
+        clubIndex = new Map();
+        for (const p of snapPlayers) { const l = clubIndex.get(p.clubId); if (l) l.push(p); else clubIndex.set(p.clubId, [p]); }
+      }
+      return clubIndex;
+    };
 
     const output = simulateMatchday({
       leagueId:   league.id,
@@ -78,7 +89,7 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
       fixtures:   schedule.fixtures,
       getClubSnapshot: (clubId: string) => ({
         clubId,
-        players:    current.players.filter(p => p.clubId === clubId),
+        players:    byClub().get(clubId) ?? [],
         coach:      current.coaches.find(
           c => c.clubId === clubId && c.teamLevel === "first_team" && c.status === "active"
         ) ?? null,
@@ -125,8 +136,11 @@ export function advanceWorldWeek(world: WorldLiveState): WeekAdvanceResult {
 
     // Stats joueurs (index par joueur pour rester rapide avec ~5 000 joueurs)
     const updatedPlayerStats = [...current.playerStats];
-    const statIndex = new Map<string, number>();
-    updatedPlayerStats.forEach((s, i) => { if (s.season === current.season) statIndex.set(`${s.playerId}|${s.leagueId}`, i); });
+    // Index construit une fois pour la semaine : les positions restent valides (on ne fait qu'ajouter)
+    if (!statIndex) {
+      statIndex = new Map<string, number>();
+      updatedPlayerStats.forEach((s, i) => { if (s.season === current.season) statIndex!.set(`${s.playerId}|${s.leagueId}`, i); });
+    }
     for (const u of output.playerStatUpdates) {
       const key = `${u.playerId}|${u.leagueId}`;
       const idx = statIndex.get(key);

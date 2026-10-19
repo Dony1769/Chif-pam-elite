@@ -11,7 +11,7 @@ import {
   createManagerGame, getManagedClub, getNextFixture, getLeagueSchedule, playWeek, prepareMatch, squadStrength,
 } from "../manager/engine";
 import { FORMATIONS, aiTacticFor, autoPickLineup, isAvailable } from "../manager/tactics";
-import { INTENSITY, diffOf } from "./difficulty";
+import { BAD_MATCH, INTENSITY, diffOf } from "./difficulty";
 import { MASTERED, defaultFamiliarity, gainFamiliarity, positionRatings, switchPrimary } from "./positions";
 import type { LiveMatch } from "../manager/matchSim";
 import { createRng, seedFromString } from "../utils/random";
@@ -146,6 +146,9 @@ export function syncWorldPlayer(s: PlayerCareerState): PlayerCareerState {
 export interface NewCareerInput {
   seed: string;
   difficulty?: import("./difficulty").Difficulty;
+  look?: import("../../manager/_ui/Avatar").Look;
+  shirt?: number;
+  celebration?: string;
   clubId: string;
   firstName: string;
   lastName: string;
@@ -193,6 +196,7 @@ export function createPlayerCareer(i: NewCareerInput): PlayerCareerState {
     shadow,
     profile: {
       id, firstName: wp.firstName, lastName: wp.lastName, nationality: i.nationality, foot: i.foot,
+      look: i.look, shirt: i.shirt, celebration: i.celebration,
       position: i.position, attrs, sub, potential, xp: zero, subXp: {}, trainingFocus: keySubs(i.position)[0],
       weakFoot, skillMoves, specialXp: { weakFoot: 0, skillMoves: 0 }, playStyles: emptyPlayStyles(),
       reputation: clamp(Math.round(club.reputation * 0.25), 5, 40),
@@ -242,6 +246,20 @@ export function coachDecision(s: PlayerCareerState): PlayerCareerState {
   else if (lineup.starters.includes(s.profile.id)) selection = "starter";
   else if (lineup.bench.includes(s.profile.id)) selection = "bench";
   // Poste réel : le slot de la formation où le coach l'aligne
+  // Série de matchs ratés : le coach sanctionne (Pro : 3, Légende : 2)
+  const d = diffOf(s.difficulty);
+  const recent = s.career?.recent ?? [];
+  const now = sh.world.season * 100 + sh.world.currentWeek;
+  if (selection === "starter" && d.benchAfter > 0 && recent.length >= d.benchAfter && recent.slice(-d.benchAfter).every(r => r < BAD_MATCH)
+    && s.career?.droppedAt !== now && (s.career?.droppedAt ?? 0) < now - d.benchAfter) {
+    const starters = lineup.starters.filter(x => x !== s.profile.id);
+    const sub = lineup.bench.find(id => squad.find(p => p.id === id)?.position === s.profile.position) ?? lineup.bench[0];
+    if (sub) {
+      const dropped = { ...lineup, starters: [...starters, sub], bench: [...lineup.bench.filter(x => x !== sub), s.profile.id] };
+      const msg = pmsg(s, "board", "Écarté du onze", `Après ${d.benchAfter} matchs en dessous de ${BAD_MATCH.toFixed(1).replace(".", ",")}, le coach vous laisse sur le banc ce week-end. Montrez-lui qu'il a tort.`);
+      return pushPlayerInbox({ ...s, selection: "bench", playedAs: null, career: s.career ? { ...s.career, droppedAt: now } : s.career, shadow: { ...sh, tactic, lineup: dropped } }, msg);
+    }
+  }
   const slot = lineup.starters.indexOf(s.profile.id);
   const slotPos = slot >= 0 ? FORMATIONS[tactic.formation][slot]?.pos : undefined;
   const playedAs = slotPos && slotPos !== s.profile.position ? slotPos : null;

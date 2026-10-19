@@ -9,22 +9,28 @@ import { ATTR_KEYS, ATTR_SHORT, GK_ATTR_SHORT } from "../../game/player2/attribu
 import type { WorldPlayerPosition } from "../../game/data/worldPlayers";
 import { POS_FR } from "../../manager/_ui/kit";
 
-export function PlayerCard({ name, overall, position, attrs, club, potential, compact }: {
+export function PlayerCard({ name, overall, position, attrs, club, potential, compact, portrait, delta }: {
   name: string; overall: number; position: WorldPlayerPosition; attrs: Attrs; club?: Pick<Club, "shortName" | "colors">;
   potential?: number; compact?: boolean;
+  /** Portrait affiché dans la carte */
+  portrait?: React.ReactNode;
+  /** Progression de note depuis la dernière visite : la carte s'illumine */
+  delta?: number;
 }) {
   const short = position === "GK" ? GK_ATTR_SHORT : ATTR_SHORT;
-  const tier = overall >= 80 ? "gold" : overall >= 70 ? "silver" : "bronze";
+  const tier = overall >= 85 ? "legend" : overall >= 80 ? "gold" : overall >= 75 ? "rare" : overall >= 70 ? "silver" : "bronze";
   return (
-    <div data-tilt className={`pc-card pc-card--${tier}${compact ? " pc-card--compact" : ""}`} style={{ ["--club" as string]: club?.colors.primary ?? "#B9FF39" }}
+    <div data-tilt className={`pc-card pc-card--${tier}${compact ? " pc-card--compact" : ""}${delta && delta > 0 ? " is-upgraded" : ""}`} style={{ ["--club" as string]: club?.colors.primary ?? "#B9FF39" }}
       role="img" aria-label={`${name}, ${POS_FR[position] ?? position}, note ${overall}`}>
       <div className="pc-card__top">
         <div className="pc-card__ovr">
           <b>{overall}</b>
           <span>{POS_FR[position] ?? position}</span>
         </div>
+        {portrait && <div className="pc-card__portrait">{portrait}</div>}
         {club && <span className="pc-card__club">{club.shortName}</span>}
       </div>
+      {delta && delta > 0 ? <span className="pc-card__delta">+{delta}</span> : null}
       <div className="pc-card__name">{name}</div>
       <div className="pc-card__attrs">
         {ATTR_KEYS.map(k => (

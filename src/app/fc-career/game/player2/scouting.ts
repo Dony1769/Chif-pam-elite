@@ -196,3 +196,39 @@ export function updateInterests(s: PlayerCareerState, roleAt: (clubId: string) =
   const next = { ...s, career: { ...c, interests: keep, offers: [...c.offers, ...offers] } };
   return msgs.length ? pushPlayerInbox(next, ...msgs) : next;
 }
+
+const PAPERS = ["L'Équipe CP", "Foot Mercato CP", "The Athletic CP", "Marca CP", "Gazzetta CP", "Kicker CP"];
+
+/**
+ * Rumeurs de presse : les clubs qui vous suivent fuitent dans les journaux,
+ * et quelques bruits sans fondement circulent quand vous êtes en forme.
+ */
+export function pressRumours(s: PlayerCareerState): PlayerCareerState {
+  const c = s.career!;
+  if (s.shadow.world.dataset !== "cp" || s.retired) return s;
+  const now = weekIndex(s);
+  const rng = createRng(seedFromString(`${s.shadow.world.seed}-rumour-${now}-${s.profile.id}`));
+  const paper = PAPERS[rng.int(0, PAPERS.length - 1)];
+  const name = `${s.profile.firstName} ${s.profile.lastName}`;
+  const interests = c.interests ?? [];
+  const real = interests.filter(i => now - i.since >= 1);
+  if (real.length && rng.chance(0.2)) {
+    const it = real[rng.int(0, real.length - 1)];
+    const club = s.shadow.world.clubs.find(x => x.id === it.clubId);
+    if (!club) return s;
+    const lines = [
+      `Selon ${paper}, ${club.name} a envoyé un recruteur pour superviser ${name} ce week-end.`,
+      `${paper} affirme que ${club.name} prépare une offre pour ${name} au prochain mercato.`,
+      `Le directeur sportif de ${club.name} n'a pas démenti son intérêt pour ${name}.`,
+    ];
+    return pushPlayerInbox(s, pmsg(s, "news", "Rumeur mercato", lines[rng.int(0, lines.length - 1)]));
+  }
+  const line = s.seasons.find(l => l.season === s.shadow.world.season);
+  const hot = line && line.apps >= 4 && avgRating(line) >= 7.1;
+  if (hot && rng.chance(0.07)) {
+    const big = s.shadow.world.clubs.filter(x => x.id !== myClub(s).id).sort((a, b) => b.reputation - a.reputation).slice(0, 12);
+    const club = big[rng.int(0, big.length - 1)];
+    return pushPlayerInbox(s, pmsg(s, "news", "Bruit de couloir", `${paper} évoque un intérêt de ${club.name} pour ${name}. Votre agent n'a reçu aucun appel… pour l'instant.`));
+  }
+  return s;
+}

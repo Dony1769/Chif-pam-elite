@@ -14,6 +14,9 @@ import { MAX_INTERESTS, objectiveLabel, objectiveProgress, weekIndex, weeksBetwe
 import { formatMoney } from "../../game/manager/engine";
 import { careerTotals, me, myClub } from "../../game/player2/engine";
 import { ROLE_LABEL, clubWageCap, defaultGoalBonus, marketValue, minReleaseClause, nationalRank, renewalDemand, renewalStance } from "../../game/player2/career";
+import { IdentityEditor } from "../_ui/IdentityEditor";
+import type { Identity } from "../_ui/IdentityEditor";
+import { lookFor } from "../../manager/_ui/Avatar";
 import { isWindowOpen, windowLabel } from "../../game/manager/market";
 
 export default function CareerPage() {
@@ -28,6 +31,7 @@ export default function CareerPage() {
   const minClause = minReleaseClause(state);
   const [clause, setClause] = useState<number>(state.contract.releaseClause ?? 0);
   const stance = renewalStance(state);
+  const [ident, setIdent] = useState<Identity>(() => ({ look: state.profile.look ?? lookFor(state.profile.id, me(state).age), shirt: state.profile.shirt ?? 9, celebration: state.profile.celebration ?? "siu" }));
   const agentRel = c.story?.agentRel ?? 50;
   const totals = careerTotals(state);
   const country = state.shadow.world.countries.find(k => k.id === c.national.countryId);
@@ -108,6 +112,10 @@ export default function CareerPage() {
           )}
         </Section>
 
+        <Section title="Identité" aside={<button type="button" className="mg-btn mg-btn--sm mg-btn--green" onClick={() => run({ type: "SET_IDENTITY", identity: ident })}>Enregistrer</button>}>
+          <IdentityEditor id={state.profile.id} value={ident} onChange={setIdent} kit={club.colors.primary} trim={club.colors.secondary} />
+        </Section>
+
         <Section title="Contrat">
           <dl className="mg-dl">
             <dt>Club</dt><dd>{club.name}{c.loan ? ` (prêt de ${clubOf(c.loan.parentClubId)?.name})` : ""}</dd>
@@ -129,6 +137,14 @@ export default function CareerPage() {
                 <span className="mg-small" style={{ display: "block" }}>{stance.reason}</span>
               </p>
               <span className="mg-small">Demande de votre agent : {formatMoney(demand)}/sem · le club peut aller jusqu&apos;à {formatMoney(clubWageCap(state))}/sem. Possible à partir de 2 saisons restantes.</span>
+              {c.renewalTalks?.counter && (
+                <div className="pc-counter">
+                  <span><b>Contre-offre du club</b> : {formatMoney(c.renewalTalks.counter.wage)}/sem · {c.renewalTalks.counter.seasons} saison(s){c.renewalTalks.counter.goalBonus !== undefined ? ` · prime ${formatMoney(c.renewalTalks.counter.goalBonus)}/but` : ""}{c.renewalTalks.counter.releaseClause ? ` · clause ${formatMoney(c.renewalTalks.counter.releaseClause)}` : ""}</span>
+                  <span className="mg-small">Tour {c.renewalTalks.rounds}/3 : au troisième refus, les discussions sont gelées deux mois.</span>
+                  <button type="button" className="mg-btn mg-btn--sm mg-btn--gold" onClick={() => run({ type: "ACCEPT_RENEW_COUNTER" })}>Accepter la contre-offre</button>
+                </div>
+              )}
+              {(c.renewalTalks?.lockedUntil ?? 0) > nowIdx && <p className="mg-warn" style={{ margin: 0 }}>Discussions gelées : le club ne reprendra contact qu&apos;en semaine {(c.renewalTalks!.lockedUntil % 100)}.</p>}
               <div className="mg-row" style={{ alignItems: "flex-end" }}>
                 <div style={{ width: 200 }}><MoneyInput id="renew-wage" label="Salaire / semaine" value={wage} step={100} onChange={setWage} /></div>
                 <label className="mg-field" style={{ width: 130 }}><span>Durée</span>
@@ -151,12 +167,24 @@ export default function CareerPage() {
       <div className="mg-col-4 mg-stack">
         <Section title={`Sélection · ${country?.name ?? ""}`}>
           <dl className="mg-dl">
-            <dt>Statut</dt><dd>{c.national.called ? "Convoqué" : "Non convoqué"}</dd>
+            <dt>Statut</dt><dd>{c.national.retired ? "Retraité international" : c.national.called ? "Convoqué" : "Non convoqué"}</dd>
             <dt>Rang dans le pays</dt><dd>{rank}e {rank <= 23 ? "(sélectionnable)" : "(top 23 requis)"}</dd>
             <dt>Sélections</dt><dd>{c.national.caps}</dd>
             <dt>Buts</dt><dd>{c.national.goals}</dd>
           </dl>
           <p className="mg-small" style={{ marginBottom: 0 }}>Trêve internationale toutes les 5 semaines, à partir de 18 ans.</p>
+          <div className="mg-row" style={{ marginTop: 10 }}>
+            {!c.national.retired && (
+              <button type="button" className="mg-btn mg-btn--sm" onClick={() => run({ type: "NATIONAL", choice: c.national.decline ? "undecline" : "decline" })}>
+                {c.national.decline ? "Répondre à la prochaine convocation" : "Décliner la prochaine convocation"}
+              </button>
+            )}
+            {(age >= 27 || c.national.retired) && (
+              <button type="button" className={`mg-btn mg-btn--sm${c.national.retired ? "" : " mg-btn--danger"}`} onClick={() => run({ type: "NATIONAL", choice: c.national.retired ? "unretire" : "retire" })}>
+                {c.national.retired ? "Revenir en sélection" : "Retraite internationale"}
+              </button>
+            )}
+          </div>
         </Section>
         <Section title="Totaux de carrière">
           <dl className="mg-dl">

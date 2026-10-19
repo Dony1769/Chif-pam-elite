@@ -200,3 +200,31 @@
 
 .pc-agentnote { padding: 8px 10px; border-left: 3px solid #d9a400; background: rgba(217, 164, 0, .08); }
 .pc-agentnote.is-closed { border-left-color: #c0392b; background: rgba(192, 57, 43, .08); }
+
+/* Identité du joueur */
+.pc-identity { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.pc-identity__fields { flex: 1; min-width: 0; display: grid; gap: 10px; }
+.pc-identity__row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.pc-identity__row > .mg-small { width: 64px; }
+.pc-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-swatches button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.15); cursor: pointer; padding: 0; }
+.pc-swatches button[aria-pressed="true"] { border-color: var(--fp-gold, #F6BF45); box-shadow: 0 0 0 2px rgba(246,191,69,.35); }
+
+/* Commentateur */
+.pc-commentator { margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--mg-panel-2, #16234A); border-left: 3px solid var(--fp-blue, #3D86FF); font-style: italic; }
+.mg-ev.is-me .mg-ev__txt { color: var(--fp-gold, #F6BF45); }
+.pc-mstats { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 12px 0 0; }
+.pc-mstats dt { color: var(--mg-text-2, #A6B3DA); }
+.pc-mstats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* Objectifs de développement */
+.pc-objectives { display: grid; gap: 10px; }
+.pc-objective { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--mg-panel-2, #16234A); }
+.pc-objective__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
+.pc-objective__reward { color: var(--fp-gold, #F6BF45); font-weight: 700; font-size: 13px; white-space: nowrap; }
+.pc-objective__bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.pc-objective__bar i { display: block; height: 100%; background: var(--fp-blue, #3D86FF); }
+.pc-counter { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(246,191,69,.4); background: rgba(246,191,69,.07); }
+.pc-editor { display: grid; gap: 12px; }
+.pc-editor__row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.pc-color { width: 100%; height: 38px; padding: 2px; border-radius: 8px; border: 1px solid var(--mg-line, rgba(120,150,230,.16)); background: transparent; cursor: pointer; }

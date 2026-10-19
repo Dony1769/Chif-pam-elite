@@ -59,7 +59,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
         <>
           <header className="mg-top" style={{ ["--club" as string]: club.colors.primary }}>
             <div className="mg-top__club">
-              <Avatar id={state.profile.id} age={p.age} kit={club.colors.primary} trim={club.colors.secondary} size={38} label="Votre portrait" />
+              <Avatar id={state.profile.id} age={p.age} look={state.profile.look} number={state.profile.shirt} kit={club.colors.primary} trim={club.colors.secondary} size={38} label="Votre portrait" />
               <div className="mg-top__id">
                 <strong>{state.profile.firstName} {state.profile.lastName}</strong>
                 <span>{club.name} · {cal ? `${cal.date} · ${cal.season}` : `saison ${state.shadow.world.season} · semaine ${state.shadow.world.currentWeek}`} · {p.age} ans</span>
@@ -76,7 +76,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
         </>
       )}
       <main className="mg-main">
-        {state ? <SheetsProvider world={state.shadow.world} highlight={state.profile.id} meClub={club?.id}>{body}</SheetsProvider> : body}
+        {state ? <SheetsProvider world={state.shadow.world} highlight={state.profile.id} meClub={club?.id} myLook={state.profile.look} myShirt={state.profile.shirt}>{body}</SheetsProvider> : body}
       </main>
       <div className="mg-toasts" aria-live="polite">
         {toasts.map(t => <div key={t.id} data-toast-id={t.id} className={`mg-toast ${t.ok ? "is-ok" : "is-err"}`} role={t.ok ? "status" : "alert"}>{t.text}</div>)}

@@ -51,6 +51,11 @@ export interface PlayerProfile {
   familiarity?: Partial<Record<WorldPlayerPosition, number>>;
   /** Intensité des séances d'entraînement */
   intensity?: import("./difficulty").Intensity;
+  /** Apparence choisie (sinon tirée de l'identifiant) */
+  look?: import("../../manager/_ui/Avatar").Look;
+  /** Numéro de maillot et célébration de but */
+  shirt?: number;
+  celebration?: string;
 }
 
 export type Selection = "starter" | "bench" | "out" | "injured" | "suspended";
@@ -148,6 +153,10 @@ export interface NationalTeamState {
   goals: number;
   /** Semaine (index absolu) du dernier rassemblement traité */
   lastWindow: number;
+  /** Retraite internationale annoncée */
+  retired?: boolean;
+  /** Décliner la prochaine convocation (repos, club) */
+  decline?: boolean;
 }
 
 export interface Award {
@@ -186,6 +195,14 @@ export interface CareerExtras {
   moments?: import("./moments").CareerMoment[];
   /** Histoire : personnages, rival, dilemmes, journal, récit de saison */
   story?: import("./story").StoryState;
+  /** Négociation de prolongation : tours, contre-offre du club, gel des discussions */
+  renewalTalks?: { rounds: number; counter: { wage: number; seasons: number; goalBonus?: number; releaseClause?: number | null } | null; lockedUntil: number };
+  /** Dernières notes en championnat (la plus récente à la fin) */
+  recent?: number[];
+  /** Mis sur le banc par le coach après une série de matchs ratés (semaine absolue) */
+  droppedAt?: number;
+  /** Objectifs de développement en cours */
+  objectives?: import("./objectives").ObjectivesState;
   /** Dernier transfert du joueur (indemnité) */
   lastMove?: { clubId: string; fee: number };
 }

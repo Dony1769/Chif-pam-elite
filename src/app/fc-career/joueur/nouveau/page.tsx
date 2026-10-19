@@ -14,6 +14,9 @@ import { readLegacy } from "../../game/player2/migrate";
 import type { Foot } from "../../game/player2/types";
 import { usePlayer } from "../_ui/PlayerContext";
 import { Crest, Ovr, POS_FR } from "../../manager/_ui/kit";
+import { IdentityEditor } from "../_ui/IdentityEditor";
+import type { Identity } from "../_ui/IdentityEditor";
+import { lookFor } from "../../manager/_ui/Avatar";
 
 const POSITIONS: WorldPlayerPosition[] = ["ST", "LW", "RW", "AM", "CM", "DM", "LB", "RB", "CB", "GK"];
 const POS_LONG: Record<WorldPlayerPosition, string> = {
@@ -35,6 +38,7 @@ export default function NewPlayerPage() {
   const [difficulty, setDifficulty] = useState<Difficulty>("pro");
   const [clubId, setClubId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const [identity, setIdentityState] = useState<Identity>(() => ({ look: lookFor("new-player"), shirt: 9, celebration: "siu" }));
 
   useEffect(() => { setSeed(seedFor(`fc27-joueur-${Date.now()}-${Math.random()}`)); }, []);
   // Monde CP réel : les 10 championnats (Top 5, D1 et D2)
@@ -63,7 +67,7 @@ export default function NewPlayerPage() {
     if (!seed || !clubId || !nameOk) return;
     if (hasSave && !confirm) { setConfirm(true); return; }
     if (!archivePlayerSave()) { notify(false, "Impossible d'archiver la carrière actuelle : création annulée pour ne rien perdre."); return; }
-    run({ type: "NEW", input: { seed, clubId, firstName: firstName.trim(), lastName: lastName.trim(), nationality, position, foot, difficulty } });
+    run({ type: "NEW", input: { seed, clubId, firstName: firstName.trim(), lastName: lastName.trim(), nationality, position, foot, difficulty, look: identity.look, shirt: identity.shirt, celebration: identity.celebration } });
     router.push("/fc-career/joueur");
   }
 
@@ -118,6 +122,11 @@ export default function NewPlayerPage() {
           </div>
           <p className="mg-small" style={{ margin: "6px 0 0" }}>{POS_LONG[position]}</p>
         </div>
+      </div>
+
+      <div className="mg-card mg-stack">
+        <b>Ton visage, ton numéro, ta célébration</b>
+        <IdentityEditor id="new-player" value={identity} onChange={setIdentityState} kit={clubs.find(c => c.club.id === clubId)?.club.colors.primary} trim={clubs.find(c => c.club.id === clubId)?.club.colors.secondary} />
       </div>
 
       <div className="mg-pagehead"><div><h2 style={{ fontSize: 22, fontWeight: 900, textTransform: "uppercase" }}>Ton premier club</h2><p>Tous les clubs CP te proposent un contrat. En deuxième division, un effectif modeste : plus de temps de jeu. Dans un grand club, il faudra gagner ta place.</p></div></div>

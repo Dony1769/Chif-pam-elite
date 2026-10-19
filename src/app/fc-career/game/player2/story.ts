@@ -19,7 +19,7 @@ const AGENTS = ["Marco Delvecchio", "Sarah Kone", "Jonas Ritter", "Inès Morel",
 const RELATIVES = ["ta mère", "ton père", "ta grand-mère", "ton grand frère", "ta sœur"];
 
 export interface Effects { trust?: number; captain?: number; fans?: number; rep?: number; morale?: number; bank?: number; fatigue?: number; xp?: number; agent?: number }
-export interface Choice { id: string; label: string; effects: Effects; outcome: string }
+export interface Choice { id: string; label: string; effects: Effects; outcome: string; /** Marque un souvenir qui débloque une suite plus tard */ flag?: string }
 export interface Dilemma { id: string; from: string; role: string; title: string; text: string; choices: Choice[]; expiresAt: number }
 export interface JournalEntry { season: number; week: number; text: string; tone: "good" | "bad" | "neutral" }
 export interface SeasonRecap {
@@ -46,6 +46,8 @@ export interface StoryState {
   seen: string[];
   recap: SeasonRecap | null;
   lastTalk?: number;
+  /** Souvenirs des choix passés (semaine absolue) : ouvrent des suites */
+  flags?: Record<string, number>;
 }
 
 const idx = (s: PlayerCareerState) => s.shadow.world.season * 100 + s.shadow.world.currentWeek;
@@ -96,20 +98,29 @@ function journal(s: PlayerCareerState, text: string, tone: JournalEntry["tone"] 
 
 // ─── Dilemmes ────────────────────────────────────────────────────────────────
 
-interface Template { key: string; when: (s: PlayerCareerState) => boolean; make: (s: PlayerCareerState) => Omit<Dilemma, "id" | "expiresAt"> }
+interface Template { key: string; when: (s: PlayerCareerState) => boolean; make: (s: PlayerCareerState) => Omit<Dilemma, "id" | "expiresAt">; /** Une seule fois dans la carrière (les suites) */ once?: boolean }
+
+/** Nombre de semaines depuis un souvenir (Infinity s'il n'existe pas). */
+const since = (s: PlayerCareerState, flag: string) => { const f = ST(s).flags?.[flag]; return f === undefined ? -1 : weeksBetweenIdx(f, idx(s)); };
+function weeksBetweenIdx(a: number, b: number) { return (Math.floor(b / 100) - Math.floor(a / 100)) * 52 + (b % 100) - (a % 100); }
+const mateName = (s: PlayerCareerState, k = 0) => {
+  const mates = s.shadow.world.players.filter(p => p.clubId === myClub(s).id && p.id !== s.profile.id && p.id !== ST(s).captainId).sort((a, b) => b.overall - a.overall);
+  const m = mates[k % Math.max(1, mates.length)];
+  return m ? `${m.firstName} ${m.lastName}`.trim() : "Un coéquipier";
+};
 
 const TEMPLATES: Template[] = [
   {
     key: "dinner", when: s => !!ST(s).captainId,
     make: s => ({ from: nameOf(s, ST(s).captainId), role: "capitaine", title: "Dîner d'équipe", text: `${nameOf(s, ST(s).captainId)} organise un dîner avec tout le groupe, la veille du match. « Ça soude un vestiaire. Tu viens ? »`, choices: [
-      { id: "go", label: "J'y vais", effects: { captain: 10, morale: 4, fatigue: 6 }, outcome: "Soirée mémorable : le vestiaire t'adopte, mais tu te couches tard." },
+      { id: "go", label: "J'y vais", effects: { captain: 10, morale: 4, fatigue: 6 }, outcome: "Soirée mémorable : le vestiaire t'adopte, mais tu te couches tard.", flag: "squad" },
       { id: "rest", label: "Je me repose", effects: { captain: -6, fatigue: -6 }, outcome: "Tu es frais, mais certains te trouvent distant." },
     ] }),
   },
   {
     key: "ad", when: () => true,
     make: s => ({ from: ST(s).agent, role: "agent", title: "Tournage publicitaire", text: `« Une marque d'équipement veut tourner une pub avec toi. ${money(adFee(s))}, une journée de tournage. Je dis oui ? »`, choices: [
-      { id: "yes", label: "Accepter", effects: { bank: adFee(s), fans: 2, fatigue: 5, agent: 6 }, outcome: "La pub tourne en boucle. Ton agent est ravi." },
+      { id: "yes", label: "Accepter", effects: { bank: adFee(s), fans: 2, fatigue: 5, agent: 6 }, outcome: "La pub tourne en boucle. Ton agent est ravi.", flag: "brand" },
       { id: "no", label: "Rester concentré", effects: { trust: 2, agent: -5 }, outcome: "Le coach apprécie ta concentration. Ton agent, beaucoup moins." },
     ] }),
   },
@@ -135,7 +146,7 @@ const TEMPLATES: Template[] = [
   {
     key: "young", when: s => me(s).age >= 24,
     make: s => ({ from: "Centre de formation", role: "jeune", title: "Un gamin du centre", text: "Un jeune de 16 ans du centre de formation te demande des conseils. Il dit que tu es son modèle.", choices: [
-      { id: "mentor", label: "Le prendre sous ton aile", effects: { fans: 3, captain: 3, fatigue: 3 }, outcome: "Tu passes du temps avec lui. Le club en parle sur ses réseaux." },
+      { id: "mentor", label: "Le prendre sous ton aile", effects: { fans: 3, captain: 3, fatigue: 3 }, outcome: "Tu passes du temps avec lui. Le club en parle sur ses réseaux.", flag: "mentor" },
       { id: "later", label: "Pas maintenant", effects: {}, outcome: "Tu lui conseilles de travailler dur. Il repart un peu déçu." },
     ] }),
   },
@@ -143,7 +154,7 @@ const TEMPLATES: Template[] = [
     key: "social", when: s => !!s.lastMatch && s.lastMatch.played && (s.lastMatch.rating ?? 7) < 6.2,
     make: s => ({ from: ST(s).agent, role: "agent", title: "Polémique sur les réseaux", text: "Après ton match raté, les critiques pleuvent sur les réseaux. « Il faut réagir… ou pas. Tu veux faire quoi ? »", choices: [
       { id: "sorry", label: "S'excuser auprès des supporters", effects: { fans: 4, morale: -2 }, outcome: "Message sincère. Les supporters saluent ton honnêteté." },
-      { id: "clap", label: "Répondre aux critiques", effects: { fans: -5, rep: 2, morale: 3 }, outcome: "Ta réponse fait le buzz. Une partie des supporters ne l'a pas aimée." },
+      { id: "clap", label: "Répondre aux critiques", effects: { fans: -5, rep: 2, morale: 3 }, outcome: "Ta réponse fait le buzz. Une partie des supporters ne l'a pas aimée.", flag: "buzz" },
       { id: "silent", label: "Couper son téléphone", effects: { morale: 2 }, outcome: "Tu coupes tout pour la semaine. Le calme revient." },
     ] }),
   },
@@ -159,7 +170,7 @@ const TEMPLATES: Template[] = [
     make: s => {
       const r = nameOf(s, ST(s).rivalId);
       return { from: "Presse", role: "journaliste", title: "Ton rival te cherche", text: `${r} déclare en interview : « Lui ? On n'est pas dans la même catégorie. » Les journalistes attendent ta réponse.`, choices: [
-        { id: "reply", label: "« Rendez-vous sur le terrain »", effects: { rep: 2, morale: 5, trust: -1 }, outcome: `Ta réponse fait la une. La rivalité avec ${r} est lancée.` },
+        { id: "reply", label: "« Rendez-vous sur le terrain »", effects: { rep: 2, morale: 5, trust: -1 }, outcome: `Ta réponse fait la une. La rivalité avec ${r} est lancée.`, flag: "rivalry" },
         { id: "ignore", label: "Ne pas répondre", effects: { trust: 2, fans: 1 }, outcome: "Tu laisses parler. Le coach apprécie ton calme." },
       ] };
     },
@@ -167,18 +178,215 @@ const TEMPLATES: Template[] = [
   {
     key: "charity", when: s => (s.career?.bank ?? 0) > 50_000,
     make: s => ({ from: ST(s).agent, role: "agent", title: "Une fondation", text: `Une association d'enfants de ta ville natale te sollicite. Un don de ${money(Math.round((s.career!.bank * 0.05) / 100) * 100)} changerait beaucoup pour eux.`, choices: [
-      { id: "give", label: "Faire le don", effects: { bank: -Math.round((s.career!.bank * 0.05) / 100) * 100, fans: 6, rep: 1 }, outcome: "Le don est rendu public par l'association. Les supporters adorent." },
+      { id: "give", label: "Faire le don", effects: { bank: -Math.round((s.career!.bank * 0.05) / 100) * 100, fans: 6, rep: 1 }, outcome: "Le don est rendu public par l'association. Les supporters adorent.", flag: "foundation" },
       { id: "no", label: "Pas cette fois", effects: {}, outcome: "Tu déclines poliment." },
     ] }),
   },
   {
     key: "bench", when: s => s.selection === "bench" || s.selection === "out",
     make: s => ({ from: coachName(s), role: "coach", title: "Explication avec le coach", text: "Encore sur le banc. Tu croises le coach dans le couloir : c'est le moment de dire ce que tu penses… ou pas.", choices: [
-      { id: "complain", label: "Exiger plus de temps de jeu", effects: { trust: -8, rep: 1, morale: 3 }, outcome: "Le coach n'aime pas qu'on lui force la main." },
+      { id: "complain", label: "Exiger plus de temps de jeu", effects: { trust: -8, rep: 1, morale: 3 }, outcome: "Le coach n'aime pas qu'on lui force la main.", flag: "rebel" },
       { id: "work", label: "Demander ce qu'il attend de toi", effects: { trust: 5, xp: 1 }, outcome: "« Plus d'intensité sans ballon. » Tu sais quoi travailler." },
     ] }),
   },
+  // ─── Suites : tes choix d'hier reviennent ───────────────────────────────────
+  {
+    key: "mentor2", once: true, when: s => since(s, "mentor") >= 40,
+    make: () => ({ from: "Centre de formation", role: "jeune", title: "Le gamin a signé pro", text: "Le jeune que tu avais conseillé vient de signer son premier contrat professionnel. Il demande à porter un numéro proche du tien, « pour ne jamais oublier ».", choices: [
+      { id: "yes", label: "Lui offrir ton ancien maillot", effects: { fans: 5, captain: 4, morale: 5 }, outcome: "Photo des deux maillots côte à côte : le club en fait sa une." },
+      { id: "advice", label: "Lui dire de se faire son propre nom", effects: { rep: 1, morale: 2 }, outcome: "« Écris ta propre histoire. » Il hoche la tête, ému." },
+    ] }),
+  },
+  {
+    key: "brand2", once: true, when: s => since(s, "brand") >= 30 && s.profile.reputation >= 35,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Égérie de la marque", text: `« La marque de la pub veut faire de toi son visage pour trois ans. ${money(adFee(s) * 6)}, mais quatre tournages par saison. »`, choices: [
+      { id: "sign", label: "Signer", effects: { bank: adFee(s) * 6, fatigue: 8, agent: 8, rep: 2, trust: -2 }, outcome: "Ton visage s'affiche dans toutes les gares. Le coach trouve que ça fait beaucoup." },
+      { id: "decline", label: "Rester discret", effects: { trust: 3, agent: -8 }, outcome: "Tu préfères le terrain aux plateaux. Ton agent boude une semaine." },
+    ] }),
+  },
+  {
+    key: "rivalry2", once: true, when: s => since(s, "rivalry") >= 26 && !!ST(s).rivalId,
+    make: s => ({ from: "Presse", role: "journaliste", title: "Face-à-face télévisé", text: `Une chaîne veut vous réunir, ${nameOf(s, ST(s).rivalId)} et toi, sur le même plateau. Tout le pays attend ce duel.`, choices: [
+      { id: "go", label: "Accepter le duel", effects: { rep: 3, fans: 3, fatigue: 3 }, outcome: "Échanges piquants mais respectueux. L'audience est record." },
+      { id: "hands", label: "Proposer une poignée de main", effects: { fans: 4, trust: 2 }, outcome: "Vous enterrez la hache de guerre en direct. Le public applaudit." },
+      { id: "no", label: "Refuser", effects: { rep: -1, morale: 2 }, outcome: "La chaîne invite ton rival seul. Il parle de toi pendant dix minutes." },
+    ] }),
+  },
+  {
+    key: "foundation2", once: true, when: s => since(s, "foundation") >= 30,
+    make: () => ({ from: "L'association", role: "fondation", title: "Le terrain porte ton nom", text: "Grâce à ton don, l'association inaugure un terrain synthétique dans ta ville natale. Ils aimeraient que tu coupes le ruban.", choices: [
+      { id: "go", label: "Y aller", effects: { fans: 6, morale: 8, fatigue: 4, rep: 1 }, outcome: "Deux cents enfants en maillot à ton nom. Tu ne t'en remets pas." },
+      { id: "video", label: "Envoyer une vidéo", effects: { fans: 2 }, outcome: "Ta vidéo est projetée pendant la cérémonie." },
+    ] }),
+  },
+  {
+    key: "rebel2", once: true, when: s => since(s, "rebel") >= 6 && since(s, "rebel") <= 40,
+    make: s => ({ from: coachName(s), role: "coach", title: "Le coach n'a pas oublié", text: "« La dernière fois, tu m'as manqué de respect devant le staff. Je veux savoir où on en est. »", choices: [
+      { id: "sorry", label: "Présenter des excuses", effects: { trust: 10, morale: -2 }, outcome: "Le coach accepte. « On repart de zéro. »" },
+      { id: "firm", label: "Assumer tes mots", effects: { trust: -6, rep: 1, captain: -3 }, outcome: "Le bras de fer continue. Le vestiaire retient son souffle." },
+    ] }),
+  },
+  {
+    key: "buzz2", once: true, when: s => since(s, "buzz") >= 20,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Un documentaire sur toi", text: "Ta réponse aux critiques a fait le tour du web. Une plateforme veut te suivre caméra au poing pendant six mois.", choices: [
+      { id: "yes", label: "Ouvrir les portes", effects: { fans: 5, rep: 3, fatigue: 6, captain: -4, bank: adFee(s) * 3 }, outcome: "Le documentaire cartonne. Certains coéquipiers n'aiment pas les caméras." },
+      { id: "no", label: "Garder ta vie privée", effects: { captain: 3, morale: 2 }, outcome: "Tu refuses. Le vestiaire apprécie ta discrétion." },
+    ] }),
+  },
+  {
+    key: "squad2", once: true, when: s => since(s, "squad") >= 30 && ST(s).captainRel >= 60,
+    make: s => ({ from: nameOf(s, ST(s).captainId), role: "capitaine", title: "Vice-capitaine ?", text: `${nameOf(s, ST(s).captainId)} : « Le groupe t'écoute. J'aimerais que tu sois mon vice-capitaine. »`, choices: [
+      { id: "yes", label: "Accepter le brassard", effects: { captain: 8, trust: 4, rep: 2, fatigue: 2 }, outcome: "Tu portes le brassard quand le capitaine sort. Une nouvelle responsabilité." },
+      { id: "no", label: "Te concentrer sur ton jeu", effects: { morale: 2 }, outcome: "Tu déclines avec respect. Il comprend." },
+    ] }),
+  },
+  // ─── Vie de vestiaire et vie privée ──────────────────────────────────────────
+  {
+    key: "tvinterview", when: s => !!s.lastMatch?.played && (s.lastMatch.rating ?? 0) >= 7.5,
+    make: () => ({ from: "Diffuseur", role: "journaliste", title: "Au micro après le match", text: "Tu sors du terrain en héros. Le journaliste bord terrain te tend le micro : « Un mot pour vos supporters ? »", choices: [
+      { id: "team", label: "Mettre l'équipe en avant", effects: { captain: 6, trust: 2 }, outcome: "« C'est la victoire du groupe. » Le vestiaire apprécie." },
+      { id: "me", label: "Savourer ta performance", effects: { rep: 2, fans: 2, captain: -3 }, outcome: "« J'avais promis de répondre présent. » Ça plaît aux supporters, moins au vestiaire." },
+      { id: "fans", label: "Dédier le match aux supporters", effects: { fans: 6 }, outcome: "La tribune chante ton nom pendant cinq minutes." },
+    ] }),
+  },
+  {
+    key: "hospital", when: () => true,
+    make: s => ({ from: nameOf(s, ST(s).captainId) || "Le vestiaire", role: "capitaine", title: "Un coéquipier opéré", text: `${mateName(s, 2)} s'est fait opérer du genou. Plusieurs joueurs passent le voir ce soir à la clinique.`, choices: [
+      { id: "visit", label: "Lui rendre visite", effects: { captain: 6, morale: 3, fatigue: 2 }, outcome: "Il est touché. « Je reviens vite, garde-moi ma place chaude. »" },
+      { id: "msg", label: "Lui envoyer un message", effects: { captain: 1 }, outcome: "Un petit mot sympa. Il répond par un pouce." },
+    ] }),
+  },
+  {
+    key: "birthday", when: () => true,
+    make: s => ({ from: mateName(s, 1), role: "coéquipier", title: "Anniversaire en pleine semaine", text: `${mateName(s, 1)} fête ses 30 ans mardi soir, avec DJ et invités. Match samedi.`, choices: [
+      { id: "party", label: "Faire la fête", effects: { captain: 6, morale: 6, fatigue: 10, trust: -2 }, outcome: "Soirée légendaire. Le préparateur physique, lui, n'a pas ri." },
+      { id: "early", label: "Passer une heure et rentrer", effects: { captain: 3, fatigue: 3 }, outcome: "Tu fais acte de présence et tu rentres sagement." },
+      { id: "skip", label: "Rester chez toi", effects: { captain: -3, fatigue: -3 }, outcome: "Tu regardes des matchs en replay. Tu es frais." },
+    ] }),
+  },
+  {
+    key: "videogame", when: s => s.profile.reputation >= 40,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Ta carte dans un jeu vidéo", text: "Un éditeur de jeu de foot veut scanner ton visage et tes gestes pour sa prochaine édition. Petite rémunération, gros coup de projecteur.", choices: [
+      { id: "scan", label: "Passer au scan", effects: { rep: 2, fans: 3, bank: Math.round(adFee(s) / 2), agent: 3 }, outcome: "Te voilà jouable. Les enfants du quartier se battent pour te prendre." },
+      { id: "no", label: "Pas intéressé", effects: { agent: -3 }, outcome: "Ta carte sortira avec un visage générique. Tant pis." },
+    ] }),
+  },
+  {
+    key: "nutrition", when: s => (s.career?.bank ?? 0) > 20_000,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Un nutritionniste privé", text: "Un nutritionniste qui suit plusieurs internationaux peut te prendre en charge toute la saison. C'est un investissement.", choices: [
+      { id: "hire", label: "L'engager", effects: { bank: -Math.max(8_000, Math.round(s.contract.wage * 2 / 1000) * 1000), fatigue: -10, xp: 2, morale: 2 }, outcome: "Nouvelle hygiène de vie. Tu récupères plus vite." },
+      { id: "no", label: "Faire confiance au staff du club", effects: { trust: 2 }, outcome: "Le staff du club apprécie ta confiance." },
+    ] }),
+  },
+  {
+    key: "mental", when: s => !!s.lastMatch?.played && (s.lastMatch.rating ?? 7) < 6.4,
+    make: () => ({ from: "Staff", role: "préparateur mental", title: "Un coach mental", text: "Le préparateur mental du club te propose quelques séances pour retrouver confiance devant le but.", choices: [
+      { id: "yes", label: "Essayer", effects: { morale: 8, xp: 1, fatigue: 1 }, outcome: "Visualisation, respiration. Tu repars plus serein." },
+      { id: "no", label: "Ça va passer tout seul", effects: { morale: -1 }, outcome: "Tu préfères travailler sur le terrain." },
+    ] }),
+  },
+  {
+    key: "autographs", when: () => true,
+    make: () => ({ from: "Club", role: "communication", title: "Séance de dédicaces", text: "Trois cents supporters attendent à la sortie de l'entraînement, sous la pluie. Le bus part dans dix minutes.", choices: [
+      { id: "sign", label: "Signer jusqu'au dernier", effects: { fans: 6, fatigue: 3, trust: -1 }, outcome: "Tu rates le bus et rentres en taxi, trempé mais heureux." },
+      { id: "quick", label: "Quelques photos et le bus", effects: { fans: 2 }, outcome: "Tu signes ce que tu peux avant de partir." },
+    ] }),
+  },
+  {
+    key: "secretclub", when: s => s.profile.reputation >= 30 && !s.career?.loan,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Un appel discret", text: "« Un grand club étranger m'a appelé. Rien d'officiel. Je fais fuiter dans la presse pour faire monter les enchères ? »", choices: [
+      { id: "leak", label: "Faire fuiter", effects: { rep: 2, agent: 6, fans: -5, trust: -4 }, outcome: "La rumeur fait la une. Les supporters doutent de ta fidélité." },
+      { id: "loyal", label: "Affirmer ta fidélité", effects: { fans: 6, trust: 4, agent: -6 }, outcome: "« Je suis bien ici. » Les supporters déploient une banderole." },
+      { id: "wait", label: "Attendre une vraie offre", effects: { agent: 2 }, outcome: "Ton agent garde le contact, discrètement." },
+    ] }),
+  },
+  {
+    key: "armband", when: s => ST(s).captainRel >= 60 && me(s).age >= 21,
+    make: s => ({ from: coachName(s), role: "coach", title: "Le brassard ce week-end", text: `${nameOf(s, ST(s).captainId)} est suspendu. « Tu portes le brassard samedi. Ça te va ? »`, choices: [
+      { id: "yes", label: "Avec fierté", effects: { trust: 5, rep: 2, morale: 6 }, outcome: "Tu mènes l'échauffement, tu parles dans le rond central. Un cap de franchi." },
+      { id: "no", label: "Proposer un plus ancien", effects: { captain: 4 }, outcome: "Tu laisses le brassard à un vétéran. Le geste est apprécié." },
+    ] }),
+  },
+  {
+    key: "bet", when: s => ["ST", "LW", "RW", "AM"].includes(s.profile.position),
+    make: s => ({ from: mateName(s, 0), role: "coéquipier", title: "Le pari du vestiaire", text: `${mateName(s, 0)} : « Si tu marques samedi, je paie le resto à tout le monde. Sinon, c'est toi. »`, choices: [
+      { id: "deal", label: "Pari tenu", effects: { captain: 4, morale: 4 }, outcome: "Le vestiaire est hilare. La pression monte, mais une bonne pression." },
+      { id: "no", label: "Pas de pari avant un match", effects: { trust: 2 }, outcome: "Tu restes sérieux. Le coach, qui écoutait, sourit." },
+    ] }),
+  },
+  {
+    key: "privacy", when: s => s.profile.reputation >= 45,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Des photographes devant chez toi", text: "Un magazine people te suit depuis trois jours. Il prépare un article sur ta vie privée.", choices: [
+      { id: "lawyer", label: "Envoyer un avocat", effects: { bank: -5_000, morale: 3 }, outcome: "L'article ne sort pas. Ça a un coût." },
+      { id: "interview", label: "Accorder une interview cadrée", effects: { fans: 3, rep: 1, morale: -1 }, outcome: "Tu racontes ce que tu veux bien raconter. Plutôt réussi." },
+      { id: "ignore", label: "Laisser faire", effects: { morale: -4 }, outcome: "L'article sort. Rien de grave, mais tu es agacé." },
+    ] }),
+  },
+  {
+    key: "physio", when: s => (me(s).fatigue ?? 0) >= 55,
+    make: () => ({ from: "Staff médical", role: "kiné", title: "Le kiné s'inquiète", text: "« Tes muscles sont tendus. Je recommande de faire l'impasse sur la séance intense de jeudi. »", choices: [
+      { id: "rest", label: "Écouter le kiné", effects: { fatigue: -12, trust: -1 }, outcome: "Une séance allégée. Tes jambes te remercient." },
+      { id: "train", label: "S'entraîner quand même", effects: { fatigue: 6, trust: 3, xp: 1 }, outcome: "Tu serres les dents. Le coach aime ça, ton corps moins." },
+    ] }),
+  },
+  {
+    key: "oldclub", once: true, when: s => !!s.career?.lastMove,
+    make: s => ({ from: "Ton ancien club", role: "club formateur", title: "Hommage à ton ancien club", text: "Ton ancien club t'invite à donner le coup d'envoi fictif de son match de gala, en souvenir de tes années là-bas.", choices: [
+      { id: "go", label: "Y aller", effects: { fans: 3, morale: 6, fatigue: 3 }, outcome: "Ovation debout. Certains anciens coéquipiers ont les yeux humides." },
+      { id: "no", label: "Décliner", effects: { morale: -1 }, outcome: "Tu envoies un message d'excuse. On te comprend." },
+    ] }),
+  },
+  {
+    key: "penaltytaker", when: s => s.profile.position !== "GK" && (s.profile.sub.penalties ?? 0) >= 65,
+    make: s => ({ from: coachName(s), role: "coach", title: "Qui tire les penaltys ?", text: `Le coach hésite entre ${mateName(s, 0)} et toi pour tirer les penaltys. « Tu te sens prêt ? »`, choices: [
+      { id: "me", label: "« Je les veux »", effects: { trust: 2, rep: 1, captain: -3 }, outcome: "Tu deviens tireur désigné. Une responsabilité, un risque." },
+      { id: "him", label: "Laisser le titulaire actuel", effects: { captain: 5 }, outcome: "Tu soutiens ton coéquipier. Le groupe apprécie." },
+    ] }),
+  },
+  {
+    key: "house", when: s => (s.career?.bank ?? 0) > 150_000,
+    make: s => ({ from: ST(s).relative, role: "famille", title: "Une maison pour la famille", text: `${cap(ST(s).relative)} rêve d'une maison avec un jardin. Tu pourrais l'offrir : ${money(Math.round(s.career!.bank * 0.3 / 1000) * 1000)}.`, choices: [
+      { id: "buy", label: "Offrir la maison", effects: { bank: -Math.round(s.career!.bank * 0.3 / 1000) * 1000, morale: 12 }, outcome: "Larmes à la remise des clés. Tu joues avec le cœur léger." },
+      { id: "later", label: "Plus tard, quand tu seras installé", effects: { morale: -2 }, outcome: "La famille comprend. Le rêve attendra." },
+    ] }),
+  },
+  {
+    key: "commission", when: s => s.profile.reputation >= 25,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "L'agent veut plus", text: "« Je te trouve des contrats et des pubs. Je veux passer de 5 à 8 % de commission. »", choices: [
+      { id: "accept", label: "Accepter", effects: { agent: 12, bank: -Math.round(s.contract.wage * 1.5 / 100) * 100 }, outcome: "Ton agent redouble d'efforts pour toi." },
+      { id: "refuse", label: "Refuser", effects: { agent: -12 }, outcome: "Ton agent fait la tête. Il faudra regagner sa confiance." },
+      { id: "deal", label: "6 %, pas plus", effects: { agent: 2, bank: -Math.round(s.contract.wage * 0.5 / 100) * 100 }, outcome: "Compromis trouvé. Tout le monde est à peu près content." },
+    ] }),
+  },
+  {
+    key: "sickfan", when: () => true,
+    make: () => ({ from: "Club", role: "fondation du club", title: "Un jeune supporter à l'hôpital", text: "Un garçon de 9 ans, hospitalisé depuis des mois, a une seule demande : te rencontrer.", choices: [
+      { id: "visit", label: "Aller le voir avec un maillot", effects: { fans: 5, morale: 6 }, outcome: "Il n'a pas lâché le maillot de la journée. Toi non plus, tu n'oublieras pas." },
+      { id: "video", label: "Lui envoyer une vidéo", effects: { fans: 1 }, outcome: "Il la regarde en boucle, paraît-il." },
+    ] }),
+  },
+  {
+    key: "summercamp", when: s => s.shadow.world.currentWeek <= 3 || s.shadow.world.currentWeek >= 50,
+    make: s => ({ from: ST(s).agent, role: "agent", title: "Stage d'été", text: "Un ancien Ballon d'Or organise un stage privé d'une semaine pendant les vacances. Peu de places.", choices: [
+      { id: "go", label: "S'inscrire", effects: { xp: 3, bank: -10_000, fatigue: 5 }, outcome: "Une semaine à travailler avec une légende. Tu reviens transformé." },
+      { id: "rest", label: "Profiter des vacances", effects: { fatigue: -10, morale: 4 }, outcome: "Soleil et famille : tu recharges les batteries." },
+    ] }),
+  },
+  {
+    key: "derbyweek", when: () => true,
+    make: s => ({ from: "Supporters", role: "groupe de supporters", title: "Semaine de derby", text: `Les ultras demandent aux joueurs de venir les saluer avant le derby, ${coachName(s)} préférerait un huis clos.`, choices: [
+      { id: "ultras", label: "Aller saluer le virage", effects: { fans: 7, trust: -3 }, outcome: "Fumigènes et chants : l'ambiance est électrique." },
+      { id: "coach", label: "Respecter le huis clos", effects: { trust: 4, fans: -2 }, outcome: "Concentration maximale. Les ultras râlent un peu." },
+    ] }),
+  },
+
 ];
+
+/** Les suites (sans saison) restent mémorisées pour toujours ; le reste est borné. */
+function keepSeen(seen: string[]): string[] {
+  const once = seen.filter(k => !/-\d+$/.test(k));
+  return [...once, ...seen.filter(k => /-\d+$/.test(k)).slice(-120)];
+}
 
 function money(v: number) { return v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1).replace(".", ",")} M€` : `${Math.round(v / 1000)} k€`; }
 function cap(t: string) { return t.charAt(0).toUpperCase() + t.slice(1); }
@@ -213,7 +421,7 @@ export function chooseStory(s0: PlayerCareerState, choiceId: string): { ok: bool
   const d = ST(s).pending;
   const c = d?.choices.find(x => x.id === choiceId);
   if (!d || !c) return { ok: false, state: s, message: "Ce choix n'est plus d'actualité." };
-  let next = withStory(applyEffects(s, c.effects), { pending: null });
+  let next = withStory(applyEffects(s, c.effects), { pending: null, ...(c.flag ? { flags: { ...(ST(s).flags ?? {}), [c.flag]: idx(s) } } : {}) });
   const good = (c.effects.trust ?? 0) + (c.effects.captain ?? 0) + (c.effects.fans ?? 0) >= 0;
   next = journal(next, `${d.title} : ${c.outcome}`, good ? "good" : "bad");
   return { ok: true, state: pushPlayerInbox(next, quiet(pmsg(next, "board", d.title, c.outcome))), message: c.outcome };
@@ -269,13 +477,17 @@ export function storyWeek(prev: PlayerCareerState, s0: PlayerCareerState): Playe
   }
 
   // Un nouveau dilemme (au plus un en attente, un modèle par saison)
-  if (!ST(s).pending && rng.chance(0.22)) {
+  if (!ST(s).pending && rng.chance(0.3)) {
     const season = s.shadow.world.season;
-    const pool = TEMPLATES.filter(t => !ST(s).seen.includes(`${t.key}-${season}`) && t.when(s));
+    const seen = ST(s).seen;
+    const pool = TEMPLATES.filter(t => (t.once ? !seen.includes(t.key) : !seen.includes(`${t.key}-${season}`)) && t.when(s));
+    // Les suites passent en priorité : ton passé te rattrape
+    const follow = pool.filter(t => t.once);
     if (pool.length) {
-      const t = pool[rng.int(0, pool.length - 1)];
+      const from = follow.length && rng.chance(0.6) ? follow : pool;
+      const t = from[rng.int(0, from.length - 1)];
       const d: Dilemma = { ...t.make(s), id: `${t.key}-${now}`, expiresAt: now + 2 };
-      s = withStory(s, { pending: d, seen: [...ST(s).seen, `${t.key}-${season}`].slice(-80) });
+      s = withStory(s, { pending: d, seen: keepSeen([...ST(s).seen, t.once ? t.key : `${t.key}-${season}`]) });
     }
   }
 

@@ -11,9 +11,10 @@ import { ZONE_LABEL, leagueZones } from "../../game/domain/competitions";
 import { CupsPanel, TrophiesPanel } from "../../manager/_ui/CupsPanel";
 import { myClub } from "../../game/player2/engine";
 import { worldCalendar } from "../../game/domain/calendar";
+import { ClubEditor } from "../_ui/ClubEditor";
 
 export default function WorldPage() {
-  const { state } = usePlayerGame();
+  const { state, run } = usePlayerGame();
   const w = state.shadow.world;
   const club = myClub(state);
   const [leagueId, setLeagueId] = useState(club.leagueId);
@@ -65,6 +66,7 @@ export default function WorldPage() {
       <CupsPanel world={w} me={club.id} nation={state.profile.nationality} />
       <AwardsPanel world={w} leagueId={leagueId} highlight={state.profile.id} />
       <TrophiesPanel world={w} me={club.id} nation={state.profile.nationality} />
+      <ClubEditor key={leagueId} state={state} run={run} leagueId={leagueId} />
     </div>
   );
 }

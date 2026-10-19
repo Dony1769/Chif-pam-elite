@@ -20,6 +20,9 @@ import { Crest, Empty, Section } from "../../manager/_ui/kit";
 import { SELECTION_LABEL, effSubs, myNextFixture, preparePlayerMatch } from "../../game/player2/engine";
 import { cupLabel, myCupMatch, shootout, startCupLive } from "../../game/player2/cup";
 import { Shootout } from "../_ui/Shootout";
+import { commentLine } from "../../game/player2/commentary";
+import type { CommentCtx } from "../../game/player2/commentary";
+import { MatchReportCard } from "../_ui/MatchReportCard";
 import { isNation, teamName } from "../../game/domain/competitions";
 import { NATION_BY_ID } from "../../game/data/cp/nations";
 import { decide, onPitch, simulateRest, startPlayerLive, stepPlayerLive } from "../../game/player2/live";
@@ -157,6 +160,15 @@ export default function PlayerMatchPage() {
   if (tc.toLowerCase() === mc.toLowerCase()) [tc, tc2] = [tc2, tc];
   const pitchColors = { mine: mc, mineAlt: mc2, theirs: tc, theirsAlt: tc2 };
   const lastDecision = live.decisions[live.decisions.length - 1];
+  const pById = new Map(state.shadow.world.players.map(p => [p.id, p]));
+  const cctx = (score?: { home: number; away: number }): CommentCtx => ({
+    name: id => { const p = id ? pById.get(id) : undefined; return p ? p.lastName : undefined; },
+    team: side => m[side].name, meId: live.playerId, mySide: m.managedSide, celebration: state.profile.celebration, score,
+  });
+  // Score à chaque événement, pour que le commentateur annonce le bon résultat
+  const running: { home: number; away: number }[] = [];
+  { let h = 0, a = 0; for (const e of m.events) { if (e.type === "goal") { if (e.side === "home") h++; else a++; } running.push({ home: h, away: a }); } }
+  const lastBig = [...m.events].reverse().find(e => e.type !== "sub");
   const myRating = report?.ratings[live.playerId];
 
   function choose(o: MomentOption) {
@@ -246,6 +258,12 @@ export default function PlayerMatchPage() {
           </div>
         )}
 
+        {lastBig && !live.moment && (
+          <p className="pc-commentator" aria-live="polite"><span aria-hidden>🎙</span> {commentLine(lastBig, cctx(running[m.events.lastIndexOf(lastBig)]))}</p>
+        )}
+
+        {m.finished && <MatchReportCard live={live} report={report} state={state} />}
+
         {lastDecision && !live.moment && (
           <p className={`pc-decision ${lastDecision.success ? "is-ok" : "is-ko"}`} style={{ margin: 0 }}>
             <b>{lastDecision.minute}&apos; · {lastDecision.success ? "Réussi" : "Raté"}</b> — {lastDecision.text}
@@ -254,9 +272,9 @@ export default function PlayerMatchPage() {
 
         <Section title="Direct">
           <div className="mg-feed">
-            {[...m.events].reverse().map((e, i) => (
-              <div key={`${e.minute}-${i}`} className={`mg-ev mg-ev--${e.type}`}>
-                <span className="mg-ev__min">{e.minute}&apos;</span><span aria-hidden>{ICON[e.type] ?? "·"}</span><span className="mg-ev__txt">{e.text}</span>
+            {m.events.map((e, i) => ({ e, i })).reverse().map(({ e, i }) => (
+              <div key={`${e.minute}-${i}`} className={`mg-ev mg-ev--${e.type}${e.playerId === live.playerId ? " is-me" : ""}`}>
+                <span className="mg-ev__min">{e.minute}&apos;</span><span aria-hidden>{ICON[e.type] ?? "·"}</span><span className="mg-ev__txt">{commentLine(e, cctx(running[i]))}</span>
               </div>
             ))}
             {m.events.length === 0 && <Empty>Coup d&apos;envoi imminent. Les moments clés vous mettront à contribution.</Empty>}

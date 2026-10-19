@@ -64,6 +64,19 @@ export function detectMoments(prev: PlayerCareerState, next: PlayerCareerState):
       detail: fee ? `Indemnité ${money(fee)} · ${next.contract.seasonsLeft} saisons` : `Contrat de ${next.contract.seasonsLeft} saisons`, trophy: record ? "cup" : "star",
     });
   }
+  // Trophées collectifs et individuels : chacun a sa cérémonie
+  const had = new Set((prev.career?.awards ?? []).map(x => `${x.season}-${x.id}-${x.label}`));
+  for (const aw of next.career.awards) {
+    const k = `${aw.season}-${aw.id}-${aw.label}`;
+    if (had.has(k)) continue;
+    const id = String(aw.id);
+    const trophy: MomentTrophy = id.includes("ballon") || id === "golden_star" ? "ballon" : id.includes("scorer") || id.includes("boot") || id.includes("soulier") ? "boot"
+      : id === "league_title" || id === "promotion" ? "shield" : id === "cup_win" ? "cup" : id.includes("nation") || id.includes("euro") || id.includes("world") ? "globe" : "star";
+    add(`award-${k}`, { title: aw.label, subtitle: `${club} · ${label}`, detail: "Un trophée de plus dans la vitrine", trophy });
+  }
+  // La carte évolue : paliers de note
+  const pa = prev.shadow.world.players.find(p => p.id === prev.profile.id)?.overall ?? 0, pb = w.players.find(p => p.id === next.profile.id)?.overall ?? 0;
+  for (const step of [70, 75, 80, 85, 90]) if (pa < step && pb >= step) add(`ovr-${step}`, { title: step >= 85 ? "Carte Légende" : step >= 80 ? "Carte Or" : step >= 75 ? "Carte Or rare" : "Carte Argent", subtitle: `Note ${pb} · ${label}`, detail: `Tu franchis la barre des ${step}`, trophy: "star" });
   if (!prev.retired && next.retired) add("retire", { title: "Fin de carrière", subtitle: `${b.apps} matchs · ${b.goals} buts · ${b.assists} passes`, detail: `${next.career.awards.length} trophée${next.career.awards.length > 1 ? "s" : ""} · ${nb.caps} sélection${nb.caps > 1 ? "s" : ""}`, trophy: "cup" });
   return out;
 }
