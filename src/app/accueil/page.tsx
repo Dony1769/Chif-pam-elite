@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, Gamepad2, LockKeyhole, ShieldCheck, Sparkles, UsersRound } from 'lucide-react';
@@ -5,6 +6,13 @@ import { LogoChifPam } from '@/components/LogoChifPam';
 import { supabaseServer } from '@/lib/server-supabase';
 import { getHomeRouteForRole } from '@/lib/auth-routing';
 
+
+export const metadata: Metadata = {
+	title: 'Jeux en ligne, défis et marché P2P',
+	description: 'Rejoignez ChifPam : jeux instantanés, défis quotidiens et marché P2P communautaire, avec des accès sécurisés et des transactions encadrées.',
+	alternates: { canonical: '/accueil' },
+	openGraph: { title: 'ChifPam : jeux, défis et marché P2P', url: '/accueil' },
+};
 
 const games = [
 	{ icon: Gamepad2, name: 'Défis quotidiens', description: 'Mettez votre stratégie à l’épreuve et gagnez des récompenses.' },

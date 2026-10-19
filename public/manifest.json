@@ -1,22 +1,22 @@
 {
-  "name": "Chif Pam",
+  "name": "ChifPam",
   "short_name": "ChifPam",
-  "description": "Plateforme sécurisée de jeux et transactions",
+  "description": "Jeux en ligne, défis, marché P2P et FC Career 27, le jeu de carrière de football.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#10B981",
   "icons": [
     {
-    "src": "/icons/icon-192.png",
-    "sizes": "192x192",
-    "type": "image/png"
-  },
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
     {
-    "src": "/icons/icon-192.svg",
-    "sizes": "192x192",
-    "type": "image/svg+xml"
-  },
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
     {
       "src": "/icons/icon-512.svg",
       "sizes": "512x512",
@@ -27,5 +27,13 @@
       "sizes": "any",
       "type": "image/svg+xml"
     }
+  ],
+  "id": "/",
+  "lang": "fr",
+  "scope": "/",
+  "categories": [
+    "games",
+    "entertainment",
+    "sports"
   ]
 }

@@ -6,8 +6,11 @@ import "./game/design/design-vars.css";
 import "./game/design/game.css";
 
 export const metadata: Metadata = {
-  title: "FC Career - Ma carriere",
-  description: "Construisez votre carriere de footballeur.",
+  title: { default: "FC Career 27 : jeu de carrière de football gratuit", template: "%s · FC Career 27" },
+  description: "FC Career 27 : crée ton joueur ou dirige un club. Matchs en direct, transferts, contrats, sélection nationale, Euro et Coupe du monde. Gratuit, dans le navigateur, sans installation.",
+  keywords: ["FC Career 27", "jeu de football", "mode carrière", "carrière joueur", "carrière manager", "jeu de foot gratuit", "football manager navigateur"],
+  alternates: { canonical: "/fc-career" },
+  openGraph: { title: "FC Career 27 : jeu de carrière de football", description: "Crée ton joueur ou dirige un club : matchs en direct, mercato, sélection nationale. Gratuit dans le navigateur.", url: "/fc-career" },
 };
 
 export default function FcCareerLayout({ children }: { children: React.ReactNode }) {

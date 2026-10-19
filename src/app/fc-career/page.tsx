@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useState } from 'react';
 import { FcEmblem } from "@/components/portal/FcEmblem";
 import { motion } from 'framer-motion';
@@ -29,9 +30,11 @@ export default function FcCareerAuthPage() {
       minHeight: '100dvh',
       background: '#0A0C0F',
       display: 'flex',
+      flexDirection: 'column',
+      gap: '28px',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '16px',
+      padding: '32px 16px',
       position: 'relative',
       overflow: 'hidden',
       fontFamily: "Inter, system-ui, sans-serif",
@@ -263,6 +266,21 @@ export default function FcCareerAuthPage() {
           ✦ CHIFPAM ELITE · FC CAREER 27 ✦
         </div>
       </motion.div>
+
+      {/* Présentation publique du jeu (lisible par les moteurs de recherche) */}
+      <section style={{ position: 'relative', zIndex: 1, width: 'min(560px, 100%)', color: 'rgba(220,227,234,.82)', fontSize: 14, lineHeight: 1.6 }}>
+        <h2 style={{ margin: '0 0 8px', fontSize: 18, color: '#EEF2F8', fontWeight: 800 }}>FC Career 27, le mode carrière de football dans ton navigateur</h2>
+        <p style={{ margin: '0 0 10px' }}>
+          Crée ton joueur à 17 ans et gagne ta place, ou prends les rênes d&apos;un club. Matchs en direct avec des moments clés à jouer,
+          négociation de contrats, mercato, prêts, sélection nationale, Euro et Coupe du monde. Gratuit, sans installation.
+        </p>
+        <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+          <li>Carrière Joueur : progression, PlayStyles, objectifs, rival de ta génération</li>
+          <li>Carrière Manager : tactique, transferts, finances et conseil d&apos;administration</li>
+          <li>Dix championnats, coupes nationales et européennes</li>
+        </ul>
+        <p style={{ margin: '12px 0 0' }}><Link href="/" style={{ color: '#9DBBFF' }}>Retour à l&apos;accueil ChifPam</Link></p>
+      </section>
     </div>
   );
 }
