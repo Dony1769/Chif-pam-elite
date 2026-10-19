@@ -1,1 +1,1 @@
-# No third-party display ad network entries configured.
+google.com, pub-5900590603770169, DIRECT, f08c47fec0942fa0

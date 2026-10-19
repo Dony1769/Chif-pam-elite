@@ -3,7 +3,7 @@
  * annonces). L'URL canonique vient de NEXT_PUBLIC_SITE_URL, sinon le domaine
  * de production.
  */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://www.chifpam.com").replace(/\/+$/, "");
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://chifpam.com").replace(/\/+$/, "");
 export const SITE_NAME = "ChifPam";
 export const SITE_DESCRIPTION =
   "ChifPam réunit des jeux en ligne, des défis communautaires et un marché P2P encadré, ainsi que FC Career 27, un jeu de carrière de football gratuit dans le navigateur.";
@@ -24,3 +24,6 @@ export const PUBLIC_ROUTES: { path: string; priority: number; freq: "daily" | "w
 /** Zones privées : jamais indexées. */
 export const PRIVATE_PREFIXES = ["/client", "/admin-chif-pam", "/agent", "/api", "/auth", "/live"];
 export const FC_PRIVATE = ["/fc-career/joueur", "/fc-career/manager", "/fc-career/modes", "/fc-career/reglages", "/fc-career/world", "/fc-career/legacy", "/fc-career/design-demo"];
+
+/** Compte éditeur Google AdSense (même identifiant que ads.txt). */
+export const ADSENSE_CLIENT = "ca-pub-5900590603770169";

@@ -6,8 +6,9 @@ import GlobalPageLoader from "@/components/ui/GlobalPageLoader";
 import { AppFeedbackProvider } from "@/components/ui/AppFeedbackProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ThreeSurface from "@/components/three/ThreeSurface";
+import Script from "next/script";
 import "./globals.css";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
+import { ADSENSE_CLIENT, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -29,6 +30,8 @@ export const metadata: Metadata = {
   icons: { icon: [{ url: "/favicon.ico" }, { url: "/icons/icon.svg", type: "image/svg+xml" }], apple: "/icons/icon-192.png" },
   // Google Search Console (même balise qu'avant, générée par Next)
   verification: { google: "0DKoujhMc_f-hx6jkLpCVG5DC1apsfHK8VtM-do5Mf0" },
+  // Google AdSense : association du site au compte éditeur
+  other: { "google-adsense-account": ADSENSE_CLIENT },
   formatDetection: { telephone: false },
 };
 
@@ -46,6 +49,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GlobalPageLoader />
         <AppFeedbackProvider>{children}</AppFeedbackProvider>
         <SpeedInsights />
+        {/* Google AdSense : chargé après l'affichage pour ne pas ralentir la page */}
+        <Script id="adsense" async strategy="afterInteractive" crossOrigin="anonymous"
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`} />
       </body>
     </html>
   );
