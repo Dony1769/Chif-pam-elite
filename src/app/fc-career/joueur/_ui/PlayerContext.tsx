@@ -21,7 +21,12 @@ interface Ctx {
   notify: (ok: boolean, text: string) => void;
   live: PlayerLive | null;
   setLive: (m: PlayerLive | null) => void;
+  /** Une semaine est en train d'être calculée */
+  busy: boolean;
 }
+
+/** Actions lourdes (le monde entier joue) : calculées en arrière-plan. */
+const HEAVY = new Set<PlayerAction["type"]>(["PLAY_WEEK", "SKIP_CUP", "PLAY_CUP"]);
 
 const PlayerCtx = createContext<Ctx | null>(null);
 
@@ -57,19 +62,56 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return () => { alive = false; off(); };
   }, [notify]);
 
-  const run = useCallback((action: PlayerAction) => {
-    const step = playerStep(ref.current, action);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const worker = useRef<Worker | null | undefined>(undefined);
+  const reqId = useRef(0);
+
+  const commit = useCallback((step: ReturnType<typeof playerStep>) => {
     if (step.state && step.state !== ref.current) {
       ref.current = step.state;
       setState(step.state);
       if (!savePlayerCareer(step.state)) notify(false, "Sauvegarde impossible (stockage plein). Votre dernière sauvegarde reste intacte.");
     }
     if (step.message) notify(step.message.ok, step.message.text);
-    return step.message;
   }, [notify]);
 
-  const value = useMemo<Ctx>(() => ({ state, ready, loadProblem, run, toasts, notify, live, setLive }),
-    [state, ready, loadProblem, run, toasts, notify, live]);
+  const getWorker = useCallback((): Worker | null => {
+    if (worker.current !== undefined) return worker.current;
+    try { worker.current = typeof Worker !== "undefined" ? new Worker(new URL("./weekWorker.ts", import.meta.url)) : null; } catch { worker.current = null; }
+    return worker.current;
+  }, []);
+  useEffect(() => () => { worker.current?.terminate(); }, []);
+
+  const run = useCallback((action: PlayerAction) => {
+    if (busyRef.current) return null; // une semaine à la fois
+    const w = HEAVY.has(action.type) && ref.current ? getWorker() : null;
+    if (w && ref.current) {
+      const id = ++reqId.current;
+      const from = ref.current;
+      busyRef.current = true; setBusy(true);
+      const done = (step: ReturnType<typeof playerStep> | null) => {
+        busyRef.current = false; setBusy(false);
+        // Le calcul en arrière-plan a échoué : on le refait ici, rien n'est perdu
+        commit(step ?? playerStep(from, action));
+      };
+      const onMsg = (e: MessageEvent<{ id: number; ok: boolean; step?: ReturnType<typeof playerStep> }>) => {
+        if (e.data.id !== id) return;
+        w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr);
+        done(e.data.ok && e.data.step ? e.data.step : null);
+      };
+      const onErr = () => { w.removeEventListener("message", onMsg); w.removeEventListener("error", onErr); worker.current = null; w.terminate(); done(null); };
+      w.addEventListener("message", onMsg); w.addEventListener("error", onErr);
+      w.postMessage({ id, state: from, action });
+      return null;
+    }
+    const step = playerStep(ref.current, action);
+    commit(step);
+    return step.message;
+  }, [commit, getWorker]);
+
+  const value = useMemo<Ctx>(() => ({ state, ready, loadProblem, run, toasts, notify, live, setLive, busy }),
+    [state, ready, loadProblem, run, toasts, notify, live, busy]);
   return <PlayerCtx.Provider value={value}>{children}</PlayerCtx.Provider>;
 }
 

@@ -233,3 +233,9 @@
   .pc-identity > .mg-avatar { align-self: center; }
   .pc-identity__row > .mg-small { width: 100%; }
 }
+
+/* Semaine en cours de calcul */
+.pc-busy { position: fixed; z-index: 90; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; background: #16234A; color: #EDF1FF; border: 1px solid rgba(61,134,255,.5); box-shadow: 0 10px 30px rgba(0,0,0,.4); font-weight: 700; }
+.pc-busy__ball { display: inline-block; animation: pc-spin 0.9s linear infinite; }
+@keyframes pc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pc-busy__ball { animation: none; } }

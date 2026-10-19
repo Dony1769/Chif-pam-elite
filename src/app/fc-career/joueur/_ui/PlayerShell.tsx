@@ -28,7 +28,7 @@ const TABS = [
 ];
 
 export function PlayerShell({ children }: { children: React.ReactNode }) {
-  const { state, ready, loadProblem, toasts } = usePlayer();
+  const { state, ready, loadProblem, toasts, busy } = usePlayer();
   const pathname = usePathname();
   const onNew = pathname === `${BASE}/nouveau`;
   const appRef = useRef<HTMLDivElement>(null);
@@ -55,6 +55,7 @@ export function PlayerShell({ children }: { children: React.ReactNode }) {
       <Backdrop club={club?.colors.primary} />
       {state && club && !onNew && <CinematicHost world={state.shadow.world} me={{ clubId: club.id, playerId: state.profile.id, nation: state.profile.nationality }} storageKey={`joueur-${state.profile.id}`} extra={moments} paused={pathname.startsWith(`${BASE}/contrat`)} />}
       <GameBar />
+      {busy && <div className="pc-busy" role="status" aria-live="polite"><span className="pc-busy__ball" aria-hidden>⚽</span>Le monde joue sa semaine…</div>}
       {state && club && p && !onNew && (
         <>
           <header className="mg-top" style={{ ["--club" as string]: club.colors.primary }}>
