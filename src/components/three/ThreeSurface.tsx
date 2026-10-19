@@ -22,7 +22,7 @@ function ThreeFallback() {
 
 export default function ThreeSurface({ variant = "ambient", className = "" }: { variant?: ThreeSurfaceVariant; className?: string }) {
   return (
-    <div className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`} aria-hidden="true">
+    <div className={`pointer-events-none absolute inset-0 overflow-hidden [&_*]:!pointer-events-none ${className}`} aria-hidden="true">
       <ThreeScene variant={variant} />
     </div>
   );
