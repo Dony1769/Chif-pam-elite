@@ -23,6 +23,7 @@ const TABS = [
   { href: `${BASE}/match`, label: "Match", icon: "ball" },
   { href: `${BASE}/progression`, label: "Progression", icon: "chart" },
   { href: `${BASE}/carriere`, label: "Carrière", icon: "doc" },
+  { href: `${BASE}/vie`, label: "Ma vie", icon: "coin" },
   { href: `${BASE}/messages`, label: "Messages", icon: "mail" },
   { href: `${BASE}/monde`, label: "Compétitions", icon: "trophy" },
 ];

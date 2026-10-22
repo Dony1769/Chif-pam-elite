@@ -19,6 +19,7 @@ import { maybeNewInterest, pressRumours, updateInterests } from "./scouting";
 import { autoPlayCupsThisWeek } from "./cup";
 import { maybePress } from "./press";
 import { storyWeek } from "./story";
+import { lifeWeek } from "./life";
 import { diffOf } from "./difficulty";
 import { objectivesAfterMatch } from "./objectives";
 import {
@@ -488,6 +489,8 @@ export function advancePlayerWeek(s0: PlayerCareerState, live?: LiveMatch | null
   const sum = s.lastMatch !== start.lastMatch ? s.lastMatch : null;
   const bonus = sum ? sum.goals * (s.contract.goalBonus ?? Math.round(s.contract.wage * 0.15)) + sum.assists * Math.round(s.contract.wage * 0.08) : 0;
   s = withCareer(s, { bank: C(s).bank + s.contract.wage + bonus });
+  // Vie hors du terrain : impôts, train de vie, biens, placements, sponsors
+  s = lifeWeek(s, s.contract.wage + bonus);
   if (sum?.played && sum.rating !== null) s = withCareer(s, { recent: [...(C(s).recent ?? []), sum.rating].slice(-6) });
 
   s = nationalWindow(s);

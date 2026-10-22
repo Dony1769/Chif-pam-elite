@@ -11,6 +11,7 @@ import type { NewCareerInput } from "./engine";
 import { applyPlayStyleProgress, createPlayerCareer, setIntensity, setPrimaryPosition, setTrainingFocus } from "./engine";
 import { setIdentity } from "./identity";
 import { editClub } from "./editor";
+import { buyAsset, invest, relationAction, sellAsset, setLifestyle, takeVacation } from "./life";
 import type { Difficulty, Intensity } from "./difficulty";
 import type { WorldPlayerPosition } from "../data/worldPlayers";
 import { hasMatchThisWeek } from "../manager/engine";
@@ -45,6 +46,12 @@ export type PlayerAction =
   | { type: "SIGN_OFFER"; offerId: string; wage: number; seasons: number }
   | { type: "REQUEST_TRANSFER"; on: boolean }
   | { type: "ACCEPT_RENEW_COUNTER" }
+  | { type: "LIFE_BUY"; itemId: string }
+  | { type: "LIFE_SELL"; uid: string }
+  | { type: "LIFE_STYLE"; lifestyle: import("./life").Lifestyle }
+  | { type: "LIFE_INVEST"; product: import("./life").Product; amount: number }
+  | { type: "LIFE_RELATION"; action: import("./life").RelationAction }
+  | { type: "LIFE_VACATION"; id: string }
   | { type: "EDIT_CLUB"; edit: import("./editor").ClubEdit }
   | { type: "NATIONAL"; choice: "decline" | "undecline" | "retire" | "unretire" }
   | { type: "RENEW"; wage: number; seasons: number; goalBonus?: number; releaseClause?: number | null }
@@ -110,6 +117,12 @@ function stepInner(s: PlayerCareerState, action: PlayerAction): PlayerStep {
     case "REJECT_OFFER":     return plain(rejectOffer(s, action.offerId));
     case "REQUEST_TRANSFER": return fromResult(requestTransfer(s, action.on));
     case "EDIT_CLUB":        { const r = editClub(s, action.edit); return { state: r.state, message: { ok: r.ok, text: r.message } }; }
+    case "LIFE_BUY":         return fromResult(buyAsset(s, action.itemId));
+    case "LIFE_SELL":        return fromResult(sellAsset(s, action.uid));
+    case "LIFE_STYLE":       return fromResult(setLifestyle(s, action.lifestyle));
+    case "LIFE_INVEST":      return fromResult(invest(s, action.product, action.amount));
+    case "LIFE_RELATION":    return fromResult(relationAction(s, action.action));
+    case "LIFE_VACATION":    return fromResult(takeVacation(s, action.id));
     case "NATIONAL":         return fromResult(nationalChoice(s, action.choice));
     case "ACCEPT_RENEW_COUNTER": {
       const c = s.career?.renewalTalks?.counter;

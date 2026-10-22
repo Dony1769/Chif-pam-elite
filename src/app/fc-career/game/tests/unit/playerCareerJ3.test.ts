@@ -36,7 +36,10 @@ describe("Initialisation et argent", () => {
     const s0 = strong(fresh(), 85);
     const s1 = advancePlayerWeek(s0);
     const goals = s1.lastMatch?.goals ?? 0;
-    expect(s1.career!.bank).toBe(s0.contract.wage + goals * Math.round(s0.contract.wage * 0.15) + (s1.lastMatch?.assists ?? 0) * Math.round(s0.contract.wage * 0.08));
+    const gross = s0.contract.wage + goals * Math.round(s0.contract.wage * 0.15) + (s1.lastMatch?.assists ?? 0) * Math.round(s0.contract.wage * 0.08);
+    // Le salaire brut est versé, puis la vie hors du terrain prélève impôts, commission et train de vie
+    expect(s1.career!.life!.last!.lines.find(l => l.label === "Salaire et primes")?.amount).toBe(gross);
+    expect(s1.career!.bank).toBe(Math.round(gross + s1.career!.life!.last!.lines.filter(l => l.label !== "Salaire et primes").reduce((t, l) => t + l.amount, 0)));
   });
 
   test("valeur et salaires cohérents", () => {

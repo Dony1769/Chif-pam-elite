@@ -254,3 +254,15 @@
 @media (max-width: 640px) { .mg-app .pc-tv .pc-tv__frame, .pc-tv .pc-tv__frame { aspect-ratio: 4 / 3; } }
 .pc-tv__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .pc-tv .pc-pitch__hud { justify-content: flex-start; left: 10px; }
+
+/* Ma vie : biens, boutique, courbe du patrimoine */
+.pc-assets { display: grid; gap: 8px; }
+.pc-asset { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--mg-panel-2, #16234A); }
+.pc-asset.is-locked { opacity: 0.55; }
+.pc-asset__icon { font-size: 26px; width: 36px; text-align: center; flex-shrink: 0; }
+.pc-asset__body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.pc-asset .mg-btn { flex-shrink: 0; }
+@media (max-width: 560px) { .pc-asset { flex-wrap: wrap; } .pc-asset .mg-btn { width: 100%; } }
+.pc-worth { width: 100%; height: 140px; margin-top: 12px; display: block; }
+.pc-worth__line { fill: none; stroke: var(--fp-gold, #F6BF45); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.pc-worth__area { fill: rgba(246, 191, 69, 0.12); }

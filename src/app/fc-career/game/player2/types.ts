@@ -197,6 +197,8 @@ export interface CareerExtras {
   story?: import("./story").StoryState;
   /** Négociation de prolongation : tours, contre-offre du club, gel des discussions */
   renewalTalks?: { rounds: number; counter: { wage: number; seasons: number; goalBonus?: number; releaseClause?: number | null } | null; lockedUntil: number };
+  /** Vie hors du terrain : patrimoine, placements, train de vie, vie privée */
+  life?: import("./life").LifeState;
   /** Dernières notes en championnat (la plus récente à la fin) */
   recent?: number[];
   /** Mis sur le banc par le coach après une série de matchs ratés (semaine absolue) */
