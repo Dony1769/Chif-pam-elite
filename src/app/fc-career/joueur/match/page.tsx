@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePlayerGame } from "../_ui/PlayerContext";
-import { MatchPitch, isVisualEvent } from "../_ui/MatchPitch";
+import { MatchPitch, frameMs, isVisualEvent } from "../_ui/MatchPitch";
 import type { Step } from "../_ui/MatchPitch";
 import { goalRoar, kick, ooh, post, save, setSoundOn, soundOn, startCrowd, stopCrowd, whistle } from "../_ui/sound";
 import { minuteFrames, phaseFrames } from "../../game/player2/pitchPlay";
@@ -34,7 +34,7 @@ import type { PlayerCareerState } from "../../game/player2/types";
 import { shortName } from "../../game/utils/names";
 
 /** Durée d'une phase de jeu (une minute) : normale ou rapide. */
-const SPEEDS = [{ label: "Normal", ms: 260, phase: 2200 }, { label: "Rapide", ms: 60, phase: 900 }];
+const SPEEDS = [{ label: "Normal", ms: 260, phase: 1 }, { label: "Rapide", ms: 60, phase: 0.45 }];
 const ICON: Record<string, string> = { corner: "⚑", freekick: "◔", shot: "↗", goal: "⚽", yellow: "🟨", red: "🟥", injury: "✚", sub: "⇄", save: "🧤", chance: "◎", half_time: "⏸", full_time: "■" };
 
 export default function PlayerMatchPage() {
@@ -110,11 +110,10 @@ export default function PlayerMatchPage() {
         // Phase réellement jouée par le moteur positionnel (sinon reconstruction)
         const ph = next.match.phase;
         const frames = ph && ph.minute === next.match.minute ? phaseFrames(ph, input) : minuteFrames(input);
-        const shot = fresh.some(e => e.type === "goal" || e.type === "shot" || e.type === "save" || e.type === "chance");
         const last = frames[frames.length - 1];
         if (last) lastBall.current = last.ball;
         setView(live);
-        setAction({ key: `m${next.match.minute}-${next.match.events.length}`, events: fresh, possession: side, frames, total: (SPEEDS[speed].phase + (shot ? 1400 : 0)) });
+        setAction({ key: `m${next.match.minute}-${next.match.events.length}`, events: fresh, possession: side, frames, total: frames.reduce((t, f) => t + frameMs(f), 0) * SPEEDS[speed].phase });
       }
       setLive(next);
       if (next.moment || next.match.minute === 45 || next.match.finished) setPlaying(false);

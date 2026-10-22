@@ -248,3 +248,9 @@
 .pc-timing__cursor { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #F6BF45; box-shadow: 0 0 10px #F6BF45; }
 .pc-timing__grade { margin: 0; font-weight: 800; min-height: 1.4em; }
 .pc-timing__grade.is-perfect { color: #34D47E; } .pc-timing__grade.is-good { color: #8BE3B0; } .pc-timing__grade.is-miss { color: #F0525B; }
+
+/* Réalisation télé du match */
+.mg-app .pc-tv .pc-tv__frame, .pc-tv .pc-tv__frame { width: 100%; aspect-ratio: 16 / 9; background: #0b1226; border-color: rgba(255, 255, 255, 0.12); }
+@media (max-width: 640px) { .mg-app .pc-tv .pc-tv__frame, .pc-tv .pc-tv__frame { aspect-ratio: 4 / 3; } }
+.pc-tv__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.pc-tv .pc-pitch__hud { justify-content: flex-start; left: 10px; }

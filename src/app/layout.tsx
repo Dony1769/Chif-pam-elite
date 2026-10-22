@@ -6,7 +6,6 @@ import GlobalPageLoader from "@/components/ui/GlobalPageLoader";
 import { AppFeedbackProvider } from "@/components/ui/AppFeedbackProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ThreeSurface from "@/components/three/ThreeSurface";
-import Script from "next/script";
 import "./globals.css";
 import { ADSENSE_CLIENT, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -40,6 +39,10 @@ export const viewport: Viewport = { themeColor: "#06110f", colorScheme: "dark" }
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
+      <head>
+        {/* Google AdSense : balise d'origine (sans attribut ajouté), chargée en asynchrone */}
+        <script async crossOrigin="anonymous" src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`} />
+      </head>
 
       <body className="antialiased">
         <ThreeSurface variant="ambient" className="fixed z-0 opacity-25" />
@@ -49,9 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GlobalPageLoader />
         <AppFeedbackProvider>{children}</AppFeedbackProvider>
         <SpeedInsights />
-        {/* Google AdSense : chargé après l'affichage pour ne pas ralentir la page */}
-        <Script id="adsense" async strategy="afterInteractive" crossOrigin="anonymous"
-          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`} />
+
       </body>
     </html>
   );

@@ -20,9 +20,12 @@ import { FORMATIONS } from "../manager/tactics";
 import { createRng, seedFromString } from "../utils/random";
 
 export type Pt = { x: number; y: number };
+/** Nature du geste qui amène le ballon à cette image (rendu : trajectoire, hauteur, vitesse). */
+export type BallKind = "start" | "pass" | "carry" | "cross" | "long" | "shot" | "lost" | "out" | "throw" | "kick" | "head";
 export interface Frame {
   /** Durée relative de la transition vers cette image */
   w: number;
+  kind?: BallKind;
   ball: Pt;
   holder?: string;
   pos: Record<string, Pt>;
@@ -205,11 +208,13 @@ export function phaseFrames(phase: import("../manager/positional").Phase, i: Min
   const mp = (p: Pt): Pt => (flip ? { x: 100 - p.x, y: 100 - p.y } : p);
   const all = anchors(i.mine, i.theirs);
   const name = new Map(all.map(a => [a.id, a.name]));
-  const frames: Frame[] = phase.frames.map(f => ({
-    w: f.w, ball: mp(f.ball), holder: f.holder,
+  const raw: Frame[] = phase.frames.map(f => ({
+    w: f.w, ball: mp(f.ball), holder: f.holder, kind: f.kind === "assist" ? "pass" : f.kind,
     pos: Object.fromEntries(Object.entries(f.pos).map(([k, v]) => [k, mp(v)])),
     caption: f.kind === "lost" && f.holder ? `${name.get(f.holder) ?? "L'adversaire"} récupère le ballon` : undefined,
   }));
+  const attMineRaw = (phase.side === i.mySide);
+  const frames = direct(raw, all, attMineRaw, i);
   const last = frames[frames.length - 1];
   if (!last) return minuteFrames(i);
   const shotEv = i.events.find(e => (e.type === "goal" && !e.setPiece) || e.type === "shot" || e.type === "chance" || e.type === "save");
@@ -226,10 +231,24 @@ export function phaseFrames(phase: import("../manager/positional").Phase, i: Min
     if (keeper && after[keeper.id]) after[keeper.id] = { x: shotEv.type === "goal" ? (end.x < 50 ? 56 : 44) : end.x, y: after[keeper.id].y };
     last.caption = shotEv.type === "goal" && shotEv.assistId ? `${name.get(shotEv.assistId) ?? ""} pour ${name.get(shotEv.playerId ?? "") ?? ""}…` : `${name.get(shotEv.type === "save" ? shotEv.shooterId ?? "" : shotEv.playerId ?? "") ?? "Le tireur"} frappe…`;
     frames.push({
-      w: 1.5, ball: end, pos: after, caption: shotEv.text,
+      w: 1.5, kind: "shot", ball: end, pos: after, caption: shotEv.text,
       flash: shotEv.type === "goal" ? { text: "BUT !", tone: attMine ? "good" : "bad" } : shotEv.type === "chance" ? { text: "Poteau !", tone: "neutral" } : undefined,
       badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined,
     });
+    // Arrêt : le gardien garde le ballon ; à côté : six mètres et dégagement long
+    if (saved && keeper) frames.push({ w: 0.7, kind: "carry", ball: { x: after[keeper.id]?.x ?? 50, y: goalY + dir * 4 }, holder: keeper.id, pos: after });
+    else if (shotEv.type === "shot" && keeper) {
+      const six: Pt = { x: end.x < 50 ? 42 : 58, y: goalY + dir * 5 };
+      const kp = { ...after, [keeper.id]: { x: six.x, y: six.y + dir * 1.5 } };
+      frames.push({ w: 0.9, kind: "out", ball: six, holder: keeper.id, pos: kp, caption: "Six mètres" });
+      const mates = all.filter(a => a.mine !== attMine && !a.gk);
+      const tgt = mates.sort((a, b) => Math.abs((kp[a.id]?.y ?? 50) - 50) - Math.abs((kp[b.id]?.y ?? 50) - 50))[0];
+      if (tgt) {
+        const land: Pt = { x: clamp((kp[tgt.id]?.x ?? 50), 15, 85), y: 50 + dir * 4 };
+        const p2 = shape(all, land, !attMine); p2[tgt.id] = land; p2[keeper.id] = { x: 50, y: goalY + dir * 3 };
+        frames.push({ w: 1.2, kind: "long", ball: land, holder: tgt.id, pos: p2, caption: `${name.get(keeper.id) ?? "Le gardien"} dégage loin` });
+      }
+    }
   }
   frames.push(...setPieceFrames(i, all, frames[frames.length - 1]));
   for (const e of i.events) {
@@ -271,10 +290,10 @@ function setPieceFrames(i: MinuteInput, all: Anchor[], ref?: Frame): Frame[] {
       const kicker = att.find(a => a.id !== taker?.id);
       if (kicker) box[kicker.id] = flag;
       if (taker) box[taker.id] = { x: head.x, y: head.y + dir * 4 };
-      out.push({ w: 1, ball: flag, holder: kicker?.id, pos: box, caption: `Corner pour ${attMine ? "vous" : "l'adversaire"}` });
+      out.push({ w: 1, kind: "out", ball: flag, holder: kicker?.id, pos: box, caption: `Corner pour ${attMine ? "vous" : "l'adversaire"}` });
       const at = { ...box, ...(taker ? { [taker.id]: head } : {}) };
-      out.push({ w: 0.9, ball: head, holder: taker?.id, pos: at, caption: `${name.get(taker?.id ?? "") ?? "Un joueur"} s'élève…` });
-      out.push({ w: 1.3, ball: end, pos: { ...at, ...(keeper ? { [keeper.id]: { x: goal ? (end.x < 50 ? 56 : 44) : end.x, y: at[keeper.id]?.y ?? goalY + dir * 3 } } : {}) }, caption: e.text,
+      out.push({ w: 0.9, kind: "cross", ball: head, holder: taker?.id, pos: at, caption: `${name.get(taker?.id ?? "") ?? "Un joueur"} s'élève…` });
+      out.push({ w: 1.3, kind: "head", ball: end, pos: { ...at, ...(keeper ? { [keeper.id]: { x: goal ? (end.x < 50 ? 56 : 44) : end.x, y: at[keeper.id]?.y ?? goalY + dir * 3 } } : {}) }, caption: e.text,
         flash: goal ? { text: "BUT !", tone: attMine ? "good" : "bad" } : undefined, badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined });
     } else {
       const spot: Pt = { x: 40 + ((i.minute * 7) % 21), y: goalY + dir * 22 };
@@ -282,13 +301,66 @@ function setPieceFrames(i: MinuteInput, all: Anchor[], ref?: Frame): Frame[] {
       // Le mur : quatre défenseurs à 9 mètres, entre le ballon et le but
       def.slice(0, 4).forEach((a, k) => { pos[a.id] = { x: spot.x + (50 - spot.x) * 0.35 - 4.5 + k * 3, y: spot.y - dir * 9 }; });
       if (taker) pos[taker.id] = { x: spot.x - 2, y: spot.y + dir * 3 };
-      out.push({ w: 1, ball: spot, holder: taker?.id, pos, caption: `Coup franc : ${name.get(taker?.id ?? "") ?? "un tireur"} se présente` });
+      out.push({ w: 1, kind: "out", ball: spot, holder: taker?.id, pos, caption: `Coup franc : ${name.get(taker?.id ?? "") ?? "un tireur"} se présente` });
       const curve: Pt = { x: (spot.x + end.x) / 2 + (spot.x < 50 ? -6 : 6), y: (spot.y + goalY) / 2 };
-      out.push({ w: 0.6, ball: curve, pos, caption: "Par-dessus le mur…" });
-      out.push({ w: 1.2, ball: end, pos: { ...pos, ...(keeper ? { [keeper.id]: { x: goal ? (end.x < 50 ? 56 : 44) : end.x, y: pos[keeper.id]?.y ?? goalY + dir * 3 } } : {}) }, caption: e.text,
+      out.push({ w: 0.6, kind: "long", ball: curve, pos, caption: "Par-dessus le mur…" });
+      out.push({ w: 1.2, kind: "shot", ball: end, pos: { ...pos, ...(keeper ? { [keeper.id]: { x: goal ? (end.x < 50 ? 56 : 44) : end.x, y: pos[keeper.id]?.y ?? goalY + dir * 3 } } : {}) }, caption: e.text,
         flash: goal ? { text: "BUT !", tone: attMine ? "good" : "bad" } : undefined, badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined });
     }
   }
   void ref;
+  return out;
+}
+
+
+/**
+ * Mise en scène télévisée d'une phase réelle : conduites de balle avant les
+ * passes, centres depuis les ailes, transversales aériennes, et touches
+ * quand le ballon est perdu près de la ligne. Le résultat (qui a le ballon,
+ * où se termine la phase) reste celui du moteur.
+ */
+function direct(raw: Frame[], all: Anchor[], attMine: boolean, i: MinuteInput): Frame[] {
+  if (!raw.length) return raw;
+  const rng = createRng(seedFromString(`${i.seed}-tv-${i.minute}`));
+  const goalY = attMine ? 0 : 100, dir = attMine ? 1 : -1;
+  const name = new Map(all.map(a => [a.id, a.name]));
+  const out: Frame[] = [raw[0]];
+  for (let k = 1; k < raw.length; k++) {
+    const prev = out[out.length - 1], f = raw[k];
+    if ((f.kind === "pass" || f.kind === "shot") && prev.holder) {
+      // Conduite : le porteur avance de quelques mètres avant de jouer
+      const carry = rng.float(2.5, 7);
+      const from = prev.pos[prev.holder] ?? prev.ball;
+      const c: Pt = { x: clamp(from.x + rng.float(-3, 3), 4, 96), y: clamp(from.y - dir * carry, 4, 96) };
+      if (f.kind === "pass" || Math.abs(c.y - goalY) > 12) {
+        out.push({ w: 0.55, kind: "carry", ball: c, holder: prev.holder, pos: { ...prev.pos, [prev.holder]: c } });
+      }
+    }
+    if (f.kind === "pass") {
+      const from = out[out.length - 1].ball;
+      const wide = from.x < 28 || from.x > 72;
+      const inBox = Math.abs(f.ball.y - goalY) < 26 && Math.abs(f.ball.x - 50) < 26 && Math.abs(from.y - goalY) < 40;
+      const d = Math.hypot(f.ball.x - from.x, f.ball.y - from.y);
+      f.kind = wide && inBox ? "cross" : d > 30 ? "long" : "pass";
+      if (f.kind === "cross") f.caption = f.caption ?? `Centre de ${name.get(out[out.length - 1].holder ?? "") ?? "l'ailier"}`;
+    }
+    if (f.kind === "lost" && (f.ball.x < 24 || f.ball.x > 76) && rng.chance(0.5) && f.holder) {
+      // Ballon sorti : touche pour l'équipe qui récupère
+      const side = f.ball.x < 50 ? -1.5 : 101.5;
+      out.push({ w: 0.6, kind: "lost", ball: { x: side, y: f.ball.y }, pos: f.pos, caption: "Sortie en touche" });
+      const line: Pt = { x: side < 0 ? 0.5 : 99.5, y: f.ball.y };
+      const thrower = f.holder;
+      const tp = { ...f.pos, [thrower]: line };
+      out.push({ w: 0.7, kind: "out", ball: line, holder: thrower, pos: tp, caption: `Touche, ${name.get(thrower) ?? "remise en jeu"}` });
+      const team = all.filter(a => a.mine === !attMine && !a.gk && a.id !== thrower);
+      const mate = team.sort((a, b) => Math.hypot((tp[a.id]?.x ?? 50) - line.x, (tp[a.id]?.y ?? 50) - line.y) - Math.hypot((tp[b.id]?.x ?? 50) - line.x, (tp[b.id]?.y ?? 50) - line.y))[0];
+      if (mate) {
+        const to: Pt = { x: clamp(line.x + (side < 0 ? 9 : -9), 4, 96), y: clamp(line.y + rng.float(-5, 5), 6, 94) };
+        out.push({ w: 0.8, kind: "throw", ball: to, holder: mate.id, pos: { ...shape(all, to, !attMine), [thrower]: { x: clamp(line.x + (side < 0 ? 3 : -3), 2, 98), y: line.y }, [mate.id]: to } });
+      }
+      continue;
+    }
+    out.push(f);
+  }
   return out;
 }

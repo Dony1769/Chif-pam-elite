@@ -17,7 +17,9 @@ import { FORMATIONS } from "../../game/manager/tactics";
 import type { LiveTeam } from "../../game/manager/matchSim";
 import type { WorldPlayer } from "../../game/data/worldPlayers";
 import type { MatchEvent } from "../../game/manager/types";
-import type { Frame } from "../../game/player2/pitchPlay";
+import type { BallKind, Frame } from "../../game/player2/pitchPlay";
+import { MatchTV } from "./MatchTV";
+import { anchors as tvAnchors, shape as tvShape } from "../../game/player2/pitchPlay";
 import { createRng, seedFromString } from "../../game/utils/random";
 
 type Pt = { x: number; y: number };
@@ -111,6 +113,10 @@ export interface Step {
   flash?: { text: string; tone: "good" | "bad" | "neutral" };
   badge?: { id: string; kind: "yellow" | "red" | "injury" | "glove" };
   holder?: string;
+  /** Geste du ballon (rendu télé) */
+  kind?: BallKind;
+  /** Plan de coupe : les joueurs sont déjà en place (coup de pied arrêté, nouvelle séquence) */
+  cut?: boolean;
 }
 export interface PitchAction {
   key: string;
@@ -122,12 +128,18 @@ export interface PitchAction {
   total?: number;
 }
 
+/** Durée naturelle de chaque geste (ms, vitesse normale) : une passe roule, un centre monte. */
+export const KIND_MS: Record<string, number> = { start: 450, carry: 750, pass: 900, cross: 1250, long: 1350, shot: 950, head: 900, lost: 800, out: 1000, throw: 950, kick: 1300 };
+export const frameMs = (f: Frame) => (f.kind ? KIND_MS[f.kind] ?? 900 : 900 * f.w) + (f.flash ? 900 : 0) + (f.caption && !f.kind ? 400 : 0);
+
 /** Images de phase → étapes animées (positions complètes des 22 joueurs). */
 function framesToSteps(frames: Frame[], total: number): Step[] {
-  const sum = frames.reduce((t, f) => t + f.w, 0) || 1;
+  const sum = frames.reduce((t, f) => t + frameMs(f), 0) || 1;
   let prev: Pt | null = null;
   return frames.map(f => {
-    const st: Step = { ball: prev ? [prev, f.ball] : [f.ball], moves: f.pos, dur: (total * f.w) / sum, caption: f.caption, flash: f.flash, badge: f.badge, holder: f.holder };
+    const jump = prev ? Math.hypot(prev.x - f.ball.x, prev.y - f.ball.y) : 0;
+    const st: Step = { ball: prev && f.kind !== "out" ? [prev, f.ball] : [f.ball], moves: f.pos, dur: (total * frameMs(f)) / sum, caption: f.caption, flash: f.flash, badge: f.badge, holder: f.holder, kind: f.kind,
+      cut: (f.kind === "out" && (jump > 12 || /Corner|Coup franc/.test(f.caption ?? ""))) };
     prev = f.ball;
     return st;
   });
@@ -157,11 +169,11 @@ export function scriptFor(events: MatchEvent[], dots: Dot[], mySide: "home" | "a
       if (as) {
         const asPt: Pt = { x: as.pt.x < 50 ? 16 : 84, y: gy + dir * 22 };
         steps.push({ ball: [asPt], moves: { [as.id]: asPt, ...(sc ? { [sc.id]: { x: scPt.x, y: scPt.y + dir * 8 } } : {}) }, dur: 650, caption: `${as.label} s'avance` });
-        steps.push({ ball: [asPt, scPt], moves: { [as.id]: asPt, ...(sc ? { [sc.id]: scPt } : {}) }, dur: 600, caption: `${as.label} pour ${sc?.label ?? "le buteur"}…` });
+        steps.push({ kind: asPt.x < 30 || asPt.x > 70 ? "cross" : "pass", ball: [asPt, scPt], moves: { [as.id]: asPt, ...(sc ? { [sc.id]: scPt } : {}) }, dur: 600, caption: `${as.label} pour ${sc?.label ?? "le buteur"}…` });
       } else {
         steps.push({ ball: [{ x: scPt.x, y: scPt.y + dir * 14 }], moves: sc ? { [sc.id]: { x: scPt.x, y: scPt.y + dir * 14 } } : {}, dur: 650, caption: `${sc?.label ?? "Un attaquant"} s'avance` });
       }
-      steps.push({ ball: [scPt, net], moves: { ...(sc ? { [sc.id]: scPt } : {}), ...(keeper ? { [keeper.id]: { x: net.x < 50 ? 54 : 46, y: keeper.pt.y } } : {}) }, dur: 1500, caption: e.text, flash: { text: "BUT !", tone: ours ? "good" : "bad" } });
+      steps.push({ kind: "shot", ball: [scPt, net], moves: { ...(sc ? { [sc.id]: scPt } : {}), ...(keeper ? { [keeper.id]: { x: net.x < 50 ? 54 : 46, y: keeper.pt.y } } : {}) }, dur: 1500, caption: e.text, flash: { text: "BUT !", tone: ours ? "good" : "bad" } });
     } else if (e.type === "shot" || e.type === "chance" || e.type === "save") {
       const sh = at(e.type === "save" ? e.shooterId : e.playerId);
       const deep = e.type === "chance" ? 9 : e.type === "save" ? 12 : 20;
@@ -171,7 +183,7 @@ export function scriptFor(events: MatchEvent[], dots: Dot[], mySide: "home" | "a
       const end: Pt = saved ? { x: 50 + ((e.minute * 5) % 9) - 4, y: gy + dir * 3 }
         : e.type === "chance" ? { x: shPt.x < 50 ? 41 : 59, y: gy - dir * 1 } : { x: shPt.x < 50 ? 30 : 70, y: gy - dir * 2 };
       steps.push({
-        ball: [shPt, end], moves: { ...(sh ? { [sh.id]: shPt } : {}), ...(saved && keeper ? { [keeper.id]: { x: end.x, y: keeper.pt.y } } : {}) }, dur: 1100, caption: e.text,
+        kind: "shot", ball: [shPt, end], moves: { ...(sh ? { [sh.id]: shPt } : {}), ...(saved && keeper ? { [keeper.id]: { x: end.x, y: keeper.pt.y } } : {}) }, dur: 1100, caption: e.text,
         flash: e.type === "chance" ? { text: "Poteau !", tone: "neutral" } : undefined,
         badge: saved && keeper ? { id: keeper.id, kind: "glove" } : undefined,
       });
@@ -222,7 +234,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
   const moment = action ? null : live.moment;
   const bm = board ?? m;
   // Positions de fin de la dernière phase : le jeu reprend de là
-  const [rest, setRest] = useState<{ pos: Record<string, Pt>; ball: Pt } | null>(null);
+  const [rest, setRest] = useState<{ pos: Record<string, Pt>; ball: Pt; holder?: string } | null>(null);
   const mine = m[mySide], theirs = m[mySide === "home" ? "away" : "home"];
 
   // Possession de la minute (déterministe), l'équipe qui a le ballon monte d'un cran
@@ -259,6 +271,22 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
 
   const meDot = dots.find(d => d.me);
   const spot = moment && meDot ? momentSpot(moment.kind, meDot.pt) : null;
+  // Bloc cohérent autour du ballon : au moment clé, ou entre deux phases sans position mémorisée
+  {
+    const all = tvAnchors(mine, theirs);
+    const center = spot ? spot.ball : rest ? null : { x: 50, y: 50 };
+    if (center) {
+      const attack = spot ? !["defend", "keeper", "keepercross"].includes(moment!.kind) : ours;
+      const pos = tvShape(all, center, attack);
+      // Coups de pied arrêtés et duels aériens : du monde dans la surface
+      if (spot && (moment!.kind === "air" || moment!.kind === "keepercross")) {
+        const gy = moment!.kind === "air" ? 0 : 100, dir = gy === 0 ? 1 : -1;
+        all.filter(a => !a.gk && a.mine === (gy === 0)).slice(-5).forEach((a, k) => { pos[a.id] = { x: 36 + k * 7, y: gy + dir * (9 + (k % 2) * 5) }; });
+        all.filter(a => !a.gk && a.mine !== (gy === 0)).slice(0, 6).forEach((a, k) => { pos[a.id] = { x: 34 + k * 6.5, y: gy + dir * (6 + (k % 2) * 5) }; });
+      }
+      for (const d of dots) if (pos[d.id]) d.pt = pos[d.id];
+    }
+  }
   if (spot && meDot) {
     meDot.pt = spot.me;
     if (spot.rival) {
@@ -294,7 +322,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
       if (play.idx + 1 < play.steps.length) setPlay({ ...play, idx: play.idx + 1 });
       else {
         const last = play.steps[play.steps.length - 1];
-        setRest({ pos: Object.assign({}, ...play.steps.map(x => x.moves)), ball: last.ball[last.ball.length - 1] ?? { x: 50, y: 50 } });
+        setRest({ pos: Object.assign({}, ...play.steps.map(x => x.moves)), ball: last.ball[last.ball.length - 1] ?? { x: 50, y: 50 }, holder: [...play.steps].reverse().find(x => x.holder)?.holder });
         setPlay(null); onActionDone?.();
       }
     }, Math.max(120, st.dur * pace * (reduce ? 0.4 : 1)));
@@ -310,7 +338,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
   const restBall: Pt = spot ? spot.ball : rest ? rest.ball : holder ? { x: holder.pt.x + 1.5, y: holder.pt.y - 1.5 } : { x: 50, y: 50 };
 
   // Rejeu après une décision, ou but du reste du match
-  const [replay, setReplay] = useState<{ key: string; path: Pt[]; flash: string | null; mineGoal: boolean | null } | null>(null);
+  const [replay, setReplay] = useState<{ key: string; path: Pt[]; flash: string | null; mineGoal: boolean | null; kind?: BallKind } | null>(null);
   const lastSpot = useRef<{ spot: { me: Pt; ball: Pt; rival?: Pt }; dots: Dot[]; moment: KeyMoment } | null>(null);
   const momentNow = moment;
   useEffect(() => { if (spot && momentNow) lastSpot.current = { spot, dots, moment: momentNow }; });
@@ -325,7 +353,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
       const { spot: sp, dots: ds } = lastSpot.current;
       const target = optionTarget(d.option, sp, ds);
       const o = outcomePath(d, sp, target, ds);
-      setReplay({ key: `d${decisions}`, ...o });
+      setReplay({ key: `d${decisions}`, ...o, kind: SHOTS.has(d.option) ? "shot" : d.option === "cross" || d.option === "longball" ? "cross" : PASSES.has(d.option) ? "pass" : "carry" });
       return;
     }
   }, [decisions, goals, live.decisions]);
@@ -335,79 +363,29 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
     return () => clearTimeout(t);
   }, [replay, reduce, onActionDone]);
 
-  // Repères : horizontal sur grand écran (nous attaquons vers la droite), vertical sinon (vers le haut)
-  const P = (p: Pt) => (wide ? { left: `${100 - p.y}%`, top: `${p.x}%` } : { left: `${p.x}%`, top: `${p.y}%` });
-  const arrows = moment && spot ? moment.options.map(o => ({ o, to: optionTarget(o.id, spot, dots) })) : [];
-  const svgXY = (p: Pt) => (wide ? { x: 100 - p.y, y: p.x } : { x: p.x, y: p.y });
-
-  // Caméra : zoom sur l'action pendant un moment clé ou un rejeu
-  const focus: Pt | null = camera === "dynamic" ? (step && step.ball.length ? step.ball[step.ball.length - 1] : replay ? replay.path[replay.path.length - 1] : spot ? spot.ball : null) : null;
-  const zoom = focus ? 1.45 : 1;
-  const camXY = (() => {
-    if (!focus) return { x: "0%", y: "0%" };
-    const p = P({ x: clamp(focus.x, 0, 100), y: clamp(focus.y, 0, 100) });
-    const fx = clamp(parseFloat(p.left), 50 / zoom, 100 - 50 / zoom), fy = clamp(parseFloat(p.top), 50 / zoom, 100 - 50 / zoom);
-    return { x: `${50 - fx}%`, y: `${50 - fy}%` };
-  })();
+  const arrows = moment && spot ? moment.options.map(o => ({ id: o.id, to: optionTarget(o.id, spot, dots), kind: (SHOTS.has(o.id) ? "shot" : PASSES.has(o.id) ? "pass" : RUNS.has(o.id) ? "run" : "def") as "shot" | "pass" | "run" | "def", hot: hoverOption === o.id })) : [];
+  // Caméra : resserre sur le moment clé et sur les tirs
+  const focus: Pt | null = camera === "dynamic" ? (step && (step.kind === "shot" || step.kind === "head" || step.flash) && step.ball.length ? step.ball[step.ball.length - 1] : replay ? replay.path[replay.path.length - 1] : spot ? spot.ball : null) : null;
+  const tvBall = step && step.ball.length
+    ? { key: `${play!.key}-${play!.idx}`, path: step.ball, dur: step.dur * pace * (reduce ? 0.4 : step.kind === "shot" || step.kind === "head" ? 0.45 : 0.85), kind: step.kind }
+    : replay ? { key: replay.key, path: replay.path, dur: replay.kind === "shot" ? 700 : 1100, kind: replay.kind }
+      : { key: `rest-${restBall.x.toFixed(1)}-${restBall.y.toFixed(1)}`, path: [restBall], dur: 450, kind: "carry" as BallKind };
+  const tvHolder = step ? step.holder ?? null : replay || spot ? null : rest?.holder ?? holder?.id ?? null;
+  const nameIds = new Set<string>([...(tvHolder ? [tvHolder] : []), ...(step?.badge ? [step.badge.id] : [])]);
   const abbr = (n: string) => n.replace(/^CP /, "").replace(/[^A-Za-zÀ-ÿ ]/g, "").trim().slice(0, 3).toUpperCase();
   const lastGoal = [...m.events].reverse().find(e => e.type === "goal");
   const lastDecision = live.decisions[live.decisions.length - 1];
   const caption = step ? step.caption ?? null : moment ? moment.text
     : replay ? (replay.key.startsWith("d") ? lastDecision?.text : lastGoal?.text) : null;
-  const holderName = step?.holder ? dots.find(d => d.id === step.holder)?.label ?? null : !moment && !replay && !step && !rest && holder ? holder.label : null;
   const flash = step?.flash ? { key: `${play!.key}-${play!.idx}`, text: step.flash.text, tone: step.flash.tone }
     : replay?.flash ? { key: replay.key + "f", text: replay.flash, tone: replay.mineGoal === true ? "good" : replay.mineGoal === false ? "bad" : "neutral" } : null;
+  void wide;
 
   return (
-    <div className={`pc-pitch${wide ? " is-wide" : ""}${moment ? " is-frozen" : ""}`} aria-hidden>
-      <div className="pc-pitch__frame">
-        <motion.div className="pc-pitch__cam" initial={false} animate={{ scale: zoom, x: camXY.x, y: camXY.y }} transition={{ duration: reduce ? 0 : 0.7, ease: [0.22, 1, 0.36, 1] }}>
-          <div className="pc-pitch__stand is-a" style={{ ["--c" as string]: colors.mine }} />
-          <div className="pc-pitch__stand is-b" style={{ ["--c" as string]: colors.theirs }} />
-          <div className="pc-pitch__field">
-            <svg className="pc-pitch__lines" viewBox="0 0 100 100" preserveAspectRatio="none">
-              {wide ? (
-                <g>
-                  <rect x="1" y="1" width="98" height="98" /><line x1="50" y1="1" x2="50" y2="99" /><circle cx="50" cy="50" r="9" />
-                  <rect x="1" y="22" width="15" height="56" /><rect x="84" y="22" width="15" height="56" />
-                  <rect x="1" y="38" width="5" height="24" /><rect x="94" y="38" width="5" height="24" />
-                </g>
-              ) : (
-                <g>
-                  <rect x="1" y="1" width="98" height="98" /><line x1="1" y1="50" x2="99" y2="50" /><circle cx="50" cy="50" r="9" />
-                  <rect x="22" y="1" width="56" height="15" /><rect x="22" y="84" width="56" height="15" />
-                  <rect x="38" y="1" width="24" height="5" /><rect x="38" y="94" width="24" height="5" />
-                </g>
-              )}
-              {arrows.map(({ o, to }) => {
-                const a = svgXY(spot!.me), b = svgXY(to);
-                const kind = SHOTS.has(o.id) ? "shot" : PASSES.has(o.id) ? "pass" : RUNS.has(o.id) ? "run" : "def";
-                return <line key={o.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`pc-pitch__arrow is-${kind}${hoverOption === o.id ? " is-hot" : ""}`} />;
-              })}
-            </svg>
-            <div className="pc-pitch__goal is-theirs" /><div className="pc-pitch__goal is-ours" />
-            {shownDots.map(d => (
-              <motion.div key={d.id} className={`pc-pitch__dot${d.mine ? " is-mine" : " is-theirs"}${d.me ? " is-me" : ""}${d.gk ? " is-gk" : ""}`}
-                style={{ ["--c" as string]: d.mine ? colors.mine : colors.theirs, ["--c2" as string]: d.mine ? colors.mineAlt : colors.theirsAlt }}
-                initial={false} animate={P(d.pt)} transition={{ duration: reduce ? 0 : step ? Math.max(0.15, (step.dur * pace) / 1000) : 0.55, ease: step ? "easeInOut" : [0.22, 1, 0.36, 1] }}>
-                <span className="pc-pitch__num">{d.num}</span>
-                {step?.badge?.id === d.id && <span className={`pc-pitch__badge is-${step.badge.kind}`} />}
-                {(d.me || d.label === holderName) && <span className="pc-pitch__name">{d.label}</span>}
-              </motion.div>
-            ))}
-            {step && step.ball.length ? (
-              <motion.div key={`${play!.key}-${play!.idx}`} className="pc-pitch__ball"
-                initial={P(step.ball[0])} animate={{ left: step.ball.map(p => P(p).left), top: step.ball.map(p => P(p).top) }}
-                transition={{ duration: reduce ? 0 : Math.max(0.12, (step.dur * pace) / 1000 * 0.85), ease: "easeInOut" }} />
-            ) : replay ? (
-              <motion.div key={replay.key} className="pc-pitch__ball"
-                initial={P(replay.path[0])} animate={{ left: replay.path.map(p => P(p).left), top: replay.path.map(p => P(p).top) }}
-                transition={{ duration: reduce ? 0 : 1.1, ease: "easeInOut" }} />
-            ) : (
-              <motion.div className="pc-pitch__ball" initial={false} animate={P(restBall)} transition={{ duration: reduce ? 0 : 0.5, ease: "easeOut" }} />
-            )}
-          </div>
-        </motion.div>
+    <div className={`pc-pitch pc-tv${moment ? " is-frozen" : ""}`} aria-hidden>
+      <div className="pc-pitch__frame pc-tv__frame">
+        <MatchTV dots={shownDots} ball={tvBall} holder={tvHolder} moveDur={step ? step.dur * pace : 650} colors={colors} camera={camera}
+          cut={step?.cut ? `${play!.key}-${play!.idx}` : null} focus={focus} arrows={arrows} from={spot?.me ?? null} badge={step?.badge ?? null} names={nameIds} frozen={!!moment} reduce={!!reduce} />
         <div className="pc-pitch__hud">
           <span className="pc-pitch__board">
             <i style={{ background: m.home.clubId === mine.clubId ? colors.mine : colors.theirs }} />{abbr(m.home.name)}
