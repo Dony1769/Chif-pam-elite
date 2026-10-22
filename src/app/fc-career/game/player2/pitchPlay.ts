@@ -21,7 +21,7 @@ import { createRng, seedFromString } from "../utils/random";
 
 export type Pt = { x: number; y: number };
 /** Nature du geste qui amène le ballon à cette image (rendu : trajectoire, hauteur, vitesse). */
-export type BallKind = "start" | "pass" | "carry" | "cross" | "long" | "shot" | "lost" | "out" | "throw" | "kick" | "head";
+export type BallKind = "start" | "pass" | "carry" | "cross" | "long" | "shot" | "lost" | "out" | "throw" | "kick" | "head" | "cut" | "tackle";
 export interface Frame {
   /** Durée relative de la transition vers cette image */
   w: number;
@@ -208,11 +208,23 @@ export function phaseFrames(phase: import("../manager/positional").Phase, i: Min
   const mp = (p: Pt): Pt => (flip ? { x: 100 - p.x, y: 100 - p.y } : p);
   const all = anchors(i.mine, i.theirs);
   const name = new Map(all.map(a => [a.id, a.name]));
-  const raw: Frame[] = phase.frames.map(f => ({
-    w: f.w, ball: mp(f.ball), holder: f.holder, kind: f.kind === "assist" ? "pass" : f.kind,
-    pos: Object.fromEntries(Object.entries(f.pos).map(([k, v]) => [k, mp(v)])),
-    caption: f.kind === "lost" && f.holder ? `${name.get(f.holder) ?? "L'adversaire"} récupère le ballon` : undefined,
-  }));
+  const raw: Frame[] = phase.frames.map((f, k) => {
+    const pos = Object.fromEntries(Object.entries(f.pos).map(([id, v]) => [id, mp(v)]));
+    const prevHolder = phase.frames[k - 1]?.holder;
+    let kind: BallKind = f.kind === "assist" ? "pass" : f.kind;
+    let caption: string | undefined;
+    if (f.kind === "lost" && f.holder) {
+      if (f.tackle) { kind = "tackle"; caption = `${name.get(f.holder) ?? "Le défenseur"} tacle ${name.get(prevHolder ?? "") ?? "le porteur"}`; }
+      else if (f.to && f.aim) {
+        // Passe coupée : le receveur visé court vers le point de passe, le défenseur s'interpose
+        kind = "cut";
+        pos[f.to] = mp(f.aim);
+        caption = `Passe vers ${name.get(f.to) ?? "un partenaire"}, interceptée par ${name.get(f.holder) ?? "la défense"}`;
+      } else caption = `${name.get(f.holder) ?? "L'adversaire"} récupère le ballon`;
+    } else if (f.kind === "carry" && (f.q ?? 0) > 0.7 && f.holder) caption = `${name.get(f.holder)} s'échappe balle au pied`;
+    else if (f.kind === "pass" && (f.q ?? 0) > 0.8 && prevHolder && Math.hypot(f.ball.x - phase.frames[k - 1].ball.x, f.ball.y - phase.frames[k - 1].ball.y) > 28) caption = `Ouverture millimétrée de ${name.get(prevHolder)}`;
+    return { w: f.w, ball: mp(f.ball), holder: f.holder, kind, pos, caption };
+  });
   const attMineRaw = (phase.side === i.mySide);
   const frames = direct(raw, all, attMineRaw, i);
   const last = frames[frames.length - 1];
@@ -327,13 +339,13 @@ function direct(raw: Frame[], all: Anchor[], attMine: boolean, i: MinuteInput): 
   const out: Frame[] = [raw[0]];
   for (let k = 1; k < raw.length; k++) {
     const prev = out[out.length - 1], f = raw[k];
-    if ((f.kind === "pass" || f.kind === "shot") && prev.holder) {
-      // Conduite : le porteur avance de quelques mètres avant de jouer
-      const carry = rng.float(2.5, 7);
+    if ((f.kind === "pass" || f.kind === "shot") && prev.holder && (prev.kind === "pass" || prev.kind === "cross" || prev.kind === "long" || prev.kind === "start")) {
+      // Contrôle orienté : le receveur prend le ballon et avance d'un ou deux pas
+      const carry = rng.float(1.5, 4);
       const from = prev.pos[prev.holder] ?? prev.ball;
       const c: Pt = { x: clamp(from.x + rng.float(-3, 3), 4, 96), y: clamp(from.y - dir * carry, 4, 96) };
       if (f.kind === "pass" || Math.abs(c.y - goalY) > 12) {
-        out.push({ w: 0.55, kind: "carry", ball: c, holder: prev.holder, pos: { ...prev.pos, [prev.holder]: c } });
+        out.push({ w: 0.4, kind: "carry", ball: c, holder: prev.holder, pos: { ...prev.pos, [prev.holder]: c } });
       }
     }
     if (f.kind === "pass") {
@@ -344,7 +356,7 @@ function direct(raw: Frame[], all: Anchor[], attMine: boolean, i: MinuteInput): 
       f.kind = wide && inBox ? "cross" : d > 30 ? "long" : "pass";
       if (f.kind === "cross") f.caption = f.caption ?? `Centre de ${name.get(out[out.length - 1].holder ?? "") ?? "l'ailier"}`;
     }
-    if (f.kind === "lost" && (f.ball.x < 24 || f.ball.x > 76) && rng.chance(0.5) && f.holder) {
+    if ((f.kind === "lost" || f.kind === "cut") && (f.ball.x < 24 || f.ball.x > 76) && rng.chance(0.35) && f.holder) {
       // Ballon sorti : touche pour l'équipe qui récupère
       const side = f.ball.x < 50 ? -1.5 : 101.5;
       out.push({ w: 0.6, kind: "lost", ball: { x: side, y: f.ball.y }, pos: f.pos, caption: "Sortie en touche" });

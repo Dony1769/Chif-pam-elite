@@ -25,6 +25,13 @@ export interface PhaseFrame {
   holder?: string;
   pos: Record<string, Pt>;
   kind: "start" | "pass" | "carry" | "lost" | "shot" | "assist";
+  /** Passe interceptée : receveur visé et point visé (le rendu montre la passe coupée) */
+  to?: string;
+  aim?: Pt;
+  /** Perte de balle sur un dribble (tacle) plutôt que sur une passe */
+  tackle?: boolean;
+  /** Qualité du geste (0-1) d'après les notes du joueur : passe précise, dribble, frappe */
+  q?: number;
 }
 export interface Phase { minute: number; side: "home" | "away"; frames: PhaseFrame[] }
 
@@ -88,18 +95,30 @@ export function shapeAround(all: Unit[], ball: Pt, attSide: "home" | "away"): Re
  * Un 4-4-2 équilibré contre un 4-4-2 donne 2,3 buts : la tactique compte.
  */
 export const TUNE = {
-  passes: [1, 5] as [number, number],
-  gain: [6, 15] as [number, number],
-  shootZone: 20,
-  intBase: 0.48,
-  intNear: 0.4,
+  passes: [4, 10] as [number, number],
+  /** Conduite de balle (par action, selon le dribble) et réussite du tacle */
+  carry: 0.18,
+  tackle: 0.3,
+  /** Passes vers la surface : défense regroupée, interceptions plus fréquentes */
+  boxInt: 2.2,
+  /** Poids d'une passe vers la surface, et poids du gain de terrain dans le choix */
+  boxPass: 0.3,
+  gainW: 22,
+  shootNear: 0.38,
+  shootFar: 0.12,
+  /** Frappes lointaines des bons tireurs */
+  longShot: 0.12,
+  gain: [1, 6] as [number, number],
+  shootZone: 17,
+  intBase: 0.04,
+  intNear: 0.1,
   intRadius: 7,
   intSkillExp: 0.8,
   intPowerExp: 0.3,
-  xgScale: 0.177,
+  xgScale: 0.26,
   xgDecay: 16,
   duelExp: 0.6,
-  homeXg: 1.06,
+  homeXg: 1.12,
   /** Poids de la mentalité et du style (création / résistance) sur les interceptions */
   tacticExp: 2.2,
 };
@@ -120,38 +139,83 @@ export function playPossession(home: LiveTeam, away: LiveTeam, side: "home" | "a
   const start = opts.from ?? { x: 50, y: 50 };
   let pos = shapeAround(all, start, side);
   if (!att.length) return { phase: { minute, side, frames }, shot: null, end: start };
+  // Le joueur le plus proche vient chercher le ballon là où il est (pas de ballon téléporté)
   let holder = [...att].sort((a, b) => dist(pos[a.p.id], start) - dist(pos[b.p.id], start))[0];
-  let ball = { ...pos[holder.p.id] };
+  let ball = { x: clamp(start.x, 3, 97), y: clamp(start.y, 3, 97) };
+  pos = { ...pos, [holder.p.id]: ball };
   frames.push({ w: 0.5, ball, holder: holder.p.id, pos, kind: "start" });
   let prev: Unit | null = null;
   const maxActions = rng.int(TUNE.passes[0], TUNE.passes[1]);
+  // Repère de niveau : la défense adverse (les gestes se jugent face à l'adversaire, pas dans l'absolu)
+  const ref = def.length ? def.reduce((t, u) => t + skill(u.p, u.pos, "def"), 0) / def.length : 60;
+  const pressure = (q: Pt) => {
+    const d = [...def].sort((a, b) => dist(pos[a.p.id], q) - dist(pos[b.p.id], q))[0];
+    return d ? { u: d, d: dist(pos[d.p.id], q) } : null;
+  };
 
   for (let k = 0; k <= maxActions; k++) {
     // Distance à l'embouchure du but (largeur ±6) : un attaquant excentré n'est pas pénalisé deux fois
     const gDist = Math.hypot(Math.max(0, Math.abs(ball.x - 50) - 6), ball.y - goalY);
-    // Zone de tir : le porteur frappe (plus il est près, plus c'est sûr)
-    if (gDist < TUNE.shootZone && rng.chance(gDist < 15 ? 0.85 : 0.55)) {
+    const shoNow = skill(holder.p, holder.pos, "sho");
+    // Zone de tir ; les bons frappeurs tentent aussi de loin
+    const longShot = gDist >= TUNE.shootZone && gDist < 30 && rng.chance(TUNE.longShot * Math.pow(shoNow / ref, 3));
+    // Marqué de près, le porteur cherche plutôt une solution
+    const tight = pressure(ball);
+    const room = tight ? clamp(tight.d / 5, 0.35, 1) : 1;
+    if ((gDist < TUNE.shootZone && rng.chance((gDist < 15 ? TUNE.shootNear : TUNE.shootFar) * room)) || longShot) {
       // Le tireur repique vers l'axe avant de frapper
       ball = { x: 50 + (ball.x - 50) * 0.55, y: ball.y };
       pos = { ...pos, [holder.p.id]: ball };
       // Angle de tir : 0 face au but, 1 sur la ligne de but
       const angle = Math.atan2(Math.abs(ball.x - 50), Math.max(1, Math.abs(ball.y - goalY))) / (Math.PI / 2);
       const keeper = all.find(u => u.side !== side && u.line === "GK");
-      const sh = skill(holder.p, holder.pos, "sho");
+      const sh = shoNow;
       const gk = keeper ? effectiveRating(keeper.p, "GK") : 35;
       const duel = clamp(sh / Math.max(30, gk), 0.6, 1.6);
-      const xg = clamp(TUNE.xgScale * Math.exp(-gDist / TUNE.xgDecay) * (1 - angle * 0.35) * Math.pow(duel, TUNE.duelExp) * opts.quality * (side === "home" ? TUNE.homeXg : 1) * rng.float(0.6, 1.4), 0.02, 0.75);
-      frames.push({ w: 0.6, ball, holder: holder.p.id, pos, kind: "shot" });
+      const gD2 = Math.hypot(Math.max(0, Math.abs(ball.x - 50) - 6), ball.y - goalY);
+      const xg = clamp(TUNE.xgScale * Math.exp(-gD2 / TUNE.xgDecay) * (1 - angle * 0.35) * Math.pow(duel, TUNE.duelExp) * opts.quality * (side === "home" ? TUNE.homeXg : 1) * rng.float(0.6, 1.4), 0.02, 0.75);
+      frames.push({ w: 0.6, ball, holder: holder.p.id, pos, kind: "shot", q: clamp((sh - 40) / 50, 0, 1) });
       return { phase: { minute, side, frames }, shot: { shooter: holder.p, assist: prev?.p ?? null, xg, from: ball }, end: ball };
     }
     if (k === maxActions) break;
-    // Passe vers un partenaire mieux placé (ou conduite de balle si personne)
+    const pasNow = skill(holder.p, holder.pos, "pas"), driNow = skill(holder.p, holder.pos, "dri");
+    // Conduite de balle : un bon dribbleur avec de l'espace avance balle au pied
+    const press = pressure(ball);
+    const space = press ? press.d : 30;
+    if (rng.chance(clamp(TUNE.carry * Math.pow(driNow / ref, 1.5) * (space > 8 ? 1.4 : 0.7), 0.03, 0.6))) {
+      const run: Pt = { x: clamp(ball.x + rng.float(-6, 6), 5, 95), y: clamp(ball.y + dir * rng.float(5, 11), 4, 96) };
+      const opp = pressure(run);
+      if (opp && opp.d < 7) {
+        // Duel : dribble contre défense
+        const ratio = skill(opp.u.p, opp.u.pos, "def") / Math.max(30, driNow);
+        if (rng.chance(clamp(TUNE.tackle * Math.pow(ratio, 1.4) / Math.pow(opts.power, TUNE.intPowerExp), 0.04, 0.7))) {
+          const lost = { x: (run.x + pos[opp.u.p.id].x) / 2, y: (run.y + pos[opp.u.p.id].y) / 2 };
+          pos = shapeAround(all, lost, side === "home" ? "away" : "home");
+          pos[opp.u.p.id] = lost;
+          frames.push({ w: 0.8, ball: lost, holder: opp.u.p.id, pos, kind: "lost", tackle: true });
+          return { phase: { minute, side, frames }, shot: null, end: lost };
+        }
+      }
+      pos = shapeAround(all, run, side);
+      pos[holder.p.id] = run;
+      ball = run;
+      frames.push({ w: 0.8, ball, holder: holder.p.id, pos, kind: "carry", q: clamp((driNow - 40) / 50, 0, 1) });
+      continue;
+    }
+    // Passe : un bon passeur voit plus loin et joue plus vers l'avant
+    const vision = clamp(pasNow / ref, 0.6, 1.5);
     const cands = att.filter(u => u.p.id !== holder.p.id);
     const weights = cands.map(u => {
       const q = pos[u.p.id];
       const gain = Math.abs(ball.y - goalY) - Math.abs(q.y - goalY);
       const d = dist(ball, q);
-      return Math.max(0.05, 1 + gain / 10) * Math.exp(-Math.max(0, d - 20) / 12) * (u.line === "ATT" ? 1.3 : 1);
+      // Un partenaire marqué de près est un mauvais choix
+      const mk = pressure(q);
+      const free = mk ? clamp(mk.d / 6, 0.25, 1.2) : 1.2;
+      // Entrée dans la surface : seulement pour un partenaire démarqué ou un passeur qui voit l'ouverture
+      const inBox = Math.hypot(Math.max(0, Math.abs(q.x - 50) - 6), q.y - goalY) < 24;
+      const boxW = inBox ? TUNE.boxPass * vision * free : 1;
+      return Math.max(0.05, 1 + (gain / TUNE.gainW) * vision) * Math.exp(-Math.max(0, d - 18 * vision) / 12) * free * boxW;
     });
     const total = weights.reduce((t, v) => t + v, 0);
     let r = rng.float(0, total), to = cands[cands.length - 1];
@@ -164,13 +228,16 @@ export function playPossession(home: LiveTeam, away: LiveTeam, side: "home" | "a
     const near = [...def].sort((a, b) => dist(pos[a.p.id], mid) - dist(pos[b.p.id], mid))[0];
     if (near) {
       const dd = Math.min(dist(pos[near.p.id], mid), dist(pos[near.p.id], recv));
-      const ratio = skill(near.p, near.pos, "def") / Math.max(30, skill(holder.p, holder.pos, "pas"));
-      const pInt = clamp((TUNE.intBase + TUNE.intNear * Math.exp(-dd / TUNE.intRadius)) * Math.pow(ratio, TUNE.intSkillExp) / Math.pow(opts.power, TUNE.intPowerExp) / Math.pow(opts.tactic ?? 1, TUNE.tacticExp), 0.02, 0.7);
+      const len = dist(ball, recv);
+      const ratio = skill(near.p, near.pos, "def") / Math.max(30, pasNow);
+      // Passe longue = plus risquée ; passeur précis = moins risquée
+      const toBox = Math.hypot(Math.max(0, Math.abs(recv.x - 50) - 6), recv.y - goalY) < 24 ? TUNE.boxInt : 1;
+      const pInt = clamp((TUNE.intBase + TUNE.intNear * Math.exp(-dd / TUNE.intRadius)) * (0.7 + len / 60) * toBox * Math.pow(ratio, TUNE.intSkillExp) / Math.pow(opts.power, TUNE.intPowerExp) / Math.pow(opts.tactic ?? 1, TUNE.tacticExp), 0.02, 0.7);
       if (rng.chance(pInt)) {
         const lost = { x: (mid.x + pos[near.p.id].x) / 2, y: (mid.y + pos[near.p.id].y) / 2 };
         pos = shapeAround(all, lost, side === "home" ? "away" : "home");
         pos[near.p.id] = lost;
-        frames.push({ w: 0.8, ball: lost, holder: near.p.id, pos, kind: "lost" });
+        frames.push({ w: 0.8, ball: lost, holder: near.p.id, pos, kind: "lost", to: to.p.id, aim: recv });
         return { phase: { minute, side, frames }, shot: null, end: lost };
       }
     }
@@ -179,7 +246,7 @@ export function playPossession(home: LiveTeam, away: LiveTeam, side: "home" | "a
     pos = shapeAround(all, recv, side);
     pos[to.p.id] = recv;
     ball = recv;
-    frames.push({ w: 1, ball, holder: to.p.id, pos, kind: "pass" });
+    frames.push({ w: 1, ball, holder: to.p.id, pos, kind: "pass", q: clamp((pasNow - 40) / 50, 0, 1) });
   }
   return { phase: { minute, side, frames }, shot: null, end: ball };
 }

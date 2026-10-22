@@ -16,6 +16,8 @@ import {
 } from "./tactics";
 import { shortName } from "../utils/names";
 import { playPossession } from "./positional";
+/** Part des minutes où l'équipe qui a fini la minute précédente avec le ballon le garde. */
+const TUNE_CONT = 0.7;
 import type { Phase } from "./positional";
 
 export const MAX_SUBS = 5;
@@ -71,6 +73,8 @@ export interface LiveMatch {
   /** Dernier point du ballon (repère domicile) et phase de jeu de la dernière minute */
   ball?: { x: number; y: number };
   phase?: Phase;
+  /** Équipe qui a le ballon à la fin de la minute (continuité de possession) */
+  nextSide?: "home" | "away";
 }
 
 const HOME_ADVANTAGE = 1.09;
@@ -221,7 +225,10 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
   // Possession
   const ctrlH = rH.midfield * pH.control * styleMatchup(m.home.tactic.style, m.away.tactic.style) * HOME_ADVANTAGE;
   const ctrlA = rA.midfield * pA.control * styleMatchup(m.away.tactic.style, m.home.tactic.style);
-  const homeHasBall = rng.chance(ctrlH / (ctrlH + ctrlA));
+  const drawn = rng.chance(ctrlH / (ctrlH + ctrlA));
+  // Continuité : l'équipe qui a gagné le ballon (ou relance après un tir) le garde le plus souvent
+  const crng = createRng(seedFromString(`${match.seed}-c${minute}`));
+  const homeHasBall = match.nextSide && crng.chance(TUNE_CONT) ? match.nextSide === "home" : drawn;
   const side: "home" | "away" = homeHasBall ? "home" : "away";
   const oppSide = homeHasBall ? "away" : "home";
   const att = m[side];
@@ -242,6 +249,8 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
   const play = playPossession(m.home, m.away, side, minute, prng, { power, tactic, quality: profAtt.chanceQuality, from: match.ball });
   m.ball = play.end;
   m.phase = play.phase;
+  const lastF = play.phase.frames[play.phase.frames.length - 1];
+  m.nextSide = play.shot ? oppSide : lastF?.kind === "lost" ? oppSide : side;
   if (play.shot) {
     const shooter = play.shot.shooter;
     const gk = def.pitch.find((p, i) => p && FORMATIONS[def.tactic.formation][i].line === "GK") ?? null;
@@ -266,6 +275,9 @@ export function simulateMinute(match: LiveMatch): LiveMatch {
     } else {
       m.events.push({ minute, type: "shot", side, playerId: shooter.id, result: "wide", text: `${name(shooter)} tente, à côté.` });
     }
+    // Reprise du jeu : engagement au centre après un but, sinon le gardien adverse relance
+    const lastEv = m.events[m.events.length - 1];
+    m.ball = lastEv?.type === "goal" && lastEv.minute === minute ? { x: 50, y: 50 } : { x: 50, y: oppSide === "home" ? 92 : 8 };
   }
 
   // Coups de pied arrêtés : corner après un tir repoussé ou contré, coup franc après une faute aux abords de la surface

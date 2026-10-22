@@ -19,7 +19,7 @@ import React, { useEffect, useRef } from "react";
 import type { BallKind } from "../../game/player2/pitchPlay";
 
 type Pt = { x: number; y: number };
-export interface TVDot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number }
+export interface TVDot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number; /** Vitesse (VIT) : pointe de course */ pace?: number }
 export interface TVBall { key: string; path: Pt[]; dur: number; kind?: BallKind }
 export interface TVArrow { id: string; to: Pt; kind: "shot" | "pass" | "run" | "def"; hot: boolean }
 
@@ -57,6 +57,7 @@ const ARC: Record<string, { peak: number; ease: "out" | "lin" | "inout" }> = {
   pass: { peak: 0.15, ease: "out" }, carry: { peak: 0, ease: "inout" }, cross: { peak: 6.5, ease: "lin" }, long: { peak: 9, ease: "lin" },
   shot: { peak: 1.4, ease: "lin" }, head: { peak: 1.8, ease: "lin" }, lost: { peak: 0.3, ease: "out" }, out: { peak: 0.4, ease: "out" },
   throw: { peak: 2.6, ease: "lin" }, kick: { peak: 8, ease: "lin" }, start: { peak: 0, ease: "inout" },
+  cut: { peak: 0.2, ease: "out" }, tackle: { peak: 0, ease: "inout" },
 };
 
 export function MatchTV(props: Props) {
@@ -101,8 +102,12 @@ export function MatchTV(props: Props) {
       // ── Joueurs : course vers la cible avec accélération limitée ──
       const tau = clamp(p.moveDur / 1000 / 4, 0.07, 0.45);
       const seen = new Set<string>();
-      const cutNow = !!p.cut && p.cut !== st.cut;
-      if (cutNow) st.cut = p.cut!;
+      // Nouvelle séquence loin du ballon affiché (minutes sautées, reprise) : plan de coupe
+      const jumpKey = p.ball.kind === "start" && p.ball.key !== st.lastKey && p.ball.path.length
+        && Math.hypot(toWorld(p.ball.path[0]).X - st.ball.x, toWorld(p.ball.path[0]).Z - st.ball.z) > 18 ? `j-${p.ball.key}` : null;
+      const cutKey = p.cut ?? jumpKey;
+      const cutNow = !!cutKey && cutKey !== st.cut;
+      if (cutNow) st.cut = cutKey!;
       for (const d of p.dots) {
         seen.add(d.id);
         const t = toWorld(d.pt);
@@ -113,9 +118,11 @@ export function MatchTV(props: Props) {
         const w = 1 / tau;
         const ax = w * w * (t.X - b.x) - 2 * w * b.vx, az = w * w * (t.Z - b.z) - 2 * w * b.vz;
         b.vx += ax * dt; b.vz += az * dt;
-        // Sprint ~9,5 m/s, mais un joueur en retard accélère pour être à l'heure
+        // Un joueur en retard accélère pour être à l'heure
         const need = Math.hypot(t.X - b.x, t.Z - b.z) / Math.max(0.25, p.moveDur / 1000);
-        const sp = Math.hypot(b.vx, b.vz), max = Math.max(9.5, need * 1.3);
+        // Pointe de vitesse selon la note VIT (7 m/s à 40, 10 m/s à 95)
+        const top = 4.8 + (d.pace ?? 70) * 0.055;
+        const sp = Math.hypot(b.vx, b.vz), max = Math.max(top, need * 1.15);
         if (sp > max) { b.vx *= max / sp; b.vz *= max / sp; }
         b.x += b.vx * dt; b.z += b.vz * dt;
         if (sp > 0.4) b.face = Math.atan2(b.vz, b.vx);
@@ -146,7 +153,11 @@ export function MatchTV(props: Props) {
         let dist = e * total, i = 0;
         while (i < segs.length - 1 && dist > segs[i]) { dist -= segs[i]; i++; }
         const s = segs[i] ? dist / segs[i] : 1;
-        const A = a.pts[i], B = a.pts[Math.min(i + 1, a.pts.length - 1)];
+        const A = a.pts[i];
+        let B = a.pts[Math.min(i + 1, a.pts.length - 1)];
+        // Le receveur va au-devant du ballon : la fin de trajectoire suit ses pieds
+        const meet = holderBody && i === segs.length - 1 && !["shot", "head", "out", "lost"].includes(a.kind);
+        if (meet) B = { X: lerp(B.X, holderBody!.x, raw), Z: lerp(B.Z, holderBody!.z, raw) };
         st.ball.x = lerp(A.X, B.X, s); st.ball.z = lerp(A.Z, B.Z, s);
         // Hauteur : parabole selon la longueur du geste
         const peak = arc.peak * clamp(total / 30, 0.35, 1.4);

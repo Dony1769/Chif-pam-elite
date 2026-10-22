@@ -23,7 +23,7 @@ import { anchors as tvAnchors, shape as tvShape } from "../../game/player2/pitch
 import { createRng, seedFromString } from "../../game/utils/random";
 
 type Pt = { x: number; y: number };
-export interface Dot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number }
+export interface Dot { id: string; mine: boolean; me: boolean; pt: Pt; label: string; gk: boolean; num: number; pace?: number }
 
 const SHOTS = new Set(["shoot", "longshot", "finesse", "chip", "acrobatic", "header", "lowdriven", "powershot", "trivela", "freekick", "penalty"]);
 const PASSES = new Set(["pass", "cross", "through", "longball", "outside", "longthrow", "quickthrow"]);
@@ -129,7 +129,7 @@ export interface PitchAction {
 }
 
 /** Durée naturelle de chaque geste (ms, vitesse normale) : une passe roule, un centre monte. */
-export const KIND_MS: Record<string, number> = { start: 450, carry: 750, pass: 900, cross: 1250, long: 1350, shot: 950, head: 900, lost: 800, out: 1000, throw: 950, kick: 1300 };
+export const KIND_MS: Record<string, number> = { start: 450, carry: 800, pass: 900, cross: 1250, long: 1350, shot: 950, head: 900, lost: 800, cut: 950, tackle: 850, out: 1000, throw: 950, kick: 1300 };
 export const frameMs = (f: Frame) => (f.kind ? KIND_MS[f.kind] ?? 900 : 900 * f.w) + (f.flash ? 900 : 0) + (f.caption && !f.kind ? 400 : 0);
 
 /** Images de phase → étapes animées (positions complètes des 22 joueurs). */
@@ -263,7 +263,7 @@ export function MatchPitch({ live, colors, hoverOption, camera = "dynamic", acti
       const k = used.get(pos) ?? 0;
       used.set(pos, k + 1);
       const num = SHIRT[pos]?.[k] ?? 12 + i;
-      dots.push({ id: p.id, mine: own, me: p.id === live.playerId, pt: jitter(p.id, pt), label: p.lastName, gk: pos === "GK", num });
+      dots.push({ id: p.id, mine: own, me: p.id === live.playerId, pt: jitter(p.id, pt), label: p.lastName, gk: pos === "GK", num, pace: p.face?.pac ?? p.overall });
     });
   };
   add(mine, myPts, true);
